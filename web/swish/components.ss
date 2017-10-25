@@ -80,7 +80,7 @@
 ;;Page Helpers
 
 (define (docked-navigation)
-  (column "docked menu left" (navigation)))
+  (column-with-id "main-nav" "docked menu left" (navigation)))
 
 (define (navigation)
   (panel (osi_get_hostname)
@@ -99,6 +99,9 @@
 ;;Form Helpers
 (define (column type . content)
   `(div (@ (class ,(format "~a column" type))) ,@content))
+
+(define (column-with-id id type . content)
+  `(div (@ (id ,id) (class ,(format "~a column" type))) ,@content))
 
 (define (panel header . content)
   `(div (@ (class "panel"))

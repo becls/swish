@@ -140,6 +140,10 @@ div.undocked.menu div.menu.item:hover {display:block;}
 
 * html .undocked.menu { display:none; }
 
+#main-nav {
+  position: fixed;
+}
+
 div.panel {
   color:#000;
   margin:7px 7px 7px 0px;
