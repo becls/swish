@@ -1,0 +1,11 @@
+This product includes code developed and copyrighted by Beckman
+Coulter, Inc. It is released under the terms of the MIT license.
+
+This product also includes separately licensed:
+
+* jQuery by the jQuery Foundation
+
+* Portable Regular Expressions for Scheme and Common Lisp (pregexp) by
+  Dorai Sitaram
+
+* SQLite in the public domain

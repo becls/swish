@@ -1,0 +1,27 @@
+SchemeInclude=/usr/local/lib/csv9.5/a6osx
+UvInclude=../../libuv/include
+UvLib=../../libuv/build/Release
+C = gcc -m64 -fPIC -Wall -Wextra -Werror -O2
+
+all: ../../bin/libosi.dylib io-constants.ss
+
+../../bin/libosi.dylib: osi.o sqlite.o sqlite3.o
+	$C -dynamiclib -undefined dynamic_lookup -L${UvLib} -o ../../bin/libosi.dylib osi.o sqlite.o sqlite3.o -luv
+
+osi.o: osi.h osi.c
+	$C -I${SchemeInclude} -I${UvInclude} -c osi.c
+
+sqlite.o: osi.h sqlite.c
+	$C -I${SchemeInclude} -I${UvInclude} -c sqlite.c
+
+sqlite3.o: sqlite3.h sqlite3.c
+	$C -DSQLITE_ENABLE_JSON1 -DSQLITE_THREADSAFE=2 -c sqlite3.c
+
+io-constants: io-constants.c
+	$C -I${UvInclude} io-constants.c -o io-constants
+
+clean:
+	rm -f ../../bin/libosi.dylib osi.o sqlite.o io-constants io-constants.ss
+
+pristine: clean
+	rm -f sqlite3.o

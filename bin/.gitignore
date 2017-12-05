@@ -1,0 +1,6 @@
+*.so
+/libosi.dylib
+/libosi.so
+/osi.dll
+/osi.exp
+/osi.lib

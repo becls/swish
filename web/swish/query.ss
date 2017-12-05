@@ -1,0 +1,93 @@
+;;; Copyright 2017 Beckman Coulter, Inc.
+;;;
+;;; Permission is hereby granted, free of charge, to any person
+;;; obtaining a copy of this software and associated documentation
+;;; files (the "Software"), to deal in the Software without
+;;; restriction, including without limitation the rights to use, copy,
+;;; modify, merge, publish, distribute, sublicense, and/or sell copies
+;;; of the Software, and to permit persons to whom the Software is
+;;; furnished to do so, subject to the following conditions:
+;;;
+;;; The above copyright notice and this permission notice shall be
+;;; included in all copies or substantial portions of the Software.
+;;;
+;;; THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+;;; EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+;;; MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+;;; NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+;;; HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+;;; WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+;;; DEALINGS IN THE SOFTWARE.
+
+(define (write-comma i op)
+  (unless (= i 0)
+    (write-char #\, op)))
+
+(define (write-row v op)
+  (write-char #\[ op)
+  (do ([i 0 (+ i 1)] [n (vector-length v)]) [(= i n)]
+    (let ([x (vector-ref v i)])
+      (write-comma i op)
+      (cond
+       [(eq? x #f) (put-string op "null")]
+       [(bytevector? x)
+        (write-char #\[ op)
+        (do ([i 0 (+ i 1)] [n (bytevector-length x)]) [(= i n)]
+          (write-comma i op)
+          (json:write op (bytevector-u8-ref x i)))
+        (write-char #\] op)]
+       [else (json:write op x)])))
+  (write-char #\] op))
+
+(define (meta op)
+  (json:write op
+    (json:make-object
+     ["instance" (log-db:get-instance-id)]
+     ["computer-name" (osi_hostname)]
+     ["software-version" software-version]
+     ["software-product-name" software-product-name]))
+  'ok)
+
+(define (doit op)
+  (let ([query (find-param "sql")])
+    (unless query (exit "Missing sql"))
+    (unless (or (starts-with-ci? query "select ")
+                (starts-with-ci? query "with ")
+                (starts-with-ci? query "explain "))
+      (exit "Query must start with select, with, or explain."))
+    (with-db [db (log-path) SQLITE_OPEN_READONLY]
+      (let ([stmt (sqlite:prepare db query)])
+        (put-string op "{\"instance\":\"")
+        (put-string op (log-db:get-instance-id))
+        (put-string op "\",\"columns\":")
+        (write-row (sqlite:columns stmt) op)
+        (put-string op ",\"rows\":[")
+        (let lp ([i 0])
+          (cond
+           [(sqlite:step stmt) =>
+            (lambda (row)
+              (write-comma i op)
+              (write-row row op)
+              (cond
+               [(< (port-position op) 10000000) (lp (+ i 1))]
+               [else
+                (put-string op "],\"limit\":")
+                (json:write op (+ i 1))
+                (write-char #\} op)
+                'ok]))]
+           [else
+            (put-string op "]}")
+            'ok]))))))
+
+(http:respond op 200 '(("Access-Control-Allow-Origin" . "*")
+                       ("Access-Control-Max-Age" . "86400")
+                       ("Content-Type" . "application/json"))
+  (let-values ([(op get) (open-bytevector-output-port (make-utf8-transcoder))])
+    (match (catch (if (find-param "meta")
+                      (meta op)
+                      (doit op)))
+      [ok (get)]
+      [#(EXIT ,reason)
+       (json:object->bytevector
+        (json:make-object ["error" (exit-reason->english reason)]))])))

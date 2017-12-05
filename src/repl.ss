@@ -1,0 +1,6 @@
+(library-directories '(("." . "../bin")))
+(compile-imported-libraries #t)
+(include "load.ss")
+(include "swish/imports.ss")
+(include "init.ss")
+(hook-console-input)
