@@ -1,6 +1,9 @@
 SchemeInclude=/usr/lib/csv9.5/a6le
 UvInclude=../../libuv/include
 UvLib=../../libuv/out/Release/obj.target
+ifneq (,$(shell gcc --help=warning | grep implicit-fallthrough))
+  HUSH=-Wimplicit-fallthrough=0
+endif
 C = gcc -m64 -msse2 -fPIC -Wall -Wextra -Werror -O2
 
 all: ../../bin/libosi.so io-constants.ss
@@ -15,7 +18,7 @@ sqlite.o: osi.h sqlite.c
 	$C -I${SchemeInclude} -I${UvInclude} -c sqlite.c
 
 sqlite3.o: sqlite3.h sqlite3.c
-	$C -DSQLITE_ENABLE_JSON1 -DSQLITE_THREADSAFE=2 -c sqlite3.c
+	$C -DSQLITE_ENABLE_JSON1 -DSQLITE_THREADSAFE=2 ${HUSH} -c sqlite3.c
 
 io-constants: io-constants.c
 	$C -I${UvInclude} io-constants.c -o io-constants
