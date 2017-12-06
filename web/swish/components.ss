@@ -91,8 +91,7 @@
       (link "errors?type=gen-server" "Gen-Server Errors")
       (link "errors?type=supervisor" "Supervisor Errors")
       (link "query-db" "Log DB")
-      (link "debug" "Debug")
-      (link "server-log" "Server Log"))))
+      (link "debug" "Debug"))))
 
 (define (stilts height)
   `(div (@ (style ,(format "height:~apx;" height)) (class "stilts"))))

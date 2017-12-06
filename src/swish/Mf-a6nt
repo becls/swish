@@ -4,26 +4,31 @@ UvInclude=../../libuv/include
 UvLib=../../libuv/Release/lib/libuv.lib
 C=../vs64 cl /nologo /Ox /MD /W3
 LD=../vs64 link /nologo
+PYTHON=C:\Python27\python.exe
 
 all: ../../bin/osi.dll io-constants.ss
 
-../../bin/osi.dll: osi.obj sqlite.obj sqlite3.obj
+../../bin/osi.dll: osi.obj sqlite.obj sqlite3.obj ${UvLib}
 	${LD} /dll /ltcg /nodefaultlib:libcmt /out:../../bin/osi.dll osi.obj sqlite.obj sqlite3.obj "${SchemeLib}" "${UvLib}"
 
-osi.obj: osi.h osi.c
+osi.obj: osi.h osi.c ${UvInclude}
 	$C /I"${SchemeInclude}" /I"${UvInclude}" /c osi.c
 
-sqlite.obj: osi.h sqlite.c
+sqlite.obj: osi.h sqlite.c ${UvInclude}
 	$C /I"${SchemeInclude}" /I"${UvInclude}" /c sqlite.c
 
 sqlite3.obj: sqlite3.h sqlite3.c
 	$C /DSQLITE_ENABLE_JSON1 /DSQLITE_THREADSAFE=2 /c sqlite3.c
 
-io-constants.exe: io-constants.c
+io-constants.exe: io-constants.c ${UvInclude}
 	$C /I"${UvInclude}" io-constants.c
 
+${UvLib}: ${UvInclude}
+	  if [ ! -f /cygdrive/c/Python27/python.exe ]; then echo Please install Python 2.7 for Windows.; exit 1; fi
+	  -cd ../../libuv; cmd /c vcbuild.bat release vs2017 x64 static
+
 clean:
-	rm -f ../../bin/osi.{dll,exp,lib} osi.obj sqlite.obj io-constants.*
+	rm -f ../../bin/osi.{dll,exp,lib} osi.obj sqlite.obj io-constants.{exe,obj}
 
 pristine: clean
-	rm -f sqlite3.obj
+	rm -rf sqlite3.obj ../../libuv/Release

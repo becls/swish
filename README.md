@@ -12,52 +12,27 @@ I/O.
 
 # Notes
 
+- `cd src; ./go` builds and runs the engine.
 - Disable the expression editor with --eedisable because Chez Scheme's
   expression editor does not use asynchronous console I/O. We would
   have to modify the places where s/expeditor.ss calls `$ee-read-char`
   in blocking mode to use libuv's asynchronous read function instead
   of the one in c/expeditor.c.
 
-# Building
+# Build System Requirements
 
 ## Linux
 
-- Chez Scheme 9.5 for a6le
+- Chez Scheme 9.5
 
 ## Mac
 
-- Chez Scheme 9.5 for a6osx
+- Chez Scheme 9.5
 
 ## Windows
 
-- Chez Scheme 9.5 for a6nt
-
-# Compiling libuv 1.18.0
-
-```bash
-$ git submodule update --init libuv
-$ cd libuv
-$ git clone https://chromium.googlesource.com/external/gyp build/gyp
-```
-
-## Linux
-
-```bash
-$ ./gyp_uv.py -Duv_library=static_library -f make
-$ BUILDTYPE=Release CFLAGS="-fPIC" make -C out
-```
-
-## Mac
-
-```bash
-$ ./gyp_uv.py -Duv_library=static_library -f xcode
-$ xcodebuild -ARCHS="x86_64" -project uv.xcodeproj -configuration Release -target All
-```
-## Windows
-
-- Install Python 2.7 for Windows.
-
-```cmd
-> set PYTHON=C:\Python27\python.exe
-> vcbuild.bat release vs2017 x64 static
-```
+- Chez Scheme 9.5
+- Cygwin with bash, git, grep, perl, texlive, etc.
+- Graphviz 2.30
+- Python 2.7 for Windows in C:\Python27
+- Put scheme in PATH.

@@ -8,23 +8,27 @@ C = gcc -m64 -msse2 -fPIC -Wall -Wextra -Werror -O2
 
 all: ../../bin/libosi.so io-constants.ss
 
-../../bin/libosi.so: osi.o sqlite.o sqlite3.o
+../../bin/libosi.so: osi.o sqlite.o sqlite3.o ${UvLib}
 	$C -shared -L${UvLib} -o ../../bin/libosi.so osi.o sqlite.o sqlite3.o -luv -luuid
 
-osi.o: osi.h osi.c
+osi.o: osi.h osi.c ${UvInclude}
 	$C -I${SchemeInclude} -I${UvInclude} -c osi.c
 
-sqlite.o: osi.h sqlite.c
+sqlite.o: osi.h sqlite.c ${UvInclude}
 	$C -I${SchemeInclude} -I${UvInclude} -c sqlite.c
 
 sqlite3.o: sqlite3.h sqlite3.c
 	$C -DSQLITE_ENABLE_JSON1 -DSQLITE_THREADSAFE=2 ${HUSH} -c sqlite3.c
 
-io-constants: io-constants.c
+io-constants: io-constants.c ${UvInclude}
 	$C -I${UvInclude} io-constants.c -o io-constants
+
+${UvLib}: ${UvInclude}
+	  cd ../../libuv; ./gyp_uv.py -Duv_library=static_library -f make
+	  BUILDTYPE=Release CFLAGS="-fPIC" make -C ../../libuv/out
 
 clean:
 	rm -f ../../bin/libosi.so osi.o sqlite.o io-constants io-constants.ss
 
 pristine: clean
-	rm -f sqlite3.o
+	rm -rf sqlite3.o ../../libuv/out/Release

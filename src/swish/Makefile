@@ -17,3 +17,7 @@ endif
 
 io-constants.ss: io-constants$(EXESUFFIX)
 	./$< > $@
+
+../../libuv/include:
+	git submodule update --init ../../libuv
+	git clone https://chromium.googlesource.com/external/gyp ../../libuv/build/gyp
