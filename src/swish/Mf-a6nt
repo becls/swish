@@ -25,7 +25,7 @@ io-constants.exe: io-constants.c ${UvInclude}
 
 ${UvLib}: ${UvInclude}
 	  if [ ! -f /cygdrive/c/Python27/python.exe ]; then echo Please install Python 2.7 for Windows.; exit 1; fi
-	  -cd ../../libuv; cmd /c vcbuild.bat release vs2017 x64 static
+	  -cd ../../libuv; PYTHON="${PYTHON}" cmd /c vcbuild.bat release vs2017 x64 static
 
 clean:
 	rm -f ../../bin/osi.{dll,exp,lib} osi.obj sqlite.obj io-constants.{exe,obj}
