@@ -1,6 +1,6 @@
 ifeq ($(shell uname -m),armv7l)
 ARCH := arm32
-else ifeq ($(getconf LONG_BIT),32)
+else ifeq ($(shell getconf LONG_BIT),32)
 ARCH := i3
 else
 ARCH := a6
