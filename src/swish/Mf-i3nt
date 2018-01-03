@@ -1,5 +1,10 @@
+ifdef ProgramFiles(x86)
 SchemeInclude=C:/Program Files (x86)/Chez Scheme 9.5/boot/i3nt
 SchemeLib=C:/Program Files (x86)/Chez Scheme 9.5/bin/i3nt/csv95.lib
+else
+SchemeInclude=C:/Program Files/Chez Scheme 9.5/boot/i3nt
+SchemeLib=C:/Program Files/Chez Scheme 9.5/bin/i3nt/csv95.lib
+endif
 UvInclude=../../libuv/include
 UvLib=../../libuv/Release/lib/libuv.lib
 C=../vs32 cl /nologo /Ox /MD /W3

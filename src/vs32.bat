@@ -1,19 +1,23 @@
 @echo off
+set Applications=%ProgramFiles(x86)%
+if not "%Applications%" == "" goto win64
+set Applications=%ProgramFiles%
+:win64
 
 :: Visual Studio 2017 Enterprise
-set BATDIR=%ProgramFiles(x86)%\Microsoft Visual Studio\2017\Enterprise\VC\Auxiliary\Build
+set BATDIR=%Applications%\Microsoft Visual Studio\2017\Enterprise\VC\Auxiliary\Build
 if exist "%BATDIR%\vcvarsall.bat" goto found
 
 :: Visual Studio 2017 Professional
-set BATDIR=%ProgramFiles(x86)%\Microsoft Visual Studio\2017\Professional\VC\Auxiliary\Build
+set BATDIR=%Applications%\Microsoft Visual Studio\2017\Professional\VC\Auxiliary\Build
 if exist "%BATDIR%\vcvarsall.bat" goto found
 
 :: Visual Studio 2017 Community
-set BATDIR=%ProgramFiles(x86)%\Microsoft Visual Studio\2017\Community\VC\Auxiliary\Build
+set BATDIR=%Applications%\Microsoft Visual Studio\2017\Community\VC\Auxiliary\Build
 if exist "%BATDIR%\vcvarsall.bat" goto found
 
 :: Visual Studio 2017 BuildTools
-set BATDIR=%ProgramFiles(x86)%\Microsoft Visual Studio\2017\BuildTools\VC\Auxiliary\Build
+set BATDIR=%Applications%\Microsoft Visual Studio\2017\BuildTools\VC\Auxiliary\Build
 if exist "%BATDIR%\vcvarsall.bat" goto found
 
 :: Visual Studio 2015
