@@ -32,7 +32,6 @@ I/O.
 ## Windows
 
 - Chez Scheme 9.5
-- Cygwin with bash, git, grep, perl, texlive, etc.
-- Graphviz 2.30
+- Cygwin with bash, git, graphviz, grep, perl, texlive, etc.
 - Python 2.7 for Windows in C:\Python27
 - Put scheme in PATH.
