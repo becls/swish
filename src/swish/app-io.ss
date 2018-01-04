@@ -42,7 +42,7 @@
 
   (define data-dir (path-combine base-dir "data"))
 
-  (define http-port-number (make-parameter 54221))
+  (define http-port-number (make-parameter 54321))
 
   (define log-path (make-parameter (path-combine data-dir "Log.db3")))
 
