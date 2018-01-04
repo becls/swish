@@ -128,7 +128,7 @@
 
   ;; Event Loop
   (fdefine osi_get_callbacks (timeout unsigned-64) ptr)
-  (fdefine osi_set_tick void)
+  (fdefine osi_set_tick (nanoseconds unsigned-64) void)
   (fdefine osi_is_tick_over boolean)
 
   ;; Ports

@@ -53,7 +53,7 @@ ptr make_scheme_string(const char* utf8);
 
 // Event Loop
 EXPORT ptr osi_get_callbacks(uint64_t timeout);
-EXPORT void osi_set_tick(void);
+EXPORT void osi_set_tick(uint64_t nanoseconds);
 EXPORT int osi_is_tick_over(void);
 
 // Ports

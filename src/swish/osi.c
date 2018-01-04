@@ -809,8 +809,8 @@ ptr osi_get_callbacks(uint64_t timeout) {
   return callbacks;
 }
 
-void osi_set_tick(void) {
-  g_tick = uv_hrtime() + 1000000; // 1 ms from now
+void osi_set_tick(uint64_t nanoseconds) {
+  g_tick = uv_hrtime() + nanoseconds;
 }
 
 ptr osi_stat(const char* path, int follow, ptr callback) {
