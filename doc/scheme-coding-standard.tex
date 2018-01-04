@@ -1,0 +1,363 @@
+% Copyright 2017 Beckman Coulter, Inc.
+%
+% Permission is hereby granted, free of charge, to any person
+% obtaining a copy of this software and associated documentation files
+% (the "Software"), to deal in the Software without restriction,
+% including without limitation the rights to use, copy, modify, merge,
+% publish, distribute, sublicense, and/or sell copies of the Software,
+% and to permit persons to whom the Software is furnished to do so,
+% subject to the following conditions:
+%
+% The above copyright notice and this permission notice shall be
+% included in all copies or substantial portions of the Software.
+%
+% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+% EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+% MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+% NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+% BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+% ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+% CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+% SOFTWARE.
+
+\documentclass[letterpaper,11pt,twoside,final]{article}
+\usepackage{sagian}
+
+\begin{document}
+
+\title {Scheme Coding Standard}
+\author {Chris Payne \and Bob Burger}
+\date {\copyright\ 2017 Beckman Coulter, Inc.
+  Licensed under the \href{https://opensource.org/licenses/MIT}{MIT License}.}
+\coverpage
+
+\section* {Purpose}
+
+This document describes the coding standard for Scheme code.  It is
+heavily inspired by the Erlang Programming Rules and
+Conventions~\cite{erlang-programming-rules}, as well as \emph{The
+  Scheme Programming Language}~\cite{the-scheme-programming-language}.
+
+\section* {Counting Standard}
+
+Count each physical line as one line of code (LOC). Blank lines and
+comment-only lines will be included. A blank line should appear
+between each top-level function definition. Be consistent about what
+is on each physical line.
+
+\section* {General}
+
+\subsection* {Avoid set!}
+
+The primitive procedures \code{set!} and \code{vector-set!} should
+be avoided. If mutation is necessary, consider using processes,
+hashtables, or dictionaries to help abstract the details into an easy
+to reason about form.
+
+Don't do this:
+\antipar
+\begin{alltt}
+(define (sum ls)
+  (let ([acc 0])
+    (for-each
+     (lambda (x)
+       (set! acc (+ acc x)))
+     ls)
+    acc))
+\end{alltt}
+
+A better form without \code{set!} is:
+\antipar
+\begin{alltt}
+(define (sum ls)
+  (fold-left
+   (lambda (acc x)
+     (+ acc x))
+   0
+   ls))
+\end{alltt}
+
+\subsection* {Use structured data instead of strings}
+
+Use structured data to communicate to other parts of the system. Using
+strings directly makes localization much harder.
+
+Don't do this:
+\antipar
+\begin{alltt}
+(format "Homing stalled for motor ~a at step ~d" name step)
+\end{alltt}
+
+Do this:
+\antipar
+\begin{alltt}
+`\#(home-stalled ,name ,step)
+\end{alltt}
+
+Symbols can be used in structured data. Structured data can be pattern
+matched and converted to strings in an appropriate language.
+
+\subsection* {Do not program defensively}
+
+A defensive program is one where the programmer does not trust the
+input data to the part of the system they are programming. In general
+one should not test input data to functions for correctness. Most of
+the code in the system should be written with the assumption that the
+input data to the function in question is correct. Only a small part
+of the code should actually perform any checking of the data. This is
+usually done when data enters the system for the first time. Once data
+has been checked as it enters the system, it should thereafter be
+assumed correct.
+
+\subsection* {Think about append}
+
+\code{append} will copy all of its arguments except the last. Its
+time and space complexity are O($n$) for a list of $n$ elements.
+
+O($n$) is likely fine in some cases, but repeated calls to
+\code{append} will result in O($n^2$) or worse. Here is an example
+that could be written better without \code{append}.
+\antipar
+\begin{alltt}
+(let lp ([ls (list 1 2 3)] [seen '()])
+  (match ls
+    [() seen]
+    [(,first . ,rest)
+     (lp rest (append seen (list first)))]))
+\end{alltt}
+
+This version of the code is O($n$) to traverse the list, uses
+\code{cons} to build up a result, then uses \code{reverse} which
+is also O($n$) to return the result in the proper order.
+\antipar
+\begin{alltt}
+(let lp ([ls (list 1 2 3)] [seen '()])
+  (match ls
+    [() (reverse seen)]
+    [(,first . ,rest)
+     (lp rest (cons first seen))]))
+\end{alltt}
+
+This is really a more general rule about knowing what the functions
+you are calling do. Understand their performance characteristics and
+know that they are the right functions to use.
+
+\subsection* {Use match instead of car and cdr}
+
+Over time, we have found \code{match} to be simple to read. It is
+so nice that we began trying to minimize our direct usage of
+\code{car} and \code{cdr}.
+
+Without \code{match}:
+\antipar
+\begin{alltt}
+(define (fold f acc ls)
+  (if (null? ls)
+      acc
+      (fold f (f (car ls) acc) (cdr ls))))
+\end{alltt}
+
+With \code{match}:
+\antipar
+\begin{alltt}
+(define (fold f acc ls)
+  (match ls
+    [() acc]
+    [(,first . ,rest) (fold f (f first acc) rest)]))
+\end{alltt}
+
+\subsection* {Use match or match-let* with records}
+
+When binding multiple fields from a record, use \code{match} or
+\code{match-let*} to minimize type checking.
+
+Given:
+\antipar
+\begin{alltt}
+(define-record <point> x y z)
+\end{alltt}
+
+Don't extract each field:
+\antipar
+\begin{alltt}
+(lambda (p)
+  (let ([x (<point> x p)]
+        [y (<point> y p)]
+        [z (<point> z p)])
+    (list x y z)))
+\end{alltt}
+
+Extract all fields at once:
+\antipar
+\begin{alltt}
+(lambda (p)
+  (match-let* ([`(<point> [x ,x] [y ,y] [z ,z]) p])
+    (list x y z)))
+\end{alltt}
+
+\subsection* {Fail fast}
+
+When dealing with code that uses exceptions, use a fail-fast approach
+for the code. This usually produces code that is easier to read and
+reason about.
+
+Don't do this:
+\antipar
+\begin{alltt}
+(if \var{condition}
+    (success)
+    (exit 'boom!))
+\end{alltt}
+
+Do this:
+\antipar
+\begin{alltt}
+(unless \var{condition}
+  (exit 'boom!))
+(success)
+\end{alltt}
+
+\subsection* {Know when to use \texttt{eq?}, \texttt{eqv?},
+  \texttt{equal?}, and \texttt{=}}
+
+Chapter 6 of \emph{The Scheme Programming
+  Language}~\cite{the-scheme-programming-language} discusses
+equivalence.
+
+Use \code{eq?} to check if two objects are represented by the same
+pointer value.
+
+Use \code{eqv?} to check if two objects are equivalent. This works
+with simple data like numbers, booleans, and characters.
+
+Use \code{equal?} to check if two objects have the same
+structure. This works with compound data like strings, lists, and
+vectors.
+
+Use \code{=} to check if two numbers are equal.
+
+\subsection* {Tag messages}
+
+Messages should be tagged. This makes the order of \code{receive}
+and \code{match} statements less important and the implementation of
+new messages easier.
+
+Don't do this:
+\antipar
+\begin{alltt}
+(define (loop)
+  (receive
+   [(,msg ,args)
+    (apply printf msg args)
+    (loop)]))
+\end{alltt}
+
+Do this:
+\antipar
+\begin{alltt}
+(define (loop)
+  (receive
+   [\#(print ,msg ,args)
+    (apply printf msg args)
+    (loop)]))
+\end{alltt}
+
+\subsection* {Libraries}
+
+The filename and library name should be consistent. The export and
+import lists should be sorted. The \code{except} clauses should be
+at the end of the \code{import} list.
+
+In Emacs, select multiple lines and use Meta-X \code{sort-lines}.
+
+For example in \texttt{swish/gen-server.ss} we find the
+\code{(swish gen-server)} library: \antipar
+\begin{alltt}
+(library (swish gen-server)
+  (export
+   define-state-record
+   gen-server:call
+   gen-server:cast
+   gen-server:debug
+   gen-server:reply
+   gen-server:start
+   gen-server:start&link
+   )
+  (import
+   (swish erlang)
+   (swish event-mgr-notify)
+   (swish events)
+   (except (chezscheme) define-record exit)
+   )
+\end{alltt}
+
+\section* {Concurrency}
+
+\subsection* {Input and Output}
+
+When choosing which input/output functions to use, prefer the ones
+provided by the concurrency subsystem. Chez Scheme's builtin
+operations may prevent the entire system from functioning for a period
+of time. Our versions of the functions will initiate asynchronous read
+and write operations, then continue processing other activities.
+
+\subsection* {Event-loop Callbacks}
+
+Inspect event-loop callbacks with great scrutiny. Well-designed
+callbacks typically register objects that wrap operating system
+interface handles with a guardian and send messages to a
+process. These types of operations neither block nor fail.
+
+\subsection* {Finalizers}
+
+Ill-behaved finalizers may cause memory and handle leaks. Inspect
+finalizers with great scrutiny. Well-designed finalizers guard against
+errors when closing handles and include time-outs so that they don't
+wait indefinitely.
+
+\subsection* {\texttt{gen-server}}
+
+In \code{handle-call}, \code{handle-cast}, and
+\code{handle-info}, do not use specific match clauses to guard
+against unexpected messages. An unexpected message will cause the
+server to crash, and the framework will report the failure.
+
+\section* {Style}
+
+Chapter~1 of \emph{The Scheme Programming Language} provides a good
+starting point for writing Scheme code.
+
+\subsection* {Only bind variables you use}
+
+\subsection* {Identifiers}
+
+Use meaningful names---this can be very difficult. Identifiers should
+correspond directly to the names used in the design
+documents. Identifiers should use lower-case letters with a hyphen
+separating compound words. Mixed-case identifiers may be used when
+they directly correspond to an external definition.
+
+\subsection* {Comments}
+
+Comments should be clear, concise, and written in U.S. English.
+
+Avoid using comments that say what the code says.
+
+\subsection* {Formatting}
+
+Scheme code should be indented according to the Emacs Scheme mode
+(\texttt{scheme.el}). Ctrl-Meta-Q in Emacs will reindent an
+expression.
+
+Line length should be limited to 79 characters. Lines longer than 79
+characters may be tolerated.
+
+Lines should end in LF, not CRLF.
+
+Tab characters should not appear in Scheme code. Their presence in a
+file makes the indentation depend on the software used to view the
+file.
+
+\bibliography{reference}
+
+\end{document}

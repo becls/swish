@@ -1,0 +1,128 @@
+#!/bin/bash -e
+if [ -t 1 ]
+then
+  MODE=spinner
+else
+  MODE=silent
+fi
+if [ "$1" == "-q" ]; then
+  MODE=silent
+  shift
+fi
+
+if [ $# -ne 1 ]
+then
+  echo "Usage: run-latex [-q] BASENAME"
+  echo "       where the optional -q suppresses the progress indicator"
+  exit 1
+fi
+
+function silent
+{
+  "$@" > /dev/null
+}
+
+# pdflatex and friends are very chatty and they create log files anyway.
+# We don't want folks to miss warnings, so replace the noise with a spinner.
+function spinner
+{
+  # By default, awk gives us the unbuffered I/O we want for a spinner.
+  "$@" | awk 'BEGIN { n=0; s="|/-\\"; } { printf "%c\r", substr(s,n+1,1); n=(n+1)%4; }'
+  RESULT=${PIPESTATUS[0]}
+  echo -ne " \r"
+  return $RESULT
+}
+
+function runpdflatex
+{
+  ${MODE} pdflatex -halt-on-error -file-line-error -interaction nonstopmode "$1"
+}
+
+function runbibtex
+{
+  # bibtex exits w/a nonzero value if there are no citations.
+  # In order to allow this, we temporarily set +e to capture the result,
+  # and if it's nonzero, check if that was the only error in the blg file.
+  set +e
+  ${MODE} bibtex "$1"
+  RESULT=$?
+  set -e
+  if [ $RESULT -ne 0 ]
+  then
+      if fgrep -asq "There was 1 error message" "$1.blg" && \
+         fgrep -asq "I found no \citation commands" "$1.blg"
+    then
+      return 0
+    fi
+    alert "There was an error running bibtex. Please check $1.blg."
+  fi
+  return $RESULT
+}
+
+function alert
+{
+  echo "$@" 1>&2
+}
+
+function update_indices
+{
+  if fgrep -asq "$1.idx" "$1.log"
+  then
+    ${MODE} makeindex -q "$1.idx" -o "$1.ind"
+    changed=yes
+  fi
+  if fgrep -asq "$1.thm" "$1.log"
+  then
+    changed=yes
+  fi
+}
+
+function display_warnings
+{
+  if fgrep -a Warning "$1.log" | fgrep -v "Font Warning" | fgrep -v hyphenat
+  then
+    alert "*** Please correct the warnings for $1. ***"
+  else
+    alert no warnings for $1
+  fi
+}
+
+function display_errors
+{
+  egrep -aA 1 '^(\..*:..*:..*|l\.|.*LaTeX Error)' "$1.log"
+}
+
+if ! runpdflatex "$1"; then display_errors "$1"; exit 1; fi
+if fgrep -asq 'Label(s) may have changed.' "$1.log"
+then
+  changed=yes
+else
+  changed=no
+fi
+if fgrep -asq "$1.bbl" "$1.log"
+then
+  runbibtex "$1"
+  changed=yes
+fi
+update_indices "$1"
+if [ $changed = no ]; then display_warnings "$1"; exit 0; fi
+
+runpdflatex "$1"
+if ! fgrep -asq 'Label(s) may have changed.' "$1.log"; then display_warnings "$1"; exit 0; fi
+
+update_indices "$1"
+runpdflatex "$1"
+if ! fgrep -asq 'Label(s) may have changed.' "$1.log"; then display_warnings "$1"; exit 0; fi
+
+update_indices "$1"
+runpdflatex "$1"
+if ! fgrep -asq 'Label(s) may have changed.' "$1.log"; then display_warnings "$1"; exit 0; fi
+
+update_indices "$1"
+runpdflatex "$1"
+if fgrep -asq 'Label(s) may have changed.' "$1.log"
+then
+  alert *** Labels keep changing!
+  display_warnings "$1"
+  exit 1
+fi

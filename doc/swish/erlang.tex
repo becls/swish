@@ -1,0 +1,1967 @@
+% Copyright 2017 Beckman Coulter, Inc.
+%
+% Permission is hereby granted, free of charge, to any person
+% obtaining a copy of this software and associated documentation files
+% (the "Software"), to deal in the Software without restriction,
+% including without limitation the rights to use, copy, modify, merge,
+% publish, distribute, sublicense, and/or sell copies of the Software,
+% and to permit persons to whom the Software is furnished to do so,
+% subject to the following conditions:
+%
+% The above copyright notice and this permission notice shall be
+% included in all copies or substantial portions of the Software.
+%
+% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+% EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+% MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+% NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+% BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+% ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+% CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+% SOFTWARE.
+
+\chapter {Erlang Embedding}\label{chap:erlang}
+
+\section {Introduction}
+
+This chapter describes the design of the message-passing concurrency
+model. It provides a Scheme embedding of a significant subset of the
+Erlang programming
+language~\cite{armstrong-thesis,programming-erlang}.\footnote{Tuples,
+  denoted by \{$e_1$, \ldots, $e_n$\} in Erlang, are implemented as
+  vectors: \code{\#(\var{e$_1$}~\etc~\var{e$_n$})}. Similarly
+  records, defined as syntactic sugar over tuples in Erlang, are
+  implemented as syntactic sugar over vectors.}  Record and pattern
+matching macros provide succinct ways of composing and decomposing
+data structures.
+
+The basic unit of sequential computation is the \emph{process}.  Each
+process has independent state and communicates with other processes by
+message passing. Because processes share no mutable state, one process
+cannot corrupt the state of another process---a problem that plagues
+software using shared-state concurrency. \concern{System procedures that
+  mutate data can cause state corruption.} \mitigation The code is
+inspected for use of these procedures.
+
+An uncaught exception in one process does not affect any other
+process. A process can be monitored for termination, and it can be
+linked to another process so that, when either process exits, the
+other one receives an exit signal.  Processes are implemented with
+one-shot continuations~\cite{one-shot}, and the concurrent system is
+simulated by the single-threaded program using software
+timer interrupts.  The operating system interface (see
+Chapter~\ref{chap:osi}) provides asynchronous input/output (I/O) so
+that processes waiting for I/O do not stop other processes from
+executing.
+
+For exceptions, we use Erlang's approach of encoding the information
+in a machine-readable datum rather than a formatted string. Doing so
+makes it possible to write code that matches particular exceptions
+without having to parse strings, and the exception is human language
+independent.
+
+The rest of this chapter is organized as follows.
+Section~\ref{sec:erlang-data-structures} introduces the main data structures,
+Section~\ref{sec:erlang-theory} describes how the concurrency
+model works, and Section~\ref{sec:erlang-api} gives the
+programming interface.
+
+\section {Data Structures}\label{sec:erlang-data-structures}
+
+\paragraph {\code{q}}\index{q@\code{q}}
+Queues are used in several key places: the inbox of messages for each
+process, the list of processes ready to run, and the list of sleeping
+processes. A \emph{queue} is a doubly-linked list with a sentinel
+value, the queue's identity. Both the sentinel value and the elements
+of the queue are instances of \code{q}, a Scheme record type with
+mutable \code{prev} and \code{next} fields.  This representation
+enables constant-time insertion and deletion operations.
+
+\paragraph {\code{msg}}\index{msg@\code{msg}}
+When a \emph{message} is sent to a process, its contents are wrapped
+in an instance of \code{msg}, a Scheme record type that extends
+\code{q} with an immutable \code{contents} field. This
+\code{msg} is inserted into the process's inbox and removed when the
+process receives it.
+
+\paragraph {\code{pcb}}\index{pcb@\code{pcb}}
+A \emph{process} is an instance of \code{pcb}, a Scheme record type
+that extends \code{q} with an immutable \code{id} field, the
+process's unique positive exact integer, and the following mutable
+fields:
+\begin{itemize}
+\item \code{name}: registered name or \code{\#f}
+\item \code{cont}: one-shot continuation if live and not currently
+  running or \code{\#f} otherwise
+\item \code{sic}: system interrupt count
+\item \code{winders}: list of winders if live and not currently
+  running or \code{()} otherwise
+\item \code{exception-state}: exception state if live and not
+  currently running, exit reason if dead, or \code{\#f} if currently
+  running
+\item \code{inbox}: queue of \code{msg} if live or \code{\#f} if
+  dead
+\item \code{precedence}: wake time if sleeping or current priority
+  ($-1$, 0, or 1) if ready to run
+\item \code{flags}: fixnum with bit 0 set when sleeping and bit 1
+  set when the process traps exits
+\item \code{links}: list of linked processes
+\item \code{monitors}: list of monitors
+\item \code{src}: source location \code{\#(at \var{char-offset}
+  \var{filename})} when available if waiting in a \code{receive}
+  macro or \code{\#f} otherwise
+\end{itemize}
+
+\paragraph {\code{mon}}\index{mon@\code{mon}}
+A \emph{monitor} is an instance of \code{mon}, a Scheme record type
+with two immutable fields, \code{origin} and \code{target}, each
+of which is a process.
+
+\paragraph {\code{osi-port}}\index{osi-port@\code{osi-port}}
+An \emph{osi-port} is an instance of \code{osi-port}, a Scheme
+record type with an immutable \code{name} field and a mutable
+\code{handle} field that wraps an operating system interface
+port. The \code{handle} field is set to \code{\#f} when the
+osi-port is closed.
+
+\paragraph {\code{directory-watcher}}\index{directory-watcher@\code{directory-watcher}}
+A \emph{directory watcher}\index{directory watcher} is an instance of
+\code{directory-watcher}, a Scheme record type with a mutable
+\code{handle} field and an immutable \code{path} field. The
+\code{handle} field is set to \code{\#f} when the directory
+watcher is closed.
+
+\paragraph {\code{listener}}\index{listener@\code{listener}}
+A \emph{TCP listener}\index{TCP listener} is an instance of
+\code{listener}, a Scheme record type with a mutable \code{handle}
+field and an immutable \code{port-number} field. The \code{handle}
+field is set to \code{\#f} when the listener is closed.
+
+\section {Theory of Operation}\label{sec:erlang-theory}
+
+The system uses a \emph{scheduler}\index{scheduler} to execute one
+process at a time. Each process holds its own system interrupt count
+(updated by \code{enable-interrupts} and \code{disable-interrupts}),
+list of winders (maintained by \code{dynamic-wind} and the system
+primitive \code{\$current-winders}), and exception state (maintained
+by \code{current-exception-state}). The scheduler captures the
+one-shot continuation for a process with an empty list of winders so
+that, when it invokes the continuation of another process, it does not
+run any winders. \concern{Using a system procedure that relies on the
+  global winders list may lead to incorrect behavior.} \mitigation
+System procedures that rely on the global winders list are called from
+only one process at a time using the
+\emph{gatekeeper}\index{gatekeeper} described in
+Chapter~\ref{chap:gatekeeper}. The gatekeeper hooks the \code{\$cp0},
+\code{\$np-compile}, \code{pretty-print}, and \code{sc-expand} system
+primitives.
+
+Spawning a new process is not as simple as capturing a one-shot
+continuation and creating a \code{pcb} record, because the
+continuation's stack link~\cite{representing-control} would be the
+continuation of the caller, and its list of winders would be the
+caller's. Thus, the scheduler remembers the current list of winders
+and then sets it to the empty list before capturing a one-shot
+continuation.  This return continuation is stored in a mutable
+variable so that it is not closed over by the new process.  Next, a
+full continuation is captured to create the initial exception state
+that will terminate the new process when an uncaught exception is
+raised. So that this full continuation does not refer to the caller's
+continuation, the current stack link is set to the null continuation
+before capturing it. After capturing the full continuation, a one-shot
+continuation for the new process is captured and returned to the
+caller via the return continuation.
+
+Each process runs until it waits in a \code{receive} macro, is
+preempted by the \code{timer-interrupt-handler}, or exits.  The
+operating system interface (see Chapter~\ref{chap:osi}) provides
+asynchronous I/O operations so that the scheduler can execute other
+processes while the system is performing I/O.  The timer interrupt
+handler runs every 1000 procedure calls.\footnote{1000 was chosen
+  because Chez Scheme performs its internal interrupt checks every
+  1000 ticks.} The scheduler uses \code{osi::SetTick} and
+\code{osi::IsTickOver} to determine when the time quantum for a
+process has elapsed.
+
+When process \var{p} exits with reason \var{r}, the message
+\code{\#(DOWN \var{m} \var{p} \var{r})} is sent to each of its
+monitor \var{m}'s \code{origin} processes.  The message
+\code{\#(EXIT \var{p} \var{r})} is sent to each linked process that
+traps exits. If \var{r} is not \code{normal}, each linked process
+that does not trap exits is killed with reason \var{r}.
+
+A process can be registered with a global name, a symbol. This name
+can be used instead of the process record itself to send it messages.
+A global \emph{registrar}\index{registrar} maintains an eq-hashtable
+mapping names to processes. The reverse mapping is maintained in the
+\code{pcb} record through the \code{name} field.
+
+There are two system processes: the
+\emph{event-loop}\index{event-loop} and the
+\emph{finalizer}\index{finalizer}.
+
+The event-loop process calls \code{osi::GetCompletionPacket} to
+retrieve completion packets from the operating system interface.  It
+executes each callback with interrupts disabled.  Event-loop callbacks
+are designed to execute quickly without failing or causing new
+completion packets to be enqueued. Typical callbacks register objects
+that wrap operating system interface handles with a guardian and send
+messages to a process. If the event-loop process exits with reason
+$r$, the system logs the event
+\code{\#(event-loop-process-terminated $r$)} with
+\code{console-event-handler} and calls \code{osi::ExitProcess}
+with exit code 80.
+
+The scheduler maintains the \emph{run queue}\index{run queue}, a queue
+of ready-to-run processes, and the \emph{sleep queue}\index{sleep
+  queue}, a queue of sleeping processes. Both are ordered by
+increasing precedence and preserve the order of insertion for
+processes with the same precedence. For the run queue, each process
+except the event-loop has precedence 0 in order to implement
+round-robin scheduling. For the sleep queue, each process uses its
+wake time as the precedence.
+
+When the run queue is empty, the event-loop process calls
+\code{osi::GetCompletionPacket} with a non-zero timeout based on the
+first entry in the sleep queue to avoid busy waiting.
+
+At every context switch, the scheduler wakes any sleeping processes
+and calls \code{osi::Is\-Completion\-Packet\-Ready}. When the call
+returns true, the scheduler promotes the event-loop process to the
+front of the run queue and sets its precedence to $-1$.  When the
+event-loop process finishes processing all completion packets, it
+demotes itself to the end of the run queue and sets its precedence to
+1.
+
+\concern{Some process may starve another process.}  \mitigation Except
+for the event-loop process, the run queue is managed with round-robin
+scheduling to prevent starvation. The event-loop process does not
+starve other processes because it drains the completion queue without
+causing new completion packets to be enqueued.
+
+The finalizer process runs the finalizers registered via
+\code{add-finalizer}. These finalizers typically close operating
+system interface handles to objects that are no longer
+accessible. \concern{Ill-behaved finalizers may cause memory and handle
+  leaks.}  \mitigation Finalizers are designed to execute quickly
+without failing. Typical finalizers guard against errors when closing
+handles. If the finalizer process exits with reason $r$, the
+system logs the event
+\code{\#(finalizer-process-terminated $r$)} with
+\code{console-event-handler} and calls \code{osi::ExitProcess}
+with exit code 80.
+
+Once the finalizer process runs all the finalizers, it waits until
+another garbage collection has occurred before running again. The
+system hooks the \code{collect} procedure so that
+it sends a wake-up message to the finalizer process every time a
+garbage collection occurs.  When the finalizer receives the wake-up
+message, it pumps all other wake-up messages from its inbox, since
+there may have been more than one garbage collection since it last
+ran.
+
+Asynchronous I/O operations for COM ports, named pipes, external
+operating system processes, files, console input, and TCP connections
+are implemented with custom binary ports so that they have the same
+interface as the system I/O procedures. The system I/O procedures are
+not used because they perform synchronous I/O.  The custom port buffer
+size is set to 1024\footnote{1024 was chosen because Chez Scheme uses
+  1024 for the buffer size of buffered transcoded ports.} with
+\code{custom-port-buffer-size}.  The custom binary port read and
+write procedures call \code{osi::ReadPort} and
+\code{osi::WritePort} with callbacks that send a message to the
+calling process, which waits until it receives the message.
+
+\concern{Using a port from more than one process at the same time may
+  cause errors including buffer corruption.}  \mitigation The code is
+inspected for concurrent use of ports. Port visibility is typically
+limited to a single process.
+
+For two-way communication ports, we use two custom ports: one
+exclusively for input, and one exclusively for output. We do not use
+custom input/output ports for two reasons.  First, textual
+input/output ports created with \code{transcoded-port} are not safe
+to use from two concurrent processes because one transcoding buffer is
+used for both reading and writing.  Second, the input side of a port
+is commonly used only by a reader process, and the output side of a
+port is commonly used only by a writer process.  Keeping the input and
+output sides separate prevents concurrent use. The underlying handle
+is closed when the output port is closed.
+
+\concern{Failing to close a handle from the operating system interface
+  that is no longer used causes resource leaks.}  \mitigation An
+\emph{osi-port guardian}\index{osi-port guardian} and associated
+finalizer are used to identify and close inaccessible osi-ports using
+\code{osi::ClosePort}. A \emph{directory-watcher
+  guardian}\index{directory-watcher guardian} and associated finalizer
+are used to identify and close inaccessible directory
+watchers\index{directory watcher}.  A \emph{listener
+  guardian}\index{listener guardian} and associated finalizer are used
+to identify and close inaccessible TCP listeners\index{TCP
+  listener}. In all cases, interrupts are disabled around code that
+wraps handles and registers objects with guardians in order to prevent
+the current process from being killed during this critical time.
+
+\section {Programming Interface}\label{sec:erlang-api}
+
+% ----------------------------------------------------------------------------
+\subsection {Process Creation}
+
+% ----------------------------------------------------------------------------
+\defineentry{spawn}
+\begin{procedure}
+  \code{(spawn \var{thunk})}
+\end{procedure}
+\returns{} a process
+
+The \code{spawn} procedure creates and returns a new process that
+executes \var{thunk}, a procedure of no arguments. The new process
+starts with \code{name} = \code{\#f}, \code{sic} = 0 (interrupts
+enabled), \code{winders} = \code{()}, an \code{exception-state}
+that terminates the process on an unhandled exception, an empty
+\code{inbox}, \code{precedence} = 0, \code{flags} = 0 (the
+process is not sleeping and does not trap exits), \code{links} =
+\code{()}, \code{monitors} = \code{()}, and \code{src} =
+\code{\#f}.
+
+% ----------------------------------------------------------------------------
+\defineentry{spawn\&link}
+\begin{procedure}
+  \code{(spawn\&link \var{thunk})}
+\end{procedure}
+\returns{} a process
+
+Like \code{spawn}, the \code{spawn\&link} procedure creates and
+returns a new process that executes \var{thunk}. In addition, it links
+the new process to the calling process.
+
+% ----------------------------------------------------------------------------
+\subsection {Process Registration}
+
+% ----------------------------------------------------------------------------
+\defineentry{register}
+\begin{procedure}
+  \code{(register \var{name} \var{process})}
+\end{procedure}
+\returns{} \code{\#t}
+
+The \code{register} procedure adds \var{name} $\rightarrow$
+\var{process} to the registrar and sets \var{process}.\code{name} =
+\var{name}. When a registered process exits, its registration is
+removed. If \var{name} is not a symbol, exception \code{\#(bad-arg
+  register \var{name})} is raised. If \var{process} is not a process,
+exception \code{\#(bad-arg register \var{process})} is raised. If
+\var{process} is dead, exception \code{\#(process-dead \var{process})}
+is raised. If \var{process} is already registered to name $n$,
+exception \code{\#(process-already-registered $n$)} is raised. If
+\var{name} is already registered to process $p$, exception
+\code{\#(name-already-registered $p$)} is raised.
+
+% ----------------------------------------------------------------------------
+\defineentry{unregister}
+\begin{procedure}
+  \code{(unregister \var{name})}
+\end{procedure}
+\returns{} \code{\#t}
+
+The \code{unregister} procedure removes \var{name} $\rightarrow$
+\var{process} from the registrar and sets \var{process}.\code{name}
+= \code{\#f}.  If \var{name} is not registered, exception
+\code{\#(bad-arg unregister \var{name})} is raised.
+
+% ----------------------------------------------------------------------------
+\defineentry{whereis}
+\begin{procedure}
+  \code{(whereis \var{name})}
+\end{procedure}
+\returns{} a process \alt{} \code{\#f}
+
+The \code{whereis} procedure returns the process associated with
+\var{name} or \code{\#f} if \var{name} is not registered.  If
+\var{name} is not a symbol, exception \code{\#(bad-arg whereis
+  \var{name})} is raised.
+
+% ----------------------------------------------------------------------------
+\defineentry{get-registered}
+\begin{procedure}
+  \code{(get-registered)}
+\end{procedure}
+\returns{} a list of registered process names
+
+The \code{get-registered} procedure returns a list of currently
+registered process names from the registrar.
+
+% ----------------------------------------------------------------------------
+\subsection {Process Termination, Links, and Monitors}
+
+% ----------------------------------------------------------------------------
+\defineentry{exit}
+\begin{procedure}
+  \code{(exit \var{reason})}
+\end{procedure}
+\returns{} never
+
+The \code{exit} procedure is the system \code{raise} procedure,
+which raises an exception of \var{reason}. If the calling process does
+not catch the exception, the process will exit with \var{reason}.
+
+The system \code{exit} procedure is exported as
+\code{scheme-exit}\index{scheme-exit@\code{scheme-exit}}.
+
+% ----------------------------------------------------------------------------
+\defineentry{catch}
+\begin{syntax}
+  \code{(catch \var{e1} \var{e2} \etc{})}
+\end{syntax}
+\expandsto{}\begin{alltt}\antipar
+(call/1cc
+ (lambda (return)
+   (with-exception-handler
+    (lambda (reason) (return `#(EXIT ,reason)))
+    (lambda () \var{e1} \var{e2} \etc{}))))\end{alltt}
+
+The \code{catch} macro evaluates expressions \var{e1} \var{e2}
+\etc{} in a dynamic context that traps exceptions.  If no exception is
+raised, the return value is the value of the last expression. If
+exception \var{reason} is raised, \code{\#(EXIT \var{reason})} is
+returned.
+
+% ----------------------------------------------------------------------------
+\defineentry{kill}
+\begin{procedure}
+  \code{(kill \var{process} \var{reason})}
+\end{procedure}
+\returns{} \code{\#t}
+
+The \code{kill} procedure is used to terminate a process.
+\begin{enumerate}
+\item If \var{process} is not a process, exception \code{\#(bad-arg kill
+  \var{process})} is raised.
+\item If \var{process} has already exited, nothing happens.
+\item If \var{reason} is \code{kill}, \var{process} is terminated
+  with reason \code{killed}, even if it traps exits.
+\item If \var{process} traps exits, message \code{\#(EXIT \var{self}
+  \var{reason})} is sent to \var{process}, where \var{self} is the
+  calling process.
+\item If \var{process} does not trap exits and \var{reason} is
+  \code{normal}, nothing happens.
+\item Otherwise, \var{process} is terminated with \var{reason}.
+\end{enumerate}
+
+% ----------------------------------------------------------------------------
+\defineentry{link}
+\begin{procedure}
+  \code{(link \var{process})}
+\end{procedure}
+\returns{} \code{\#t}
+
+The \code{link} procedure creates a bi-directional link between the
+calling process (\var{self}) and \var{process}. No more than one link
+can exist between two processes, but it is not an error to call
+\code{link} more than once on the same two processes.
+
+\begin{enumerate}
+\item If \var{process} is not a process, exception \code{\#(bad-arg link
+  \var{process})} is raised.
+\item If \var{process} is \var{self}, nothing happens.
+\item If \var{process} has not exited, then if the two processes are
+  already linked, nothing happens; otherwise, \var{self} is added to
+  \var{process}.\code{links}, and \var{process} is added to
+  \var{self}.\code{links}.
+\item Otherwise, \var{process} has exited with reason $r$ =
+  \var{process}.\code{exception-state}.
+  \begin{enumerate}
+  \item If \var{self} traps exits, message \code{\#(EXIT \var{process} $r$)}
+    is sent to \var{self}.
+  \item If \var{self} does not trap exits and \var{reason} is \code{normal},
+    nothing happens.
+  \item Otherwise, \var{self} is terminated with reason $r$.
+  \end{enumerate}
+\end{enumerate}
+
+% ----------------------------------------------------------------------------
+\defineentry{unlink}
+\begin{procedure}
+  \code{(unlink \var{process})}
+\end{procedure}
+\returns{} \code{\#t}
+
+The \code{unlink} procedure removes the bi-directional link if
+present between the calling process (\var{self}) and \var{process} by
+removing \var{self} from \var{process}.\code{links} and
+\var{process} from \var{self}.\code{links}.  If \var{process} is not
+a process, exception \code{\#(bad-arg unlink \var{process})} is
+raised.
+
+% ----------------------------------------------------------------------------
+\defineentry{monitor}
+\begin{procedure}
+  \code{(monitor \var{process})}
+\end{procedure}
+\returns{} a monitor
+
+The \code{monitor} procedure creates and returns a new monitor $m$
+with \code{origin} = the calling process (\var{self}) and
+\code{target} = \var{process}.  Unlike \code{link},
+\code{monitor} can create more than one connection between the same
+processes.  It adds $m$ to \var{self}.\code{monitors} and
+\var{process}.\code{monitors}.  When \var{process} exits or has
+already exited with reason $r$, the message \code{\#(DOWN $m$
+  \var{process} $r$)} is sent to \var{self}.  If \var{process} is not
+a process, exception \code{\#(bad-arg monitor \var{process})} is
+raised.
+
+% ----------------------------------------------------------------------------
+\defineentry{demonitor}
+\begin{procedure}
+  \code{(demonitor \var{monitor})}
+\end{procedure}
+\returns{} \code{\#t}
+
+The \code{demonitor} procedure removes a \var{monitor} created by
+the calling process (\var{self}) from \var{self}.\code{monitors} and
+\var{monitor}.\code{target}.\code{monitors} if present.  If
+\var{monitor} is not a monitor with \code{origin} = \var{self},
+exception \code{\#(bad-arg demonitor \var{monitor})} is raised.
+
+% ----------------------------------------------------------------------------
+\defineentry{demonitor\&flush}
+\begin{procedure}
+  \code{(demonitor\&flush \var{monitor})}
+\end{procedure}
+\returns{} \code{\#t}
+
+The \code{demonitor\&flush} procedure provides a convenient way to
+demonitor and flush any remaining \code{DOWN} message from the
+calling process's \code{inbox}. It performs the following operations:
+\antipar\begin{alltt}
+(demonitor \var{monitor})
+(receive (until 0 #t)
+  [#(DOWN ,@\var{monitor} ,_ ,_) #t])
+\end{alltt}
+
+% ----------------------------------------------------------------------------
+\defineentry{monitor?}
+\begin{procedure}
+  \code{(monitor? \var{x})}
+\end{procedure}
+\returns{} a boolean
+
+The \code{monitor?} procedure determines whether or not the datum
+\var{x} is a monitor.
+
+% ----------------------------------------------------------------------------
+\subsection {Messages and Pattern Matching}
+
+The pattern matching syntax of Figure~\ref{fig:erlang-pattern-grammar}
+provides a concise and expressive way to match data structures and
+bind variables to parts. The \code{receive}, \code{match}, and
+\code{match-let*} macros use this pattern language. The
+implementation uses two structurally recursive passes over the
+pattern. The first pass checks the pattern syntax including record
+types and field names and accumulates the list of pattern
+variables. This list enables it to check for duplicate pattern
+variables.  The second pass emits code that matches the input against
+the pattern left to right.
+
+% ----------------------------------------------------------------------------
+\begin{figure}
+\begin{tabular}{lp{3.6in}}
+  pattern & matches \\ \hline
+
+  \var{symbol} & itself \\
+  \var{number} & itself \\
+  \var{boolean} & itself \\
+  \var{character} & itself \\
+  \var{string} & itself \\
+  \var{bytevector} & itself \\
+
+  \code{()} & itself \\
+  \code{($p_1$ . $p_2$)} & a pair whose car matches $p_1$ and cdr
+  matches $p_2$ \\
+
+  \code{\#($p_1$ \etc{} $p_n$)} & a vector of $n$ elements whose
+  elements match $p_1$ \etc{} $p_n$ \\
+
+  \code{,\_} & any datum \\
+  \code{,\var{variable}} & any datum and binds a fresh \var{variable} to it \\
+  \code{,@\var{variable}} & any datum \code{equal?} to the bound
+  \var{variable} \\
+
+  \code{,(\var{variable} <= \var{pattern})} & any datum that
+  matches \var{pattern} and binds a fresh \var{variable} to it \\
+
+  \code{`(\var{type} \set{,\var{field}\alt{}[\var{field} \var{pattern}]} \etc{})} &
+  an instance of the record \var{type}, each \var{field} of which is
+  bound to fresh variable \var{field} or matches the corresponding
+  \var{pattern} \\
+
+  \hline
+\end{tabular}
+\caption{Pattern Grammar\label{fig:erlang-pattern-grammar}}
+\end{figure}
+
+% ----------------------------------------------------------------------------
+\defineentry{send}
+\begin{procedure}
+  \code{(send \var{destination} \var{message})}
+\end{procedure}
+\returns{} \var{message}
+
+The \code{send} procedure sends \var{message} to a process or
+registered name, \var{destination}.  If \var{destination} is not a
+process or registered name, exception \code{\#(bad-arg send
+  \var{destination})} is raised.  If \var{destination} has exited,
+nothing else happens.  Otherwise, \var{message} is added to the end of
+\var{destination}.\code{inbox}.  If \var{destination} is sleeping,
+it is awakened.  If \var{destination} is not on the run
+queue\index{run queue}, it is placed on the run queue with precedence
+0.
+
+% ----------------------------------------------------------------------------
+\defineentry{receive}
+\begin{syntax}
+  \begin{alltt}
+(receive
+  \opt{(after \var{timeout} \var{t1} \var{t2} \etc{})\alt{}(until \var{time} \var{t1} \var{t2} \etc{})}
+  (\nt{pattern} \opt{(guard \var{g})} \var{b1} \var{b2} \etc{})
+  \etc{})\strut\end{alltt}
+\end{syntax}
+\returns{} the value of the last evaluated expression
+
+The \code{receive} macro examines each message $m$ in the calling
+process's \code{inbox} by testing it against each pattern and
+optional guard. Each guard expression \var{g} is evaluated in the
+scope of its associated pattern variables.  When \var{g} returns
+\code{\#f}, $m$ fails to match that clause.  For the first pattern
+and guard that matches $m$, $m$ is removed from \code{inbox}, and
+the expressions \var{b1} \var{b2} \etc{} are evaluated in the scope of
+its pattern variables.  If $m$ fails to match all patterns, the
+examination continues with the next message in \code{inbox}. When
+all messages have been examined, the calling process waits with its
+\code{src} field set to the source location of the \code{receive}
+macro if available. The process awakens when a new message or the time
+specified by the optional \code{after} or \code{until} clause
+arrives. If a new message arrives before the timeout, the examination
+process continues as before. Otherwise, the timeout expressions
+\var{t1} \var{t2} \etc{} are evaluated.
+
+The optional \code{after} clause specifies a \var{timeout} in
+milliseconds from the time at which control enters the
+\code{receive} macro.  Similarly, the optional \code{until}
+clause specifies a clock \var{time} in milliseconds as measured by
+\code{erlang:now}.  In addition, \var{timeout} and \var{time} can be
+\code{infinity} to indicate no timeout. If $t$ = \var{timeout} or
+\var{time} is not a non-negative exact integer or \code{infinity},
+exception \code{\#(timeout-value $t$ \var{src})} is returned, where
+\var{src} is the source location of the \code{receive} macro if
+available.
+
+See Figure~\ref{fig:erlang-pattern-grammar} for the pattern grammar.
+
+% ----------------------------------------------------------------------------
+\defineentry{match}
+\begin{syntax}\begin{alltt}
+(match \var{exp}
+  (\nt{pattern} \opt{(guard \var{g})} \var{b1} \var{b2} \etc{})
+  \etc{})\strut\end{alltt}
+\end{syntax}
+\returns{} the value of the last expression \var{b1} \var{b2} \etc{}
+for the matched pattern
+
+The \code{match} macro evaluates \var{exp} once and tests its value
+$v$ against each pattern and optional guard.  Each guard expression
+\var{g} is evaluated in the scope of its associated pattern
+variables. When \var{g} returns \code{\#f}, $v$ fails to match that
+clause.  For the first pattern and guard that matches $v$, the
+expressions \var{b1} \var{b2} \etc{} are evaluated in the scope of its
+pattern variables. If $v$ fails to match all patterns, exception
+\code{\#(bad-match $v$ \var{src})} is raised, where \var{src} is the
+source location of the \code{match} clause if available.
+
+See Figure~\ref{fig:erlang-pattern-grammar} for the pattern grammar.
+
+% ----------------------------------------------------------------------------
+\defineentry{match-let*}
+\begin{syntax}\begin{alltt}
+(match-let* ([\nt{pattern} \opt{(guard \var{g})} \var{exp}]
+             \etc{})
+  \var{b1} \var{b2} \etc{})\strut\end{alltt}
+\end{syntax}
+\returns{} the value of the last expression \var{b1} \var{b2} \etc{}
+
+The \code{match-let*} macro evaluates each \var{exp} in the order
+specified and matches its value against its pattern and guard.  The
+pattern variables of each clause extend the scope of its guard
+expression \var{g} and all subsequent pattern clauses and body
+expressions \var{b1} \var{b2} \etc{}.  The \code{match-let*} macro
+returns the value of the last body expression.  If any pattern fails
+to match or any \var{g} returns \code{\#f}, exception
+\code{\#(bad-match $v$ \var{src})} is raised, where $v$ is the datum
+that failed to match the pattern or guard at source location \var{src}
+if available.
+
+See Figure~\ref{fig:erlang-pattern-grammar} for the pattern grammar.
+
+% ----------------------------------------------------------------------------
+\subsection {Process Properties}
+
+% ----------------------------------------------------------------------------
+\defineentry{self}
+\begin{syntax}
+  \code{self}
+\end{syntax}
+\returns{} the current process
+
+The \code{self} macro uses \code{identifier-syntax} to expand into
+code that retrieves the global self variable's top-level value. The
+global variable cannot be used directly because library bindings are
+immutable.
+
+% ----------------------------------------------------------------------------
+\defineentry{process?}
+\begin{procedure}
+  \code{(process? \var{x})}
+\end{procedure}
+\returns{} a boolean
+
+The \code{process?} procedure determines whether or not the datum
+\var{x} is a process.
+
+% ----------------------------------------------------------------------------
+\defineentry{process-id}
+\begin{procedure}
+  \code{(process-id \opt{\var{process}})}
+\end{procedure}
+\returns{} the process id
+
+The \code{process-id} procedure returns \var{process}.\code{id},
+where \var{process} defaults to \code{self}. If \var{process} is not
+a process, exception \code{\#(bad-arg process-id \var{process})} is
+raised.
+
+% ----------------------------------------------------------------------------
+\defineentry{process-trap-exit}
+\begin{parameter}
+  \code{process-trap-exit}
+\end{parameter}
+\hasvalue{} boolean
+
+The \code{process-trap-exit} parameter specifies whether or not the
+calling process traps exit signals as messages. Processes start with
+this parameter set to \code{\#f}.
+
+% ----------------------------------------------------------------------------
+\defineentry{pps}
+\begin{procedure}
+  \code{(pps \opt{\var{op}})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{pps} procedure prints information about all processes to
+\var{op}, which defaults to the current output port. If \var{op} is
+not an output port, exception \code{\#(bad-arg pps \var{op})} is
+raised.
+
+% ----------------------------------------------------------------------------
+\subsection{Miscellaneous}
+
+% ----------------------------------------------------------------------------
+\defineentry{add-finalizer}
+\begin{procedure}
+  \code{(add-finalizer \var{finalizer})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{add-finalizer}\index{finalizer} procedure adds
+\var{finalizer} to the global list of finalizers. \var{finalizer} is a
+procedure of no arguments that runs in the finalizer process after
+garbage collections. If \var{finalizer} is not a procedure, exception
+\code{\#(bad-arg add-finalizer \var{finalizer})} is raised.
+
+% ----------------------------------------------------------------------------
+\defineentry{bad-arg}
+\begin{procedure}
+  \code{(bad-arg \var{who} \var{arg})}
+\end{procedure}
+\returns{} never
+
+The \code{bad-arg} procedure raises exception \code{\#(bad-arg
+  \var{who} \var{arg})}.
+
+% ----------------------------------------------------------------------------
+\defineentry{console-event-handler}
+\begin{procedure}
+  \code{(console-event-handler \var{event})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{console-event-handler} procedure prints an \var{event} to
+the console. It is used when the event manager is not available. It
+disables interrupts so that it can be called from multiple processes
+safely.  The output is designed to be machine readable. The output
+looks like this:
+
+\begin{alltt}
+Date: Fri Aug 06 11:54:59 2010
+Timestamp: 1281110099144
+Event: \var{event}
+\end{alltt}
+
+The date is the local time from the \code{date-and-time} procedure,
+the timestamp is the clock time from \code{erlang:now}, and
+\var{event} is printed as with \code{write}.
+
+% ----------------------------------------------------------------------------
+\defineentry{dbg}
+\begin{procedure}
+  \code{(dbg)}\\
+  \code{(dbg \var{id})}\\
+  \code{(dbg \var{base} \var{proc})}\strut
+\end{procedure}
+\returns{} see below
+
+The \code{dbg} procedure is used to debug processes that exit with a
+continuation condition.
+
+\code{(dbg)} prints to the current output port the process id and
+exception message for each process that exited with a continuation
+condition.
+
+\code{(dbg \var{id})} enters the interactive debugger using the
+exception state of process \var{id}. If process \var{id} does not
+exist or did not exit with a continuation condition, the following
+message is printed: ``Nothing to debug.''
+
+\code{(dbg \var{base} \var{proc})} folds over the processes that
+exited with a continuation condition and calls \var{proc} with the
+process id, process exception state, and the accumulator value
+(initially \var{base}). It returns the final accumulator value.
+
+% ----------------------------------------------------------------------------
+\defineentry{erlang:now}
+\begin{procedure}
+  \code{(erlang:now)}
+\end{procedure}
+\returns{} the current clock time in milliseconds
+
+The \code{erlang:now} procedure calls \code{osi::GetTickCount} to
+return the number of milliseconds in UTC since the UNIX epoch January
+1, 1970.
+
+% -------------------------------------------------------------------------
+\defineentry{make-process-parameter}
+\begin{procedure}
+  \code{(make-process-parameter \var{initial} \opt{\var{filter}})}
+\end{procedure}
+\returns{} a process parameter procedure
+
+The \code{make-process-parameter} procedure creates a parameter
+procedure $p$ that provides per-process, mutable storage using a weak
+eq-hashtable mapping processes to values. Calling $p$ with no
+arguments returns the current value of the parameter for the calling
+process, and calling $p$ with one argument sets the value of the
+parameter for the calling process. The \var{filter}, if present, is a
+procedure of one argument that is applied to the \var{initial} and all
+subsequent values. If \var{filter} is not a procedure, exception
+\code{\#(bad-arg make-process-parameter \var{filter})} is raised.
+
+Because the parameters used by the system formatting and printing
+  routines are not process safe, they are redefined to use
+  \code{make-process-parameter}. These system parameters are
+\code{pretty-initial-indent},
+\code{pretty-line-length},
+\code{pretty-maximum-lines},
+\code{pretty-one-line-limit},
+\code{pretty-standard-indent},
+\code{print-brackets},
+\code{print-char-name},
+\code{print-gensym},
+\code{print-graph},
+\code{print-length},
+\code{print-level},
+\code{print-precision},
+\code{print-radix},
+\code{print-record},
+\code{print-unicode}, and
+\code{print-vector-length}.
+The \code{custom-port-buffer-size} parameter is also redefined to be
+process safe.
+
+% -------------------------------------------------------------------------
+\defineentry{on-exit}
+\begin{syntax}
+  \code{(on-exit \var{finally} \var{b1} \var{b2} \etc{})}
+\end{syntax}
+\expandsto{}\begin{alltt}\antipar
+(dynamic-wind
+  void
+  (lambda () \var{b1} \var{b2} \etc{})
+  (lambda () \var{finally}))\end{alltt}
+
+The \code{on-exit} macro executes the body expressions \var{b1}
+\var{b2} \etc{} in a dynamic context that executes the \var{finally}
+expression whenever control leaves the body.
+
+% ----------------------------------------------------------------------------
+\defineentry{profile-me}
+\begin{procedure}
+  \code{(profile-me)}
+\end{procedure}
+\returns{} unspecified
+
+The \code{profile-me} procedure does nothing but provide a
+place-holder for the system profiler to count the call site.  When
+profiling is turned off, \code{(profile-me)} expands to
+\code{(void)}, and the system optimizer eliminates it.
+
+% ----------------------------------------------------------------------------
+\subsection {Records}
+
+For users of the concurrency model, a \emph{record}\index{record} is a
+container of named, immutable fields implemented as a vector whose
+first element is the record name and remaining elements are the
+fields. Each record definition is a macro that provides all record
+operations using field names only, not field indices. The macro makes
+it easy to copy a record without having to specify the fields that
+don't change.  We decided not to use the Scheme record facility
+because it does not provide name-based constructors, copy operators,
+or convenient serialization.
+
+% ----------------------------------------------------------------------------
+\index{record!define-record@\code{define-record}}
+\defineentry{define-record}
+\begin{syntax}
+  \code{(define-record \var{name} \var{field} \etc{})}
+\end{syntax}
+\expandsto{} a macro definition of \var{name} described below
+
+The \code{define-record} macro defines a macro for creating,
+copying, identifying, and accessing record type \var{name}. \var{name}
+and \var{field} \etc{} must be identifiers. No two field names can be
+the same. The following field names are reserved: \code{make},
+\code{copy}, \code{copy*}, and \code{is?}.
+
+% ----------------------------------------------------------------------------
+\index{record!make@\code{make}}
+\begin{syntax}
+  \code{(\var{name} make [\var{field} \var{value}] \etc{})}
+\end{syntax}
+\returns{} a new instance of record type \var{name} with \var{field} =
+\var{value} \etc{}
+
+The \code{make} form creates a new instance of the record type
+\var{name}. \var{field} bindings may appear in any order. All fields
+from the record definition must be specified.
+
+% ----------------------------------------------------------------------------
+\index{record!field accessor}
+\begin{syntax}
+  \code{(\var{name} \var{field} \var{instance})}
+\end{syntax}
+\returns{} \var{instance}.\var{field}
+
+The field accessor form retrieves the value of the specified
+\var{field} of \var{instance}. If $r$ = \var{instance} is not a record
+of type \var{name}, exception \code{\#(bad-record \var{name} $r$
+  \var{src})} is raised, where \var{src} is the source location of the
+field accessor form if available.
+
+\index{record!field accessor}
+\begin{syntax}
+  \code{(\var{name} \var{field})}
+\end{syntax}
+\returns{} a procedure that, given \var{instance}, returns \var{instance}.\var{field}
+
+The \code{(\var{name} \var{field})} form expands to \code{(lambda (instance) (\var{name} \var{field} instance))}.
+
+% ----------------------------------------------------------------------------
+\index{record!open@\code{open}}
+\begin{syntax}
+  \code{(\var{name} open \var{instance} \opt{\var{prefix}} (\var{field} \etc{}))}
+\end{syntax}
+\expandsto{} definitions for \var{field} \etc{} or \var{prefix}\var{field} \etc{} described below
+
+The \code{open} form defines identifier syntax for each specified \var{field}
+so that a reference to \var{field} expands to \code{(\var{name} \var{field} $r$)}
+where $r$ is the value of \var{instance}.
+If $r$ is not a record of type \var{name}, exception
+\code{\#(bad-record \var{name} $r$ \var{src})} is raised, where
+\var{src} is the source location of the \code{open} form if avalable.
+The \code{open} form is equivalent to the following, except that it
+checks the record type only once:
+\antipar\codebegin
+(begin
+  (define instance \var{instance})
+  (define-syntax \var{field} (identifier-syntax (\var{name} \var{field} instance)))
+  \etc{})
+\codeend\antipar
+The \code{open} form introduces definitions only for fields listed explicitly in \code{(\var{field} \etc{})}.
+If the optional \var{prefix} identifier is supplied, \code{open} produces
+a definition for \code{\var{prefix}\var{field}} rather than \var{field} for
+each \var{field} specified.
+
+% ----------------------------------------------------------------------------
+\index{record!copy@\code{copy}}
+\begin{syntax}
+  \code{(\var{name} copy \var{instance} [\var{field} \var{value}] \etc{})}
+\end{syntax}
+\returns{} a new instance of record type \var{name} with \var{field} =
+\var{value} \etc{} and remaining fields copied from \var{instance}
+
+The \code{copy} form creates a copy of \var{instance} except that
+each specified \var{field} is set to the associated \var{value}. If
+$r$ = \var{instance} is not a record of type \var{name}, exception
+\code{\#(bad-record \var{name} $r$ \var{src})} is raised, where
+\var{src} is the source location of the \code{copy} form if
+avalable.  \var{field} bindings may appear in any order.
+
+% ----------------------------------------------------------------------------
+\index{record!copy*@\code{copy*}}
+\begin{syntax}
+  \code{(\var{name} copy* \var{instance} [\var{field} \var{value}] \etc{})}
+\end{syntax}
+\returns{} a new instance of record type \var{name} with \var{field} =
+\var{value} \etc{} and remaining fields copied from \var{instance}
+
+The \code{copy*} form is like \code{copy} except that, within the \var{value} expressions,
+each specified \var{field} is bound to an identifier macro that returns the value of \var{instance.field}.
+If $r$ = \var{instance} is not a record of type \var{name}, exception
+\code{\#(bad-record \var{name} $r$ \var{src})} is raised, where
+\var{src} is the source location of the \code{copy*} form if avalable.
+The \code{copy*} form is equivalent to the following, except that it
+checks the record type only once:
+\antipar\codebegin
+(let ([instance \var{instance}])
+  (\var{name} open instance (\var{field} \etc{}))
+  (\var{name} copy instance [\var{field} \var{value}] \etc{}))
+\codeend\antipar
+
+% ----------------------------------------------------------------------------
+\index{record!is?@\code{is?}}
+\begin{syntax}
+  \code{(\var{name} is? \var{x})}
+\end{syntax}
+\returns{} a boolean
+
+The \code{is?} form determines whether or not the datum \var{x} is
+an instance of record type \var{name}.
+
+% ----------------------------------------------------------------------------
+\subsection {I/O}
+
+% ----------------------------------------------------------------------------
+\defineentry{make-utf8-transcoder}
+\begin{procedure}
+  \code{(make-utf8-transcoder)}
+\end{procedure}
+\returns{} a UTF-8 transcoder
+
+The \code{make-utf8-transcoder} procedure creates a UTF-8 transcoder
+with end-of-line style \code{none} and error-handling mode
+\code{raise}.
+
+% ----------------------------------------------------------------------------
+\defineentry{binary->utf8}
+\begin{procedure}
+  \code{(binary->utf8 \var{bp})}
+\end{procedure}
+\returns{} a transcoded textual port wrapping \var{bp}
+
+The \code{binary->utf8} procedure takes a binary port \var{bp} and
+returns a textual port wrapping \var{bp} using
+\code{transcoded-port} and \code{(make-utf8-transcoder)}. The
+original port \var{bp} is marked closed so that it cannot be used
+except through the associated textual port.
+
+% ----------------------------------------------------------------------------
+\defineentry{force-close-output-port}
+\begin{procedure}
+  \code{(force-close-output-port \var{op})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{force-close-output-port} procedure is used to close a
+custom output port, even if it has unflushed output that would
+otherwise cause it to fail to close.  If \var{op} is not already
+closed, \code{force-close-output-port} tries to close it with
+\code{(close-output-port \var{op})}. If it fails with exception
+\code{\#(io-error \var{name} WritePort \var{errno})}, the output
+buffer is cleared with \code{(clear-output-port \var{op})}, and
+\code{(close-output-port \var{op})} is called again.
+
+% ----------------------------------------------------------------------------
+\defineentry{io-error}
+\begin{procedure}
+  \code{(io-error \var{name} \var{who} \var{errno})}
+\end{procedure}
+\returns{} never
+
+The \code{io-error} procedure raises exception \code{\#(io-error
+  \var{name} \var{who} \var{errno})}.  The string \var{name}
+identifies the file, pipe, COM port, process, console input, or TCP
+port.  The symbol \var{who} specifies the procedure that raised an
+error, and the number \var{errno} specifies the error code.  The
+\code{read-osi-port} procedure raises this exception with
+\var{who}=\code{ReadPort}, and the \code{write-osi-port} procedure
+raises it with \var{who}=\code{WritePort}.
+
+% ----------------------------------------------------------------------------
+\defineentry{connect-usb}
+\begin{procedure}
+  \code{(connect-usb \var{device-name} \var{read-address} \var{write-address})}
+\end{procedure}
+\returns{} two values: a binary input port and a binary output port
+
+The \code{connect-usb} procedure calls \code{osi::ConnectWinUSB} to
+establish a USB connection with the given \var{device-name}. It
+returns a custom binary input port that reads from the
+\var{read-address} endpoint and a custom binary output port that
+writes to the \var{write-address} endpoint. These ports do not track
+or report position. The operating system handle is closed when the
+output port is closed, not when the input port is closed, and the
+underlying osi-port is registered with the osi-port
+guardian\index{osi-port guardian}.
+
+% ----------------------------------------------------------------------------
+\defineentry{create-server-pipe}
+\begin{procedure}
+  \code{(create-server-pipe \var{name} \var{callback})}
+\end{procedure}
+\returns{} two values: a binary input port and a binary output port
+
+The \code{create-server-pipe} procedure calls
+\code{osi::CreateServerPipe(\var{full-name}, \var{callback})} to
+create a server pipe with
+\var{full-name}=\verb|\\.\pipe\|\var{name}. It returns a custom binary
+input port that reads from the pipe and a custom binary output port
+that writes to the pipe. These ports do not track or report
+position. The operating system handle is closed when the output port
+is closed, not when the input port is closed, and the underlying
+osi-port is registered with the osi-port guardian\index{osi-port
+  guardian}.
+
+The \var{callback} procedure is called with two arguments, \var{count}
+and \var{errno}, from the event loop after a client pipe has
+connected. Before this occurs, I/O operations on the server pipe will
+fail with error code 536.
+
+If \code{osi::CreateServerPipe} returns error pair
+\code{(\var{who} . \var{errno})}, exception \code{\#(io-error
+  \var{full-name} \var{who} \var{errno})} is raised.
+
+% ----------------------------------------------------------------------------
+\defineentry{create-client-pipe}
+\begin{procedure}
+  \code{(create-client-pipe \var{name})}
+\end{procedure}
+\returns{} two values: a binary input port and a binary output port
+
+The \code{create-client-pipe} procedure calls
+\code{osi::CreateClientPipe(\var{full-name})} to create a client
+pipe connection to \var{full-name}=\verb|\\.\pipe\|\var{name}. It
+returns a custom binary input port that reads from the pipe and a
+custom binary output port that writes to the pipe. These ports do not
+track or report position. The operating system handle is closed when
+the output port is closed, not when the input port is closed, and the
+underlying osi-port is registered with the osi-port
+guardian\index{osi-port guardian}.
+
+If \code{osi::CreateClientPipe} returns error pair
+\code{(\var{who} . \var{errno})}, exception \code{\#(io-error
+  \var{full-name} \var{who} \var{errno})} is raised.
+
+% ----------------------------------------------------------------------------
+\defineentry{create-watched-process}
+\begin{procedure}
+  \code{(create-watched-process \var{command-line} \var{callback})}
+\end{procedure}
+\returns{} three values: a process handle, a binary input port, and a
+binary output port
+
+The \code{create-watched-process} procedure calls
+\code{osi::CreateWatchedProcess(\var{command-line}, \var{callback})}
+to spawn an operating system process. It returns a process handle that
+can be used with \code{osi::TerminateProcess}, a custom binary input
+port that reads from the standard output and standard error of the
+process, and a custom binary output port that writes to the standard
+input of the process. These ports do not track or report position. The
+operating system handle for the input port is closed when the input
+port is closed, and likewise for the output port. Both underlying
+osi-ports are registered with the osi-port guardian\index{osi-port
+  guardian}.
+
+The \var{callback} procedure is called with two arguments, the process
+handle and the exit code, from the event loop after the operating
+system process exits.
+
+If \code{osi::CreateWatchedProcess} returns error pair
+\code{(\var{who} . \var{errno})}, exception
+\code{\#(create-watched-process-failed \var{command-line} \var{who}
+  \var{errno})} is raised.
+
+% ----------------------------------------------------------------------------
+\defineentry{absolute-path}
+\begin{procedure}
+  \code{(absolute-path \var{path} \var{root})}
+\end{procedure}
+\returns{} the full, absolute path of \var{path} with respect to \var{root}
+
+If \var{path} is an absolute path, the \code{absolute-path}
+procedure returns the full path of \var{path} using
+\code{osi::GetFullPath}. Otherwise, it returns the full path of
+\code{(path-combine \var{root} \var{path})}.
+
+% ----------------------------------------------------------------------------
+\defineentry{create-directory-path}
+\begin{procedure}
+  \code{(create-directory-path \var{path})}
+\end{procedure}
+\returns{} \var{path}
+
+The \code{create-directory-path} procedure creates directories as
+needed for the file \var{path}. It calls
+\code{osi::GetFullPath(\var{path})} so that relative specifiers such
+as \code{..} work properly. It does not raise an exception if
+\code{osi::CreateDirectory} fails.
+
+% ----------------------------------------------------------------------------
+\defineentry{create-file-port}
+\begin{procedure}
+  \code{(create-file-port \var{name} \var{desired-access}
+    \var{share-mode} \var{creation-disposition})}
+\end{procedure}
+\returns{} an osi-port
+
+The \code{create-file-port} procedure creates an osi-port by calling
+\code{osi::CreateFile(\var{name}, \var{desired-access},
+  \var{share-mode}, \var{creation-disposition})}. The osi-port is
+registered with the osi-port guardian\index{osi-port guardian}.
+
+If \code{osi::CreateFile} returns error pair \code{(\var{who}
+  . \var{errno})}, exception \code{\#(io-error \var{name} \var{who}
+  \var{errno})} is raised.
+
+The constants \code{GENERIC\_READ} and \code{GENERIC\_WRITE} can
+be used for \var{desired-access}.
+
+The constants \code{FILE\_SHARE\_NONE}, \code{FILE\_SHARE\_READ},
+\code{FILE\_SHARE\_WRITE}, and \code{FILE\_SHARE\_DELETE} can be
+used for \var{share-mode}.
+
+The constants \code{CREATE\_ALWAYS}, \code{CREATE\_NEW},
+\code{OPEN\_ALWAYS}, \code{OPEN\_EXISTING}, and
+\code{TRUNCATE\_EXISTING} can be used for
+\var{creation-disposition}.
+
+% ----------------------------------------------------------------------------
+\defineentry{read-osi-port}
+\begin{procedure}
+  \code{(read-osi-port \var{port} \var{bv} \var{start} \var{n} \var{fp})}
+\end{procedure}
+\returns{} the number of bytes read
+
+The \code{read-osi-port} procedure calls \code{osi::ReadPort} with
+the handle from the given osi-port \var{port}, bytevector buffer
+\var{bv}, starting 0-based buffer index \var{start}, maximum number of
+bytes to read \var{n}, starting 0-based file position \var{fp}, and a
+callback that fires in the event loop. The callback sends a message to
+the calling process, which waits until it receives it. If the read
+fails, exception \code{\#(io-error \var{name} ReadPort \var{errno})}
+is raised, where \var{name} is the name of \var{port} and \var{errno}
+is the error number. Otherwise, the number of bytes read is returned.
+
+Error codes 38 (end of file), 109 (pipe closed), 995 (thread exit),
+and 10053 (connection aborted) are treated as end of file and cause a
+0 to be returned.
+
+% ----------------------------------------------------------------------------
+\defineentry{write-osi-port}
+\begin{procedure}
+  \code{(write-osi-port \var{port} \var{bv} \var{start} \var{n} \var{fp})}
+\end{procedure}
+\returns{} the number of bytes written
+
+The \code{write-osi-port} procedure calls \code{osi::WritePort}
+with the handle from the given osi-port \var{port}, bytevector buffer
+\var{bv}, starting 0-based buffer index \var{start}, maximum number of
+bytes to write \var{n}, starting 0-based file position \var{fp}, and a
+callback that fires in the event loop. The callback sends a message to
+the calling process, which waits until it receives it. If the write
+fails, exception \code{\#(io-error \var{name} WritePort
+  \var{errno})} is raised, where \var{name} is the name of \var{port}
+and \var{errno} is the error number. Otherwise, the number of bytes
+written is returned.
+
+% ----------------------------------------------------------------------------
+\defineentry{close-osi-port}
+\begin{procedure}
+  \code{(close-osi-port \var{port})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{close-osi-port} procedure closes osi-port \var{port} using
+\code{osi::ClosePort}. If \var{port} has already been closed,
+\code{close-osi-port} does not raise an exception.
+
+% ----------------------------------------------------------------------------
+\defineentry{get-file-size}
+\begin{procedure}
+  \code{(get-file-size \var{port})}
+\end{procedure}
+\returns{} the number of bytes in the file associated with osi-port \var{port}
+
+The \code{get-file-size} procedure calls \code{osi::GetFileSize}
+to return the number of bytes in the file associated with osi-port
+\var{port}.
+
+If \code{osi::GetFileSize} returns error pair \code{(\var{who}
+  . \var{errno})}, exception \code{\#(io-error \var{filename}
+  \var{who} \var{errno})} is raised.
+
+% ----------------------------------------------------------------------------
+\defineentry{create-file}
+\begin{procedure}
+  \code{(create-file \var{name} \var{desired-access} \var{share-mode}
+    \var{creation-disposition} \var{type})}
+\end{procedure}
+\returns{} a custom file port
+
+The \code{create-file} procedure creates a custom file port by
+calling \code{(create-file-port \var{name} \var{desired-access}
+  \var{share-mode} \var{creation-disposition})}. The custom port
+supports both getting and setting the file position. The particular
+type of custom port returned is determined by \var{type}:
+\begin{itemize}
+  \item \code{binary-input}: a binary input port
+  \item \code{binary-output}: a binary output port
+  \item \code{input}: a textual input port wrapping a binary input
+    port with \code{binary->utf8}
+  \item \code{output}: a textual output port wrapping a binary
+    output port with \code{binary->utf8}
+  \item \code{append}: a textual output port wrapping a binary
+    output port with \code{binary->utf8} and initially positioned at
+    the end of the file (determined by \code{osi::GetFileSize})
+\end{itemize}
+
+If \var{type} is any other value, exception \code{\#(bad-arg
+  create-file \var{type})} is raised.
+
+% ----------------------------------------------------------------------------
+\defineentry{find-files}
+\begin{procedure}
+  \code{(find-files \var{spec})}
+\end{procedure}
+\returns{} a list of files and directories that match \var{spec}
+
+The \code{find-files} procedure calls \code{osi::FindFiles} with a
+callback that fires in the event loop.  The callback sends a message
+to the calling process, which waits until it receives the message and
+returns the list of files and directories that match \var{spec}. If
+\code{osi::FindFiles} or the message indicates error pair
+\code{(\var{who} . \var{errno})}, exception
+\code{\#(find-files-failed \var{spec} \var{who} \var{errno})} is
+raised.
+
+% ----------------------------------------------------------------------------
+\defineentry{hook-console-input}
+\begin{procedure}
+  \code{(hook-console-input)}
+\end{procedure}
+\returns{} unspecified
+
+The \code{hook-console-input} procedure replaces the system console
+input port, which uses synchronous I/O, with a custom textual input
+port that uses asynchronous I/O. It builds a custom binary input port
+with \code{osi::OpenConsole}, wraps it with \code{binary->utf8},
+and sets the result as the \code{console-input-port},
+\code{current-input-port}, and the system internal
+\code{\$console-input-port}. It does nothing after it has been
+called once.
+
+% ----------------------------------------------------------------------------
+\defineentry{move-file}
+\begin{procedure}
+  \code{(move-file \var{old-pathname} \var{new-pathname} \opt{\var{option}})}
+\end{procedure}
+\returns{} \code{\#t}
+
+The \code{move-file} procedure calls
+\code{osi::MoveFile}. \var{option} may be either \code{error} or
+\code{replace}. A value of \code{replace} causes
+\var{new-pathname} to be replaced if it exists. The default is
+\code{error}.
+
+If \var{old-pathname} is not a string, exception \code{\#(bad-arg
+  move-file \var{old-pathname})} is raised.  If \var{new-pathname} is
+not a string, exception \code{\#(bad-arg move-file
+  \var{new-pathname})} is raised.  If \var{option} is not
+\code{error} or \code{replace}, exception \code{\#(bad-arg
+  move-file \var{option})} is raised.
+
+% ----------------------------------------------------------------------------
+\defineentry{open-file-to-append}
+\begin{procedure}
+  \code{(open-file-to-append \var{name})}
+\end{procedure}
+\returns{} a custom file port
+
+The \code{open-file-to-append} procedure calls \code{(create-file
+  \var{name} GENERIC\_WRITE FILE\_SHARE\_READ OPEN\_ALWAYS 'append)}.
+
+% ----------------------------------------------------------------------------
+\defineentry{open-file-to-read}
+\begin{procedure}
+  \code{(open-file-to-read \var{name})}
+\end{procedure}
+\returns{} a custom file port
+
+The \code{open-file-to-read} procedure calls \code{(create-file
+  \var{name} GENERIC\_READ FILE\_SHARE\_READ OPEN\_EXISTING 'input)}.
+
+% ----------------------------------------------------------------------------
+\defineentry{open-file-to-replace}
+\begin{procedure}
+  \code{(open-file-to-replace \var{name})}
+\end{procedure}
+\returns{} a custom file port
+
+The \code{open-file-to-replace} procedure calls \code{(create-file
+  \var{name} GENERIC\_WRITE FILE\_SHARE\_READ CREATE\_ALWAYS 'output)}.
+
+% ----------------------------------------------------------------------------
+\defineentry{open-file-to-write}
+\begin{procedure}
+  \code{(open-file-to-write \var{name})}
+\end{procedure}
+\returns{} a custom file port
+
+The \code{open-file-to-write} procedure calls \code{(create-file
+  \var{name} GENERIC\_WRITE FILE\_SHARE\_READ CREATE\_NEW 'output)}.
+
+% ----------------------------------------------------------------------------
+\defineentry{open-utf8-bytevector}
+\begin{procedure}
+  \code{(open-utf8-bytevector \var{bv})}
+\end{procedure}
+\returns{} a transcoded textual input port wrapping \var{bv}
+
+The \code{open-utf8-bytevector} procedure calls
+\code{(binary->utf8 (open-bytevector-input-port \var{bv}))}.
+
+% ----------------------------------------------------------------------------
+\defineentry{path-combine}
+\begin{procedure}
+  \code{(path-combine \var{path$_1$} \var{path$_2$} \etc{})}
+\end{procedure}
+\returns{} the string combining the paths
+
+The \code{path-combine} procedure appends one or more paths,
+inserting the \verb|\| character between each pair of paths when the
+first path of the pair does not end with it.
+
+% ----------------------------------------------------------------------------
+\defineentry{read-bytevector}
+\begin{procedure}
+  \code{(read-bytevector \var{name} \var{contents})}
+\end{procedure}
+\returns{} a list of annotations
+
+The \code{read-bytevector} procedure takes a filename \var{name} and
+\var{contents} bytevector and returns a list of annotations read using
+\code{get-datum/annotations} from the \var{contents} bytevector
+transcoded with the UTF-8 transcoder described in
+\code{binary->utf8}.
+
+% ----------------------------------------------------------------------------
+\defineentry{read-file}
+\begin{procedure}
+  \code{(read-file \var{name})}
+\end{procedure}
+\returns{} a bytevector with the contents of \var{name}
+
+The \code{read-file} procedure calls \code{(create-file-port
+  \var{name} GENERIC\_READ FILE\_SHARE\_READ OPEN\_EXISTING)} to open
+the file \var{name} and returns the contents as a bytevector.
+
+% ----------------------------------------------------------------------------
+\defineentry{watch-directory}
+\begin{procedure}
+  \code{(watch-directory \var{path} \var{subtree?} \var{callback})}
+\end{procedure}
+\returns{} a directory watcher\index{directory watcher}
+
+The \code{watch-directory} procedure calls
+\code{osi::WatchDirectory} to track changes in the directory
+\var{path} and returns a directory watcher that is registered with the
+directory-watcher guardian\index{directory-watcher guardian}. When
+\var{subtree?} is true, the directory tree rooted at \var{path} is
+watched. The change filter is configured to detect creating, renaming,
+and deleting files and directories as well as changes to the size and
+last-write time of files. Changes to file attributes, last-access and
+creation times, and security attributes are not included.
+
+Every time changes are detected, \code{(\var{callback}
+  ((\var{action} . \var{filename}) \etc))} is executed in the event
+loop. The \var{action} number is defined as follows:
+
+\begin{center}\begin{tabular}{ll}
+  \var{action} & Meaning\\
+  \hline
+  1 & \var{filename} was added to the directory.\\
+  2 & \var{filename} was removed from the directory.\\
+  3 & \var{filename} was modified.\\
+  4 & \var{filename} was renamed, and \var{filename} is the old
+  name.\\
+  5 & \var{filename} was renamed, and \var{filename} is the new
+  name.\\
+\end{tabular}\end{center}
+
+When the directory watcher stops, it executes \code(\var{callback}
+\var{errno}) in the event loop, and no more callbacks from this
+watcher will be executed. An \var{errno} of zero indicates a normal
+close from \code{close-directory-watcher}. A non-zero \var{errno}
+indicates an error from \code{ReadDirectoryChangesW}.
+
+If \code{osi::WatchDirectory} returns error pair \code{(\var{who}
+  . \var{errno})}, exception \code{\#(watch-directory-failed
+  \var{path} \var{who} \var{errno})} is raised.
+
+% ----------------------------------------------------------------------------
+\defineentry{close-directory-watcher}
+\begin{procedure}
+  \code{(close-directory-watcher \var{watcher})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{close-directory-watcher} procedure uses
+\code{osi::CloseDirectoryWatcher} to close the given directory
+\var{watcher}\index{directory watcher}. If the watcher has not already
+stopped, the associated callback will be executed at least one more
+time. If \var{watcher} is not a directory watcher, exception
+\code{\#(bad-arg close-directory-watcher \var{watcher})} is
+raised. If \var{watcher} has already been closed,
+\code{close-directory-watcher} does not raise an exception.
+
+% ----------------------------------------------------------------------------
+\defineentry{directory-watcher-path}
+\begin{procedure}
+  \code{(directory-watcher-path \var{watcher})}
+\end{procedure}
+\returns{} the \code{path} field of \var{watcher}
+
+The \code{directory-watcher-path} procedure returns the
+\code{path} of the given directory \var{watcher}\index{directory
+  watcher}.
+
+% ----------------------------------------------------------------------------
+\defineentry{listen-tcp}
+\begin{procedure}
+  \code{(listen-tcp \var{port-number})}
+\end{procedure}
+\returns{} a TCP listener\index{TCP listener}
+
+The \code{listen-tcp} procedure calls \code{osi::ListenTCP} to
+create a TCP listener for \var{port-number} and returns a TCP listener
+that is registered with the listener guardian\index{listener
+  guardian}. If \var{port-number} is zero, the operating system will
+choose an available port number, which can be queried with
+\code{listener-port-number}.
+
+If \var{port-number} is not a fixnum between 0 and 65535 inclusive,
+exception \code{\#(bad-arg listen-tcp \var{port-number})} is raised.
+
+If \code{osi::ListenTCP} returns error pair \code{(\var{who}
+  . \var{errno})}, exception \code{\#(listen-tcp-failed
+  \var{port-number} \var{who} \var{errno})} is raised.
+
+% ----------------------------------------------------------------------------
+\defineentry{close-tcp-listener}
+\begin{procedure}
+  \code{(close-tcp-listener \var{listener})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{close-tcp-listener} procedure closes a TCP
+\var{listener}\index{TCP listener} using
+\code{osi::CloseTCPListener}.  If \var{listener} is not a TCP
+listener, exception \code{\#(bad-arg close-tcp-listener
+  \var{listener})} is raised. If \var{listener} has already been
+closed, \code{close-tcp-listener} does not raise an exception.
+
+% ----------------------------------------------------------------------------
+\defineentry{listener-port-number}
+\begin{procedure}
+  \code{(listener-port-number \var{listener})}
+\end{procedure}
+\returns{} the \code{port-number} field of \var{listener}
+
+The \code{listener-port-number} procedure returns the
+\code{port-number} of the given TCP \var{listener}\index{TCP
+  listener}.
+
+% ----------------------------------------------------------------------------
+\defineentry{accept-tcp}
+\begin{procedure}
+  \code{(accept-tcp \var{listener} \opt{\var{process}})}
+\end{procedure}
+\returns{} see below
+
+The \code{accept-tcp} procedure calls \code{osi::AcceptTCP} with a
+callback that fires in the event loop when an incoming connection to
+TCP \var{listener}\index{TCP listener} is made. The callback creates a
+custom binary input port that reads from the new connection and a
+custom binary output port that writes to the new connection. These
+ports do not track or report position. The operating system handle is
+closed when the output port is closed, not when the input port is
+closed, and the underlying osi-port is registered with the osi-port
+guardian\index{osi-port guardian}.  The callback sends one of the
+following messages to \var{process}, which defaults to \code{self}:
+
+\begin{itemize}
+\item \code{\#(accept-tcp \var{listener} \var{ip} \var{op})}, where
+  \var{ip} is the input port and \var{op} is the output port
+
+\item \code{\#(accept-tcp-failed \var{listener} \var{who}
+  \var{errno})}, where \var{who} and \var{errno} specify the error
+  from the callback to \code{osi::AcceptTCP}
+\end{itemize}
+
+When \var{process} is present, \code{accept-tcp} returns
+\var{listener} without waiting for the callback.
+
+When \var{process} is absent, \code{accept-tcp} waits to receive a
+message from the callback. If it receives the \code{accept-tcp}
+message, it returns two values, \var{ip} and \var{op}. If it receives
+the \code{accept-tcp-failed} message, it raises exception
+\code{\#(accept-tcp-failed \var{listener}\textrm{.}port-number
+  \var{who} \var{errno})}.
+
+If \var{listener} is not an open TCP listener, exception
+\code{\#(bad-arg accept-tcp \var{listener})} is raised.  If
+\var{process} is not a process, exception \code{\#(bad-arg
+  accept-tcp \var{process})} is raised.
+
+% ----------------------------------------------------------------------------
+\defineentry{connect-tcp}
+\begin{procedure}
+  \code{(connect-tcp \var{hostname} \var{port-spec} \opt{\var{process}})}
+\end{procedure}
+\returns{} see below
+
+The \code{connect-tcp} procedure calls \code{osi::ConnectTCP} with
+a callback that fires in the event loop when the TCP connection to
+\var{hostname} on \var{port-spec} is established or fails to be
+established.  The \var{port-spec} may be a fixnum port number or a
+string service name such as ``http''. The callback creates a custom
+binary input port that reads from the new connection and a custom
+binary output port that writes to the new connection. These ports do
+not track or report position. The operating system handle is closed
+when the output port is closed, not when the input port is closed, and
+the underlying osi-port is registered with the osi-port
+guardian\index{osi-port guardian}.  The callback sends one of the
+following messages to \var{process}, which defaults to \code{self}:
+
+\begin{itemize}
+\item \code{\#(connect-tcp \var{hostname} \var{port-spec} \var{ip}
+  \var{op})}, where \var{ip} is the input port and \var{op} is the
+  output port
+\item \code{\#(connect-tcp-failed \var{hostname} \var{port-spec}
+  \var{who} \var{errno})}, where \var{who} and \var{errno} specify the
+  error from the callback to \code{osi::ConnectTCP}
+\end{itemize}
+
+When \var{process} is present, \code{connect-tcp} returns
+\code{\#t} without waiting for the callback.
+
+When \var{process} is absent, \code{connect-tcp} waits to receive a
+message from the callback. If it receives the \code{connect-tcp}
+message, it returns two values, \var{ip} and \var{op}. If it receives
+the \code{connect-tcp-failed} message, it raises exception
+\code{\#(connect-tcp-failed \var{hostname} \var{port-spec} \var{who}
+  \var{errno})}.
+
+If \var{hostname} is not a string, exception \code{\#(bad-arg
+  connect-tcp \var{hostname})} is raised. If \var{port-spec} is not a
+fixnum between 0 and 65535 inclusive or a string, exception
+\code{\#(bad-arg listen-tcp \var{port-spec})} is raised.
+
+% ----------------------------------------------------------------------------
+\subsection {Queues}
+
+A queue is represented as a pair of lists,
+\code{(\var{in}~.~\var{out})}. The \var{out} list contains the first
+elements of the queue, and the \var{in} list contains the last
+elements of the queue in reverse. This representation allows for O(1)
+amortized insertion and removal times. The implementation is based on
+the Erlang queue module~\cite{queue-ref}.
+
+% ----------------------------------------------------------------------------
+\defineentry{queue:add}
+\begin{procedure}
+  \code{(queue:add \var{x} \var{q})}
+\end{procedure}
+\returns{} a queue that adds \var{x} to the rear of \var{q}
+
+% ----------------------------------------------------------------------------
+\defineentry{queue:add-front}
+\begin{procedure}
+  \code{(queue:add-front \var{x} \var{q})}
+\end{procedure}
+\returns{} a queue that adds \var{x} to the front of \var{q}
+
+% ----------------------------------------------------------------------------
+\defineentry{queue:drop}
+\begin{procedure}
+  \code{(queue:drop \var{q})}
+\end{procedure}
+\returns{} a queue without the first element of \var{q}
+
+% ----------------------------------------------------------------------------
+\defineentry{queue:empty}
+\begin{syntax}
+  \code{queue:empty}
+\end{syntax}
+\returns{} the empty queue
+
+% ----------------------------------------------------------------------------
+\defineentry{queue:empty?}
+\begin{procedure}
+  \code{(queue:empty? \var{q})}
+\end{procedure}
+\returns{} \code{\#t} if \var{q} is a queue, \code{\#f} otherwise
+
+% ----------------------------------------------------------------------------
+\defineentry{queue:get}
+\begin{procedure}
+  \code{(queue:get \var{q})}
+\end{procedure}
+\returns{} the first element of \var{q}
+
+% ----------------------------------------------------------------------------
+\subsection{Hash Tables}
+
+The implementation of functional hash tables is based on the Erlang
+dict module~\cite{dict-ref,dynamic-hashing}.
+
+% ----------------------------------------------------------------------------
+\defineentry{ht:delete}
+\begin{procedure}
+  \code{(ht:delete \var{ht} \var{key})}
+\end{procedure}
+\returns{} a hash table formed by dropping any association of
+\var{key} from \var{ht}
+
+% ----------------------------------------------------------------------------
+\defineentry{ht:fold}
+\begin{procedure}
+  \code{(ht:fold \var{ht} \var{f} \var{init})}
+\end{procedure}
+\returns{} see below
+
+The \code{ht:fold} procedure accumulates a value by applying \var{f}
+to each key/value association in \var{ht} and the accumulator, which
+is initially \var{init}. It can be defined recursively as follows,
+where $n$ is the size of \var{ht}, and the result of \code{ht:fold}
+is $F_n$:
+
+$$\begin{array}{r@{\;=\;}l}
+F_0 & \var{init}\\
+F_i & \code{(\var{f} \var{key$_i$} \var{val$_i$} $F_{i-1}$)}
+\hbox{ for $1 \le i \le n$}\\
+\end{array}$$
+
+% ----------------------------------------------------------------------------
+\defineentry{ht:is?}
+\begin{procedure}
+  \code{(ht:is? \var{x})}
+\end{procedure}
+\returns{} \code{\#t} if \var{x} is a hash table, \code{\#f}
+otherwise
+
+% ----------------------------------------------------------------------------
+\defineentry{ht:keys}
+\begin{procedure}
+  \code{(ht:keys \var{ht})}
+\end{procedure}
+\returns{} a list of the keys of \var{ht}
+
+% ----------------------------------------------------------------------------
+\defineentry{ht:make}
+\begin{procedure}
+  \code{(ht:make \var{hash-key} \var{equal-key?} \var{valid-key?})}
+\end{procedure}
+\returns{} an empty hash table
+
+The \code{ht:make} procedure returns an empty hash table.
+
+The \var{hash-key} procedure takes a key and returns an exact
+integer. It must return the same integer for equivalent keys.
+
+The \var{equal-key?} procedure takes two keys and returns a true value
+if they are equivalent and \code{\#f} otherwise.
+
+The \var{valid-key?} procedure takes a datum and returns a true value
+if it a valid key and \code{\#f} otherwise.
+
+% ----------------------------------------------------------------------------
+\defineentry{ht:ref}
+\begin{procedure}
+  \code{(ht:ref \var{ht} \var{key} \var{default})}
+\end{procedure}
+\returns{} the value associated with \var{key} in \var{ht},
+\var{default} if none
+
+% ----------------------------------------------------------------------------
+\defineentry{ht:set}
+\begin{procedure}
+  \code{(ht:set \var{ht} \var{key} \var{val})}
+\end{procedure}
+\returns{} a hash table formed by associating \var{key} with \var{val}
+in \var{ht}
+
+% ----------------------------------------------------------------------------
+\defineentry{ht:size}
+\begin{procedure}
+  \code{(ht:size \var{ht})}
+\end{procedure}
+\returns{} the number of entries in \var{ht}
+
+% ----------------------------------------------------------------------------
+\subsection{Error Strings}
+
+% ----------------------------------------------------------------------------
+\defineentry{current-exit-reason->english}
+\begin{parameter}
+  \code{current-exit-reason->english}
+\end{parameter}
+\hasvalue{} a procedure of one argument that returns an English string
+
+The \code{current-exit-reason->english} parameter specifies the
+conversion procedure used by \code{exit-reason->english}. It defaults
+to \code{swish-exit-reason->english}.
+
+% ----------------------------------------------------------------------------
+\defineentry{exit-reason->english}
+\begin{procedure}
+  \code{(exit-reason->english \var{x})}
+\end{procedure}
+\returns{} a string in U.S. English
+
+The \code{exit-reason->english} procedure converts an exit reason into
+an English string using the procedure stored in parameter
+\code{current-exit-reason->english}.
+
+% ----------------------------------------------------------------------------
+\defineentry{swish-exit-reason->english}
+\begin{procedure}
+  \code{(swish-exit-reason->english \var{x})}
+\end{procedure}
+\returns{} a string in U.S. English
+
+The \code{swish-exit-reason->english} procedure converts an exit
+reason from Swish into an English string.
+
+% ----------------------------------------------------------------------------
+\subsection{String Utilities}
+
+The string utilities below are found in the \code{(swish
+  string-utils)} library. For regular expression support, see the
+\code{(swish pregexp)} library described in~\cite{pregexp}.
+
+% ----------------------------------------------------------------------------
+\defineentry{ends-with?}
+\begin{procedure}
+  \code{(ends-with? \var{s} \var{p})}
+\end{procedure}
+\returns{} a boolean
+
+The \code{ends-with?} procedure determines whether or not the string
+\var{s} ends with string \var{p} using case-sensitive comparisons.
+
+% ----------------------------------------------------------------------------
+\defineentry{ends-with-ci?}
+\begin{procedure}
+  \code{(ends-with-ci? \var{s} \var{p})}
+\end{procedure}
+\returns{} a boolean
+
+The \code{ends-with-ci?} procedure determines whether or not the
+string \var{s} ends with string \var{p} using case-insensitive
+comparisons.
+
+% ----------------------------------------------------------------------------
+\defineentry{format-rfc2822}
+\begin{procedure}
+  \code{(format-rfc2822 \var{d})}
+\end{procedure}
+\returns{} a string like ``Thu, 28 Jul 2016 17:20:11 -0400''
+
+The \code{format-rfc2822} procedure returns a string representation of
+the date object \var{d} in the form specified in Section 3.3 of RFC
+2822~\cite{RFC2822}.
+
+% ----------------------------------------------------------------------------
+\defineentry{join}
+\begin{procedure}
+  \code{(join \var{ls} \var{separator} \opt{\var{last-separator}})}
+\end{procedure}
+\returns{} a string
+
+The \code{join} procedure returns the string formed by displaying each
+of the elements of list \var{ls} separated by displaying
+\var{separator}. When \var{last-separator} is specified, it is used as
+the last separator.
+
+% ----------------------------------------------------------------------------
+\defineentry{split}
+\begin{procedure}
+  \code{(split \var{str} \var{separator})}
+\end{procedure}
+\returns{} a list of strings
+
+The \code{split} procedure divides the \var{str} string by the
+\var{separator} character into a list of strings, none of which
+contain \var{separator}.
+
+% ----------------------------------------------------------------------------
+\defineentry{split-n}
+\begin{procedure}
+  \code{(split-n \var{str} \var{separator} \var{n})}
+\end{procedure}
+\returns{} a list of no more than \var{n} strings
+
+The \code{split-n} procedure divides the \var{str} string by the
+\var{separator} character into a list of at most \var{n} strings. The
+last string may contain \var{separator}.
+
+% ----------------------------------------------------------------------------
+\defineentry{starts-with?}
+\begin{procedure}
+  \code{(starts-with? \var{s} \var{p})}
+\end{procedure}
+\returns{} a boolean
+
+The \code{starts-with?} procedure determines whether or not the string
+\var{s} starts with string \var{p} using case-sensitive comparisons.
+
+% ----------------------------------------------------------------------------
+\defineentry{starts-with-ci?}
+\begin{procedure}
+  \code{(starts-with-ci? \var{s} \var{p})}
+\end{procedure}
+\returns{} a boolean
+
+The \code{starts-with-ci?} procedure determines whether or not the
+string \var{s} starts with string \var{p} using case-insensitive
+comparisons.
+
+% ----------------------------------------------------------------------------
+\defineentry{symbol-append}
+\begin{procedure}
+  \code{(symbol-append . \var{ls})}
+\end{procedure}
+\returns{} a symbol
+
+The \code{symbol-append} procedure returns the symbol formed by
+appending the symbols passed as arguments.

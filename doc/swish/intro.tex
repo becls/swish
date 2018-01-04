@@ -1,0 +1,101 @@
+% Copyright 2018 Beckman Coulter, Inc.
+%
+% Permission is hereby granted, free of charge, to any person
+% obtaining a copy of this software and associated documentation files
+% (the "Software"), to deal in the Software without restriction,
+% including without limitation the rights to use, copy, modify, merge,
+% publish, distribute, sublicense, and/or sell copies of the Software,
+% and to permit persons to whom the Software is furnished to do so,
+% subject to the following conditions:
+%
+% The above copyright notice and this permission notice shall be
+% included in all copies or substantial portions of the Software.
+%
+% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+% EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+% MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+% NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+% BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+% ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+% CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+% SOFTWARE.
+
+\chapter {Introduction to Swish}\label{chap:intro-swish}
+
+\section {Overview}
+
+The Swish Concurrency Engine is a framework used to write
+fault-tolerant programs with message-passing concurrency. It uses the
+Chez Scheme~\cite{chez-scheme-users-guide} programming language and
+embeds concepts from the Erlang~\cite{erlang} programming
+language. Swish also provides a web server following the HTTP
+protocol~\cite{RFC7230}.
+
+Swish uses message-passing concurrency and fault isolation to
+provide fault-tolerant software~\cite{armstrong-thesis,actors}. The
+software is divided into lightweight processes that communicate via
+asynchronous message passing but are otherwise isolated from each
+other. Because processes share no mutable state, one process cannot
+corrupt the state of another process---a problem that plagues software
+using shared-state concurrency.
+
+Exceptions are raised when the software detects an error and cannot
+continue normal processing. If an exception is not caught by the
+process that raised it, the process is terminated. An error logger
+records process crashes and other software errors.
+
+There are two mechanisms for detecting process termination,
+\emph{links} and \emph{monitors}. Processes can be linked together so
+that when one exits abnormally, the others are killed. A process can
+monitor other processes and receive process-down messages that include
+the termination reason.
+
+A single event dispatcher receives events from the various processes
+and sends them to all attached event handlers.  Event handlers filter
+events based on their needs.
+
+Swish is written in Chez Scheme
+for two main reasons. First, it provides efficient first-class
+continuations~\cite{one-shot,representing-control} needed to implement
+lightweight processes with much less memory and CPU overhead than
+operating system threads.  Second, Chez Scheme provides powerful
+syntactic abstraction capabilities~\cite{syntactic-abstraction} needed
+to make the code closely reflect the various aspects of the
+design. For example, the message-passing system uses syntactic
+abstraction to specify pattern matching succinctly.
+
+I/O operations are performed asynchronously using C code (see
+Chapter~\ref{chap:osi}), and they complete via Scheme callback
+functions. Asynchronous I/O is used so that Swish can run in a single
+thread without blocking for I/O. The results from asynchronous
+operations are invoked synchronously by the Scheme code, allowing it
+to control re-entrancy.
+
+\section {Supervision Tree}
+
+\begin{figure}
+  \center\includegraphics{swish/intro-sup-tree.pdf}
+  \caption{\label{fig:intro-sup-tree}Supervision Tree}
+\end{figure}
+
+By default, Swish uses the supervision tree illustrated in
+Figure~\ref{fig:intro-sup-tree}. The top-level supervisor, main-sup,
+is configured one-for-all and no restarts so that a failure of any of
+its children crashes the program. The event-mgr worker is the event
+manager gen-server (see Chapter~\ref{chap:event-mgr}). The log-db
+worker is a database gen-server (see Chapter~\ref{chap:log-db}) that
+logs all events to the log database. The event-mgr-sentry worker is
+used during shutdown to make sure the event manager stops sending
+events to log-db before log-db shuts down. The statistics worker is a
+system statistics gen-server (see Chapter~\ref{chap:stats}) that
+periodically posts a \code{<statistics>} event.  The gatekeeper
+worker is the gen-server described in Chapter~\ref{chap:gatekeeper}.
+
+The \code{http-sup} supervisor is configured one-for-one with up to
+10 restarts every 10 seconds. The \code{http-listener},
+\code{http-cache}, and http-connection processes are described in
+Chapter~\ref{chap:http}.
+
+When running as a Windows service, Swish is configured to restart
+automatically 10 seconds after a failure. The failure is logged to the
+log file, and an event is logged to the Windows event log.

@@ -1,0 +1,220 @@
+% Copyright 2017 Beckman Coulter, Inc.
+%
+% Permission is hereby granted, free of charge, to any person
+% obtaining a copy of this software and associated documentation files
+% (the "Software"), to deal in the Software without restriction,
+% including without limitation the rights to use, copy, modify, merge,
+% publish, distribute, sublicense, and/or sell copies of the Software,
+% and to permit persons to whom the Software is furnished to do so,
+% subject to the following conditions:
+%
+% The above copyright notice and this permission notice shall be
+% included in all copies or substantial portions of the Software.
+%
+% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+% EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+% MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+% NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+% BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+% ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+% CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+% SOFTWARE.
+
+\chapter {Gatekeeper}\label{chap:gatekeeper}
+
+\section {Introduction}
+
+The gatekeeper\index{gatekeeper} is a single gen-server named
+\code{gatekeeper} that manages shared resources using mutexes.
+Before a process uses a shared resource, it asks the gatekeeper to
+enter the corresponding mutex. When the process no longer needs the
+resource or terminates, it tells the gatekeeper to leave the mutex. A
+process may enter the same mutex multiple times, and it needs to leave
+the mutex the same number of times.  The gatekeeper breaks deadlocks
+by raising an exception in one of the processes waiting for a mutex
+involved in a cyclic dependency chain.
+
+The gatekeeper hooks system primitives \code{\$cp0},
+\code{\$np-compile}, \code{pretty-print}, and \code{sc-expand} because
+they are not safe to be called from two processes at the same time
+(see the discussion of the global winders list in
+Section~\ref{sec:erlang-theory}). The \code{\$cp0} procedure uses
+resource \code{\$cp0}, the \code{\$np-compile} procedure uses resource
+\code{\$np-compile}, and so forth.
+
+\section {Theory of Operation}
+
+\paragraph* {state}\index{gatekeeper!state} The gatekeeper state is a
+list of \code{<mutex>}\index{gatekeeper!<mutex>@\code{<mutex>}}
+records, each of which has the following fields:\antipar
+
+\begin{itemize}
+\item \var{resource}: resource compared for equality using \code{eq?}
+\item \var{process}: process that owns \var{resource}
+\item \var{monitor}: monitor of \var{process}
+\item \var{count}: number of times \var{process} has entered this
+  mutex
+\item \var{waiters}: ordered list of \var{from} arguments from
+  \code{handle-call} for processes that are waiting to enter this
+  mutex
+\end{itemize}
+
+\genserver{gatekeeper}{init} The gatekeeper \code{init} procedure
+hooks the system primitives listed in the introduction so that they
+use \code{with-mutex} with a timeout of one minute, and it sets the
+\code{current-expand} parameter to the hooked \code{sc-expand}
+procedure. The process traps exits so that \code{terminate} can unhook
+the system primitives when the process is shut down. It returns an
+empty list of \code{<mutex>} records.
+
+\genserver{gatekeeper}{terminate} The gatekeeper \code{terminate}
+procedure unhooks the system primitives listed in the introduction and
+sets the \code{current-expand} parameter to the unhooked
+\code{sc-expand} procedure.
+
+\genserver{gatekeeper}{handle-call} The gatekeeper
+\code{handle-call} procedure handles the following messages:\antipar
+
+\begin{itemize}
+\item \code{\#(enter \var{resource})}: Find \var{mutex} $\in$
+  \var{state} where \var{mutex}.\var{resource} = \var{resource}.
+
+  If no such \var{mutex} exists, no-reply with \code{(enter-mutex
+    \var{resource} \var{from} '() \var{state})}.
+
+  If \var{mutex}.\var{process} = \var{from}.\var{process}, increment
+  \var{mutex}.\var{count}, and reply \code{ok} with the updated
+  state.
+
+  If \code{(deadlock? \textrm{\var{from}.\var{process}} \var{mutex}
+    \var{state})}, reply \code{\#(deadlock \var{resource})} with
+  \var{state}.
+
+  Otherwise, add \var{from} to the end of \var{mutex}.\var{waiters},
+  and no-reply with the updated state.
+
+\item \code{\#(leave \var{resource})}: Find \var{mutex} $\in$
+  \var{state} where \var{mutex}.\var{resource} = \var{resource} and
+  \var{mutex}.\var{process} = \var{from}.\var{process}.
+
+  If no such \var{mutex} exists, reply \code{\#(unowned-resource
+    \var{resource})} with \var{state}.
+
+  If \var{mutex}.\var{count} $>$ 1, decrement \var{mutex}.\var{count},
+  and reply \code{ok} with the updated state.
+
+  Otherwise, reply \code{ok} with \code{(leave-mutex \var{mutex}
+    \var{state})}.
+\end{itemize}
+
+\genserver{gatekeeper}{handle-cast} The gatekeeper
+\code{handle-cast} procedure raises an exception on all messages.
+
+\genserver{gatekeeper}{handle-info} The gatekeeper
+\code{handle-info} procedure handles the following message:\antipar
+
+\begin{itemize}
+\item \code{\#(DOWN \var{monitor} \_ \_)}: Find \var{mutex} $\in$
+  \var{state} where \var{mutex}.\var{monitor} =
+  \var{monitor}. No-reply with \code{(leave-mutex \var{mutex}
+    \var{state})}.
+\end{itemize}
+
+\index{gatekeeper!enter-mutex@\code{enter-mutex}}
+\begin{procedure}
+  \code{(enter-mutex \var{resource} \var{from} \var{waiters} \var{state})}
+\end{procedure}
+\returns{} updated state
+
+The \code{enter-mutex} procedure calls \code{(gen-server:reply
+  \var{from} 'ok)} to reply to the caller waiting to enter the
+mutex. It adds a \code{<mutex>} record with
+\var{resource} = \var{resource}, \var{process} = \var{from}.\var{process},
+\var{monitor} = \code{(monitor \var{process})}, \var{count} = 1, and
+\var{waiters} = \var{waiters} to \var{state}.
+
+\index{gatekeeper!leave-mutex@\code{leave-mutex}}
+\begin{procedure}
+  \code{(leave-mutex \var{mutex} \var{state})}
+\end{procedure}
+\returns{} updated state
+
+The \code{leave-mutex} procedure calls \code{(demonitor\&flush
+  \textrm{\var{mutex}.\var{monitor}})}. If
+\var{mutex}.\var{waiters} = \code{()}, it returns \code{(remq
+  \var{mutex} \var{state})}. Otherwise, it returns
+\code{(enter-mutex \textrm{\var{mutex}.\var{resource}} (car
+  \textrm{\var{mutex}.\var{waiters}}) (cdr \textrm{\var{mutex}.\var{waiters}})
+  (remq \var{mutex} \var{state}))}.
+
+\index{gatekeeper!deadlock?@\code{deadlock?}}
+\begin{procedure}
+  \code{(deadlock? \var{process} \var{mutex} \var{state})}
+\end{procedure}
+\returns{} a boolean
+
+The \code{deadlock?} procedure returns \code{\#t} if \var{process}
+would deadlock waiting for \var{mutex}. Let \var{owner} =
+\var{mutex}.\var{process}. If \var{owner} = \var{process}, return
+\code{\#t}. Otherwise, find the mutex \var{waiting} $\in$
+\var{state} where \code{\#(\var{owner} \_)} $\in$
+\var{waiting}.\var{waiters}. If no such \var{waiting} exists, return
+\code{\#f}. Otherwise, return \code{(deadlock? \var{process}
+  \var{waiting} \var{state})}.
+
+\section {Programming Interface}
+
+\defineentry{gatekeeper:start\&link}
+\begin{procedure}
+  \code{(gatekeeper:start\&link)}
+\end{procedure}
+\returns{}
+\code{\#(ok \var{pid})} $|$
+\code{\#(error \var{reason})}
+
+The \code{gatekeeper:start\&link} procedure calls
+\code{(gen-server:start\&link 'gatekeeper)}.
+
+\defineentry{gatekeeper:enter}
+\begin{procedure}
+  \code{(gatekeeper:enter \var{resource} \var{timeout})}
+\end{procedure}
+\returns{} \code{ok}
+
+The \code{gatekeeper:enter} procedure calls \code{(gen-server:call
+  'gatekeeper \#(enter \var{resource}) \var{timeout})} to enter the
+mutex for \var{resource}. If it returns $e \ne \code{ok}$, it raises
+exception $e$.
+
+\defineentry{gatekeeper:leave}
+\begin{procedure}
+  \code{(gatekeeper:leave \var{resource})}
+\end{procedure}
+\returns{} \code{ok}
+
+The \code{gatekeeper:leave} procedure calls \code{(gen-server:call
+  'gatekeeper \#(leave \var{resource}))} to leave the mutex for
+\var{resource}. If it returns $e \ne \code{ok}$, it raises exception
+$e$.
+
+\defineentry{with-mutex}
+\begin{syntax}
+  \code{(with-mutex \var{resource} \var{timeout} \var{body\(\sb{1}\)} \var{body\(\sb{2}\)} \etc)}
+\end{syntax}
+\expandsto{}
+\code{(\$with-mutex '\var{resource} \var{timeout} (lambda ()
+  \var{body\(\sb{1}\)} \var{body\(\sb{2}\)} \etc))}
+
+The \code{with-mutex} form executes the body expressions in a
+dynamic context where the calling process owns \var{resource}, which
+must be an identifier. The \var{timeout} expression specifies how long
+the caller is willing to wait to enter the mutex for \var{resource} as
+defined by \code{gen-server:call}.  The internal
+\code{\$with-mutex} procedure is defined as follows:\antipar
+\begin{samepage}\begin{alltt}
+(define (\$with-mutex \var{resource} \var{timeout} \var{body})
+  (dynamic-wind
+    (lambda () (gatekeeper:enter \var{resource} \var{timeout}))
+    \var{body}
+    (lambda () (gatekeeper:leave \var{resource}))))
+\end{alltt}\end{samepage}

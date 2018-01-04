@@ -1,0 +1,559 @@
+% Copyright 2017 Beckman Coulter, Inc.
+%
+% Permission is hereby granted, free of charge, to any person
+% obtaining a copy of this software and associated documentation files
+% (the "Software"), to deal in the Software without restriction,
+% including without limitation the rights to use, copy, modify, merge,
+% publish, distribute, sublicense, and/or sell copies of the Software,
+% and to permit persons to whom the Software is furnished to do so,
+% subject to the following conditions:
+%
+% The above copyright notice and this permission notice shall be
+% included in all copies or substantial portions of the Software.
+%
+% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+% EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+% MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+% NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+% BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+% ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+% CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+% SOFTWARE.
+
+\chapter {HTTP Interface}\label{chap:http}
+
+\section {Introduction}
+
+The HTTP interface provides a basic implementation of the Hypertext
+Transfer Protocol~\cite{RFC7230}. The programming interface includes
+procedures for the HyperText Markup Language (HTML) version
+5~\cite{html5} and JavaScript Object Notation (JSON)~\cite{RFC7159}.
+
+\section {Theory of Operation}
+
+The HTTP interface provides a supervisor, \code{http-sup}, to manage
+the \code{http-listener} gen-server, the \code{http-cache}
+gen-server, and new connection processes. This structure is
+illustrated in Figure~\ref{fig:http-tree}.
+
+\begin{figure}
+  \center\includegraphics{swish/http-tree.pdf}
+  \caption{\label{fig:http-tree}HTTP tree}
+\end{figure}
+
+The \code{http-listener} is a gen-server that creates a TCP listener
+using \code{listen-tcp} and accepts new connections using
+\code{accept-tcp}. For each connection, the http-listener uses its
+supervisor to spawn and link a handler process.
+
+Each handler reads from its input port until a CR LF
+occurs. Well-formed input is converted to a \code{<request>} record,
+and the HTTP request header and any content parameters are read.
+
+When \code{Content-Length} appears in the header, the content bytes
+are read. If the \code{Content-Type} is \code{multipart/form-data}
+or \code{application/x-www-form-urlencoded}, the content is
+converted to an association list. Otherwise, parameter
+\code{"unhandled-content"} is included with the value of the raw
+bytevector of data. Each uploaded file is stored in
+\code{(tmp-path)}, and the association list value is
+\code{\#(<file> \var{filename})}.
+
+\code{http:file-handler} is then called combining the
+\code{<request>} query parameters and content
+parameters. \code{http:file-handler} logs the specific request,
+validates that the requested path does not include ``..'', retrieves a
+page handler from the \code{http-cache}, and invokes it. A
+\emph{page handler} is a procedure which responds to a particular HTTP
+request. The output port is flushed after the page handler returns.
+
+After a request is processed, all uploaded files are deleted, and the
+current process and connection can be reused. The system reads another
+request from the input port.
+
+The \code{http-cache} is a gen-server that stores page handlers and
+provides a mapping from file extension to content type. It creates a
+directory watcher using \code{watch-directory} to invalidate the
+cache when anything in the \code{(web-path)} tree changes.
+
+The \code{http-cache} considers a path that ends in ``.ss'' a
+dynamic page loaded from \code{(web-path)}. Other paths are
+considered static and are sent directly over the connection using
+\code{http:respond-file}.
+
+\section {Security}
+
+The HTTP interface is written in Scheme, and therefore buffer overrun
+exploits cannot be used against the system.
+
+User input should be carefully checked before calling \code{eval} or
+invoking a database query.
+
+A URL which directs the system away from \code{(web-path)} using
+``..'' could allow access to system files. \code{http:file-handler}
+explicitly checks for relative paths.
+
+The HTTP interface limits incoming data to protect against large
+memory allocation which may crash the system. URL requests are limited
+to 4,096 bytes. Headers are limited to 1,048,576 bytes. Posted content
+is limited to 4,194,304 bytes, not including uploaded files.
+
+The HTTP interface does not limit incoming file uploads. If the disk
+runs out of space, the handler process will exit with an I/O error.
+
+\section {Dynamic Pages}
+
+A dynamic page is a sequence of definitions followed by a sequence of
+expressions stored in ``.ss'' files in \code{(web-path)}.  The
+definitions and expressions are placed in a \code{lambda} expression
+that is evaluated by the \code{interpret} system procedure.  The
+page is responsible for sending the HTTP response. The output port is
+flushed after the page handler returns.
+
+\section {Dynamic Page Constructs}
+
+The evaluated \code{lambda} expression exposes the following
+variables to a dynamic page:
+
+\begin{argtbl}
+  \argrow{ip}{binary input port}
+  \argrow{op}{binary output port}
+  \argrow{request}{a \code{<request>} record}
+  \argrow{header}{an association list}
+  \argrow{params}{an association list}
+\end{argtbl}
+
+\defineentry{find-param}
+\begin{syntax}
+  \code{(find-param \var{key})}
+\end{syntax}\antipar
+\implementation{The \code{find-param} macro expands to
+  \code{(http:find-param \var{key} \var{params})}.}
+
+\defineentry{get-param}
+\begin{syntax}
+  \code{(get-param \var{key})}
+\end{syntax}\antipar
+\implementation{The \code{get-param} macro expands to
+  \code{(http:get-param \var{key} \var{params})}.}
+
+\defineentry{http:include}
+\begin{syntax}
+  \code{(http:include "\var{filename}")}
+\end{syntax}\antipar
+
+The \code{http:include} construct includes the definitions from
+\var{filename}, a path relative to \code{(web-path)} if
+\var{filename} begins with a forward slash, else relative to the
+directory of the current file.
+
+\implementation{The \code{http:include} macro calls
+  \code{read-file} and \code{read-bytevector} to retrieve a list
+  of expressions that are spliced in at the same scope as the use of
+  \code{http:include}. The splicing is done with \code{let-syntax}
+  so that any nested \code{http:include} expressions are processed
+  relative to the directory of \var{filename}.}
+
+\section {Programming Interface}
+
+\begin{recorddef}{<request>}
+  \argrow{method}{a symbol}
+  \argrow{path}{a decoded string}
+  \argrow{query}{a decoded association list}
+\end{recorddef}
+
+\defineentry{http-sup:start\&link}
+\begin{procedure}
+  \code{(http-sup:start\&link)}
+\end{procedure}
+\returns{}
+\code{\#(ok \var{pid})} \alt{} \code{\#(error \var{error})}
+
+The \code{http-sup:start\&link} procedure creates a supervisor named
+\code{http-sup} using \code{supervisor:start\&link} configured
+one-for-one with up to 10 restarts every 10 seconds. The supervisor
+starts the \code{http-cache} and \code{http-listener} gen-servers.
+
+\defineentry{http:get-port-number}
+\begin{procedure}
+  \code{(http:get-port-number)}
+\end{procedure}
+\returns{} see below
+
+If the \code{(http-port-number)} is configured to be zero, the
+operating system will choose an available port
+number. \code{(http:get-port-number)} uses
+\code{listener-port-number} to retrieve the actual port number that
+the server is listening on.
+
+\defineentry{http:find-header}
+\begin{procedure}
+  \code{(http:find-header \var{name} \var{header})}
+\end{procedure}
+\returns{} a string \alt{} \code{\#f}
+
+The \code{http:find-header} procedure returns the value associated
+with \var{name} in \var{header}. Header comparisons are
+case-insensitive. If \var{name} is not a string, exception
+\code{\#(bad-arg http:find-header \var{name})} is raised.
+
+\defineentry{http:get-header}
+\begin{procedure}
+  \code{(http:get-header \var{name} \var{header})}
+\end{procedure}
+\returns{} a string
+
+The \code{http:get-header} procedure returns the value assocated
+with \var{name} in \var{header} or exits with reason
+\code{\#(invalid-header \var{name} \var{header})}. Header
+comparisons are case-insensitive. If \var{name} is not a string,
+exception \code{\#(bad-arg http:get-header \var{name})} is raised.
+
+\defineentry{http:find-param}
+\begin{procedure}
+  \code{(http:find-param \var{name} \var{params})}
+\end{procedure}
+\returns{} a string \alt{} \code{\#f}
+
+The \code{http:find-param} procedure returns the value associated
+with \var{name} in \var{params}. Parameter comparisons are
+case-sensitive. If \var{name} is not a string, exception
+\code{\#(bad-arg http:find-param \var{name})} is raised.
+
+\defineentry{http:get-param}
+\begin{procedure}
+  \code{(http:get-param \var{name} \var{params})}
+\end{procedure}
+\returns{} a string
+
+The \code{http:get-param} procedure returns the value associated
+with \var{name} in \var{params} or exits with reason
+\code{\#(invalid-param \var{name} \var{params})}. Parameter
+comparisons are case-sensitive. If \var{name} is not a string,
+exception \code{\#(bad-arg http:get-param \var{name})} is raised.
+
+\defineentry{http:read-header}
+\begin{procedure}
+  \code{(http:read-header \var{ip} \var{limit})}
+\end{procedure}
+\returns{} an association list
+
+The \code{http:read-header} procedure reads from the binary input
+port \var{ip} until a blank line is read.
+
+An association list is created by making a string from the characters
+before the first colon as the key. Non-linear white space is skipped,
+and the remaining characters are converted to a string value.
+
+Reading beyond \var{limit} will result in exiting with reason
+\code{input-limit-exceeded}.
+
+Failure to find a colon on any given line will result in exiting with
+reason \code{invalid-header}.
+
+\defineentry{http:read-status}
+\begin{procedure}
+  \code{(http:read-status \var{ip} \var{limit})}
+\end{procedure}
+\returns{} number \alt{} \code{\#f}
+
+The \code{http:read-status} procedure reads the HTTP response status
+line from the binary input port \var{op} and returns the number if
+well formed and \code{\#f} otherwise. Reading beyond \var{limit}
+will result in exiting with reason \code{input-limit-exceeded}.
+
+\defineentry{http:write-status}
+\begin{procedure}
+  \code{(http:write-status \var{op} \var{status})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{http:write-status} procedure writes the HTTP response
+status line to the binary output port \var{op}.
+
+Unless \var{status} is a fixnum and $100 \leq \var{status} \leq 599$, the
+exception \code{\#(bad-arg http:write-status \var{status})} is
+raised.
+
+According to HTTP~\cite{RFC7230} the status line includes a human
+readable reason phrase. The grammar shows that it can in fact be 0
+characters long; therefore, the reason phrase is not included in this
+implementation.
+
+\defineentry{http:write-header}
+\begin{procedure}
+  \code{(http:write-header \var{op} \var{header})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{http:write-header} procedure writes the HTTP \var{header},
+and trailing CR LF to the binary output port \var{op}.
+
+\var{header} is an association list. If \var{header}'s keys are not
+strings, exception \code{\#(bad-arg http:write-header \var{header})}
+is raised.
+
+\defineentry{http:respond}
+\begin{procedure}
+  \code{(http:respond \var{op} \var{status} \var{header} \var{content})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{http:respond} procedure writes the HTTP \var{status} and
+\var{header} to binary output port \var{op} using
+\code{http:write-status} and \code{http:write-header}, adding
+\code{Content-Length} to the \var{header}. When
+\code{Cache-Control} is not present in \var{header}, it is added
+with value \code{no-cache}. The \var{content} is then written, and
+the output port is flushed.
+
+\var{content} is a bytevector.
+
+\defineentry{http:respond-file}
+\begin{procedure}
+  \code{(http:respond-file \var{op} \var{status} \var{header} \var{filename})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{http:respond-file} procedure writes the HTTP \var{status}
+and \var{header} to binary output port \var{op} using
+\code{http:write-status} and \code{http:write-header}, adding
+\code{Content-Length} to \var{header}.  The \code{Cache-Control}
+header is added, if it is not already present, with value
+\code{max-age=3600}. The \code{Content-Type} header is added if
+it is not already present and the extension of \var{filename} matches
+(case insensitively) an extension in the \code{mime-types} file of
+\code{(web-path)}. Each line of \code{mime-types} has the form
+\code{("\var{extension}"~.~"\var{Content-Type}")}. The content of
+the file is streamed to the output port so that the file does not need
+to be loaded into memory. The output port is flushed.
+
+\defineentry{http:percent-encode}
+\begin{procedure}
+  \code{(http:percent-encode \var{s})}
+\end{procedure}
+\returns{} an encoded string
+
+The \code{http:percent-encode} procedure writes the characters
+\code{A}--\code{Z}, \code{a}--\code{z},
+\code{0}--\code{9}, hyphen, underscore, period, and
+\code{\~}. Other characters are converted to a \code{\%} prefix
+and two digit hexadecimal representation.
+
+\defineentry{html:encode}
+\begin{procedure}
+  \code{(html:encode \var{s})} \\
+  \code{(html:encode \var{op} \var{s})}\strut
+\end{procedure}
+\returns{} see below
+
+The \code{html:encode} procedure converts special character entities
+in string \var{s}.
+
+\begin{tabular}{ll}
+  input & output \\ \hline
+  \code{"} & \code{\&quot;} \\
+  \code{\&} & \code{\&amp;} \\
+  \code{\textless} & \code{\&lt;} \\
+  \code{\textgreater} & \code{\&gt;} \\
+  \hline
+\end{tabular}
+
+The single argument form of \code{html:encode} returns an encoded
+string.
+
+The two argument form of \code{html:encode} sends the encoded string
+to the textual output port \var{op}.
+
+\defineentry{html->string}
+\begin{procedure}
+  \code{(html->string \var{x})} \\
+  \code{(html->string \var{op} \var{x})}\strut
+\end{procedure}
+\returns{} see below
+
+The \code{html->string} procedure transforms an object into
+HTML. The transformation, $H$, is described below:
+
+\begin{tabular}{ll}
+  \var{x} & $H(\var{x})$\\ \hline
+
+  \code{()} & nothing\\
+  \code{\#!void} & nothing\\
+  \code{\var{string}} & $E(\var{string})$\\
+  \code{\var{number}} & \var{number}\\
+  \code{(begin \var{pattern} \ldots)} & $H(\var{pattern})$\ldots\\
+  \code{(cdata \var{string} \ldots)} &
+  \code{[!CDATA[\var{string}$\ldots$]]}\\
+  \code{(html5 \opt{(@ \var{attr} \ldots)} \var{pattern} \ldots)} &
+  \code{<!DOCTYPE html><html $A(\var{attr})$ $\ldots$>$H(\var{pattern})\ldots$</html>}\\
+  \code{(raw \var{string} \ldots)} & \var{string}$\ldots$\\
+  \code{(script \opt{(@ \var{attr} \ldots)} \var{string} \ldots)} &
+  \code{<script $A(\var{attr})$ $\ldots$>\var{string}$\ldots$</script>}\\
+  \code{(style \opt{(@ \var{attr} \ldots)} \var{string} \ldots)} &
+  \code{<style $A(\var{attr})$ $\ldots$>\var{string}$\ldots$</style>}\\
+  \code{(\var{tag} \opt{(@ \var{attr} \ldots)} \var{pattern} \ldots)} &
+  \code{<\var{tag} $A(\var{attr})$ $\ldots$>$H(\var{pattern})\ldots$</\var{tag}>}\\
+  \code{(\var{void-tag} \opt{(@ \var{attr} \ldots)})} &
+  \code{<\var{void-tag} $A(\var{attr})$ $\ldots$>}\\
+
+  \hline
+\end{tabular}
+
+$E$ denotes the \code{html:encode} function.
+
+A \var{void-tag} is one of \code{area}, \code{base}, \code{br},
+\code{col}, \code{embed}, \code{hr}, \code{img},
+\code{input}, \code{keygen}, \code{link}, \code{menuitem},
+\code{meta}, \code{param}, \code{source}, \code{track}, or
+\code{wbr}. A \var{tag} is any other symbol.
+
+The attribute transformation, $A$, is described below, where \var{key}
+is a symbol:
+
+\begin{tabular}{ll}
+  \var{attr} & $A(\var{attr})$\\ \hline
+
+  \code{\#!void} & nothing\\
+  \code{(\var{key})} & \var{key}\\
+  \code{(\var{key} \var{string})} & \code{\var{key}="$E(\var{string})$"}\\
+  \code{(\var{key} \var{number})} & \code{\var{key}="\var{number}"}\\
+
+  \hline
+\end{tabular}
+
+The single argument form of \code{html->string} returns an encoded
+HTML string.
+
+The two argument form of \code{html->string} sends the encoded HTML
+string to the textual output port \var{op}.
+
+Input that does not match the specification causes a
+\code{\#(bad-arg html->string \var{x})} exception to be raised.
+
+\defineentry{html->bytevector}
+\begin{procedure}
+  \code{(html->bytevector \var{x})}
+\end{procedure}
+\returns{} a bytevector
+
+The \code{html->bytevector} procedure calls \code{html->string} on
+\var{x} using a bytevector output port transcoded using
+\code{(make-utf8-transcoder)} and returns the resulting bytevector.
+
+\subsection {JavaScript Object Notation}
+
+This implementation translates JavaScript types into the following
+Scheme types:
+
+\begin{tabular}{ll}
+  JavaScript & Scheme \\ \hline
+
+  \code{true} & \code{\#t} \\
+  \code{false} & \code{\#f} \\
+  \code{null} & \code{\#\textbackslash nul} \\
+  \var{string} & \var{string} \\
+  \var{number} & \var{number} \\
+  \var{array} & \var{list} \\
+  \var{object} & hashtable mapping case-sensitive strings to values \\
+
+  \hline
+\end{tabular}
+
+This implementation does not range check values to ensure that a
+JavaScript implementation can interpret the data.
+
+Some JavaScript implementations allow inline expressions within JSON
+objects. \code{json:write} enables this by supporting symbols as
+values. Symbols are inlined into the output.
+
+\defineentry{json:extend-object}
+\begin{syntax}
+  \code{(json:extend-object \var{ht} [\var{key} \var{value}] \etc)}
+\end{syntax}
+
+The \code{json:extend-object} construct adds the \var{key} /
+\var{value} pairs to the hashtable \var{ht} using
+\code{hashtable-set!}. The resulting expression returns \var{ht}.
+
+\defineentry{json:make-object}
+\begin{syntax}
+  \code{(json:make-object [\var{key} \var{value}] \etc)}
+\end{syntax}
+
+The \code{json:make-object} construct expands into a call to
+\code{json:extend-object} with a new hashtable.
+
+\defineentry{json:read}
+\begin{procedure}
+  \code{(json:read \var{ip})}
+\end{procedure}
+\returns{} a Scheme object
+
+The \code{json:read} procedure reads characters from the textual
+input port \var{ip} and returns an appropriate Scheme object.
+
+The following exceptions may be raised:
+\begin{itemize}
+\item \code{invalid-surrogate-pair}
+\item \code{unexpected-eof}
+\item \code{\#(unexpected-input \var{data} \var{input-position})}
+\end{itemize}
+
+\defineentry{json:write}
+\begin{procedure}
+  \code{(json:write \var{op} \var{x})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{json:write} procedure writes the object \var{x} to the
+textual output port \var{op} in JSON format. JSON objects are sorted
+by key using \code{string<?} to provide stable output. Scheme fixnums,
+bignums, and finite flonums may be used as numbers.
+
+If an object cannot be formatted, \code{\#(invalid-datum \var{x})}
+is raised.
+
+\defineentry{json:object->bytevector}
+\begin{procedure}
+  \code{(json:object->bytevector \var{x})}
+\end{procedure}
+\returns{} a bytevector
+
+The \code{json:object->bytevector} procedure calls
+\code{json:write} on \var{x} using a bytevector output port
+transcoded using \code{(make-utf8-transcoder)} and returns the
+resulting bytevector.
+
+\defineentry{json:object->string}
+\begin{procedure}
+  \code{(json:object->string \var{x})}
+\end{procedure}
+\returns{} a JSON formatted string
+
+The \code{json:object->string} procedure creates a string output
+port, calls \code{json:write} on \var{x}, and returns the resulting
+string.
+
+\defineentry{json:string->object}
+\begin{procedure}
+  \code{(json:string->object \var{x})}
+\end{procedure}
+\returns{} a Scheme object
+
+The \code{json:string->object} procedure creates a string input port
+on \var{x}, calls \code{json:read}, and returns the resulting Scheme
+object after making sure the rest of the string is only whitespace.
+
+\section {Published Events}
+
+\begin{event}\codeindex{<http-request>}\end{event}\antipar
+\begin{argtbl}
+  \argrow{timestamp}{timestamp from \code{erlang:now}}
+  \argrow{pid}{handler process}
+  \argrow{host}{the IP address of the client}
+  \argrow{method}{\code{<request>} method}
+  \argrow{path}{\code{<request>} path}
+  \argrow{header}{an association list}
+  \argrow{params}{an association list}
+\end{argtbl}

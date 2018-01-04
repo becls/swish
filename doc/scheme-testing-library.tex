@@ -1,0 +1,151 @@
+% Copyright 2017 Beckman Coulter, Inc.
+%
+% Permission is hereby granted, free of charge, to any person
+% obtaining a copy of this software and associated documentation files
+% (the "Software"), to deal in the Software without restriction,
+% including without limitation the rights to use, copy, modify, merge,
+% publish, distribute, sublicense, and/or sell copies of the Software,
+% and to permit persons to whom the Software is furnished to do so,
+% subject to the following conditions:
+%
+% The above copyright notice and this permission notice shall be
+% included in all copies or substantial portions of the Software.
+%
+% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+% EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+% MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+% NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+% BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+% ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+% CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+% SOFTWARE.
+
+\documentclass[letterpaper,11pt,twoside,final]{article}
+\usepackage{swish}
+
+\begin{document}
+
+\title {Scheme Testing Library}
+\author {Leif Danielson \and Bob Burger}
+\date {\copyright\ 2017 Beckman Coulter, Inc.
+  Licensed under the \href{https://opensource.org/licenses/MIT}{MIT License}.}
+\maketitle
+
+\section* {Introduction}
+
+The Scheme Testing Library \code{(swish mat)} provides methods to
+define, iterate through, and run test cases, and to log the
+results. Test cases are called \emph{mats} and consist of a name, a
+set of tags, and a test procedure.  The set of mats is stored in
+reverse order in a single, global list.  The list of tags allows the
+user to group tests or mark them.  For example, tags can be used to
+note that a test was created for a particular change request.
+
+The Scheme Testing Library uses only the \code{(chezscheme)}
+library so that it can be used to test any Scheme code.
+
+A \emph{mat} is an entry in the global list of the form
+\code{(\var{name} \var{tags} . \var{test})}. The \var{test} is a
+procedure of no arguments.
+
+\section* {Programming Interface}
+
+% ----------------------------------------------------------------------------
+\begin{syntax}
+  \code{(mat \var{name} (\var{tag} \etc) $e_1$ $e_2$ \etc)}
+\end{syntax}
+\expandsto{} \code{(add-mat '\var{name} '(\var{tag} \etc)
+  (lambda () $e_1$ $e_2$ \etc))}
+
+The \code{mat} macro creates a mat with the given \var{name},
+\var{tag}s, and test procedure $e_1$ $e_2$ \etc\ using the
+\code{add-mat} procedure.
+
+% ----------------------------------------------------------------------------
+\begin{procedure}
+  \code{(add-mat \var{name} \var{tags} \var{test})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{add-mat} procedure adds a mat to the front of the global
+list. \var{name} is a symbol, \var{tags} is a list, and \var{test} is
+a procedure of no argument.
+
+If \var{name} is already used, an exception is raised.
+
+% ----------------------------------------------------------------------------
+\begin{procedure}
+  \code{(run-mat \var{name} \var{reporter})}
+\end{procedure}
+\returns{} see below
+
+The \code{run-mat} procedure runs the mat of the given \var{name} by
+executing its test procedure with an altered exception handler. If the
+test procedure completes without raising an exception, the mat result
+is \code{pass}. If the test procedure raises exception \var{e}, the
+mat result is \code{(fail~.~\var{e})}.
+
+After the mat completes, the \code{run-mat} procedure tail calls
+\code{(\var{reporter} \var{name} \var{tags} \var{result})}.
+
+If no mat with the given \var{name} exists, an exception is raised.
+
+% ----------------------------------------------------------------------------
+\begin{syntax}
+  \code{(run-mats)}
+\end{syntax}
+\begin{syntax}
+  \code{(run-mats \var{name$_1$} \var{name$_2$} \etc)}
+\end{syntax}
+\returns{} unspecified
+
+The \code{run-mats} macro runs each mat specified by symbols
+\var{name$_1$} \var{name$_2$} \etc.  When no names are supplied, all
+mats are executed.  After each mat is executed, its result, name, and
+exception if it failed are displayed.  When the mats are finished, a
+summary of the number run, passed, and failed is displayed.
+
+% ----------------------------------------------------------------------------
+\begin{procedure}
+  \code{(run-mats-to-file \var{filename})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{run-mats-to-file} procedure executes all mats and writes
+the results into the file specified by the string \var{filename}. If
+the files exists, its contents are overwritten. The file format is a
+sequence of s-expressions readable with \code{load-results} and
+\code{summarize}.
+
+% ----------------------------------------------------------------------------
+\begin{procedure}
+  \code{(for-each-mat \var{procedure})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{for-each-mat} procedure calls \code{(\var{procedure}
+  \var{name} \var{tags})} for each mat, in no particular order.
+
+% ----------------------------------------------------------------------------
+\begin{procedure}
+  \code{(load-results \var{filename})}
+\end{procedure}
+\returns{} a list of expressions
+
+The \code{load-results} procedure reads the contents of the file
+specified by string \var{filename} and returns the list of
+s-expressions contained within.
+
+% ----------------------------------------------------------------------------
+\begin{procedure}
+  \code{(summarize \var{files})}
+\end{procedure}
+\returns{} two values: the number of passing mats and the number of
+failing mats
+
+The \code{summarize} procedure reads the contents of each file in
+\var{files}, a list of string filenames, and returns the number of
+passing mats and the number of failing mats. An error is raised if any
+entry is malformed.
+
+\end{document}

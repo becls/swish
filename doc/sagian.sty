@@ -1,0 +1,168 @@
+% Copyright 2017 Beckman Coulter, Inc.
+%
+% Permission is hereby granted, free of charge, to any person
+% obtaining a copy of this software and associated documentation files
+% (the "Software"), to deal in the Software without restriction,
+% including without limitation the rights to use, copy, modify, merge,
+% publish, distribute, sublicense, and/or sell copies of the Software,
+% and to permit persons to whom the Software is furnished to do so,
+% subject to the following conditions:
+%
+% The above copyright notice and this permission notice shall be
+% included in all copies or substantial portions of the Software.
+%
+% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+% EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+% MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+% NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+% BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+% ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+% CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+% SOFTWARE.
+
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{sagian}
+\RequirePackage{alltt,amsmath,float,fullpage,hyperref,index,longtable,wrapfig,xspace}
+\RequirePackage[T1]{fontenc}
+\RequirePackage{lmodern}
+\RequirePackage[usenames]{colortbl}
+\RequirePackage[pdftex]{graphicx}
+\RequirePackage[htt]{hyphenat}
+\RequirePackage{fancyhdr}
+\RequirePackage[all]{hypcap}
+\RequirePackage[hyperref]{ntheorem}
+\RequirePackage{lscape}
+\RequirePackage{lastpage}
+\RequirePackage{etoolbox}
+
+\hypersetup{pdfpagemode=UseNone,hidelinks}
+\bibliographystyle{plain}
+
+\definecolor{shade}{gray}{0.8}
+
+\newcommand{\cpp}{C\textsuperscript{++}\xspace}
+\newcommand{\csharp}{C$^\sharp$\xspace}
+\newcommand{\code}[1]{\texttt{\upshape\mdseries\protect\frenchspacing #1}}
+\newcommand{\codebegin}{\begingroup\upshape\mdseries\protect\frenchspacing\begin{alltt}}
+\newcommand{\codeend}{\end{alltt}\endgroup}
+\newcommand{\var}[1]{\textrm{\itshape\mdseries\protect\frenchspacing #1\/}}
+\newcommand{\etc}{\textrm{\upshape\mdseries\dots}}
+\newcommand{\opt}[1]{\textrm{\upshape\mdseries[}#1\textrm{\upshape\mdseries]}}
+\newcommand{\set}[1]{$\{$#1$\}$}
+\newcommand{\alt}{$\;|\;$}
+\newcommand{\tbd}[1]{\textsf{TBD: #1}}
+\newcommand{\antipar}{\vspace{-\baselineskip}}
+
+\newsavebox{\declbox}
+\newlength{\declheight}
+\newcommand{\makedecl}[1]{%
+\newenvironment{#1}{%
+  \begin{lrbox}{\declbox}%
+    \begin{minipage}[t]{\textwidth}}{%
+    \end{minipage}%
+    \hfill\strut\makebox[0pt][r]{\textrm{\upshape\bfseries #1}}%
+  \end{lrbox}%
+  \setlength{\declheight}{\ht\declbox}%
+  \addtolength{\declheight}{\dp\declbox}%
+  \begin{trivlist}%
+  \item%
+    \makebox[0pt][l]{\color{shade}\rule[-\dp\declbox]{\textwidth}{\declheight}}%
+    \usebox{\declbox}%
+  \end{trivlist}}}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.5\baselineskip}
+
+\setlength{\topmargin}{-0.5in}
+\setlength{\headsep}{0.5in}
+\addtolength{\headsep}{-\headheight}
+\setlength{\textheight}{9in}
+\setlength{\footskip}{0.5in}
+\setlength{\evensidemargin}{0pt}
+\setlength{\oddsidemargin}{0pt}
+\setlength{\textwidth}{6.5in}
+
+\newcommand{\coverpage}{\maketitle}
+
+% Print the bibliography with an entry in the table of contents.
+% Override \thebibliography so that nothing appears if there are
+% no citations. Take advantage of the fact that \thebibliography
+% begins with an empty argument if there are no items in it.
+\newcommand{\tocbibliography}[1]{
+  {
+  \let\prevthebibliography\thebibliography
+  \let\endprevthebibliography\endthebibliography
+  \renewcommand\thebibliography[1]{
+    \ifx\relax##1\relax
+    \else
+      \clearpage\phantomsection
+      \addcontentsline{toc}{chapter}{Bibliography}
+      \prevthebibliography{##1}
+    \fi
+  }
+  \bibliography{#1}
+  }
+}
+
+% Use toggles (etoolbox package) to track having any figures/tables
+% and generate the corresponding lists with a table of contents entry
+% only if they have any items.
+\newtoggle{has@any@figures}
+\AtEndEnvironment{figure}{\global\toggletrue{has@any@figures}}
+\newtoggle{has@any@tables}
+\AtEndEnvironment{table}{\global\toggletrue{has@any@tables}}
+\newcommand{\toclistoffigures}{
+  \iftoggle{has@any@figures}{
+    \clearpage\phantomsection
+    \addcontentsline{toc}{chapter}{List of Figures}
+    \listoffigures}{}}
+\newcommand{\toclistoftables}{
+  \iftoggle{has@any@tables}{
+    \clearpage\phantomsection
+    \addcontentsline{toc}{chapter}{List of Tables}
+    \listoftables}{}}
+
+% Print the index, but first, override \theindex environment
+% with one that adds an entry to the table of contents before
+% deferring to the previous \theindex environment.
+% Have the table of contents addition happen within \theindex
+% environment so that if there are no items in that index,
+% it does not show up in the table of contents.
+\newcommand{\tocprintindex}[1]{
+  % Don't forget the extra layer of { } scoping to hide our crimes.
+  {
+  \let\prevtheindex\theindex
+  \let\endprevtheindex\endtheindex
+  \renewenvironment{theindex}{
+    \edef\indexname{\the\@nameuse{idxtitle@\@indextype}}
+    \clearpage\phantomsection
+    \addcontentsline{toc}{chapter}{\indexname}
+    \begin{prevtheindex}
+  }{
+    \end{prevtheindex}
+  }
+  \printindex[#1]
+  }
+}
+
+\newenvironment{sagianbook}[3]{
+  \title{#1}
+  \author{#2}
+  \date{#3}
+  \coverpage
+  \tableofcontents
+  }{
+  \tocbibliography{reference}
+  \toclistoffigures
+  \toclistoftables
+  \tocprintindex{default}
+  }
+
+\newcommand{\defineentry}[1]{\index{#1@\code{#1}}}
+\newcommand{\codeindex}[1]{\code{#1}\index{#1@\code{#1}}}
+\newcommand{\makeresults}[1]{\vspace{-\topsep}\vspace{-\parskip}\vspace{-\partopsep}\textbf{#1:}}
+\newcommand{\nt}[1]{\textrm{\upshape\mdseries\frenchspacing$<$#1$>$}}
+
+\newenvironment{grammar}{\begin{tabular}{@{}r@{\ $\rightarrow$\ }l}}{\end{tabular}}
+\newenvironment{argtbl}{\begin{tabular}{r@{\ }p{0.75\textwidth}}}{\end{tabular}}
+\newcommand{\argrow}[2]{\var{#1}: & #2\\}

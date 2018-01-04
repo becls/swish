@@ -1,0 +1,245 @@
+% Copyright 2017 Beckman Coulter, Inc.
+%
+% Permission is hereby granted, free of charge, to any person
+% obtaining a copy of this software and associated documentation files
+% (the "Software"), to deal in the Software without restriction,
+% including without limitation the rights to use, copy, modify, merge,
+% publish, distribute, sublicense, and/or sell copies of the Software,
+% and to permit persons to whom the Software is furnished to do so,
+% subject to the following conditions:
+%
+% The above copyright notice and this permission notice shall be
+% included in all copies or substantial portions of the Software.
+%
+% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+% EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+% MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+% NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+% BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+% ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+% CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+% SOFTWARE.
+
+\chapter {Log Database}\label{chap:log-db}
+
+\section {Introduction}
+
+The log database is a single gen-server named \code{log-db} that
+uses the database interface (see Chapter~\ref{chap:db}) to log system
+events (see Chapter~\ref{chap:event-mgr}).
+
+\section {Theory of Operation}
+
+\subsection {Initialization}
+
+The \code{log-db} gen-server handles startup and setup through two
+separate procedures. Startup uses the \code{db:start\&link}
+procedure to connect to the the SQLite log database specified by the
+\code{(log-path)} parameter. It creates the file if it does not
+exist, but otherwise startup does not modify the database.
+
+Setup makes sure the schema of the log database has been created and
+is up-to-date. A unique symbol identifying the schema version is
+stored in a table named version. This allows the software to upgrade
+between known schema versions and to exit with an error when it
+encounters an unsupported database version. These schema updates
+happen within a database transaction so that if there is an error, the
+changes are rolled back.
+
+Setup calls \code{event-mgr:set-log-handler} after updating the
+schema. This registers the \code{log-db} to log system events. It
+also calls \code{event-mgr:flush-buffer}. This causes the event
+manager to stop buffering startup events and the \code{log-db} to
+log the events that were buffered.
+
+Finally, setup sends a \code{<system-attributes>} event so that
+\code{log-db} receives and logs it.
+
+Once the \code{log-db} gen-server has been setup, it continues to
+receive events from the system event manager. It converts events that
+it recognizes into insertions to the log database. Events that it does
+not recognize are ignored.
+
+The tables are pruned using insert triggers to hold 90 days of
+information. To keep the insert operations fast, the timestamp columns
+are indexed, and the pruning deletes no more than 10 rows per insert.
+
+\subsection {Extensions}
+
+An application typically produces events beyond those that are part of
+Swish and may wish to log them in the same log database file where the
+Swish events are logged. The \code{log-db} design allows for this
+type of extension.
+
+The \code{log-db:setup} procedure takes a list of
+\code{<event-logger>} records. Each logger represents an extension
+to the log database schema and contains two procedures, \code{setup}
+and \code{log}. The \code{log-db:setup} procedure calls the
+\code{setup} procedure of logger to make sure that its portion of
+the schema has been created and is up-to-date. Then, when
+\code{log-db} receives an event, it calls the \code{log} procedure
+of each logger. If the event is recognized by that portion of the
+schema, the \code{log} procedure inserts or updates data in the log
+database. Otherwise, the procedure ignores that event.
+
+Additionally, the version table does not store a single schema
+version. Instead, it stores schema versions associated with names. The
+\code{setup} procedure of an \code{<event-logger>} uses an unique
+name for its portion of the schema and the \code{log-db:version}
+procedure to retrieve and set its version.
+
+The schema and logging for Swish events is implemented as an
+\code{<event-logger>} defined by \code{swish-event-logger} and
+using the schema version name \code{swish}. An application that
+wishes to use this logging must provide \code{swish-event-logger} in
+the list to \code{log-db:setup}. If the application wishes to log
+Swish events in a different structure, it can omit the
+\code{swish-event-logger} and provide its own logger with its own
+schema. However, doing so makes the application more brittle with
+respect to changes in the Swish implementation.
+
+\section {Programming Interface}
+
+\begin{recorddef}{<event-logger>}
+  \argrow{setup}{procedure of no arguments that makes sure this
+    portion of the schema is created and up-to-date}
+  \argrow{log}{procedure of one argument, an event, that logs the
+    event if it recognizes it and otherwise ignores it}
+\end{recorddef}
+
+\defineentry{log-db:start\&link}
+\begin{procedure}
+  \code{(log-db:start\&link)}
+\end{procedure}
+\returns{}
+\code{\#(ok \var{pid})} $|$
+\code{\#(error \var{error})}
+
+The \code{log-db:start\&link} procedure creates a new \code{db}
+gen-server named \code{log-db} using \code{db:start\&link}. It
+uses the value of the \code{(log-path)} parameter as the path to the
+SQLite database and specifies \code{create} mode.
+
+\defineentry{log-db:setup}
+\begin{procedure}
+  \code{(log-db:setup \var{loggers})}
+\end{procedure}
+\returns{}
+\code{ignore} $|$
+\code{\#(error \var{error})}
+
+The argument \var{loggers} is a list of \code{<event-logger>}
+records. The \code{log-db:setup} makes sure the \code{log-db} is
+setup to run by doing the following in order.
+
+\begin{enumerate}
+  \item Initialize or upgrade the database schema from within a
+    \code{db:transaction} call. It does this by calling the
+    \code{setup} procedure of each logger.
+  \item Register a procedure with \code{event-mgr:set-log-handler} to
+    have the \code{log-db} gen-server log events it recognizes. When
+    this procedure receives an event, it calls the \code{log}
+    procedure of each logger.
+  \item Call \code{event-mgr:flush-buffer} to stop buffering system
+    events and apply the log handler to the events already buffered.
+  \item Send a \code{<system-attributes>} event.
+\end{enumerate}
+
+If everything succeeds, the procedure returns \code{ignore}. If
+either the \code{db:transaction} or
+\code{event-mgr:set-log-handler} indicate an error, the procedure
+returns that error.
+
+\defineentry{log-db:version}
+\begin{procedure}
+  \code{(log-db:version \var{name} \opt{\var{version}})}
+\end{procedure}
+
+\begin{argtbl}
+  \argrow{name}{symbol identifying the schema}
+  \argrow{version}{string specifying the version of the schema}
+\end{argtbl}
+
+When called with one argument, \code{log-db:version} retrieves the
+version associated with \var{name} from the database and returns it as
+a string. It returns \code{\#f} if no version associated with
+\var{name} is stored in the database.
+
+When called with two arguments, it stores \var{version} as the version
+associated with \var{name} in the database.
+
+\defineentry{log-db:get-instance-id}
+\begin{procedure}
+  \code{(log-db:get-instance-id)}
+\end{procedure}
+
+\returns{} a string
+
+\code{log-db:setup} associates a globally unique identifier with the
+database file. The \code{log-db:get-instance-id} function caches and
+returns that identifier.
+
+\defineentry{swish-event-logger}
+\begin{property}
+  \code{swish-event-logger}
+\end{property}
+
+The \code{swish-event-logger} is an \code{<event-logger>} record
+that defines the schema for Swish events. It uses the name
+\code{swish} to store its schema version.
+
+\defineentry{create-table}
+\begin{syntax}\begin{alltt}
+(create-table \var{name}
+  (\var{field} \var{type} . \var{inline})
+  \etc{})\strut\end{alltt}
+\end{syntax}
+\expandsto{} \code{(execute "create table if not exists \etc{}")}
+
+The \code{create-table} syntax describes the schema of a single
+table and expands into a call to \code{execute} to create the table
+if no table with that name already exists. The name of the table,
+\var{name}, and of each field, \var{field}, are converted from Scheme
+to SQL identifiers by replacing hyphen characters with underscores and
+eliminating any non-alphanumeric and non-underscore characters. The
+SQL definition of each field is produced by joining the converted
+field name, the \var{type} and any additional \var{inline} arguments
+into a space separated string.
+
+\defineentry{define-simple-events}
+\begin{syntax}\begin{alltt}
+(define-simple-events \var{create} \var{handle}
+  (\var{name} \var{clause} \etc{})
+  \etc{})\strut\end{alltt}
+\end{syntax}
+\expandsto{} A definition of the \var{create} and \var{handle}
+procedures
+
+The \code{define-simple-events} syntax is used to log record types
+by inserting a row into a table with the same name and the same
+fields. Each \var{name} is a record type. Each \var{clause} is a valid
+\code{create-table} clause for one of the fields in that record
+type.
+
+It defines \var{create} as a procedure of 0 arguments that consists of
+a \code{(create-table \var{name} \var{clause} \etc{})} for each
+record in the \code{define-simple-events}. This means that the name
+of the record type and each field are converted to SQL names by the
+\code{create-table} syntax.
+
+It defines \var{handle} as a procedure of 1 argument, an event. If the
+event is one of the record types in the \code{define-simple-events},
+it calls \code{db:log} with an insert statement. If the event is
+unrecognized, it returns \code{\#f}.
+
+\section {Published Events}
+
+\begin{pubevent}{<system-attributes>}
+  \argrow{timestamp}{timestamp from \code{erlang:now}}
+  \argrow{date}{date from \code{current-date}}
+  \argrow{software-version}{software version string}
+  \argrow{computer-name}{computer name from \code{osi::GetComputerName}}
+\end{pubevent}
+
+The \code{<system-attributes>} event is sent exactly once, when
+\code{log-db:setup} is called.

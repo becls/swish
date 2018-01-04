@@ -1,0 +1,530 @@
+% Copyright 2017 Beckman Coulter, Inc.
+%
+% Permission is hereby granted, free of charge, to any person
+% obtaining a copy of this software and associated documentation files
+% (the "Software"), to deal in the Software without restriction,
+% including without limitation the rights to use, copy, modify, merge,
+% publish, distribute, sublicense, and/or sell copies of the Software,
+% and to permit persons to whom the Software is furnished to do so,
+% subject to the following conditions:
+%
+% The above copyright notice and this permission notice shall be
+% included in all copies or substantial portions of the Software.
+%
+% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+% EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+% MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+% NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+% BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+% ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+% CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+% SOFTWARE.
+
+\chapter {Database Interface}\label{chap:db}
+
+\section {Introduction}
+
+The database (\code{db}) interface is a gen-server which provides a
+basic transaction framework to retrieve and store data in a SQLite
+database. It provides functions to use transactions (directly and
+lazily).
+
+The low-level SQLite interface can be found in the operating system
+interface design (see Chapter~\ref{chap:osi}).
+
+Other SQLite resources are available online~\cite{sqlite} or in The
+Definitive Guide to SQLite~\cite{sqlite-guide}.
+
+\section {Theory of Operation}
+
+The \code{db} gen-server serializes internal requests to the
+database.  For storage and retrieval of data, each transaction is
+processed in turn by a separate linked process.  The gen-server does
+not block waiting for this process to finish so that it can maintain
+linear performance by keeping its inbox short. The return value of the
+transaction is returned to the caller or an error is generated without
+tearing down the gen-server.
+
+To facilitate logging, the \code{db} gen-server can lazily open a
+transaction. In order to allow other processes access to the database,
+lazy transactions should be closed occasionally. To support this, it
+tracks a count of entries in the current transaction. A transaction is
+committed when the threshold of 10,000 is reached, the message queue
+of the \code{db} is empty, or when a direct transaction is
+requested.  Each database is created with write-ahead logging enabled
+to prevent write operations from blocking on queries made from another
+connection.
+
+SQLite has three types of transactions: deferred, immediate, and
+exclusive. This interface uses only immediate transactions to simplify
+the handling of the \code{SQLITE\_BUSY} error.  Using immediate
+transactions means that \code{SQLITE\_BUSY} will only occur during
+\code{BEGIN IMMEDIATE}, \code{BEGIN TRANSACTION}, \code{COMMIT},
+and \code{ROLLBACK}\footnote{Our testing showed that
+  \code{ROLLBACK} returns \code{SQLITE\_BUSY} only when a
+  \code{COMMIT} for the same transaction returned
+  \code{SQLITE\_BUSY}. This framework never causes that situation to
+  occur, but it guards against it anyway.} statements. For each of
+these statements, when a \code{SQLITE\_BUSY} occurs, the code waits
+for a brief time, then retries the statement. The wait times in
+milliseconds follow the pattern \code{(2 3 6 11 16 21 26 26 26 51
+  51 . \#0=(101 . \#0\#))}, and up to 500 retries are attempted before
+exiting with \code{\#(db-retry-failed \var{sql} \var{count})}.  When
+the retry count is positive, it is logged to the event manager along
+with the total duration with a \code{<transaction-retry>} event.
+
+\begin{pubevent}{<transaction-retry>}
+  \argrow{timestamp}{timestamp from \code{erlang:now}}
+  \argrow{database}{database filename}
+  \argrow{duration}{duration in milliseconds}
+  \argrow{count}{retry count}
+  \argrow{sql}{query}
+\end{pubevent}
+
+The \code{db} gen-server uses the operating system interface to
+interact with SQLite. To prevent memory leaks, raw database handles
+are wrapped in a Scheme record and registered with a guardian.
+
+\paragraph* {state}\index{db!state}
+\code{(define-state-record <db-state> filename db cache queue worker)}
+\begin{itemize}
+\item \code{filename} is the database specified when the server was
+  started.
+\item \code{db} is the database record.
+\item \code{cache} is a hash table mapping SQL strings to SQLite
+  prepared statements.
+\item \code{queue} is a queue of log and transaction requests.
+\item \code{worker} is the pid of the active worker or \code{\#f}.
+\end{itemize}
+
+\paragraph* {dictionary parameters}\index{db!parameters}
+\begin{itemize}
+
+\item \code{current-database} stores a Scheme record:\newline
+  \code{(define-record-type database (fields (mutable
+    handle)))}\newline The \code{handle} is set to \code{\#f} when
+  the database is closed.
+
+\item \code{statement-cache} stores a Scheme record:\newline
+  \code{(define-record-type cache (fields (immutable ht) (mutable
+    waketime) (mutable lazy-statements)))}\newline
+  The \code{waketime} is the next time the cache will attempt to
+  remove dead entries.
+
+  The hash table, \code{ht}, maps SQL strings to a Scheme
+  record:\newline \code{(define-record-type entry (fields
+    (immutable stmt) (mutable timestamp)))}\newline
+
+  When a SQL string is not found in the cache,
+  \code{PrepareStatement} is used with the
+  \code{current-database} to make a SQLite statement. The raw
+  statement handle is stored in a Scheme record:\newline
+  \code{(define-record-type statement (fields (immutable handle)
+    (immutable database)))}\newline The \code{statement} record is
+  not registered with a guardian. The statement is finalized using
+  \code{FinalizeStatement} when it is removed from the
+  cache. \code{CloseDatabase} will finalize any remaining
+  statements associated with the database.
+
+  When a SQL string is found in the cache, the entry's
+  \code{timestamp} is updated. Entries older than 5 minutes will
+  be removed from the cache.
+
+  Accessing the cache may exit with reason reason
+  \code{\#(db-error prepare \var{error} \var{sql})}, where
+  \var{error} is a SQLite error pair.
+
+  The \code{lazy-statements} list contains \code{statement}
+  records created by \code{lazy-execute}. These statements are
+  finalized when a transaction completes.
+
+\end{itemize}
+
+\genserver{db}{init} The \code{init} procedure takes a filename and
+mode symbol and attempts to open that database, setting
+\code{journal\_mode} to ``wal'' if \var{mode} is
+\code{create}. The handle returned from \code{OpenDatabase} is
+wrapped in a \var{database} record that is registered with a
+guardian. The garbage collector is hooked so that dead databases are
+closed even if the \code{db} gen-server fails to close them for any
+reason.
+
+The gen-server traps exits so that it can close the database in its
+\code{terminate} procedure.
+
+\genserver{db}{terminate} The \code{terminate} flushes the queue and
+closes the database.
+
+\genserver{db}{handle-call} The \code{handle-call} procedure
+processes the following messages:
+
+\antipar\begin{itemize}
+
+\item \code{\#(transaction \var{f})}: Add this transaction along
+  with the \var{from} argument to \code{handle-call} to the queue.
+  Process the queue.
+
+\item \code{filename}: Return the database filename.
+
+\item \code{stop}: Flush the queue and stop with reason
+  \code{normal}, returning \code{stopped} to the caller.
+
+\end{itemize}
+
+\genserver{db}{handle-cast} The \code{handle-cast} procedure
+processes the following message:
+
+\antipar\begin{itemize}
+
+\item \code{\#(log \var{sql} \var{bindings})}: Add this record to
+  the queue. Process the queue.
+
+\end{itemize}
+
+\genserver{db}{handle-info} The \code{handle-info} procedure
+processes the following messages:
+
+\antipar\begin{itemize}
+
+\item \code{timeout}: Remove old entries from the statement cache.
+
+\item \code{\#(EXIT \var{worker-pid} normal)}: The worker finished
+  the previous request successfully. Process the queue.
+
+\item \code{\#(EXIT \var{worker-pid} \var{reason})}: The worker
+  failed to process the previous request. Flush the queue and stop
+  with \var{reason}.
+
+\end{itemize}
+
+\section {Design Decisions}
+
+There is a one-to-one relationship between a SQLite database handle
+and the \code{db} gen-server. For clarity, the database handle and a
+SQLite statement cache are implemented in terms of Erlang process
+dictionary parameters.
+
+An alternate approach for logging was already explored where a
+transaction was not lazily opened. Such an approach means that when a
+third party tool tries to access the database, it will hang until the
+transaction is complete.
+
+A commit threshold of 10,000 was chosen because it was large enough to
+minimize the cost of a transaction but small enough to execute simple
+queries in less than one second.
+
+\section {Programming Interface}
+
+\defineentry{db:start\&link}
+\begin{procedure}
+  \code{(db:start\&link \var{name} \var{filename} \var{mode})}
+\end{procedure}
+\returns{}
+\code{\#(ok \var{pid})} $|$
+\code{\#(error \var{error})}
+
+The \code{db:start\&link} procedure creates a new \code{db}
+gen-server using \code{gen-server:start\&link}.
+
+\var{name} is the registered name of the process. For an anonymous
+server, \code{\#f} may be specified.
+
+\var{filename} is the path to a SQLite database.
+
+\var{mode} is one of the following symbols used to pass SQLite flags
+to \code{OpenDatabase}:
+
+\antipar\begin{itemize}
+
+\item \code{read-only} uses the SQLite flag
+  \code{SQLITE\_OPEN\_READONLY}.
+
+\item \code{open} uses the SQLite flag
+  \code{SQLITE\_OPEN\_READWRITE}.
+
+\item \code{create} combines the SQLite flags \code{(logor
+  SQLITE\_OPEN\_READWRITE \code{SQLITE\_OPEN\_CREATE})}.
+\end{itemize}
+
+The SQLite constants can be found in \texttt{sqlite3.h} or
+online~\cite{sqlite}.
+
+This procedure may return an \var{error} of \code{\#(db-error open
+  \var{error} \var{filename})}, where \var{error} is a SQLite error
+pair.
+
+\defineentry{db:stop}
+\begin{procedure}
+  \code{(db:stop \var{who})}
+\end{procedure}
+\returns{}
+\code{stopped}
+
+The \code{db:stop} procedure calls \code{(gen-server:call
+  \var{who} stop infinity)}.
+
+\defineentry{with-db}
+\begin{syntax}
+  \code{(with-db [\var{db} \var{filename} \var{flags}] \var{body\(\sb{1}\)} \var{body\(\sb{2}\)} \etc)}
+\end{syntax}
+\expandsto{} \antipar\begin{alltt}
+(let ([\var{db} (sqlite:open \var{filename} \var{flags})])
+  (on-exit (sqlite:close \var{db})
+    \var{body\(\sb{1}\)} \var{body\(\sb{2}\)} ...))
+\end{alltt}
+
+The \code{with-db} macro opens the database in \var{filename},
+executes the statements in the body, and closes the database before
+exiting.  This is a suitable alternative to starting a
+\code{gen-server} when you need to query a database using a separate
+SQLite connection, and you do not need to cache prepared SQL
+statements.
+
+\defineentry{db:filename}
+\begin{procedure}
+  \code{(db:filename \var{who})}
+\end{procedure}
+\returns{} the database filename
+
+The \code{db:filename} procedure calls \code{(gen-server:call
+  \var{who} filename)}.
+
+\defineentry{db:log}
+\begin{procedure}
+  \code{(db:log \var{who} \var{sql} . \var{bindings})}
+\end{procedure}
+\returns{}
+\code{ok}
+
+The \code{db:log} procedure calls \code{(gen-server:cast \var{who}
+  \#(log \var{sql} \var{bindings}))}.  \var{sql} is a SQL string, and
+\var{bindings} is a list of values to be bound in the query.
+Because \code{db:log} does not wait for a reply from the server, any
+error in processing the request will crash the server.
+
+\defineentry{db:transaction}
+\begin{procedure}
+  \code{(db:transaction \var{who} \var{f})}
+\end{procedure}
+\returns{}
+\code{\#(ok \var{result})} $|$
+\code{\#(error \var{error})}
+
+The \code{db:transaction} procedure calls \code{(gen-server:call
+  \var{who} \#(transaction \var{f}) infinity)}.
+
+\var{f} is a thunk which returns a single value,
+\var{result}. \code{execute}, \code{lazy-execute}, and
+\code{columns} can be used inside the procedure \var{f}.
+
+\var{result} is the successful return value of \var{f}. Typically,
+this is a list of rows as returned by a \code{SELECT} query.
+
+\var{error} is the failure reason of \var{f}.
+
+\defineentry{transaction}
+\begin{syntax}
+  \code{(transaction \var{db} \var{body} \etc)}
+\end{syntax}
+\expandsto{} \antipar\begin{alltt}
+(match (db:transaction \var{db} (lambda () \var{body} \etc))
+  [#(ok ,result) result]
+  [#(error ,reason) (exit reason)])
+\end{alltt}
+
+The \code{transaction} macro runs the body in a transaction and
+returns the result when successful and exits when unsuccessful.
+
+\defineentry{execute}
+\begin{procedure}
+  \code{(execute \var{sql} . \var{bindings})}
+\end{procedure}
+\returns{}
+a list of rows where each row is a vector of data in column order as
+specified in the \var{sql} statement
+
+\code{execute} should only be used from within a thunk \var{f}
+provided to \code{db:transaction}.
+
+\var{sql} is mapped to a SQLite statement using the
+\code{statement-cache}. The \var{bindings} are then applied using
+\code{BindStatement}. The statement is then executed using
+\code{StepStatement}. The results are accumulated as a list, and the
+statement is reset using \code{ResetStatement} to prevent the
+statement from locking parts of the database.
+
+This procedure may exit with reason \code{\#(db-error prepare
+  \var{error} \var{sql})}, where \var{error} is a SQLite error pair.
+
+\defineentry{lazy-execute}
+\begin{procedure}
+  \code{(lazy-execute \var{sql} . \var{bindings})}
+\end{procedure}
+\returns{}
+a thunk
+
+\code{lazy-execute} should only be used from within a thunk \var{f}
+provided to \code{db:transaction}.
+
+A new SQLite statement is created from \var{sql} using
+\code{PrepareStatement} so that the statement won't interfere with
+any other queries. The statement is added to the
+\code{lazy-statements} list of the \code{statement-cache} and is
+finalized when the transaction completes.  The \var{bindings} are then
+applied using \code{BindStatement}. A thunk is returned which, when
+called, executes the statement using \code{StepStatement}. The thunk
+returns one row of data or \code{\#f}.
+
+This procedure may exit with reason \code{\#(db-error prepare
+  \var{error} \var{sql})}, where \var{error} is a SQLite error pair.
+
+\defineentry{execute-sql}
+\begin{procedure}
+  \code{(execute-sql \var{db} \var{sql} . \var{bindings})}
+\end{procedure}
+\returns{}
+a list of rows where each row is a vector of data in column order as
+specified in the \var{sql} statement
+
+\code{execute-sql} should only be used for statements that do not need to be inside a transaction, such as a one-time query.
+
+\var{sql} is prepared into a SQLite statement for use with \var{db}, executed via \code{sqlite:execute} with the specified \var{bindings}, and finalized.
+
+This procedure may exit with reason \code{\#(db-error prepare
+  \var{error} \var{sql})}, where \var{error} is a SQLite error pair.
+
+\defineentry{columns}
+\begin{procedure}
+  \code{(columns \var{sql})}
+\end{procedure}
+\returns{}
+a vector of column names in order as specified in the \var{sql} statement
+
+\code{columns} should only be used from within a thunk \var{f}
+provided to \code{db:transaction}.
+
+\var{sql} is mapped to a SQLite statement using the
+\code{statement-cache}. The statement columns are then retrieved
+using \code{GetStatementColumns}.
+
+\defineentry{parse-sql}
+\begin{procedure}\code{(parse-sql \var{x})}\end{procedure}
+\returns{} two values: a query string and a list of syntax objects for
+the arguments
+
+The \code{parse-sql} procedure is used by macro transformers to take
+syntax object \var{x} and produce a query string and associated
+arguments according to the patterns below.
+
+\begin{itemize}
+
+\item \code{(insert \var{table} ([\var{column} \var{e\(\sb{1}\)}
+    \var{e\(\sb{2}\)} \etc{}] \etc{})}
+
+  The \code{insert} form generates a SQL insert statement. The
+  \var{table} and \var{column} patterns are SQL identifiers. Any
+  \var{e} expression that is \code{(unquote \var{exp})} is converted
+  to \code{?} in the query, and \var{exp} is added to the list of
+  arguments. All other expressions are spliced into the query string.
+
+\item \code{(update \var{table} ([\var{column} \var{e\(\sb{1}\)}
+    \var{e\(\sb{2}\)} \etc{}] \etc{}) \var{where} \etc{})}
+
+  The \code{update} form generates a SQL update statement. The
+  \var{table} and \var{column} patterns are SQL identifiers. Any
+  \var{e} or \var{where} expression that is \code{(unquote
+    \var{exp})} is converted to \code{?} in the query, and \var{exp}
+  is added to the list of arguments. All other expressions are spliced
+  into the query string.
+
+\item \code{(delete \var{table} \var{where} \etc{})}
+
+  The \code{delete} form generates a SQL delete statement. The
+  \var{table} pattern is a SQL identifier. Any \var{where} expression
+  that is \code{(unquote \var{exp})} is converted to \code{?} in
+  the query, and \var{exp} is added to the list of arguments. All
+  other expressions are spliced into the query string.
+
+\end{itemize}
+
+\defineentry{sqlite:bind}
+\begin{procedure}
+  \code{(sqlite:bind \var{stmt} \var{bindings})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{sqlite:bind} procedure binds the variables in statement
+record instance \var{stmt} with the list of \var{bindings}. It resets
+the statement before binding the variables.
+
+\defineentry{sqlite:close}
+\begin{procedure}
+  \code{(sqlite:close \var{db})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{sqlite:close} procedure closes the database associated with
+database record instance \var{db}.
+
+\defineentry{sqlite:columns}
+\begin{procedure}
+  \code{(sqlite:columns \var{stmt})}
+\end{procedure}
+\returns{} a vector of column names
+
+The \code{sqlite:columns} procedure returns a vector of column names
+for the statement record instance \var{stmt}.
+
+\defineentry{sqlite:execute}
+\begin{procedure}
+  \code{(sqlite:execute \var{stmt} \var{bindings})}
+\end{procedure}
+\returns{} a list of rows where each row is a vector of data in column order
+
+The \code{sqlite:execute} procedure calls \code{(sqlite:bind
+  \var{stmt} \var{bindings})} to bind any variables and then
+iteratively calls \code{(sqlite:step \var{stmt})} to build the
+resulting list of rows. It resets the statement when the procedure
+exits.
+
+\defineentry{sqlite:finalize}
+\begin{procedure}
+  \code{(sqlite:finalize \var{stmt})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{sqlite:finalize} procedure finalizes the statement record
+instance \var{stmt}.
+
+\defineentry{sqlite:open}
+\begin{procedure}
+  \code{(sqlite:open \var{filename} \var{flags})}
+\end{procedure}
+\returns{} a database record instance
+
+The \code{sqlite:open} procedure opens the SQLite database in file
+\var{filename} with \var{flags} specified by
+\code{sqlite3\_open\_v2}~\cite{sqlite}. The constants
+\code{SQLITE\_OPEN\_CREATE}, \code{SQLITE\_OPEN\_READONLY}, and
+\code{SQLITE\_OPEN\_READWRITE} are exported from the \code{(swish db)}
+library.
+
+\defineentry{sqlite:prepare}
+\begin{procedure}
+  \code{(sqlite:prepare \var{db} \var{sql})}
+\end{procedure}
+\returns{} a statement record instance
+
+The \code{sqlite:prepare} procedure returns a statement record
+instance for the \var{sql} statement in the database record instance
+\var{db}.
+
+\defineentry{sqlite:step}
+\begin{procedure}
+  \code{(sqlite:step \var{stmt})}
+\end{procedure}
+\returns{} a vector of data in column order or \code{\#f}
+
+The \code{sqlite:step} procedure steps the statement record instance
+\var{stmt} and returns the next row vector in column order or
+\code{\#f} if there are no more rows.

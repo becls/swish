@@ -1,0 +1,77 @@
+% Copyright 2018 Beckman Coulter, Inc.
+%
+% Permission is hereby granted, free of charge, to any person
+% obtaining a copy of this software and associated documentation files
+% (the "Software"), to deal in the Software without restriction,
+% including without limitation the rights to use, copy, modify, merge,
+% publish, distribute, sublicense, and/or sell copies of the Software,
+% and to permit persons to whom the Software is furnished to do so,
+% subject to the following conditions:
+%
+% The above copyright notice and this permission notice shall be
+% included in all copies or substantial portions of the Software.
+%
+% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+% EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+% MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+% NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+% BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+% ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+% CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+% SOFTWARE.
+
+\chapter {Operating System Interface}\label{chap:osi}
+
+\section {Introduction}
+
+This chapter describes the operating system interface. Swish is
+written in Chez Scheme and runs on macOS, Linux, and Windows. It
+provides asynchronous I/O via libuv~\cite{libuv} and database support
+via SQLite~\cite{sqlite-guide}.
+
+\section {Theory of Operation}
+
+The operating system interface is written in C99~\cite{c99} as a
+shared library that is statically linked against the libuv and SQLite
+libraries and dynamically linked against single-threaded Chez Scheme
+9.5.  Please refer to Chapter~4 of the \emph{Chez Scheme Version 9
+  User's Guide}~\cite{chez-scheme-users-guide} for information on the
+foreign function interface.
+
+The single-threaded version of Chez Scheme is used because of its
+simplicity. All Scheme code runs in the main thread. In order to keep
+this thread responsive, operations that block for more than a
+millisecond are performed asynchronously.
+
+For each asynchronous function in the operating system interface, a
+Scheme callback procedure is passed as the last argument.  This
+callback procedure is later returned to Scheme in a completion packet
+that includes the results of the asynchronous function call.
+
+Scheme object locking and unlocking is handled by the operating system
+interface because it manages the data structures that contain pointers
+to Scheme objects.
+
+The operating system interface uses port objects for files, console
+input, and TCP/IP connections. A port object is created by the various
+open functions, which return a port handle that is used for read,
+write, and close operations. Once a port is closed, its port object is
+freed.
+
+For interface functions that can fail, an error pair\index{error pair}
+\code{(\var{who} . \var{errno})} is returned, where \var{who} is a
+symbol representing the name of the particular function that failed
+and \var{errno} is either an error number or, in the case of certain
+SQLite functions, a pair whose car is the error number and cdr is the
+English error string.
+
+Section~\ref{sec:osi-api} describes the programming interface from the
+C side. The Scheme library \code{(osi)} provides foreign procedures
+for each C function using the same name. For functions that may return
+error pair \code{(\var{who} . \var{errno})}, the corresponding Scheme
+procedure $p$, e.g., \code{osi\_read\_port}, raises exception
+\code{\#(osi-error $p$ \var{who} \var{errno})}. In addition, the
+\code{(osi)} library exports another procedure with the \verb|*|
+suffix, e.g., \code{osi\_read\_port*}, that returns the error pair.
+
+\section {Programming Interface}\label{sec:osi-api}

@@ -1,0 +1,25 @@
+digraph G {
+  graph [margin=0,rankdir=LR];
+  node [shape=box,fontname="Courier",fontsize=11];
+  mainsup [label="main-sup",shape=ellipse];
+  eventmgr [label="event-mgr"];
+  logdb [label="log-db"];
+  eventmgrsentry [label="event-mgr-sentry"];
+  statistics [label="statistics"];
+  gatekeeper [label="gatekeeper"];
+  httpsup [label="http-sup",shape=ellipse];
+  httpd [label="http-listener"];
+  httpcache [label="http-cache"];
+  hc1 [label="http-connection 1",fontname="Times-Roman"];
+  hc2 [label="http-connection 2",fontname="Times-Roman"];
+  mainsup -> eventmgr;
+  mainsup -> logdb;
+  mainsup -> eventmgrsentry;
+  mainsup -> statistics;
+  mainsup -> gatekeeper;
+  mainsup -> httpsup;
+  httpsup -> httpd;
+  httpsup -> httpcache;
+  httpsup -> hc1;
+  httpsup -> hc2;
+}

@@ -1,0 +1,519 @@
+% Copyright 2017 Beckman Coulter, Inc.
+%
+% Permission is hereby granted, free of charge, to any person
+% obtaining a copy of this software and associated documentation files
+% (the "Software"), to deal in the Software without restriction,
+% including without limitation the rights to use, copy, modify, merge,
+% publish, distribute, sublicense, and/or sell copies of the Software,
+% and to permit persons to whom the Software is furnished to do so,
+% subject to the following conditions:
+%
+% The above copyright notice and this permission notice shall be
+% included in all copies or substantial portions of the Software.
+%
+% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+% EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+% MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+% NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+% BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+% ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+% CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+% SOFTWARE.
+
+\chapter {Generic Server}\label{chap:gen-server}
+
+\begin{quote}
+  \emph{The generic server provides an ``empty'' server, that is, a
+  framework from which instances of servers can be
+  built.} \hfill ---Joe~Armstrong~\cite{armstrong-thesis}
+\end{quote}
+
+\section {Introduction}
+
+In a concurrent system, many processes need to access a shared
+resource or sequentially manipulate the state of the system. This is
+generally modeled using a client/server design pattern. To help
+developers build robust servers, a generic server
+(\code{gen-server}) implementation inspired by Erlang's Open Telecom
+Platform is provided.
+
+The principles of the generic server can be found in Joe Armstrong's
+thesis~\cite{armstrong-thesis} or \emph{Programming Erlang---Software
+  for a Concurrent World}~\cite{programming-erlang}. Documentation for
+Erlang's \code{gen\_server} is available
+online~\cite{gen-server-ref}. Source code for the Erlang Open Telecom
+Platform can be found online~\cite{erlang}. The source code for
+\code{gen\_server} is part of stdlib and can be found in
+/lib/stdlib/src/gen\_server.erl.
+
+\section {Theory of Operation}
+
+A \code{gen-server} provides a consistent mechanism for programmers
+to create a process which manages state, timeout conditions, and
+failure conditions using functional programming techniques. A
+programmer uses \code{gen-server:start\&link} and implements the callback
+API to instantiate particular behavior.
+
+A generic server starts a new process, registers it as a named
+process, and invokes the \code{init} callback procedure while
+blocking the calling process.
+
+Clients can then send messages to a server using the synchronous
+\code{gen-server:call}, the asynchronous \code{gen-server:cast},
+or the raw \code{send} procedure. The \code{gen-server} framework
+will automatically process messages and dispatch them to
+\code{handle-call}, \code{handle-cast}, and \code{handle-info}
+respectively.
+
+The \code{gen-server} framework code automatically interprets a
+\code{stop} return value from the callback API or an \code{EXIT}
+message from the process which created it as a termination request and
+calls \code{terminate}. Unless the termination reason is either
+\code{normal} or \code{shutdown}, generic servers use
+\code{event-mgr:notify} to report the termination.
+
+Erlang's \code{gen\_server} supports timeouts during
+\code{gen\_server:start} and \code{gen\_server:start\&link}. In
+order to simplify the startup code, we have not implemented this
+feature. Timeouts while running the \code{init} callback may cause
+resources to be stranded until the garbage collector can clean them
+up. Timeouts during initialization should be considered carefully.
+
+\section {Programming Interface}
+
+\defineentry{gen-server:start\&link}
+\begin{syntax}
+  \code{(gen-server:start\&link \var{name} \var{arg} \etc)}
+\end{syntax}
+\returns{}
+\code{\#(ok \var{pid})\alt{}%
+  \#(error \var{reason})\alt{}%
+  ignore}
+
+\begin{argtbl}
+  \argrow{name}{a symbol for a registered server or \code{\#f} for
+    an anonymous server}
+  \argrow{arg}{any Scheme datum}
+\end{argtbl}
+
+\code{gen-server:start\&link} spawns the server process, links to
+the calling process, registers the server process as \var{name}, and calls
+\code{(init \var{arg} ...)} within that process. To ensure a
+synchronized startup procedure, \code{gen-server:start\&link} does
+not return until \code{init} has returned.
+
+This macro uses the current scope to capture the callback functions
+\code{init}, \code{handle-call}, \code{handle-cast},
+\code{handle-info}, and \code{terminate}.
+
+Attempting to register a name that already exists results in
+\code{\#(error \#(name-already-registered \var{pid}))}, where
+\var{pid} is the existing process.
+
+The return value of \code{gen-server:start\&link} is propagated from
+the \code{init} callback.
+
+An \code{init} which returns \code{\#(ok \var{state}
+  \opt{\var{timeout}})} will yield \code{\#(ok \var{pid})} where
+\var{pid} is the newly created process.
+
+An \code{init} which returns \code{\#(stop \var{reason})} or exits
+with \var{reason} will terminate the process and yield
+\code{\#(error \var{reason})}.
+
+An \code{init} which returns \code{ignore} will terminate the
+process and yield \code{ignore}. This value is useful to inform a
+supervisor that the \code{init} procedure has determined that this
+server is not necessary for the system to operate.
+
+An \code{init} which returns \var{other} values will terminate the
+process and yield \code{\#(error \#(bad-return-value \var{other}))}.
+
+\defineentry{gen-server:start}
+\begin{syntax}
+  \code{(gen-server:start \var{name} \var{arg} \etc)}
+\end{syntax}
+\returns{}
+\code{\#(ok \var{pid})\alt{}%
+  \#(error \var{error})\alt{}%
+  ignore}
+
+\code{gen-server:start} behaves the same as \code{start\&link}
+except that it does not link to the calling process.
+
+\defineentry{gen-server:call}
+\begin{procedure}
+  \code{(gen-server:call \var{server} \var{request} \opt{\var{timeout}})}
+\end{procedure}
+\returns{}
+\var{reply}
+
+\begin{argtbl}
+  \argrow{server}{process or registered name}
+  \argrow{request}{any Scheme datum}
+  \argrow{timeout}{non-negative exact integer in milliseconds or
+    \code{infinity}, defaults to 5000}
+\end{argtbl}
+
+\code{gen-server:call} sends a synchronous \var{request} to
+\var{server} and waits for a \var{reply}. The server processes the
+request using \code{handle-call}.
+
+Failure to receive a reply causes the calling process to exit with
+reason \code{\#(timeout \#(gen-server call (\var{server}
+  \var{request})))} if no timeout is specified, or \code{\#(timeout
+  \#(gen-server call (\var{server} \var{request} \var{timeout})))} if
+a timeout is specified. If the caller catches the failure and
+continues running, the caller must be prepared for a possible late
+reply from the server.
+
+\code{gen-server:call} exits if the server terminates while the
+client is waiting for a reply. When that happens, the client exits for
+the same reason as the server.
+
+\defineentry{gen-server:cast}
+\begin{procedure}
+  \code{(gen-server:cast \var{server} \var{request})}
+\end{procedure}
+\returns{}
+\code{ok}
+
+\begin{argtbl}
+  \argrow{server}{process or registered name}
+  \argrow{request}{any Scheme datum}
+\end{argtbl}
+
+\code{gen-server:cast} sends an asynchronous \var{request} to a
+\var{server} and returns \code{ok} immediately. When using
+\code{gen-server:cast} a client does not expect failures in the
+server to cause failures in the client; therefore, this procedure
+ignores all failures. The server will process the request using
+\code{handle-cast}.
+
+\defineentry{gen-server:reply}
+\begin{procedure}
+  \code{(gen-server:reply \var{client} \var{reply})}
+\end{procedure}
+\returns{}
+\code{ok}
+
+\begin{argtbl}
+  \argrow{client}{a \var{from} argument provided to the
+    \code{handle-call} callback}
+  \argrow{reply}{any Scheme datum}
+\end{argtbl}
+
+\code{gen-server:reply} can be used by a server to explicitly send a
+\var{reply} to a \var{client} that called \code{gen-server:call}.
+
+In some situations, a server cannot reply immediately to a client. In
+such cases, the \var{from} argument inside \code{handle-call} is
+stored, and \code{no-reply} is returned.  Later,
+\code{gen-server:reply} can be called using that \var{from} value as
+\var{client}. The \var{reply} is the return value of the
+\code{gen-server:call} in this case.
+
+\defineentry{gen-server:debug}
+\begin{procedure}
+  \code{(gen-server:debug \var{server} \var{server-options} \var{client-options})}
+\end{procedure}
+\returns{} \code{ok}
+
+\begin{argtbl}
+  \argrow{server}{process or registered name}
+  \argrow{server-options}{\code{(\opt{message} \opt{state}
+      \opt{reply})\alt{}\#f}}
+  \argrow{client-options}{\code{(\opt{message} \opt{reply})\alt{}\#f}}
+\end{argtbl}
+
+\code{gen-server:debug} sets the debugging mode of \var{server}.
+The \var{server-options} argument specifies the logging of calls in
+the server. When \var{server-options} is \code{\#f}, server logging
+is turned off. Otherwise, server logging is turned on, and
+\var{server-options} is a list of symbols specifying the level of
+detail.  In logging mode, the \var{server} sends a
+\code{<gen-server-debug>} event for each call to
+\code{handle-call}, \code{handle-cast}, and
+\code{handle-info}. The \var{message} field is populated when
+\code{message} is in \var{server-options}, the \var{state} field is
+populated when \code{state} is in \var{server-options}, and the
+\var{reply} field is populated when \code{reply} is in
+\var{server-options}.
+
+Similarly, the \var{client-options} argument specifies the logging of
+client calls to \var{server} with \code{gen-server:call}.  When
+\var{client-options} is \code{\#f}, client logging is turned
+off. Otherwise, client logging is turned on, and \var{client-options}
+is a list of symbols specifying the level of detail. In logging mode,
+\code{gen-server:call} sends a \code{<gen-server-debug>}
+event. The \var{message} field is populated when \code{message} is
+in \var{client-options}, and the \var{reply} field is populated when
+\code{reply} is in \var{client-options}.
+
+\defineentry{define-state-record}
+\begin{syntax}
+  \code{(define-state-record \var{name} \var{field} \etc)}
+\end{syntax}
+
+This form defines a record type using \code{(define-record
+  \var{name} \var{field} \etc)} and defines a new syntactic form
+\code{\$state}. \code{\$state} provides a succinct syntax for the
+\code{state} variable.
+
+\code{\$state} transforms \code{(\$state \var{op} \var{arg} \etc)}
+to \code{(\var{name} \var{op} state \var{arg} \etc)} where
+\code{state} is a variable in the same scope as \code{\$state}.
+
+Given this definition:
+
+\code{(define-state-record <my-state> x y z)}
+
+The following code is equivalent:
+
+\begin{tabular}{l l}
+  \code{(<my-state> copy state [x 2])} & \code{(\$state copy [x 2])} \\
+  \code{(<my-state> x state)} & \code{(\$state x)} \\
+  \code{(<my-state> y state)} & \code{(\$state y)} \\
+  \code{(<my-state> z state)} & \code{(\$state z)} \\
+\end{tabular}
+
+There is no equivalent for constructing a state record because
+constructing a record does not require the \code{state}
+variable. The \code{(<my-state> make \etc)} syntax must be used.
+
+\section {Published Events}
+
+All generic servers send the event manager the following event:
+
+\begin{pubevent}{<gen-server-terminating>}
+  \argrow{timestamp}{the time the event occured}
+  \argrow{name}{the name of the server}
+  \argrow{last-message}{the last message received by the server}
+  \argrow{state}{the last state passed into \code{terminate}}
+  \argrow{reason}{the reason for termination}
+\end{pubevent}
+
+This event is fired after a successful call to \code{terminate}
+unless the reason for termination is \code{normal} or
+\code{shutdown}. If the \code{terminate} procedure exits with a
+new \var{reason}, the event contains the new \var{reason}.
+
+\begin{pubevent}{<gen-server-debug>}
+  \argrow{timestamp}{the time the operation started}
+  \argrow{duration}{the duration of the operation in milliseconds}
+  \argrow{type}{1 for \code{handle-call}, 2 for \code{handle-cast}, 3
+    for \code{handle-info}, 4 for \code{terminate}, 5 for
+    a successful \code{gen-server:call}, and 6 for a failed
+    \code{gen-server:call}}
+  \argrow{client}{the client process or \code{\#f}}
+  \argrow{server}{the server process}
+  \argrow{message}{the message sent to the server or \code{\#f}}
+  \argrow{state}{the state of the server when it received the message
+    or \code{\#f}}
+  \argrow{reply}{the server's reply or \code{\#f}}
+\end{pubevent}
+
+\section {Callback Interface}
+
+A programmer implements the callback interface to define a particular
+server's behavior. All callback functions are called from within the
+server process.
+
+The callback functions for gen-server processes are supposed to be
+\emph{well-behaved functions}, i.e., functions that work
+correctly. The generation of an exception in a well-behaved function
+is interpreted as a failure~\cite{armstrong-thesis}.
+
+When a callback function exits with a reason, \code{terminate} is
+called and the server exits.
+
+When a callback function returns an unexpected \var{value},
+\code{terminate} is called with the reason
+\code{\#(bad-return-value \var{value})}, and the server exits.
+
+A callback may specify a \var{timeout} as a relative time in
+milliseconds up to one day, an absolute time in milliseconds (e.g.,
+from \code{erlang:now}), or \code{infinity}. The default
+\var{timeout} is \code{infinity}. If the time period expires before
+another message is received, then a \code{timeout} message will be
+processed by \code{handle-info}.
+
+Messages sent using \code{send}, including \code{\#(EXIT \var{pid}
+  \var{reason})} and \code{\#(DOWN \var{monitor} \var{pid}
+  \var{reason})}, are processed by \code{handle-info}.
+
+The generic server framework will automatically interpret an
+\code{EXIT} message from the process which spawned it as a reason
+for termination. \code{terminate} will be called
+directly. \code{handle-info} will not be called. The server must use
+\code{(process-trap-exit \#t)} to receive \code{EXIT} messages.
+
+\defineentry{init}
+\begin{procedure}
+  \code{(init \var{arg} \etc)}
+\end{procedure}
+\returns{}
+\code{\#(ok \var{state} \opt{\var{timeout}})\alt{}%
+  \#(stop \var{reason})\alt{}%
+  ignore}
+
+\begin{argtbl}
+  \argrow{arg \etc}{the \var{arg} \etc{} provided to
+    \code{gen-server:start\&link} or \code{gen-server:start}}
+  \argrow{state}{any Scheme datum}
+  \argrow{timeout}{relative time in milliseconds up to one day,
+    absolute time in milliseconds (e.g., from \code{erlang:now}), or
+    \code{infinity} (default)}
+  \argrow{reason}{any Scheme datum}
+\end{argtbl}
+
+\code{(init \var{arg} \etc)} is called from a new server process and
+must complete before \code{gen-server:start\&link} or
+\code{gen-server:start} returns.
+
+A successful \code{init} returns \code{\#(ok \var{state}
+  \opt{\var{timeout}})}. The \var{state} is then maintained
+functionally by the generic server framework.
+
+\code{init} may specify that server initialization failed by
+returning \code{\#(stop \var{reason})}. The server will then fail to
+start using this \var{reason}. \code{terminate} will not be called
+as the server has not properly started.
+
+\code{init} may specify \code{ignore}. The server will then exit
+with reason \code{normal}, and \code{gen-server:start\&link} will
+return \code{ignore}. This is used to inform a
+supervisor that the server is not necessary
+for the system to operate. \code{terminate} will not be called.
+
+\defineentry{handle-call}
+\begin{procedure}
+  \code{(handle-call \var{request} \var{from} \var{state})}
+\end{procedure}
+\returns{}
+\code{\#(reply \var{reply} \var{state} \opt{\var{timeout}})\alt{}%
+  \#(no-reply \var{state} \opt{\var{timeout}})\alt{}%
+  \#(stop \var{reason} \opt{\var{reply}} \var{state})}
+
+\begin{argtbl}
+  \argrow{request}{the \var{request} provided to \code{gen-server:call}}
+  \argrow{from}{\code{\#(\var{client-process} \var{tag})}}
+  \argrow{state}{server state}
+  \argrow{reply}{any Scheme datum}
+  \argrow{timeout}{relative time in milliseconds up to one day,
+    absolute time in milliseconds (e.g., from \code{erlang:now}), or
+    \code{infinity} (default)}
+  \argrow{reason}{any Scheme datum}
+\end{argtbl}
+
+\code{handle-call} is responsible for processing a client
+\var{request} generated by \code{gen-server:call}.
+
+\code{handle-call} may return \code{\#(reply \var{reply}
+  \var{state} \opt{\var{timeout}})} to indicate that \var{reply} is to
+be returned from \code{gen-server:call} to the caller. The server
+state will become \var{state}.
+
+\code{handle-call} may return \code{\#(no-reply \var{state}
+  \opt{\var{timeout}})} to continue operation and to indicate that the
+caller of \code{gen-server:call} will continue to wait for a
+reply. The server state will become \var{state}. The server will need
+to use \code{gen-server:reply} and \var{from} to reply to the
+client.
+
+\code{handle-call} may return \code{\#(stop \var{reason}
+  \opt{\var{reply}} \var{state})} to set a new \var{state}, then
+terminate the server with the given \var{reason}. If the optional
+\var{reply} is specified, it will be the return value of
+\code{gen-server:call}; otherwise, \code{gen-server:call} will
+exit with \var{reason}.
+
+\var{reply} is any Scheme datum.
+
+\var{state} is any Scheme datum.
+
+\var{reason} is any Scheme datum.
+
+\defineentry{handle-cast}
+\begin{procedure}
+  \code{(handle-cast \var{request} \var{state})}
+\end{procedure}
+\returns{}
+\code{\#(no-reply \var{state} \opt{\var{timeout}})\alt{}%
+  \#(stop \var{reason} \var{state})}
+
+\begin{argtbl}
+  \argrow{request}{the \var{request} provided to \code{gen-server:cast}}
+  \argrow{state}{server state}
+  \argrow{timeout}{relative time in milliseconds up to one day,
+    absolute time in milliseconds (e.g., from \code{erlang:now}), or
+    \code{infinity} (default)}
+  \argrow{reason}{any Scheme datum}
+\end{argtbl}
+
+\code{handle-cast} is responsible for processing a client
+\var{request} generated by \code{gen-server:cast}.
+
+\code{handle-cast} may return \code{\#(no-reply \var{state}
+  \opt{\var{timeout}})} to continue operation. The server state will
+become \var{state}.
+
+\code{handle-cast} may return \code{\#(stop \var{reason}
+  \var{state})} to terminate the server with the given
+\var{reason}. The server state will become \var{state}.
+
+\defineentry{handle-info}
+\begin{procedure}
+  \code{(handle-info \var{msg} \var{state})}
+\end{procedure}
+\returns{}
+\code{\#(no-reply \var{state} \opt{\var{timeout}})} $|$
+\code{\#(stop \var{reason} \var{state})}
+
+\begin{argtbl}
+  \argrow{msg}{\code{timeout} or a Scheme datum sent via \code{send}}
+  \argrow{state}{server state}
+  \argrow{timeout}{relative time in milliseconds up to one day,
+    absolute time in milliseconds (e.g., from \code{erlang:now}), or
+    \code{infinity} (default)}
+  \argrow{reason}{any Scheme datum}
+\end{argtbl}
+
+\code{handle-info} is responsible for processing timeouts and
+miscellaneous messages sent to the server via \code{send}.
+
+\code{handle-info} may return \code{\#(no-reply \var{state}
+  \opt{\var{timeout}})} to continue operation. The server state will
+become \var{state}.
+
+\code{handle-info} may return \code{\#(stop \var{reason}
+  \var{state})} to terminate the server with the given
+\var{reason}. The server state will become \var{state}.
+
+\defineentry{terminate}
+\begin{procedure}
+  \code{(terminate \var{reason} \var{state})}
+\end{procedure}
+\returns{} ignored
+
+\begin{argtbl}
+  \argrow{reason}{shutdown reason}
+  \argrow{state}{server state}
+\end{argtbl}
+
+\code{terminate} is called when the server is about to terminate. It
+is responsible for cleaning up any resources that the server
+allocated. When it returns, the server exits for the given
+\var{reason}.
+
+\var{reason} can be any reason specified by a stop return value
+\code{\#(stop \etc)}. When a supervision tree is terminating,
+\var{reason} will be \code{shutdown}.
+
+The return value of \code{terminate} is ignored.  Unless the
+termination reason is either \code{normal} or \code{shutdown}, the
+generic server framework uses \code{event-mgr:notify} to report the
+termination. The server then terminates for that reason.
+
+If \code{terminate} exits with \var{reason}, then that reason is
+logged, and the server terminates with \var{reason}.

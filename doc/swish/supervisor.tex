@@ -1,0 +1,539 @@
+% Copyright 2017 Beckman Coulter, Inc.
+%
+% Permission is hereby granted, free of charge, to any person
+% obtaining a copy of this software and associated documentation files
+% (the "Software"), to deal in the Software without restriction,
+% including without limitation the rights to use, copy, modify, merge,
+% publish, distribute, sublicense, and/or sell copies of the Software,
+% and to permit persons to whom the Software is furnished to do so,
+% subject to the following conditions:
+%
+% The above copyright notice and this permission notice shall be
+% included in all copies or substantial portions of the Software.
+%
+% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+% EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+% MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+% NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+% BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+% ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+% CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+% SOFTWARE.
+
+\chapter {Supervisor}\label{chap:supervisor}
+
+\section {Introduction}
+
+In a fault tolerant system, faults must first be observed and then
+acted upon. A \code{supervisor} monitors child processes for failure
+and can be composed into a hierarchy to monitor for faults within
+other supervisors.
+
+The principles of supervisors and supervision hierarchies can be found
+in Joe Armstrong's thesis~\cite{armstrong-thesis} or \emph{Programming
+  Erlang---Software for a Concurrent
+  World}~\cite{programming-erlang}. Documentation for Erlang's
+\code{supervisor} is available online~\cite{supervisor-ref}. Source
+code for the Erlang Open Telecom Platform can be found
+online~\cite{erlang}. The source code for \code{supervisor} is part
+of stdlib and can be found in /lib/stdlib/src/supervisor.erl.
+
+\emph{Patterns for Fault Tolerant
+  Software}~\cite{patterns-for-fault-tolerant-software} is a good
+reference for understanding the mindset of creating fault tolerant
+systems.
+
+\section {Theory of Operation}
+
+A \emph{supervisor} is a gen-server which is
+responsible for starting, stopping, and monitoring its child
+processes. A supervisor observes its children, and when a failure
+occurs, restarts child processes.
+
+A \emph{watcher} is a supervisor which is configured to only observe
+the children. A watcher interface is provided for convenience.
+
+A supervisor can be configured to restart individual children when
+those children fail, or to restart all children when any child
+fails. This is called the restart \var{strategy}. A strategy of
+\code{one-for-one} indicates that when a child process terminates,
+it should be restarted; only that child process is affected. A
+strategy of \code{one-for-all} indicates that when a child process
+terminates and should be restarted, all other child process are
+terminated and then restarted.
+
+A supervisor maintains a list of times of when a restart occurs. When
+a child fails and is to be restarted, a timestamp is added to the
+\var{restarts} list. A maximum restart frequency is represented as an
+\var{intensity} and a \var{period} of time. If more than
+\var{intensity} restarts occur in a \var{period} of time, the
+supervisor terminates all child processes and then itself. This
+prevents the possibility of an infinite cycle of child process
+termination and restarts.
+
+A supervisor is started with a list of child specifications. These
+specifications are used to start child processes from within the
+supervisor process during initialization.
+
+Child specifications can be added to a supervisor at run time. These
+dynamic children will not be automatically restarted if the supervisor
+itself terminates and is restarted.
+
+\paragraph*{state}\index{supervisor!state}
+\code{(define-state-record <supervisor-state> strategy intensity
+  period children restarts)}
+\begin{itemize}
+  \item \code{strategy} defines how the supervisor processes a child
+    termination: \code{one-for-one} or \code{one-for-all}.
+  \item \code{intensity} is the maximum restart intensity.
+  \item \code{period} is the maximum restart period in milliseconds.
+  \item \code{children} is a list of \code{<child>} records with
+    the most recently started child first.
+  \item \code{restarts} is an ordered list of times when restarts
+    have occurred.
+\end{itemize}
+
+\code{(define-record <child> pid name thunk restart-type shutdown
+  type)}\linebreak \code{pid} stores the child process or
+\code{\#f}. The remaining fields are copied from the child
+specification described below.
+
+\genserver{supervisor}{init} The \code{init} procedure validates the
+startup arguments and starts the initial child processes. Invalid
+startup arguments cause the supervisor to fail to start. If any child
+fails to start, all started children are terminated and the supervisor
+fails to start.
+
+This process traps exits so that it can detect child exits, as well as
+the \code{EXIT} message from the parent process.
+
+An invalid argument results in a specific error reason that includes
+the invalid input.
+\antipar
+\begin{itemize}
+  \item{\code{\#(invalid-strategy \var{strategy})}}
+  \item{\code{\#(invalid-intensity \var{intensity})}}
+  \item{\code{\#(invalid-period \var{period})}}
+\end{itemize}
+
+An invalid child specification during initialization will result in
+\code{\#(error \#(start-specs \var{reason}))} where \var{reason} is
+one of the reasons listed in the programming interface below.
+
+\genserver{supervisor}{terminate} The \code{terminate} procedure
+shuts each child process down in order (most recently added first).
+
+\genserver{supervisor}{handle-call} The \code{handle-call} procedure
+processes the following messages:
+
+\antipar
+\begin{itemize}
+  \item{\code{\#(start-child \var{child-spec})}}: Validates the
+    \var{child-spec}, starts the child, adds it to the state, and
+    replies with \code{\#(ok \var{pid})} where \var{pid} is the new
+    child process.
+
+    If a child specification of the same name already exists,
+    \code{\#(error already-present)} is returned. If the child
+    process was already started \code{\#(error \#(already-started
+      \var{pid}))} is returned.
+
+    A successfully started child is linked to the supervisor, an event
+    is fired to the event manager to log the start, and \code{\#(ok
+      \var{pid})} is returned. If the \var{pid} already occurs in the
+    children list, then \code{start-child} returns \code{\#(error
+      \#(duplicate-process \var{pid}))}.
+
+    If the child process start function returns \code{ignore}, the
+    child specification is added to the supervisor, and the function
+    returns \code{\#(ok \#f)}.
+
+    If the child process start function returns \code{\#(error
+      \var{reason})}, then \code{start-child} returns
+    \code{\#(error \var{reason})}.
+
+    If the child process start function exits with \var{reason},
+    \code{\#(error \var{reason})} is returned.
+
+    If the child process start function returns \var{other} values
+    \code{\#(error \#(bad-return-value \var{other}))} is returned.
+
+  \item{\code{\#(restart-child \var{name})}}: Finds a child by
+    \var{name}, verifies that it is not currently running, then starts
+    that child.
+
+    If the child process is already running, \code{\#(error
+      running)} is returned.  If the child specification does not
+    exist, \code{\#(error not-found)} is returned.
+
+    A successfully started child is linked to the supervisor, an event
+    is fired to the event manager to log the start, and \code{\#(ok
+      \var{pid})} is returned. If the \var{pid} already occurs in the
+    children list, then \code{restart-child} returns \code{\#(error
+      \#(duplicate-process \var{pid}))}.
+
+    If the child process start function returns \code{ignore}, the
+    child specification is added to the supervisor and the function
+    returns \code{\#(ok \#f)}.
+
+    If the child process start function returns \code{\#(error
+      \var{reason})}, then \code{restart-child} returns
+    \code{\#(error \var{reason})}.
+
+    If the child process start function exits with \var{reason},
+    \code{\#(error \var{reason})} is returned.
+
+    If the child process start function returns \var{other} values
+    \code{\#(error \#(bad-return-value \var{other}))} is returned.
+
+  \item{\code{\#(delete-child \var{name})}}: Finds a child by
+    \var{name}, verifies that it is not currently running, then
+    removes the child specification from the state and returns
+    \code{ok}.
+
+    If the child process is running, \code{\#(error running)} is
+    returned.  If the child specification does not exist,
+    \code{\#(error not-found)} is returned.
+
+  \item{\code{\#(terminate-child \var{name})}}: Finds a child by
+    \var{name} and terminates it if it is running. The child \var{pid}
+    is updated to \code{\#f} and returns \code{ok}.
+
+    If the child specification does not exist, \code{\#(error
+      not-found)} is returned.
+
+  \item{\code{get-children}}: Returns the state's \code{children}
+    field.
+\end{itemize}
+
+\genserver{supervisor}{handle-cast} The \code{handle-cast} procedure
+does not process any messages.
+
+\genserver{supervisor}{handle-info} The \code{handle-info} procedure
+processes the following message:
+
+\antipar
+\begin{itemize}
+  \item{\code{\#(EXIT \var{pid} \var{reason})}}: Find \var{pid} in
+    the children list and apply the restart strategy. An unknown
+    \var{pid} is ignored.
+
+    When the child specification \var{restart-type} is
+    \code{permanent} or \code{transient} the current timestamp is
+    prepended to the \var{restarts} list. The list is then pruned
+    based on the \var{period}. If the resulting list length $<=$
+    \var{intensity}, the supervisor continues. Otherwise, the
+    supervisor terminates with reason \code{shutdown}.
+\end{itemize}
+
+Internally, the \code{(shutdown \var{pid} \var{x})} function kills
+child processes and returns the exit reason. This function is used by
+\code{terminate}, \code{terminate-child}, and during a failed
+\code{init}. The following steps are necessary to defend against a
+``naughty'' child which unlinks from the supervisor.
+
+\antipar
+\begin{itemize}
+  \item Monitor \var{pid} to protect against a child process
+    which may have called \code{unlink}.
+  \item Unlink \var{pid} to stop receiving \code{EXIT} messages
+    from \var{pid}.
+  \item An \code{EXIT} message may already exist for \var{pid}. If
+    it does, then wait for the \code{DOWN} message, and return the
+    exit reason.
+  \item If \var{x} $=$ \code{brutal-kill}, kill \var{pid} with
+    reason \code{kill} and wait for the \code{DOWN} message to
+    determine the exit reason.
+  \item Otherwise, \var{x} is a \var{timeout}. kill \var{pid} with
+    reason \code{shutdown} and wait for the \code{DOWN} message to
+    determine the exit reason. If a \var{timeout} occurs, kill
+    \var{pid} with reason \code{kill}, and wait for the
+    \code{DOWN} message to determine the exit reason.
+\end{itemize}
+
+\section {Design Decisions}
+
+Our initial implementation did not automatically link to child
+processes, but this led to unexpected behavior when child processes
+neglected to link to the supervisor.  Therefore, this implementation
+links to all child processes.
+
+\section {Programming Interface}
+
+\code{supervisor:start\&link} and \code{supervisor:start-child}
+use a child specification. A child specification is defined as:
+
+\begin{grammar}
+\var{child-spec}
+ & \code{\#(\var{name} \var{thunk} \var{restart-type} \var{shutdown} \var{type})}
+\end{grammar}
+
+\var{name} is a symbol unique to the children within the supervisor.
+
+\var{thunk} is a procedure that should spawn a process and link to the
+supervisor process, then return \code{\#(ok \var{pid})} or
+\code{\#(error \var{reason})} or \code{ignore}. Typically, the
+thunk will call \code{gen-server:start\&link} which provides the
+appropriate behavior and return value.
+
+\var{restart-type} is a symbol with the following meaning:
+\antipar
+\begin{itemize}
+  \item A \code{permanent} child process is aways restarted.
+  \item A \code{temporary} child process is never restarted.
+  \item A \code{transient} child process is only restarted if it
+    terminates with an exit reason other than \code{normal} or
+    \code{shutdown}.
+  \item A \code{watch-only} child process is never restarted, and
+    its child specification is removed from the supervisor when it
+    terminates.
+\end{itemize}
+
+\var{shutdown} defines how a child process should be terminated.
+\antipar
+\begin{itemize}
+\item \code{brutal-kill} indicates that the child process will be
+  terminated using \code{(kill \var{pid} kill)}.
+
+\item A fixnum $>$ 0 represents a timeout. The supervisor will use
+  \code{(kill \var{pid} shutdown)} and wait for an exit signal. If
+  no exit signal is received within the timeout, the child process
+  will be terminated using \code{(kill \var{pid}
+    kill)}. \code{infinity} can be used if and only if the
+  \var{type} of the process is \code{supervisor}.
+\end{itemize}
+
+The \var{type} is useful for validating the \var{shutdown} parameter,
+but is otherwise unused. It may be useful in conjunction with
+\code{supervisor:get-children} to generate a tree of the running
+supervision hierarchy.
+
+\begin{grammar}
+  \var{type}
+  & \code{supervisor}\\
+  & \code{worker}
+\end{grammar}
+
+Invalid child specifications will result in specific error reasons
+which include the invalid input.
+
+\antipar
+\begin{itemize}
+  \item{\code{\#(invalid-name \var{name})}}
+  \item{\code{\#(invalid-thunk \var{thunk})}}
+  \item{\code{\#(invalid-restart-type \var{restart-type})}}
+  \item{\code{\#(invalid-type \var{type})}}
+  \item{\code{\#(invalid-shutdown \var{shutdown})}}
+  \item{\code{\#(invalid-child-spec \var{spec})}}
+\end{itemize}
+
+\defineentry{supervisor:start\&link}
+\begin{procedure}
+  \code{(supervisor:start\&link \var{name} \var{strategy}
+    \var{intensity} \var{period} \var{start-specs})}
+\end{procedure}
+\returns{}
+\code{\#(ok \var{pid})} $|$
+\code{\#(error \var{reason})}
+
+The \code{supervisor:start\&link} procedure creates a new
+\code{supervisor} gen-server using \code{gen-server:start\&link}.
+
+\var{name} is the registered name of the process. For an anonymous
+server, \code{\#f} may be specified.
+
+\begin{grammar}
+  \var{strategy}
+  & \code{one-for-one}\\
+  & \code{one-for-all}
+\end{grammar}
+
+\begin{grammar}
+  \var{intensity}
+  & a fixnum $>=$ 0
+\end{grammar}
+
+\begin{grammar}
+  \var{period}
+  & a fixnum $>$ 0
+\end{grammar}
+
+\begin{grammar}
+  \var{start-specs}
+  & (\var{child-spec} \etc)
+\end{grammar}
+
+\defineentry{supervisor:start-child}
+\begin{procedure}
+  \code{(supervisor:start-child \var{supervisor} \var{child-spec})}
+\end{procedure}
+\returns{}
+\code{\#(ok \var{pid})} $|$
+\code{\#(error \var{reason})}
+
+This procedure dynamically adds the given \var{child-spec} to the
+\var{supervisor} which starts a child process.
+
+The \code{supervisor:start-child} procedure calls
+\code{(gen-server:call \var{supervisor} \#(start-child
+  \var{child-spec}) infinity)}.
+
+\defineentry{supervisor:restart-child}
+\begin{procedure}
+  \code{(supervisor:restart-child \var{supervisor} \var{name})}
+\end{procedure}
+\returns{}
+\code{\#(ok \var{pid})} $|$
+\code{\#(error \var{reason})}
+
+This procedure restarts a child process identified by \var{name}. The
+child specification must exist, and the child process must not be
+running.
+
+The \code{supervisor:restart-child} procedure calls
+\code{(gen-server:call \var{supervisor} \#(restart-child \var{name})
+  infinity)}.
+
+\defineentry{supervisor:delete-child}
+\begin{procedure}
+  \code{(supervisor:delete-child \var{supervisor} \var{name})}
+\end{procedure}
+\returns{}
+\code{ok} $|$
+\code{\#(error \var{reason})}
+
+This procedure deletes the child specification identified by
+\var{name}. The child process must not be running.
+
+The \code{supervisor:delete-child} procedure calls
+\code{(gen-server:call \var{supervisor} \#(delete-child \var{name})
+  infinity)}.
+
+\defineentry{supervisor:terminate-child}
+\begin{procedure}
+  \code{(supervisor:terminate-child \var{supervisor} \var{name})}
+\end{procedure}
+\returns{}
+\code{ok} $|$
+\code{\#(error \var{reason})}
+
+This procedure terminates the child process identified by
+\var{name}. The child specification must exist, but the child process
+does not need be running.
+
+The \code{supervisor:terminate-child} procedure calls
+\code{(gen-server:call \var{supervisor} \#(terminate-child
+  \var{name}) infinity)}.
+
+\defineentry{supervisor:get-children}
+\begin{procedure}
+  \code{(supervisor:get-children \var{supervisor})}
+\end{procedure}
+\returns{} a list of \code{<child>} records
+
+This procedure returns the \var{supervisor} internal representation of
+child specifications.
+
+The \code{supervisor:get-children} procedure calls
+\code{(gen-server:call \var{supervisor} get-children infinity)}.
+
+\section {Published Events}
+
+A supervisor can notify the event manager of the same events as a
+gen-server, as well as the following events.
+
+\begin{grammar}
+  \var{event}
+  & \code{<supervisor-error>} \\
+  & \code{<child-start>} \\
+  & \code{<child-end>} \\
+\end{grammar}
+
+\defineentry{<supervisor-error>}
+\begin{event}\code{<supervisor-error>}\end{event}
+\antipar
+\begin{tabular}{r l}
+  \code{timestamp} & the time the event occured \\
+  \code{supervisor} & the supervisor's process id \\
+  \code{error-context} & the context in which the event occured \\
+  \code{reason} & the reason for the error \\
+  \code{child-pid} & the child's process id \\
+  \code{child-name} & the child's name \\
+\end{tabular}
+
+This event is fired when the supervisor fails to start its children,
+fails to restart its children, or when it has exceeded the maximum
+restart frequency.
+
+\defineentry{<child-start>}
+\begin{event}\code{<child-start>}\end{event}
+\antipar
+\begin{tabular}{r l}
+  \code{timestamp} & the time the event occured \\
+  \code{supervisor} & the supervisor's process id \\
+  \code{pid} & the child's process id \\
+  \code{name} & the child's name \\
+  \code{restart-type} & the child's restart-type \\
+  \code{shutdown} & the child's shutdown \\
+  \code{type} & the child's type \\
+\end{tabular}
+
+This event is fired after the child start procedure has returned a
+valid value.
+
+\defineentry{<child-end>}
+\begin{event}\code{<child-end>}\end{event}
+\antipar
+\begin{tabular}{r l}
+  \code{timestamp} & the time the event occured \\
+  \code{pid} & the child's process id \\
+  \code{killed} & 1 indicates the supervisor terminated the child, 0
+  otherwise \\
+  \code{reason} & the reason the child has terminated \\
+\end{tabular}
+
+This event is fired after the supervisor terminates a child process,
+and after the supervisor detects a failure in a child.
+
+\section {Watcher Interface}
+
+\defineentry{watcher:start\&link}
+\begin{procedure}
+\code{(watcher:start\&link \var{name})}
+\end{procedure}
+
+\returns{}
+\code{\#(ok \var{pid})} $|$
+\code{\#(error \var{reason})}
+
+The \code{watcher:start\&link} procedure creates a supervisor with a
+strategy of \code{one-for-one}, an intensity of 0, a period of 1,
+and no children.
+
+\var{name} is the registered name of the process. For an anonymous
+server, \code{\#f} may be specified.
+
+\defineentry{watcher:start-child}
+\begin{procedure}
+\code{(watcher:start-child \var{watcher} \var{name} \var{shutdown}
+  \var{thunk})}
+\end{procedure}
+
+\returns{}
+\code{\#(ok \var{pid})} $|$
+\code{\#(error \var{reason})}
+
+The \code{watcher:start-child} procedure calls
+\code{(supervisor:start-child \var{watcher} \#(\var{name}
+  \var{thunk} watch-only \var{shutdown} worker))}.
+
+\defineentry{watcher:shutdown-children}
+\begin{procedure}
+\code{(watcher:shutdown-children \var{watcher})}
+\end{procedure}
+
+\returns{}
+\code{ok}
+
+The \code{watcher:shutdown-children} procedure terminates and
+deletes each \code{watch-only} child in \var{watcher}.
