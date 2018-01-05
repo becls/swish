@@ -53,7 +53,7 @@ typedef struct {
   int flags;
   ptr callback;
   sqlite3* db;
-  int result;
+  int sqlite_rc;
 } open_req_t;
 
 static void close_worker(void* arg);
@@ -192,19 +192,7 @@ static ptr make_sqlite_error(const char* who, int rc, sqlite3* db) {
 
 static void open_worker(uv_work_t* req) {
   open_req_t* r = container_of(req, open_req_t, work);
-  int rc = sqlite3_open_v2(r->filename, &r->db, r->flags, NULL);
-  if (SQLITE_OK != rc)
-  {
-    if (r->db)
-    {
-      rc = sqlite3_extended_errcode(r->db);
-      sqlite3_close(r->db);
-    }
-    r->result = TRANSLATE_SQLITE_ERRNO(rc);
-  } else {
-    sqlite3_extended_result_codes(r->db, 1);
-    r->result = 0;
-  }
+  r->sqlite_rc = sqlite3_open_v2(r->filename, &r->db, r->flags, NULL);
 }
 
 static void async_cb(uv_async_t* handle) {
@@ -221,14 +209,19 @@ static void open_cb(uv_work_t* req, int status) {
   open_req_t* r = container_of(req, open_req_t, work);
   ptr callback = r->callback;
   sqlite3* db = r->db;
-  int rc = r->result;
+  int sqlite_rc = r->sqlite_rc;
   free(r->filename);
   Sunlock_object(callback);
   free(r);
-  if (rc) {
-    add_callback1(callback, make_error_pair("sqlite3_open_v2", rc));
+  if (SQLITE_OK != sqlite_rc) {
+    if (db) {
+      add_callback1(callback, make_sqlite_error("sqlite3_open_v2", sqlite3_extended_errcode(db), db));
+      sqlite3_close(db);
+    } else
+      add_callback1(callback, make_error_pair("sqlite3_open_v2", TRANSLATE_SQLITE_ERRNO(sqlite_rc)));
     return;
   }
+  sqlite3_extended_result_codes(db, 1);
   database_t* d = malloc_container(database_t);
   if (!d) {
     add_callback1(callback, make_error_pair("osi_open_database", UV_ENOMEM));
@@ -242,7 +235,7 @@ static void open_cb(uv_work_t* req, int status) {
   d->sql = NULL;
   d->sql_len = 0;
   d->sqlite_rc = SQLITE_OK;
-  rc = uv_async_init(g_loop, &(d->async), async_cb);
+  int rc = uv_async_init(g_loop, &(d->async), async_cb);
   if (rc < 0) {
     sqlite3_close(db);
     free(d);
@@ -578,9 +571,9 @@ void osi_interrupt_database(uptr database) {
 ptr osi_get_sqlite_status(int operation, int resetp) {
   int current;
   int highwater;
-  int rc = sqlite3_status(operation, &current, &highwater, resetp);
-  if (SQLITE_OK != rc)
-    return make_error_pair("sqlite3_status", TRANSLATE_SQLITE_ERRNO(rc));
+  int sqlite_rc = sqlite3_status(operation, &current, &highwater, resetp);
+  if (SQLITE_OK != sqlite_rc)
+    return make_error_pair("sqlite3_status", TRANSLATE_SQLITE_ERRNO(sqlite_rc));
   ptr v = Smake_vector(2, Sfixnum(0));
   Svector_set(v, 0, Sinteger(current));
   Svector_set(v, 1, Sinteger(highwater));

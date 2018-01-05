@@ -48,6 +48,7 @@
       [#(bad-return-value ,other) (format "Bad return value: ~s." other)]
       [#(connect-tcp-failed ,hostname ,port-spec ,who ,errno) (format "Error ~d from ~a when connecting to ~a on TCP port ~a: ~a." errno who hostname port-spec (errno->english errno))]
       [#(create-watched-process-failed ,command-line ,who ,errno) (format "Error ~d from ~a during create-watched-process ~s: ~a." errno who command-line (errno->english errno))]
+      [#(db-error ,who (,osi-who ,errno . ,errstr) ,detail) (format "Database error ~d in ~a from ~a on ~s: ~a." errno who osi-who detail errstr)]
       [#(db-error ,who (,osi-who . ,errno) ,detail) (format "Database error ~d in ~a from ~a on ~s: ~a." errno who osi-who detail (errno->english errno))]
       [#(db-retry-failed ,sql ,count) (format "Database query failed after ~d retries: ~a." count sql)]
       [#(deadlock ,resource) (format "Deadlock on resource ~s." resource)]
