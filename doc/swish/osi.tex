@@ -45,8 +45,8 @@ millisecond are performed asynchronously.
 
 For each asynchronous function in the operating system interface, a
 Scheme callback procedure is passed as the last argument.  This
-callback procedure is later returned to Scheme in a completion packet
-that includes the results of the asynchronous function call.
+callback procedure is later returned to Scheme in a list that includes
+the results of the asynchronous function call.
 
 Scheme object locking and unlocking is handled by the operating system
 interface because it manages the data structures that contain pointers
