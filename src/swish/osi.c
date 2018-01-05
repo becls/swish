@@ -207,16 +207,14 @@ static void open_fs_cb(uv_fs_t* req) {
 }
 
 static void get_file_size_cb(uv_fs_t* req) {
-  ssize_t result = req->result;
   ptr callback = (ptr)req->data;
-  uint64_t size = req->statbuf.st_size;
+  if (req->result < 0)
+    add_callback1(callback, make_error_pair("uv_fs_fstat", (int)req->result));
+  else
+    add_callback1(callback, Sunsigned64(req->statbuf.st_size));
   uv_fs_req_cleanup(req);
   Sunlock_object(callback);
   free(req);
-  if (result < 0)
-    add_callback1(callback, make_error_pair("uv_fs_fstat", (int)result));
-  else
-    add_callback1(callback, Sunsigned64(size));
 }
 
 static void return_fs_result_cb(uv_fs_t* req) {
