@@ -17,7 +17,7 @@
 
   (define software-company-dir "Beckman Coulter")
 
-  (define software-copyright-year "2017")
+  (define software-copyright-year "2018")
 
   ;; The software-internal-name value is used as the name for the
   ;; compiled exe and boot files. It must not contain spaces or any
