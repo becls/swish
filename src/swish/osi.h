@@ -49,9 +49,9 @@ uv_loop_t* g_loop;
 void add_callback1(ptr callback, ptr arg);
 void add_callback2(ptr callback, ptr arg1, ptr arg2);
 ptr make_error_pair(const char* who, int error);
-ptr make_scheme_string(const char* utf8);
-ptr make_scheme_string2(const char* utf8, size_t count);
 char* string_to_utf8(ptr s, size_t* utf8_len);
+ptr utf8_to_string(const char* utf8);
+ptr utf8_to_string2(const char* utf8, size_t count);
 
 // Event Loop
 EXPORT ptr osi_get_callbacks(uint64_t timeout);

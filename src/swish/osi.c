@@ -94,11 +94,11 @@ ptr make_error_pair(const char* who, int error)
   return Scons(Sstring_to_symbol(who), Sinteger(error));
 }
 
-ptr make_scheme_string(const char* utf8) {
-  return make_scheme_string2(utf8, strlen(utf8));
+ptr utf8_to_string(const char* utf8) {
+  return utf8_to_string2(utf8, strlen(utf8));
 }
 
-ptr make_scheme_string2(const char* utf8, size_t count)
+ptr utf8_to_string2(const char* utf8, size_t count)
 {
   // Determine len, the number of Unicode characters.
   int len = 0;
@@ -109,19 +109,19 @@ ptr make_scheme_string2(const char* utf8, size_t count)
     if ((uc & 0x80) == 0)
       s += 1, count -= 1;
     else if ((uc & 0x40) == 0)
-      return make_error_pair("make_scheme_string", UV_ECHARSET);
+      return make_error_pair("utf8_to_string", UV_ECHARSET);
     else if ((uc & 0x20) == 0)
       if ((count >= 2) && ((s[1] & 0xC0) == 0x80))
         s += 2, count -= 2;
       else
-        return make_error_pair("make_scheme_string", UV_ECHARSET);
+        return make_error_pair("utf8_to_string", UV_ECHARSET);
     else if ((uc & 0x10) == 0)
       if ((count >= 3) &&
           ((s[1] & 0xC0) == 0x80) &&
           ((s[2] & 0xC0) == 0x80))
         s += 3, count -= 3;
       else
-        return make_error_pair("make_scheme_string", UV_ECHARSET);
+        return make_error_pair("utf8_to_string", UV_ECHARSET);
     else
       if ((count >= 4) &&
           ((uc & 0x08) == 0) &&
@@ -130,7 +130,7 @@ ptr make_scheme_string2(const char* utf8, size_t count)
           ((s[3] & 0xC0) == 0x80))
         s += 4, count -= 4;
       else
-        return make_error_pair("make_scheme_string", UV_ECHARSET);
+        return make_error_pair("utf8_to_string", UV_ECHARSET);
   }
   // Decode it into the Scheme string.
   ptr ss = Smake_uninitialized_string(len);
@@ -149,7 +149,7 @@ ptr make_scheme_string2(const char* utf8, size_t count)
       s += 3;
       // Surrogates D800-DFFF are invalid.
       if ((c & 0xF800) == 0xD800)
-        return make_error_pair("make_scheme_string", UV_ECHARSET);
+        return make_error_pair("utf8_to_string", UV_ECHARSET);
     } else {
       c = ((uc & 0x07) << 18) | ((s[1] & 0x3F) << 12) | ((s[2] & 0x3F) << 6) | (s[3] & 0x3F);
       s += 4;
@@ -376,7 +376,7 @@ static void list_directory_cb(uv_fs_t* req) {
     ptr ls = Snil;
     uv_dirent_t ent;
     while (uv_fs_scandir_next(req, &ent) >= 0)
-      ls = Scons(Scons(make_scheme_string(ent.name), Sinteger(ent.type)), ls);
+      ls = Scons(Scons(utf8_to_string(ent.name), Sinteger(ent.type)), ls);
     add_callback1(callback, ls);
   }
   uv_fs_req_cleanup(req);
@@ -568,7 +568,7 @@ static void watch_path_cb(uv_fs_event_t* handle, const char* filename, int event
     add_callback1(callback, Sinteger(status));
     return;
   }
-  add_callback2(callback, make_scheme_string(filename), Sinteger(events));
+  add_callback2(callback, utf8_to_string(filename), Sinteger(events));
 }
 
 size_t osi_bytes_used(void) {
@@ -720,7 +720,7 @@ ptr osi_get_ip_address(uptr port) {
     return make_error_pair("uv_ip6_name", rc);
   size_t len = strlen(name);
   snprintf(name + len, sizeof(name) - len, "]:%d", ntohs(addr.sin6_port));
-  return make_scheme_string(name);
+  return utf8_to_string(name);
 }
 
 ptr osi_get_tcp_listener_port(uptr listener) {
