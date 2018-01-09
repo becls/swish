@@ -189,7 +189,7 @@
           (fxlogbit1 2 (pcb-flags p))
           (fxlogbit0 2 (pcb-flags p)))))
 
-  (define erlang:now osi_now)
+  (define erlang:now osi_get_time)
 
   (define (panic event)
     (on-exit (osi_exit 80)

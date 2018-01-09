@@ -64,7 +64,7 @@
             (system-detail <system-attributes>
               [date (current-date)]
               [software-version software-version]
-              [computer-name (osi_hostname)])
+              [computer-name (osi_get_hostname)])
             'ignore)]
          [,error error])]
       [,error error]))

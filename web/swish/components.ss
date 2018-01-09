@@ -83,7 +83,7 @@
   (column "docked menu left" (navigation)))
 
 (define (navigation)
-  (panel (osi_hostname)
+  (panel (osi_get_hostname)
     (section software-product-name
       (link "index" "Home")
       (link "charts" "Charts")

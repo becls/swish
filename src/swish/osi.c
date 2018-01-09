@@ -571,7 +571,7 @@ static void watch_path_cb(uv_fs_event_t* handle, const char* filename, int event
   add_callback2(callback, utf8_to_string(filename), Sinteger(events));
 }
 
-size_t osi_bytes_used(void) {
+size_t osi_get_bytes_used(void) {
 #if defined(__APPLE__)
   malloc_zone_pressure_relief(NULL, 0);
   struct mstats ms = mstats();
@@ -732,17 +732,17 @@ ptr osi_get_tcp_listener_port(uptr listener) {
   return Sfixnum(ntohs(addr.sin6_port));
 }
 
-ptr osi_hostname(void) {
+ptr osi_get_hostname(void) {
   static char buf[1024];
   size_t size = sizeof(buf);
   int rc = uv_os_gethostname(buf, &size);
   if (0 == rc)
-    return Sstring_of_length(buf, size);
+    return utf8_to_string2(buf, size);
   else
     return make_error_pair("uv_os_gethostname", rc);
 }
 
-uint64_t osi_hrtime(void) {
+uint64_t osi_get_hrtime(void) {
   return uv_hrtime();
 }
 
@@ -796,7 +796,7 @@ ptr osi_listen_tcp(uint16_t port, ptr callback) {
   return Sunsigned((uptr)listener);
 }
 
-uint64_t osi_now(void) {
+uint64_t osi_get_time(void) {
 #ifdef _WIN32
   uint64_t now;
   GetSystemTimeAsFileTime((LPFILETIME)&now);
@@ -828,6 +828,7 @@ ptr osi_open_file(const char* path, int flags, int mode, ptr callback) {
 
 void osi_print_all_handles(void) {
   uv_print_all_handles(g_loop, stderr);
+  fflush(stderr);
 }
 
 ptr osi_remove_directory(const char* path, ptr callback) {
@@ -860,7 +861,7 @@ ptr osi_rename(const char* path, const char* new_path, ptr callback) {
   return Strue;
 }
 
-uptr osi_stdin(void) {
+uptr osi_get_stdin(void) {
   static port_vtable_t stdin_vtable = {
     .close = close_port_nosys,
     .read = read_fs_port,
@@ -871,7 +872,7 @@ uptr osi_stdin(void) {
   return (uptr)&stdin_port;
 }
 
-const char* osi_strerror(int err) {
+const char* osi_get_error_text(int err) {
   static char buf[32];
   switch (err) {
 #define UV_STRERROR_GEN(name, msg) case UV_ ## name: return msg;
@@ -921,10 +922,10 @@ void osi_set_tick(uint64_t nanoseconds) {
   g_tick = uv_hrtime() + nanoseconds;
 }
 
-ptr osi_stat(const char* path, int follow, ptr callback) {
+ptr osi_get_stat(const char* path, int follow, ptr callback) {
   uv_fs_t* req = malloc_container(uv_fs_t);
   if (!req)
-    return make_error_pair("osi_stat", UV_ENOMEM);
+    return make_error_pair("osi_get_stat", UV_ENOMEM);
   Slock_object(callback);
   req->data = callback;
   int rc = follow ?

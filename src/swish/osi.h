@@ -69,13 +69,13 @@ EXPORT void osi_exit(int status);
 // File System
 EXPORT ptr osi_open_file(const char* path, int flags, int mode, ptr callback);
 EXPORT ptr osi_get_file_size(uptr port, ptr callback);
-EXPORT uptr osi_stdin(void);
+EXPORT uptr osi_get_stdin(void);
 EXPORT ptr osi_chmod(const char* path, int mode, ptr callback);
 EXPORT ptr osi_make_directory(const char* path, int mode, ptr callback);
 EXPORT ptr osi_list_directory(const char* path, ptr callback);
 EXPORT ptr osi_remove_directory(const char* path, ptr callback);
 EXPORT ptr osi_rename(const char* path, const char* new_path, ptr callback);
-EXPORT ptr osi_stat(const char* path, int follow, ptr callback);
+EXPORT ptr osi_get_stat(const char* path, int follow, ptr callback);
 EXPORT ptr osi_unlink(const char* path, ptr callback);
 EXPORT ptr osi_watch_path(const char* path, ptr callback);
 EXPORT void osi_close_path_watcher(uptr watcher);
@@ -89,12 +89,12 @@ EXPORT ptr osi_get_tcp_listener_port(uptr listener);
 EXPORT ptr osi_get_ip_address(uptr port);
 
 // Information
-EXPORT size_t osi_bytes_used(void);
+EXPORT size_t osi_get_bytes_used(void);
+EXPORT const char* osi_get_error_text(int err);
+EXPORT ptr osi_get_hostname(void);
+EXPORT uint64_t osi_get_hrtime(void);
+EXPORT uint64_t osi_get_time(void);
 EXPORT ptr osi_make_guid(void);
-EXPORT ptr osi_hostname(void);
-EXPORT uint64_t osi_hrtime(void);
-EXPORT uint64_t osi_now(void);
-EXPORT const char* osi_strerror(int err);
 EXPORT void osi_print_all_handles(void);
 
 // SQLite

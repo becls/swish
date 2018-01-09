@@ -117,5 +117,5 @@
   (define (errno->english x)
     (if (pair? x)
         (cdr x)
-        (osi_strerror x)))
+        (osi_get_error_text x)))
   )

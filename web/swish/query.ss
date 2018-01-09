@@ -44,7 +44,7 @@
   (json:write op
     (json:make-object
      ["instance" (log-db:get-instance-id)]
-     ["computer-name" (osi_hostname)]
+     ["computer-name" (osi_get_hostname)]
      ["software-version" software-version]
      ["software-product-name" software-product-name]))
   'ok)

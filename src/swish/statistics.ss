@@ -101,7 +101,7 @@
          [date date]
          [reason reason]
          [bytes-allocated (bytes-allocated)]
-         [osi-bytes-used (osi_bytes_used)]
+         [osi-bytes-used (osi_get_bytes_used)]
          [sqlite-memory sqlite-memory]
          [sqlite-memory-highwater sqlite-memory-highwater]
          [ports 0]

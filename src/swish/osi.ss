@@ -26,7 +26,7 @@
    guid->string
    osi_bind_statement
    osi_bind_statement*
-   osi_bytes_used
+   osi_get_bytes_used
    osi_chmod
    osi_chmod*
    osi_clear_statement_bindings
@@ -57,9 +57,9 @@
    osi_get_statement_sql*
    osi_get_tcp_listener_port
    osi_get_tcp_listener_port*
-   osi_hostname
-   osi_hostname*
-   osi_hrtime
+   osi_get_hostname
+   osi_get_hostname*
+   osi_get_hrtime
    osi_interrupt_database
    osi_is_tick_over
    osi_list_directory
@@ -70,7 +70,7 @@
    osi_make_directory*
    osi_make_guid
    osi_make_guid*
-   osi_now
+   osi_get_time
    osi_open_database
    osi_open_database*
    osi_open_file
@@ -87,12 +87,12 @@
    osi_reset_statement
    osi_reset_statement*
    osi_set_tick
-   osi_stat
-   osi_stat*
-   osi_stdin
+   osi_get_stat
+   osi_get_stat*
+   osi_get_stdin
    osi_step_statement
    osi_step_statement*
-   osi_strerror
+   osi_get_error_text
    osi_unlink
    osi_unlink*
    osi_watch_path
@@ -142,13 +142,13 @@
   ;; File System
   (define-osi osi_open_file (path string) (flags int) (mode int) (callback ptr))
   (define-osi osi_get_file_size (port uptr) (callback ptr))
-  (fdefine osi_stdin uptr)
+  (fdefine osi_get_stdin uptr)
   (define-osi osi_chmod (path string) (mode int) (callback ptr))
   (define-osi osi_make_directory (path string) (mode int) (callback ptr))
   (define-osi osi_list_directory (path string) (callback ptr))
   (define-osi osi_remove_directory (path string) (callback ptr))
   (define-osi osi_rename (path string) (new-path string) (callback ptr))
-  (define-osi osi_stat (path string) (follow? boolean) (callback ptr))
+  (define-osi osi_get_stat (path string) (follow? boolean) (callback ptr))
   (define-osi osi_unlink (path string) (callback ptr))
   (define-osi osi_watch_path (path string) (callback ptr))
   (fdefine osi_close_path_watcher (watcher uptr) void)
@@ -161,12 +161,12 @@
   (define-osi osi_get_ip_address (port uptr))
 
   ;; Information
-  (fdefine osi_bytes_used size_t)
+  (fdefine osi_get_bytes_used size_t)
   (define-osi osi_make_guid)
-  (define-osi osi_hostname)
-  (fdefine osi_hrtime unsigned-64)
-  (fdefine osi_now unsigned-64)
-  (fdefine osi_strerror (err int) string)
+  (define-osi osi_get_hostname)
+  (fdefine osi_get_hrtime unsigned-64)
+  (fdefine osi_get_time unsigned-64)
+  (fdefine osi_get_error_text (err int) string)
   (fdefine osi_print_all_handles void)
 
   (define (guid->string guid)

@@ -42,7 +42,7 @@
        (fprintf op "Uptime: ~a\n" (uptime))
        (newline op)
        (fprintf op "  Scheme bytes: ~15:D\n" (bytes-allocated))
-       (fprintf op "       C bytes: ~15:D\n" (osi_bytes_used))
+       (fprintf op "       C bytes: ~15:D\n" (osi_get_bytes_used))
        #;; TODO: Implement
        (fprintf op " private bytes: ~15:D\n"
          (<memory-info> private-usage (GetMemoryInfo)))

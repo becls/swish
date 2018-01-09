@@ -255,9 +255,9 @@
   ;; Console Ports
 
   (define (make-console-input)
-    ;; no need to register (osi_stdin) with guardian
+    ;; no need to register static stdin port with the guardian
     (define name "stdin")
-    (binary->utf8 (make-iport name (make-osi-port name (osi_stdin)) #f)))
+    (binary->utf8 (make-iport name (make-osi-port name (osi_get_stdin)) #f)))
 
   (define hook-console-input
     (let ([hooked? #f])
@@ -424,7 +424,7 @@
      [(path follow?)
       (define result)
       (with-interrupts-disabled
-       (match (osi_stat* path follow?
+       (match (osi_get_stat* path follow?
                 (let ([p self])
                   (lambda (r)
                     (set! result r)
