@@ -55,8 +55,13 @@ typedef struct {
   ptr write_buffer;
   uint32_t write_size;
   ptr write_callback;
-  uv_tcp_t tcp;
-} tcp_port_t;
+  union {
+    uv_handle_t handle;
+    uv_stream_t stream;
+    uv_pipe_t pipe;
+    uv_tcp_t tcp;
+  } h;
+} stream_port_t;
 
 typedef struct {
   uv_fs_t fs;
@@ -74,7 +79,7 @@ typedef struct {
   ptr callback;
   uv_getaddrinfo_t getaddrinfo;
   struct addrinfo* ai;
-  tcp_port_t* tcp_port;
+  stream_port_t* stream_port;
   uv_connect_t connect;
 } tcp_connect_t;
 
@@ -87,6 +92,10 @@ void add_callback1(ptr callback, ptr arg) {
 
 void add_callback2(ptr callback, ptr arg1, ptr arg2) {
   g_callbacks = Scons(Scons(callback, Scons(arg1, Scons(arg2, Snil))), g_callbacks);
+}
+
+void add_callback3(ptr callback, ptr arg1, ptr arg2, ptr arg3) {
+  g_callbacks = Scons(Scons(callback, Scons(arg1, Scons(arg2, Scons(arg3, Snil)))), g_callbacks);
 }
 
 ptr make_error_pair(const char* who, int error)
@@ -384,17 +393,17 @@ static void list_directory_cb(uv_fs_t* req) {
   free(req);
 }
 
-static void read_tcp_alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf) {
+static void read_stream_alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf) {
   (void)suggested_size;
-  tcp_port_t* p = container_of(handle, tcp_port_t, tcp);
+  stream_port_t* p = container_of(handle, stream_port_t, h.stream);
   buf->base = (char*)&Sbytevector_u8_ref(p->read_buffer, p->read_start_index);
   buf->len = p->read_size;
 }
 
-static void read_tcp_cb(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
+static void read_stream_cb(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
   (void)buf;
   uv_read_stop(stream);
-  tcp_port_t* p = container_of(stream, tcp_port_t, tcp);
+  stream_port_t* p = container_of(stream, stream_port_t, h.stream);
   ptr callback = p->read_callback;
   Sunlock_object(p->read_buffer);
   Sunlock_object(callback);
@@ -402,10 +411,10 @@ static void read_tcp_cb(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf)
   add_callback1(callback, Sinteger(nread));
 }
 
-static ptr read_tcp_port(uptr port, ptr buffer, size_t start_index, uint32_t size, int64_t offset, ptr callback) {
+static ptr read_stream_port(uptr port, ptr buffer, size_t start_index, uint32_t size, int64_t offset, ptr callback) {
   if (-1 != offset)
     return make_error_pair("osi_read_port", UV_EINVAL);
-  tcp_port_t* p = (tcp_port_t*)port;
+  stream_port_t* p = (stream_port_t*)port;
   if (p->read_callback)
     return make_error_pair("osi_read_port", UV_EBUSY);
   Slock_object(buffer);
@@ -414,7 +423,7 @@ static ptr read_tcp_port(uptr port, ptr buffer, size_t start_index, uint32_t siz
   p->read_start_index = start_index;
   p->read_size = size;
   p->read_callback = callback;
-  int rc = uv_read_start((uv_stream_t*)&(p->tcp), read_tcp_alloc_cb, read_tcp_cb);
+  int rc = uv_read_start(&(p->h.stream), read_stream_alloc_cb, read_stream_cb);
   if (rc < 0) {
     Sunlock_object(buffer);
     Sunlock_object(callback);
@@ -424,8 +433,8 @@ static ptr read_tcp_port(uptr port, ptr buffer, size_t start_index, uint32_t siz
   return Strue;
 }
 
-static void write_tcp_cb(uv_write_t* req, int status) {
-  tcp_port_t* p = container_of(req, tcp_port_t, write_req);
+static void write_stream_cb(uv_write_t* req, int status) {
+  stream_port_t* p = container_of(req, stream_port_t, write_req);
   ptr callback = p->write_callback;
   Sunlock_object(p->write_buffer);
   Sunlock_object(callback);
@@ -433,10 +442,10 @@ static void write_tcp_cb(uv_write_t* req, int status) {
   add_callback1(callback, (status < 0) ? Sinteger32(status) : Sunsigned32(p->write_size));
 }
 
-static ptr write_tcp_port(uptr port, ptr buffer, size_t start_index, uint32_t size, int64_t offset, ptr callback) {
+static ptr write_stream_port(uptr port, ptr buffer, size_t start_index, uint32_t size, int64_t offset, ptr callback) {
   if (-1 != offset)
     return make_error_pair("osi_write_port", UV_EINVAL);
-  tcp_port_t* p = (tcp_port_t*)port;
+  stream_port_t* p = (stream_port_t*)port;
   if (p->write_callback)
     return make_error_pair("osi_write_port", UV_EBUSY);
   Slock_object(buffer);
@@ -447,7 +456,7 @@ static ptr write_tcp_port(uptr port, ptr buffer, size_t start_index, uint32_t si
   uv_buf_t buf = {
     .base = (char*)&Sbytevector_u8_ref(p->write_buffer, start_index),
     .len = size};
-  int rc = uv_write(&(p->write_req), (uv_stream_t*)&(p->tcp), &buf, 1, write_tcp_cb);
+  int rc = uv_write(&(p->write_req), &(p->h.stream), &buf, 1, write_stream_cb);
   if (rc < 0) {
     Sunlock_object(buffer);
     Sunlock_object(callback);
@@ -457,8 +466,8 @@ static ptr write_tcp_port(uptr port, ptr buffer, size_t start_index, uint32_t si
   return Strue;
 }
 
-static void close_tcp_cb(uv_handle_t* handle) {
-  tcp_port_t* p = container_of(handle, tcp_port_t, tcp);
+static void close_stream_cb(uv_handle_t* handle) {
+  stream_port_t* p = container_of(handle, stream_port_t, h.stream);
   ptr callback = p->close_callback;
   free(p);
   if (callback) {
@@ -467,20 +476,25 @@ static void close_tcp_cb(uv_handle_t* handle) {
   }
 }
 
-static ptr close_tcp_port(uptr port, ptr callback) {
-  tcp_port_t* p = (tcp_port_t*)port;
+static ptr close_stream_port(uptr port, ptr callback) {
+  stream_port_t* p = (stream_port_t*)port;
   if (p->close_callback)
     return make_error_pair("osi_close_port", UV_EBUSY);
   Slock_object(callback);
   p->close_callback = callback;
-  uv_close((uv_handle_t*)&(p->tcp), close_tcp_cb);
+  uv_close(&(p->h.handle), close_stream_cb);
   return Strue;
 }
 
+static port_vtable_t pipe_vtable = {
+  .close = close_stream_port,
+  .read = read_stream_port,
+  .write = write_stream_port};
+
 static port_vtable_t tcp_vtable = {
-  .close = close_tcp_port,
-  .read = read_tcp_port,
-  .write = write_tcp_port};
+  .close = close_stream_port,
+  .read = read_stream_port,
+  .write = write_stream_port};
 
 static void connect_tcp_cb(uv_connect_t* req, int status) {
   tcp_connect_t* p = container_of(req, tcp_connect_t, connect);
@@ -490,19 +504,19 @@ static void connect_tcp_cb(uv_connect_t* req, int status) {
       if (!ai) {
         ptr callback = p->callback;
         Sunlock_object(callback);
-        uv_close((uv_handle_t*)&(p->tcp_port->tcp), close_tcp_cb);
+        uv_close(&(p->stream_port->h.handle), close_stream_cb);
         uv_freeaddrinfo(p->getaddrinfo.addrinfo);
         free(p);
         add_callback1(callback, make_error_pair("uv_tcp_connect", status));
         return;
       }
       p->ai = ai->ai_next;
-      status = uv_tcp_connect(&(p->connect), &(p->tcp_port->tcp), ai->ai_addr, connect_tcp_cb);
+      status = uv_tcp_connect(&(p->connect), &(p->stream_port->h.tcp), ai->ai_addr, connect_tcp_cb);
     } while (status < 0);
     return;
   }
   ptr callback = p->callback;
-  tcp_port_t* port = p->tcp_port;
+  stream_port_t* port = p->stream_port;
   Sunlock_object(callback);
   uv_freeaddrinfo(p->getaddrinfo.addrinfo);
   free(p);
@@ -514,13 +528,13 @@ static void connect_tcp_addrinfo_cb(uv_getaddrinfo_t* req, int status, struct ad
   if (status < 0) {
     ptr callback = p->callback;
     Sunlock_object(callback);
-    uv_close((uv_handle_t*)&(p->tcp_port->tcp), close_tcp_cb);
+    uv_close(&(p->stream_port->h.handle), close_stream_cb);
     free(p);
     add_callback1(callback, make_error_pair("uv_getaddrinfo", status));
     return;
   }
   p->ai = res->ai_next;
-  int rc = uv_tcp_connect(&(p->connect), &(p->tcp_port->tcp), res->ai_addr, connect_tcp_cb);
+  int rc = uv_tcp_connect(&(p->connect), &(p->stream_port->h.tcp), res->ai_addr, connect_tcp_cb);
   if (rc < 0)
     connect_tcp_cb(&(p->connect), rc);
 }
@@ -538,12 +552,12 @@ static void listen_tcp_cb(uv_stream_t* server, int status) {
     add_callback1(callback, make_error_pair("uv_listen", status));
     return;
   }
-  tcp_port_t* port = malloc_container(tcp_port_t);
+  stream_port_t* port = malloc_container(stream_port_t);
   if (!port) {
     add_callback1(callback, make_error_pair("uv_listen", UV_ENOMEM));
     return;
   }
-  status = uv_tcp_init(g_loop, &(port->tcp));
+  status = uv_tcp_init(g_loop, &(port->h.tcp));
   if (status < 0) {
     free(port);
     add_callback1(callback, make_error_pair("uv_tcp_init", status));
@@ -553,9 +567,9 @@ static void listen_tcp_cb(uv_stream_t* server, int status) {
   port->close_callback = 0;
   port->read_callback = 0;
   port->write_callback = 0;
-  status = uv_accept(server, (uv_stream_t*)&(port->tcp));
+  status = uv_accept(server, &(port->h.stream));
   if (status < 0) {
-    uv_close((uv_handle_t*)&(port->tcp), close_tcp_cb);
+    uv_close(&(port->h.handle), close_stream_cb);
     add_callback1(callback, make_error_pair("uv_accept", status));
     return;
   }
@@ -569,6 +583,33 @@ static void watch_path_cb(uv_fs_event_t* handle, const char* filename, int event
     return;
   }
   add_callback2(callback, utf8_to_string(filename), Sinteger(events));
+}
+
+static int string_list_length(ptr x) {
+  int n = 0;
+  while (Spairp(x)) {
+    if (!Sstringp(Scar(x)))
+      return -1;
+    ++n;
+    x = Scdr(x);
+  }
+  if (!Snullp(x))
+    return -1;
+  return n;
+}
+
+static void free_argv(char** argv) {
+  for (char** arg = argv + 1; *arg; arg++)
+    free(*arg);
+  free(argv);
+}
+
+static void process_exit_cb(uv_process_t* process, int64_t exit_status, int term_signal) {
+  ptr callback = (ptr)process->data;
+  add_callback3(callback, Sinteger32(process->pid), Sinteger64(exit_status), Sinteger32(term_signal));
+  Sunlock_object(callback);
+  process->data = 0;
+  uv_close((uv_handle_t*)process, close_handle_data_cb);
 }
 
 size_t osi_get_bytes_used(void) {
@@ -621,12 +662,12 @@ ptr osi_connect_tcp(const char* node, const char* service, ptr callback) {
   tcp_connect_t* p = malloc_container(tcp_connect_t);
   if (!p)
     return make_error_pair("osi_connect_tcp", UV_ENOMEM);
-  tcp_port_t* port = p->tcp_port = malloc_container(tcp_port_t);
+  stream_port_t* port = p->stream_port = malloc_container(stream_port_t);
   if (!port) {
     free(p);
     return make_error_pair("osi_connect_tcp", UV_ENOMEM);
   }
-  int rc = uv_tcp_init(g_loop, &(port->tcp));
+  int rc = uv_tcp_init(g_loop, &(port->h.tcp));
   if (rc < 0) {
     free(port);
     free(p);
@@ -646,7 +687,7 @@ ptr osi_connect_tcp(const char* node, const char* service, ptr callback) {
   rc = uv_getaddrinfo(g_loop, &(p->getaddrinfo), connect_tcp_addrinfo_cb, node, service, &hints);
   if (rc < 0) {
     Sunlock_object(callback);
-    uv_close((uv_handle_t*)&(port->tcp), close_tcp_cb);
+    uv_close(&(port->h.handle), close_stream_cb);
     free(p);
     return make_error_pair("uv_getaddrinfo", rc);
   }
@@ -686,6 +727,131 @@ void osi_exit(int status) {
   _exit(status);
 }
 
+ptr osi_spawn(const char* path, ptr args, ptr callback) {
+  int argc = string_list_length(args);
+  if (argc < 0)
+    return make_error_pair("osi_spawn", UV_EINVAL);
+  // Child stdin
+  stream_port_t* in_port = malloc_container(stream_port_t);
+  if (!in_port)
+    return make_error_pair("osi_spawn", UV_ENOMEM);
+  in_port->vtable = &pipe_vtable;
+  in_port->close_callback = 0;
+  in_port->read_callback = 0;
+  in_port->write_callback = 0;
+  int rc = uv_pipe_init(g_loop, &(in_port->h.pipe), 1);
+  if (rc < 0) {
+    free(in_port);
+    return make_error_pair("uv_pipe_init", rc);
+  }
+  // Child stdout
+  stream_port_t* out_port = malloc_container(stream_port_t);
+  if (!out_port) {
+    uv_close(&(in_port->h.handle), close_stream_cb);
+    return make_error_pair("osi_spawn", UV_ENOMEM);
+  }
+  out_port->vtable = &pipe_vtable;
+  out_port->close_callback = 0;
+  out_port->read_callback = 0;
+  out_port->write_callback = 0;
+  rc = uv_pipe_init(g_loop, &(out_port->h.pipe), 1);
+  if (rc < 0) {
+    uv_close(&(in_port->h.handle), close_stream_cb);
+    free(out_port);
+    return make_error_pair("uv_pipe_init", rc);
+  }
+  // Child stderr
+  stream_port_t* err_port = malloc_container(stream_port_t);
+  if (!err_port) {
+    uv_close(&(in_port->h.handle), close_stream_cb);
+    uv_close(&(out_port->h.handle), close_stream_cb);
+    return make_error_pair("osi_spawn", UV_ENOMEM);
+  }
+  err_port->vtable = &pipe_vtable;
+  err_port->close_callback = 0;
+  err_port->read_callback = 0;
+  err_port->write_callback = 0;
+  rc = uv_pipe_init(g_loop, &(err_port->h.pipe), 1);
+  if (rc < 0) {
+    uv_close(&(in_port->h.handle), close_stream_cb);
+    uv_close(&(out_port->h.handle), close_stream_cb);
+    free(err_port);
+    return make_error_pair("uv_pipe_init", rc);
+  }
+  // Build argument list
+  char** argv = (char**)malloc((argc + 2) * sizeof(char*));
+  if (!argv) {
+    uv_close(&(in_port->h.handle), close_stream_cb);
+    uv_close(&(out_port->h.handle), close_stream_cb);
+    uv_close(&(err_port->h.handle), close_stream_cb);
+    return make_error_pair("osi_spawn", UV_ENOMEM);
+  }
+  {
+    char** arg = argv;
+    *arg++ = (char*)path;
+    ptr x = args;
+    while (Spairp(x)) {
+      size_t l;
+      if (!(*arg++ = string_to_utf8(Scar(x), &l)))
+        break;
+      x = Scdr(x);
+    }
+    *arg = NULL;
+  }
+  // Spawn the process
+  uv_process_t* p = malloc_container(uv_process_t);
+  if (!p) {
+    uv_close(&(in_port->h.handle), close_stream_cb);
+    uv_close(&(out_port->h.handle), close_stream_cb);
+    uv_close(&(err_port->h.handle), close_stream_cb);
+    free_argv(argv);
+    return make_error_pair("osi_spawn", UV_ENOMEM);
+  }
+  uv_stdio_container_t stdio[3];
+  stdio[0].flags = UV_CREATE_PIPE | UV_READABLE_PIPE;
+  stdio[0].data.stream = &(in_port->h.stream);
+  stdio[1].flags = UV_CREATE_PIPE | UV_WRITABLE_PIPE;
+  stdio[1].data.stream = &(out_port->h.stream);
+  stdio[2].flags = UV_CREATE_PIPE | UV_WRITABLE_PIPE;
+  stdio[2].data.stream = &(err_port->h.stream);
+  uv_process_options_t options = {
+    .exit_cb = process_exit_cb,
+    .file = path,
+    .args = argv,
+    .env = NULL,
+    .cwd = NULL,
+    .flags = 0,
+    .stdio_count = 3,
+    .stdio = stdio,
+    .uid = 0,
+    .gid = 0 };
+  Slock_object(callback);
+  p->data = callback;
+  rc = uv_spawn(g_loop, p, &options);
+  free_argv(argv);
+  if (rc < 0) {
+    uv_close(&(in_port->h.handle), close_stream_cb);
+    uv_close(&(out_port->h.handle), close_stream_cb);
+    uv_close(&(err_port->h.handle), close_stream_cb);
+    Sunlock_object(callback);
+    free(p);
+    return make_error_pair("uv_spawn", rc);
+  }
+  ptr r = Smake_vector(4, 0);
+  Svector_set(r, 0, Sunsigned((uptr)in_port));
+  Svector_set(r, 1, Sunsigned((uptr)out_port));
+  Svector_set(r, 2, Sunsigned((uptr)err_port));
+  Svector_set(r, 3, Sinteger32(p->pid));
+  return r;
+}
+
+ptr osi_kill(int pid, int signum) {
+  int rc = uv_kill(pid, signum);
+  if (rc < 0)
+    return make_error_pair("uv_kill", rc);
+  return Strue;
+}
+
 ptr osi_get_file_size(uptr port, ptr callback) {
   fs_port_t* p = (fs_port_t*)port;
   if (p->vtable != &file_vtable)
@@ -705,12 +871,12 @@ ptr osi_get_file_size(uptr port, ptr callback) {
 }
 
 ptr osi_get_ip_address(uptr port) {
-  tcp_port_t* p = (tcp_port_t*)port;
+  stream_port_t* p = (stream_port_t*)port;
   if (p->vtable != &tcp_vtable)
     return make_error_pair("osi_get_ip_address", UV_EINVAL);
   struct sockaddr_in6 addr;
   int addr_len = sizeof(addr);
-  int rc = uv_tcp_getpeername(&(p->tcp), (struct sockaddr*)&addr, &addr_len);
+  int rc = uv_tcp_getpeername(&(p->h.tcp), (struct sockaddr*)&addr, &addr_len);
   if (rc < 0)
     return make_error_pair("uv_tcp_getpeername", rc);
   char name[256];
@@ -987,6 +1153,7 @@ ptr osi_write_port(uptr port, ptr buffer, size_t start_index, uint32_t size, int
 __attribute__((constructor))
 #endif
 static void osi_init(void) {
+  uv_disable_stdio_inheritance();
   g_loop = uv_default_loop();
   uv_timer_init(g_loop, &g_timer);
   g_callbacks = Snil;

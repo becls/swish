@@ -48,6 +48,7 @@ uv_loop_t* g_loop;
 
 void add_callback1(ptr callback, ptr arg);
 void add_callback2(ptr callback, ptr arg1, ptr arg2);
+void add_callback3(ptr callback, ptr arg1, ptr arg2, ptr arg3);
 ptr make_error_pair(const char* who, int error);
 char* string_to_utf8(ptr s, size_t* utf8_len);
 ptr utf8_to_string(const char* utf8);
@@ -65,6 +66,8 @@ EXPORT ptr osi_close_port(uptr port, ptr callback);
 
 // Process
 EXPORT void osi_exit(int status);
+EXPORT ptr osi_spawn(const char* path, ptr args, ptr callback);
+EXPORT ptr osi_kill(int pid, int signum);
 
 // File System
 EXPORT ptr osi_open_file(const char* path, int flags, int mode, ptr callback);

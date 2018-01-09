@@ -26,7 +26,6 @@
    guid->string
    osi_bind_statement
    osi_bind_statement*
-   osi_get_bytes_used
    osi_chmod
    osi_chmod*
    osi_clear_statement_bindings
@@ -42,26 +41,34 @@
    osi_exit
    osi_finalize_statement
    osi_finalize_statement*
+   osi_get_bytes_used
    osi_get_callbacks
+   osi_get_error_text
    osi_get_file_size
    osi_get_file_size*
+   osi_get_hostname
+   osi_get_hostname*
+   osi_get_hrtime
    osi_get_ip_address
    osi_get_ip_address*
    osi_get_last_insert_rowid
    osi_get_last_insert_rowid*
    osi_get_sqlite_status
    osi_get_sqlite_status*
+   osi_get_stat
+   osi_get_stat*
    osi_get_statement_columns
    osi_get_statement_columns*
    osi_get_statement_sql
    osi_get_statement_sql*
+   osi_get_stdin
    osi_get_tcp_listener_port
    osi_get_tcp_listener_port*
-   osi_get_hostname
-   osi_get_hostname*
-   osi_get_hrtime
+   osi_get_time
    osi_interrupt_database
    osi_is_tick_over
+   osi_kill
+   osi_kill*
    osi_list_directory
    osi_list_directory*
    osi_listen_tcp
@@ -70,7 +77,6 @@
    osi_make_directory*
    osi_make_guid
    osi_make_guid*
-   osi_get_time
    osi_open_database
    osi_open_database*
    osi_open_file
@@ -87,12 +93,10 @@
    osi_reset_statement
    osi_reset_statement*
    osi_set_tick
-   osi_get_stat
-   osi_get_stat*
-   osi_get_stdin
+   osi_spawn
+   osi_spawn*
    osi_step_statement
    osi_step_statement*
-   osi_get_error_text
    osi_unlink
    osi_unlink*
    osi_watch_path
@@ -138,6 +142,8 @@
 
   ;; Process
   (fdefine osi_exit (status int) void)
+  (define-osi osi_spawn (path string) (args ptr) (callback ptr))
+  (define-osi osi_kill (pid int) (signum int))
 
   ;; File System
   (define-osi osi_open_file (path string) (flags int) (mode int) (callback ptr))
