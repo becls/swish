@@ -59,6 +59,7 @@
    remove-file
    rename-path
    set-file-mode
+   spawn-os-process
    stat-directory?
    stat-regular-file?
    watch-path
@@ -505,6 +506,29 @@
                   (exit `#(unexpected-eof ,name)))
                 bv)
               #vu8())))))
+
+  ;; Process Ports
+
+  (define (spawn-os-process path args process)
+    (unless (and (list? args) (for-all string? args))
+      (bad-arg 'spawn-os-process args))
+    (unless (process? process)
+      (bad-arg 'spawn-os-process process))
+    (with-interrupts-disabled
+     (match (osi_spawn* path args
+              (lambda (os-pid exit-status term-signal)
+                (send process
+                  `#(<process-terminated> ,os-pid ,exit-status ,term-signal))))
+       [#(,to-stdin ,from-stdout ,from-stderr ,os-pid)
+        (values
+         (let ([name (format "process ~d stdin" os-pid)])
+           (make-oport name (@make-osi-port name to-stdin)))
+         (let ([name (format "process ~d stdout" os-pid)])
+           (make-iport name (@make-osi-port name from-stdout) #t))
+         (let ([name (format "process ~d stderr" os-pid)])
+           (make-iport name (@make-osi-port name from-stderr) #t))
+         os-pid)]
+       [(,who . ,errno) (io-error path who errno)])))
 
   ;; TCP/IP Ports
 
