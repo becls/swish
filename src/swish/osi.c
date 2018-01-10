@@ -739,7 +739,7 @@ ptr osi_spawn(const char* path, ptr args, ptr callback) {
   in_port->close_callback = 0;
   in_port->read_callback = 0;
   in_port->write_callback = 0;
-  int rc = uv_pipe_init(g_loop, &(in_port->h.pipe), 1);
+  int rc = uv_pipe_init(g_loop, &(in_port->h.pipe), 0);
   if (rc < 0) {
     free(in_port);
     return make_error_pair("uv_pipe_init", rc);
@@ -754,7 +754,7 @@ ptr osi_spawn(const char* path, ptr args, ptr callback) {
   out_port->close_callback = 0;
   out_port->read_callback = 0;
   out_port->write_callback = 0;
-  rc = uv_pipe_init(g_loop, &(out_port->h.pipe), 1);
+  rc = uv_pipe_init(g_loop, &(out_port->h.pipe), 0);
   if (rc < 0) {
     uv_close(&(in_port->h.handle), close_stream_cb);
     free(out_port);
@@ -771,7 +771,7 @@ ptr osi_spawn(const char* path, ptr args, ptr callback) {
   err_port->close_callback = 0;
   err_port->read_callback = 0;
   err_port->write_callback = 0;
-  rc = uv_pipe_init(g_loop, &(err_port->h.pipe), 1);
+  rc = uv_pipe_init(g_loop, &(err_port->h.pipe), 0);
   if (rc < 0) {
     uv_close(&(in_port->h.handle), close_stream_cb);
     uv_close(&(out_port->h.handle), close_stream_cb);
