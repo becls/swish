@@ -257,7 +257,7 @@
 
   (define (make-console-input)
     ;; no need to register static stdin port with the guardian
-    (define name "stdin")
+    (define name "stdin-nb")
     (binary->utf8 (make-iport name (make-osi-port name (osi_get_stdin)) #f)))
 
   (define hook-console-input
