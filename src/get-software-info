@@ -1,0 +1,24 @@
+#!/usr/bin/perl
+use strict;
+use autodie;
+
+if ($#ARGV < 0) {
+    print "Usage: $0 fieldname\n" ;
+    exit(1);
+}
+my $fieldname = $ARGV[0];
+
+open INPUT, "software-info.ss";
+my @orig = <INPUT>;
+my $orig = join "", @orig;
+close INPUT;
+
+$_ = $orig;
+if ( /\(define\s+$fieldname\s+\"([^\"]*)\"\)/ )
+{
+    print "$1\n";
+    exit(0);
+} else {
+    print "ERROR: $fieldname not found in software-info.ss\n";
+    exit(1);
+}
