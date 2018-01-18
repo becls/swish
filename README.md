@@ -24,6 +24,10 @@ I/O.
 ## Linux
 
 - Chez Scheme 9.5
+- GCC, the GNU Compiler Collection
+- GNU C++ compilter for libuv
+- Python 2.7 for libuv
+- uuid-dev package
 
 ## Mac
 
