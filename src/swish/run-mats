@@ -1,0 +1,65 @@
+#!/bin/bash -e
+#This is only meant to be run as part of the run-mats script in the src folder
+
+# Concurrency
+$launch <<EOF
+(run-suite "swish/erlang" "$outdir")
+EOF
+
+$launch <<EOF
+(run-suite "swish/gen-server" "$outdir")
+EOF
+
+$launch <<EOF
+(run-suite "swish/event-mgr" "$outdir")
+EOF
+
+$launch <<EOF
+(run-suite "swish/supervisor" "$outdir")
+EOF
+
+$launch <<EOF
+(run-suite "swish/io" "$outdir")
+EOF
+
+# Other parts of the system
+
+$launch <<EOF
+(run-suite "swish/app" "$outdir")
+EOF
+
+$launch <<EOF
+(run-suite "swish/db" "$outdir")
+EOF
+
+$launch <<EOF
+(run-suite "swish/ht" "$outdir")
+EOF
+
+$launch <<EOF
+(run-suite "swish/html" "$outdir")
+EOF
+
+$launch <<EOF
+(run-suite "swish/http" "$outdir")
+EOF
+
+$launch <<EOF
+(run-suite "swish/json" "$outdir")
+EOF
+
+$launch <<EOF
+(run-suite "swish/pregexp" "$outdir")
+EOF
+
+$launch <<EOF
+(run-suite "swish/queue" "$outdir")
+EOF
+
+$launch <<EOF
+(run-suite "swish/statistics" "$outdir")
+EOF
+
+$launch <<EOF
+(run-suite "swish/string-utils" "$outdir")
+EOF

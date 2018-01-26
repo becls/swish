@@ -1,0 +1,17 @@
+#!/bin/bash -e
+launch="scheme --eedisable -q repl.ss run-mats.ss"
+
+find . -name *.mo -delete
+rm -f ../data/server.profile
+rm -f ../data/TestLog.db3
+make -s -C swish
+
+$launch <<EOF
+(run-suite "$1" ".")
+EOF
+
+# finish up
+$launch <<EOF
+(html-report "." "suite-report.html")
+(console-summary ".")
+EOF

@@ -1,0 +1,12 @@
+#!/bin/bash -e
+launch="scheme --eedisable -q repl.ss $1.ms"
+
+find . -name *.mo -delete
+rm -f ../data/server.profile
+rm -f ../data/TestLog.db3
+make -s -C swish
+
+$launch <<EOF
+(import (swish mat))
+(run-mats $2)
+EOF

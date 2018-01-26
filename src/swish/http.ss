@@ -552,10 +552,9 @@
   (define (do-interpret exprs path)
     (define (http:path-root path fn)
       (and (string? fn)
-           (cond
-            [(starts-with? fn "/") (web-path)] ; rooted
-            [(not (path-absolute? fn)) path]   ; relative
-            [else #f])))
+           (if (starts-with? fn "/") ; rooted
+               (web-path)
+               path)))
     (define (http:include-help k fn path)
       (define (fail)
         (syntax-error k (format "invalid path ~s in" fn)))

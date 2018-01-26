@@ -1,0 +1,30 @@
+#!/bin/bash -e
+if [[ "$PROFILE_MATS" == "no" ]]; then
+  launch="scheme --eedisable -q repl.ss run-mats.ss"
+else
+  rm -f ../data/server.profile
+  launch="scheme --eedisable -q replp.ss run-mats.ss"
+fi
+
+if [[ "$OUTDIR" != "" ]]; then
+    outdir=$OUTDIR
+else
+    outdir=.
+fi
+
+git clean -fxd ../bin
+rm -f ../data/TestLog.db3
+make -s -C swish
+
+# Swish
+source swish/run-mats
+
+# finish up
+$launch <<EOF
+(html-report "$outdir" "$outdir/mat-report.html")
+(console-summary "$outdir")
+EOF
+
+if [[ "$PROFILE_MATS" != "no" ]]; then
+  ./dump-profile
+fi

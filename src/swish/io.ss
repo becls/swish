@@ -48,6 +48,7 @@
    open-file-to-read
    open-file-to-replace
    open-file-to-write
+   open-utf8-bytevector
    path-combine
    path-watcher-path
    path-watcher?
@@ -182,6 +183,9 @@
   (define (make-oport name port)
     (make-custom-binary-output-port name (make-w! port) #f #f
       (make-close port)))
+
+  (define (open-utf8-bytevector bv)
+    (binary->utf8 (open-bytevector-input-port bv)))
 
   (define (read-bytevector name contents)
     (let* ([ip (open-bytevector-input-port contents)]
@@ -458,7 +462,7 @@
   (include "io-constants.ss")
 
   (define (open-file name flags mode type)
-    (unless (memq type '(binary-input binary-output input output))
+    (unless (memq type '(binary-input binary-output input output append))
       (bad-arg 'open-file type))
     (let ([port (open-file-port name flags mode)])
       (define fp 0)
@@ -467,7 +471,11 @@
           (unless (eof-object? x)
             (set! fp (+ fp x)))
           x))
-      (define (w! bv start n) (write-osi-port port bv start n -1))
+      (define (w! bv start n)
+        (let ([count (write-osi-port port bv start n fp)])
+          (set! fp (+ fp count))
+          count))
+      (define (a! bv start n) (write-osi-port port bv start n -1))
       (define (gp) fp)
       (define (sp! pos) (set! fp pos))
       (define (close) (close-osi-port port))
@@ -475,13 +483,16 @@
         [(binary-input)
          (make-custom-binary-input-port name r! gp sp! close)]
         [(binary-output)
-         (make-custom-binary-output-port name w! #f #f close)]
+         (make-custom-binary-output-port name w! gp sp! close)]
         [(input)
          (binary->utf8
           (make-custom-binary-input-port name r! gp sp! close))]
         [(output)
          (binary->utf8
-          (make-custom-binary-output-port name w! #f #f close))])))
+          (make-custom-binary-output-port name w! gp sp! close))]
+        [(append)
+         (binary->utf8
+          (make-custom-binary-output-port name a! #f #f close))])))
 
   (define (open-file-to-read name)
     (open-file name O_RDONLY 0 'input))
@@ -490,7 +501,7 @@
     (open-file name (+ O_WRONLY O_CREAT O_EXCL) #o777 'output))
 
   (define (open-file-to-append name)
-    (open-file name (+ O_WRONLY O_CREAT O_APPEND) #o777 'output))
+    (open-file name (+ O_WRONLY O_CREAT O_APPEND) #o777 'append))
 
   (define (open-file-to-replace name)
     (open-file name (+ O_WRONLY O_CREAT O_TRUNC) #o777 'output))
