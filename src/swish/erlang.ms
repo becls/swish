@@ -137,7 +137,7 @@
         (flush-output-port to-stdin)
         (let search ([re (pregexp pattern)] [lines '()])
           (receive
-           (after 1000
+           (after 10000
              (osi_kill* os-pid 15)
              (exit `#(pattern-not-found ,pattern ,(reverse lines))))
            [,line (guard (string? line))
