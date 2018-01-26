@@ -101,8 +101,7 @@ fields:
   running
 \item \code{inbox}: queue of \code{msg} if live or \code{\#f} if
   dead
-\item \code{precedence}: wake time if sleeping or current priority
-  ($-1$, 0, or 1) if ready to run
+\item \code{precedence}: wake time if sleeping or 0 if ready to run
 \item \code{flags}: fixnum with bit 0 set when sleeping and bit 1
   set when the process traps exits
 \item \code{links}: list of linked processes
@@ -217,27 +216,20 @@ of ready-to-run processes, and the \emph{sleep queue}\index{sleep
   queue}, a queue of sleeping processes. Both are ordered by
 increasing precedence and preserve the order of insertion for
 processes with the same precedence. For the run queue, each process
-except the event-loop has precedence 0 in order to implement
-round-robin scheduling. For the sleep queue, each process uses its
-wake time as the precedence.
+has precedence 0 in order to implement round-robin scheduling. For the
+sleep queue, each process uses its wake time as the precedence.
 
 When the run queue is empty, the event-loop process calls
 \code{osi::GetCompletionPacket} with a non-zero timeout based on the
-first entry in the sleep queue to avoid busy waiting.
-
-At every context switch, the scheduler wakes any sleeping processes
-and calls \code{osi::Is\-Completion\-Packet\-Ready}. When the call
-returns true, the scheduler promotes the event-loop process to the
-front of the run queue and sets its precedence to $-1$.  When the
+first entry in the sleep queue to avoid busy waiting. When the
 event-loop process finishes processing all completion packets, it
-demotes itself to the end of the run queue and sets its precedence to
-1.
+places itself at the end of the run queue.
 
-\concern{Some process may starve another process.}  \mitigation Except
-for the event-loop process, the run queue is managed with round-robin
-scheduling to prevent starvation. The event-loop process does not
-starve other processes because it drains the completion queue without
-causing new completion packets to be enqueued.
+\concern{Some process may starve another process.}  \mitigation The
+run queue is managed with round-robin scheduling to prevent
+starvation. The event-loop process does not starve other processes
+because it drains the completion queue without causing new completion
+packets to be enqueued.
 
 The finalizer process runs the finalizers registered via
 \code{add-finalizer}. These finalizers typically close operating
