@@ -236,7 +236,7 @@
 
     (let* ([buffers (make-buffers)]
            [filenames
-            (map (lambda (bv) (guid->string (osi_make_guid))) buffers)])
+            (map (lambda (bv) (uuid->string (osi_make_uuid))) buffers)])
       (for-each
        (lambda (data fn)
          (let ([op (open-file (path-combine test-dir fn)

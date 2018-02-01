@@ -23,7 +23,6 @@
 #!chezscheme
 (library (swish osi)
   (export
-   guid->string
    osi_bind_statement
    osi_bind_statement*
    osi_chmod
@@ -75,8 +74,8 @@
    osi_listen_tcp*
    osi_make_directory
    osi_make_directory*
-   osi_make_guid
-   osi_make_guid*
+   osi_make_uuid
+   osi_make_uuid*
    osi_open_database
    osi_open_database*
    osi_open_file
@@ -103,7 +102,8 @@
    osi_watch_path*
    osi_write_port
    osi_write_port*
-   string->guid
+   string->uuid
+   uuid->string
    )
   (import (chezscheme))
 
@@ -130,10 +130,17 @@
                     x
                     (raise `#(osi-error name ,(car x) ,(cdr x))))))))]))
 
-  ;; Event Loop
+  ;; System
+  (fdefine osi_get_bytes_used size_t)
   (fdefine osi_get_callbacks (timeout unsigned-64) ptr)
-  (fdefine osi_set_tick (nanoseconds unsigned-64) void)
+  (fdefine osi_get_error_text (err int) string)
+  (define-osi osi_get_hostname)
+  (fdefine osi_get_hrtime unsigned-64)
+  (fdefine osi_get_time unsigned-64)
   (fdefine osi_is_tick_over boolean)
+  (define-osi osi_make_uuid)
+  (fdefine osi_print_all_handles void)
+  (fdefine osi_set_tick (nanoseconds unsigned-64) void)
 
   ;; Ports
   (define-osi osi_read_port (port uptr) (buffer ptr) (start-index size_t) (size unsigned-32) (offset integer-64) (callback ptr))
@@ -166,32 +173,23 @@
   (define-osi osi_get_tcp_listener_port (listener uptr))
   (define-osi osi_get_ip_address (port uptr))
 
-  ;; Information
-  (fdefine osi_get_bytes_used size_t)
-  (define-osi osi_make_guid)
-  (define-osi osi_get_hostname)
-  (fdefine osi_get_hrtime unsigned-64)
-  (fdefine osi_get_time unsigned-64)
-  (fdefine osi_get_error_text (err int) string)
-  (fdefine osi_print_all_handles void)
-
-  (define (guid->string guid)
-    (unless (and (bytevector? guid) (= (bytevector-length guid) 16))
-      (raise `#(bad-arg guid->string ,guid)))
+  (define (uuid->string uuid)
+    (unless (and (bytevector? uuid) (= (bytevector-length uuid) 16))
+      (raise `#(bad-arg uuid->string ,uuid)))
     (format "~8,'0X-~4,'0X-~4,'0X-~4,'0X-~2,'0X~2,'0X~2,'0X~2,'0X~2,'0X~2,'0X"
-      (#3%bytevector-u32-ref guid 0 'little)
-      (#3%bytevector-u16-ref guid 4 'little)
-      (#3%bytevector-u16-ref guid 6 'little)
-      (#3%bytevector-u16-ref guid 8 'big)
-      (#3%bytevector-u8-ref guid 10)
-      (#3%bytevector-u8-ref guid 11)
-      (#3%bytevector-u8-ref guid 12)
-      (#3%bytevector-u8-ref guid 13)
-      (#3%bytevector-u8-ref guid 14)
-      (#3%bytevector-u8-ref guid 15)))
+      (#3%bytevector-u32-ref uuid 0 'little)
+      (#3%bytevector-u16-ref uuid 4 'little)
+      (#3%bytevector-u16-ref uuid 6 'little)
+      (#3%bytevector-u16-ref uuid 8 'big)
+      (#3%bytevector-u8-ref uuid 10)
+      (#3%bytevector-u8-ref uuid 11)
+      (#3%bytevector-u8-ref uuid 12)
+      (#3%bytevector-u8-ref uuid 13)
+      (#3%bytevector-u8-ref uuid 14)
+      (#3%bytevector-u8-ref uuid 15)))
 
-  (define (string->guid s)
-    (define (err) (raise `#(bad-arg string->guid ,s)))
+  (define (string->uuid s)
+    (define (err) (raise `#(bad-arg string->uuid ,s)))
     (define (decode-digit c)
       (cond
        [(#3%char<=? #\0 c #\9)
@@ -233,5 +231,4 @@
   (define-osi osi_step_statement (statement uptr) (callback ptr))
   (fdefine osi_interrupt_database (database uptr) void)
   (define-osi osi_get_sqlite_status (operation int) (reset? boolean))
-
   )

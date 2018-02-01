@@ -198,9 +198,9 @@
   (match-let*
    ([#(EXIT #(bad-arg add-finalizer 12)) (catch (add-finalizer 12))]
     [#(EXIT #(bad-arg demonitor 12)) (catch (demonitor 12))]
-    [#(EXIT #(bad-arg guid->string #f)) (catch (guid->string #f))]
-    [#(EXIT #(bad-arg guid->string #vu8(1 2 3)))
-     (catch (guid->string #vu8(1 2 3)))]
+    [#(EXIT #(bad-arg uuid->string #f)) (catch (uuid->string #f))]
+    [#(EXIT #(bad-arg uuid->string #vu8(1 2 3)))
+     (catch (uuid->string #vu8(1 2 3)))]
     [#(EXIT #(bad-arg kill 12)) (catch (kill 12 'crash))]
     [#(EXIT #(bad-arg link 12)) (catch (link 12))]
     [#(EXIT #(bad-arg make-process-parameter 12))
@@ -226,21 +226,21 @@
     [#(EXIT #(bad-arg send 12)) (catch (send 12 'msg))]
     [#(EXIT #(bad-arg spawn 12)) (catch (spawn 12))]
     [#(EXIT #(bad-arg spawn&link 12)) (catch (spawn&link 12))]
-    [#(EXIT #(bad-arg string->guid #f)) (catch (string->guid #f))]
-    [#(EXIT #(bad-arg string->guid "498e2279-1301-421e-9a2e-4001acf565e"))
-     (catch (string->guid "498e2279-1301-421e-9a2e-4001acf565e"))]
-    [#(EXIT #(bad-arg string->guid "498e2279x1301-421e-9a2e-4001acf565e6"))
-     (catch (string->guid "498e2279x1301-421e-9a2e-4001acf565e6"))]
-    [#(EXIT #(bad-arg string->guid "498e2279-1301x421e-9a2e-4001acf565e6"))
-     (catch (string->guid "498e2279-1301x421e-9a2e-4001acf565e6"))]
-    [#(EXIT #(bad-arg string->guid "498e2279-1301-421ex9a2e-4001acf565e6"))
-     (catch (string->guid "498e2279-1301-421ex9a2e-4001acf565e6"))]
-    [#(EXIT #(bad-arg string->guid "498e2279-1301-421e-9a2ex4001acf565e6"))
-     (catch (string->guid "498e2279-1301-421e-9a2ex4001acf565e6"))]
-    [#(EXIT #(bad-arg string->guid "498e2279-1301-421e-9a2e-4001acf565eg"))
-     (catch (string->guid "498e2279-1301-421e-9a2e-4001acf565eg"))]
-    [#(EXIT #(bad-arg string->guid "498e2279-1301-421e-9a2ex4001acf565e67"))
-     (catch (string->guid "498e2279-1301-421e-9a2ex4001acf565e67"))]
+    [#(EXIT #(bad-arg string->uuid #f)) (catch (string->uuid #f))]
+    [#(EXIT #(bad-arg string->uuid "498e2279-1301-421e-9a2e-4001acf565e"))
+     (catch (string->uuid "498e2279-1301-421e-9a2e-4001acf565e"))]
+    [#(EXIT #(bad-arg string->uuid "498e2279x1301-421e-9a2e-4001acf565e6"))
+     (catch (string->uuid "498e2279x1301-421e-9a2e-4001acf565e6"))]
+    [#(EXIT #(bad-arg string->uuid "498e2279-1301x421e-9a2e-4001acf565e6"))
+     (catch (string->uuid "498e2279-1301x421e-9a2e-4001acf565e6"))]
+    [#(EXIT #(bad-arg string->uuid "498e2279-1301-421ex9a2e-4001acf565e6"))
+     (catch (string->uuid "498e2279-1301-421ex9a2e-4001acf565e6"))]
+    [#(EXIT #(bad-arg string->uuid "498e2279-1301-421e-9a2ex4001acf565e6"))
+     (catch (string->uuid "498e2279-1301-421e-9a2ex4001acf565e6"))]
+    [#(EXIT #(bad-arg string->uuid "498e2279-1301-421e-9a2e-4001acf565eg"))
+     (catch (string->uuid "498e2279-1301-421e-9a2e-4001acf565eg"))]
+    [#(EXIT #(bad-arg string->uuid "498e2279-1301-421e-9a2ex4001acf565e67"))
+     (catch (string->uuid "498e2279-1301-421e-9a2ex4001acf565e67"))]
     [#(EXIT #(bad-arg unlink 12)) (catch (unlink 12))]
     [#(EXIT #(bad-arg unregister 12)) (catch (unregister 12))]
     [#(EXIT #(bad-arg whereis 12)) (catch (whereis 12))]
@@ -911,13 +911,13 @@
 
   )
 
-(mat guid ()
+(mat uuid ()
   (match-let*
    ([#vu8(#x79 #x22 #x8E #x49 #x1 #x13 #x1E #x42 #x9A #x2E #x40
            #x1 #xAC #xF5 #x65 #xE5)
-      (string->guid "498e2279-1301-421E-9a2E-4001aCf565E5")]
+      (string->uuid "498e2279-1301-421E-9a2E-4001aCf565E5")]
     ["498E2279-1301-421E-9A2E-4001ACF565E5"
-     (guid->string #vu8(#x79 #x22 #x8E #x49 #x1 #x13 #x1E #x42 #x9A #x2E #x40
+     (uuid->string #vu8(#x79 #x22 #x8E #x49 #x1 #x13 #x1E #x42 #x9A #x2E #x40
                          #x1 #xAC #xF5 #x65 #xE5))])
    'ok))
 

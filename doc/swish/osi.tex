@@ -25,7 +25,7 @@
 \section {Introduction}
 
 This chapter describes the operating system interface. Swish is
-written in Chez Scheme and runs on macOS, Linux, and Windows. It
+written in Chez Scheme and runs on Linux, macOS, and Windows. It
 provides asynchronous I/O via libuv~\cite{libuv} and database support
 via SQLite~\cite{sqlite-guide}.
 
@@ -75,3 +75,127 @@ procedure $p$, e.g., \code{osi\_read\_port}, raises exception
 suffix, e.g., \code{osi\_read\_port*}, that returns the error pair.
 
 \section {Programming Interface}\label{sec:osi-api}
+
+\subsection {System Functions}
+
+\defineentry{osi\_get\_bytes\_used}
+\begin{function}
+  size\_t \code{osi\_get\_bytes\_used}(void);
+\end{function}
+
+The \code{osi\_get\_bytes\_used} function returns the number of bytes
+used by the C run-time heap. On Linux, it calls the \code{mallinfo}
+function. On macOS, it calls the \code{mstats} function. On Windows,
+it calls the \code{\_heapwalk} function.
+
+\defineentry{osi\_get\_callbacks}
+\begin{function}
+  ptr \code{osi\_get\_callbacks}(uint64\_t timeout);
+\end{function}
+
+The \code{osi\_get\_callbacks} function returns a list of callback
+lists in descending order of time received. When the list is empty, it
+blocks up to \var{timeout} milliseconds before returning. Each
+callback list has the form \code{(\var{callback} \var{result} \etc)},
+where \var{callback} is the callback procedure passed to the
+asynchronous function that returned one or more \var{result}s.
+
+\defineentry{osi\_get\_error\_text}
+\begin{function}
+  const char* \code{osi\_get\_error\_text}(int err);
+\end{function}
+
+The \code{osi\_get\_error\_text} function returns the English string
+for the given error number.
+
+\defineentry{osi\_get\_hostname}
+\begin{function}
+  ptr \code{osi\_get\_hostname}(void);
+\end{function}
+
+The \code{osi\_get\_hostname} function returns the host name from
+\code{uv\_os\_gethostname}.
+
+\defineentry{osi\_get\_hrtime}
+\begin{function}
+  uint64\_t \code{osi\_get\_hrtime}(void);
+\end{function}
+
+The \code{osi\_get\_hrtime} function returns the current
+high-resolution real time in nanoseconds from \code{uv\_hrtime}. It is
+not related to the time of day and is not subject to clock drift.
+
+\defineentry{osi\_get\_time}
+\begin{function}
+  uint64\_t \code{osi\_get\_time}(void);
+\end{function}
+
+The \code{osi\_get\_time} function returns the current clock time in
+milliseconds in UTC since the UNIX epoch January 1, 1970. On Windows,
+it calls the \code{GetSystemTimeAsFileTime} function in
+\texttt{kernel32.dll}. On all other systems, it calls the
+\code{clock\_gettime} function with \code{CLOCK\_REALTIME}.
+
+\defineentry{osi\_is\_tick\_over}
+\begin{function}
+  int \code{osi\_is\_tick\_over}(void);
+\end{function}
+
+The \code{osi\_is\_tick\_over} function returns 1 if the current time
+from\code{uv\_hrtime} is greater than or equal to the threshold set by
+the most recent call to \code{osi\_set\_tick} and 0 otherwise.
+
+\defineentry{osi\_make\_uuid}
+\begin{function}
+  ptr \code{osi\_make\_uuid}(void);
+\end{function}
+
+The \code{osi\_make\_uuid} function returns a new universally unique
+identifier (UUID) as a bytevector. On Windows, it calls the
+\code{UuidCreate} function in \texttt{rpcrt4.dll}. On all other
+systems, it calls the \code{uuid\_generate} function.
+
+\defineentry{uuid->string}
+\begin{procedure}
+  \code{(uuid->string \var{uuid})}
+\end{procedure}
+\returns{} a string
+
+The \code{uuid->string} procedure returns the uppercase hexadecimal
+string representation of \var{uuid},
+$\var{HH}_3\var{HH}_2\var{HH}_1\var{HH}_0\code{-}\var{HH}_5\var{HH}_4\code{-}\var{HH}_7\var{HH}_6\code{-}\var{HH}_8\var{HH}_9\code{-}\var{HH}_{10}\var{HH}_{11}\var{HH}_{12}\var{HH}_{13}\var{HH}_{14}\var{HH}_{15}$,
+where $\var{HH}_i$ is the 2-character uppercase hexadecimal
+representation of the octet at index $i$ of bytevector \var{uuid}.  If
+\var{uuid} is not a bytevector of length 16, exception
+\code{\#(bad-arg uuid->string \var{uuid})} is raised.
+
+\defineentry{string->uuid}
+\begin{procedure}
+  \code{(string->uuid \var{s})}
+\end{procedure}
+\returns{} a UUID bytevector
+
+The \code{string->uuid} procedure returns the bytevector \var{uuid}
+for string \var{s} such that \code{(uuid->string \var{uuid})} is
+equivalent to \var{s}, ignoring case. If \var{s} is not a string with
+uppercase or lowercase hexadecimal digits and hyphens as shown in
+\code{uuid->string}, exception \code{\#(bad-arg string->uuid \var{s})}
+is raised.
+
+\defineentry{osi\_print\_all\_handles}
+\begin{function}
+  void \code{osi\_print\_all\_handles}(void);
+\end{function}
+
+The \code{osi\_print\_all\_handles} function calls
+\code{uv\_print\_all\_handles} to print all libuv handles to stderr.
+
+\defineentry{osi\_set\_tick}
+\begin{function}
+  void \code{osi\_set\_tick}(uint64\_t nanoseconds);
+\end{function}
+
+The \code{osi\_set\_tick} function sets the threshold for
+\code{osi\_is\_tick\_over} to be the current time from
+\code{uv\_hrtime} plus the given number of \var{nanoseconds}.
+

@@ -98,7 +98,7 @@
     log-db:instance-id)
 
   (define (create-instance-id!)
-    (let ([id (guid->string (osi_make_guid))])
+    (let ([id (uuid->string (osi_make_uuid))])
       (log-db:version 'instance id)
       (set! log-db:instance-id id)))
 

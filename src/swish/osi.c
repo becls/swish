@@ -709,7 +709,7 @@ ptr osi_make_directory(const char* path, int mode, ptr callback) {
   return Strue;
 }
 
-ptr osi_make_guid(void) {
+ptr osi_make_uuid(void) {
 #ifdef _WIN32
   ptr r = Smake_bytevector(sizeof(UUID), 0);
   RPC_STATUS rc = UuidCreate((UUID*)Sbytevector_data(r));

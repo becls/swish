@@ -54,10 +54,17 @@ char* string_to_utf8(ptr s, size_t* utf8_len);
 ptr utf8_to_string(const char* utf8);
 ptr utf8_to_string2(const char* utf8, size_t count);
 
-// Event Loop
+// System
+EXPORT size_t osi_get_bytes_used(void);
 EXPORT ptr osi_get_callbacks(uint64_t timeout);
-EXPORT void osi_set_tick(uint64_t nanoseconds);
+EXPORT const char* osi_get_error_text(int err);
+EXPORT ptr osi_get_hostname(void);
+EXPORT uint64_t osi_get_hrtime(void);
+EXPORT uint64_t osi_get_time(void);
 EXPORT int osi_is_tick_over(void);
+EXPORT ptr osi_make_uuid(void);
+EXPORT void osi_print_all_handles(void);
+EXPORT void osi_set_tick(uint64_t nanoseconds);
 
 // Ports
 EXPORT ptr osi_read_port(uptr port, ptr buffer, size_t start_index, uint32_t size, int64_t offset, ptr callback);
@@ -90,15 +97,6 @@ EXPORT ptr osi_listen_tcp(uint16_t port, ptr callback);
 EXPORT void osi_close_tcp_listener(uptr listener);
 EXPORT ptr osi_get_tcp_listener_port(uptr listener);
 EXPORT ptr osi_get_ip_address(uptr port);
-
-// Information
-EXPORT size_t osi_get_bytes_used(void);
-EXPORT const char* osi_get_error_text(int err);
-EXPORT ptr osi_get_hostname(void);
-EXPORT uint64_t osi_get_hrtime(void);
-EXPORT uint64_t osi_get_time(void);
-EXPORT ptr osi_make_guid(void);
-EXPORT void osi_print_all_handles(void);
 
 // SQLite
 EXPORT ptr osi_open_database(const char* filename, int flags, ptr callback);

@@ -679,7 +679,7 @@
       (let* ([fn (make-directory-path
                   (path-combine (tmp-path)
                     (format "~36r.tmp"
-                      (bytevector-uint-ref (osi_make_guid) 0 'little 16))))]
+                      (bytevector-uint-ref (osi_make_uuid) 0 'little 16))))]
              [op (parameterize ([custom-port-buffer-size (ash 1 16)])
                    (open-file fn (+ O_WRONLY O_CREAT) #o666 'binary-output))])
         (match (catch
