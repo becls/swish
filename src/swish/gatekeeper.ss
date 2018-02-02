@@ -26,7 +26,7 @@
    gatekeeper:start&link
    gatekeeper:enter
    gatekeeper:leave
-   with-mutex
+   with-gatekeeper-mutex
    )
   (import
    (swish erlang)
@@ -47,13 +47,13 @@
       [#(EXIT ,_) 'ok]
       [,r (exit r)]))
 
-  (define-syntax (with-mutex x)
+  (define-syntax (with-gatekeeper-mutex x)
     (syntax-case x ()
       [(_ resource timeout body ...)
        (identifier? #'resource)
-       #'($with-mutex 'resource timeout (lambda () body ...))]))
+       #'($with-gatekeeper-mutex 'resource timeout (lambda () body ...))]))
 
-  (define ($with-mutex resource timeout body)
+  (define ($with-gatekeeper-mutex resource timeout body)
     (dynamic-wind
       (lambda () (gatekeeper:enter resource timeout))
       body
@@ -75,19 +75,19 @@
     (set! sc-expand.orig (#%$top-level-value 'sc-expand))
     (#%$set-top-level-value! '$cp0
       (lambda args
-        (with-mutex $cp0 60000
+        (with-gatekeeper-mutex $cp0 60000
           (apply $cp0.orig args))))
     (#%$set-top-level-value! '$np-compile
       (lambda (original-input-expression pt?)
-        (with-mutex $np-compile 60000
+        (with-gatekeeper-mutex $np-compile 60000
           ($np-compile.orig original-input-expression pt?))))
     (#%$set-top-level-value! 'pretty-print
       (lambda args
-        (with-mutex pretty-print 60000
+        (with-gatekeeper-mutex pretty-print 60000
           (apply pretty-print.orig args))))
     (#%$set-top-level-value! 'sc-expand
       (lambda args
-        (with-mutex sc-expand 60000
+        (with-gatekeeper-mutex sc-expand 60000
           (apply sc-expand.orig args))))
     (current-expand sc-expand)
     (process-trap-exit #t)

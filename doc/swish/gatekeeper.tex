@@ -61,11 +61,11 @@ records, each of which has the following fields:\antipar
 
 \genserver{gatekeeper}{init} The gatekeeper \code{init} procedure
 hooks the system primitives listed in the introduction so that they
-use \code{with-mutex} with a timeout of one minute, and it sets the
-\code{current-expand} parameter to the hooked \code{sc-expand}
-procedure. The process traps exits so that \code{terminate} can unhook
-the system primitives when the process is shut down. It returns an
-empty list of \code{<mutex>} records.
+use \code{with-gatekeeper-mutex} with a timeout of one minute, and it
+sets the \code{current-expand} parameter to the hooked
+\code{sc-expand} procedure. The process traps exits so that
+\code{terminate} can unhook the system primitives when the process is
+shut down. It returns an empty list of \code{<mutex>} records.
 
 \genserver{gatekeeper}{terminate} The gatekeeper \code{terminate}
 procedure unhooks the system primitives listed in the introduction and
@@ -197,22 +197,22 @@ The \code{gatekeeper:leave} procedure calls \code{(gen-server:call
 \var{resource}. If it returns $e \ne \code{ok}$, it raises exception
 $e$.
 
-\defineentry{with-mutex}
+\defineentry{with-gatekeeper-mutex}
 \begin{syntax}
-  \code{(with-mutex \var{resource} \var{timeout} \var{body\(\sb{1}\)} \var{body\(\sb{2}\)} \etc)}
+  \code{(with-gatekeeper-mutex \var{resource} \var{timeout} \var{body\(\sb{1}\)} \var{body\(\sb{2}\)} \etc)}
 \end{syntax}
 \expandsto{}
-\code{(\$with-mutex '\var{resource} \var{timeout} (lambda ()
+\code{(\$with-gatekeeper-mutex '\var{resource} \var{timeout} (lambda ()
   \var{body\(\sb{1}\)} \var{body\(\sb{2}\)} \etc))}
 
-The \code{with-mutex} form executes the body expressions in a
+The \code{with-gatekeeper-mutex} form executes the body expressions in a
 dynamic context where the calling process owns \var{resource}, which
 must be an identifier. The \var{timeout} expression specifies how long
 the caller is willing to wait to enter the mutex for \var{resource} as
 defined by \code{gen-server:call}.  The internal
-\code{\$with-mutex} procedure is defined as follows:\antipar
+\code{\$with-gatekeeper-mutex} procedure is defined as follows:\antipar
 \begin{samepage}\begin{alltt}
-(define (\$with-mutex \var{resource} \var{timeout} \var{body})
+(define (\$with-gatekeeper-mutex \var{resource} \var{timeout} \var{body})
   (dynamic-wind
     (lambda () (gatekeeper:enter \var{resource} \var{timeout}))
     \var{body}

@@ -940,28 +940,28 @@
   (let* ([p1 (spawn&link
               (lambda ()
                 (eval-test)
-                (with-mutex A 1000
+                (with-gatekeeper-mutex A 1000
                   (receive [continue 'ok])
-                  (with-mutex B 1000
+                  (with-gatekeeper-mutex B 1000
                     'ok))))]
          [p2 (spawn&link
               (lambda ()
                 (eval-test)
-                (with-mutex B 1000
+                (with-gatekeeper-mutex B 1000
                   (receive [continue 'ok])
-                  (with-mutex C 1000
+                  (with-gatekeeper-mutex C 1000
                     (receive)))))]
          [p3 (spawn&link
               (lambda ()
                 (eval-test)
-                (with-mutex C 1000
+                (with-gatekeeper-mutex C 1000
                   (receive [continue 'ok])
-                  (with-mutex A 1000
+                  (with-gatekeeper-mutex A 1000
                     'ok))))]
          [p4 (spawn&link
               (lambda ()
                 (receive [continue 'ok])
-                (with-mutex A 10 'ok)))])
+                (with-gatekeeper-mutex A 10 'ok)))])
     (continue p1 p2 p3)
     (continue p1 p2 p3)
     (match-let*
