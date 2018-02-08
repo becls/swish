@@ -1,4 +1,4 @@
-SchemeInclude=/usr/local/lib/csv9.5/i3osx
+SchemeInclude=/usr/local/lib/csv${CHEZ_VERSION}/${MACHINE_TYPE}/
 UvInclude=../../libuv/include
 UvLib=../../libuv/build/Release
 C = gcc -m32 -fPIC -Wall -Wextra -Werror -O2

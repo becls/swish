@@ -1,5 +1,6 @@
-SchemeInclude=C:/Program Files/Chez Scheme 9.5/boot/a6nt
-SchemeLib=C:/Program Files/Chez Scheme 9.5/bin/a6nt/csv95.lib
+SchemeDir=C:/Program Files/Chez Scheme ${CHEZ_VERSION}
+SchemeInclude=${SchemeDir}/boot/${MACHINE_TYPE}
+SchemeLib=${SchemeDir}/bin/${MACHINE_TYPE}/csv$(subst .,,${CHEZ_VERSION}).lib
 UvInclude=../../libuv/include
 UvLib=../../libuv/Release/lib/libuv.lib
 C=../vs64 cl /nologo /Ox /MD /W3

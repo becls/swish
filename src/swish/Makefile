@@ -17,6 +17,9 @@ else
 $(error Operating system $(OS) is not supported.)
 endif
 
+MACHINE_TYPE := $(shell echo '(machine-type)' | scheme -q)
+CHEZ_VERSION := $(shell scheme --version 2>&1)
+
 io-constants.ss: io-constants$(EXESUFFIX)
 	./$< > $@
 

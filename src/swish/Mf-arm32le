@@ -1,4 +1,4 @@
-SchemeInclude=/usr/lib/csv9.5/arm32le
+SchemeInclude=/usr/lib/csv${CHEZ_VERSION}/${MACHINE_TYPE}/
 UvInclude=../../libuv/include
 UvLib=../../libuv/out/Release/obj.target
 C = gcc -fPIC -Wall -Wextra -Werror -O2
