@@ -39,3 +39,16 @@ I/O.
 - Cygwin with bash, git, graphviz, grep, perl, texlive, etc.
 - Python 2.7 for Windows in C:\Python27
 - Put scheme in PATH.
+
+### Building on Windows with Anaconda Python
+
+- One time, make an [environment containing Python 2.7](https://conda.io/docs/user-guide/tasks/manage-python.html#installing-a-different-version-of-python)
+
+  `conda create -n py27 python=2.7 anaconda`
+
+- When libuv needs to be rebuilt:
+
+  ```
+  source activate py27
+  PYTHON="$(cygpath -w "$(type -p python)")" ./go
+  ```
