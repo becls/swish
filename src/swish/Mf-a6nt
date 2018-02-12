@@ -5,7 +5,7 @@ UvInclude=../../libuv/include
 UvLib=../../libuv/Release/lib/libuv.lib
 C=../vs64 cl /nologo /Ox /MD /W3
 LD=../vs64 link /nologo
-PYTHON=C:\Python27\python.exe
+PYTHON ?= C:\Python27\python.exe
 
 all: ../../bin/osi.dll io-constants.ss
 
@@ -25,7 +25,7 @@ io-constants.exe: io-constants.c ${UvInclude}
 	$C /I"${UvInclude}" io-constants.c
 
 ${UvLib}: ${UvInclude}
-	  if [ ! -f /cygdrive/c/Python27/python.exe ]; then echo Please install Python 2.7 for Windows.; exit 1; fi
+	  if [ ! -f "$$(cygpath "${PYTHON}")" ]; then echo Please install Python 2.7 for Windows.; exit 1; fi
 	  -cd ../../libuv; PYTHON="${PYTHON}" cmd /c vcbuild.bat release vs2017 x64 static
 
 clean:
