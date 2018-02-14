@@ -53,10 +53,10 @@ interface because it manages the data structures that contain pointers
 to Scheme objects.
 
 The operating system interface uses port objects for files, console
-input, and TCP/IP connections. A port object is created by the various
-open functions, which return a port handle that is used for read,
-write, and close operations. Once a port is closed, its port object is
-freed.
+input, pipes to other processes, and TCP/IP connections. A port object
+is created by the various open functions, which return a port handle
+that is used for read, write, and close operations. Once a port is
+closed, its port object is freed.
 
 For interface functions that can fail, an error pair\index{error pair}
 \code{(\var{who} . \var{errno})} is returned, where \var{who} is a
@@ -94,7 +94,7 @@ it calls the \code{\_heapwalk} function.
 \end{function}
 
 The \code{osi\_get\_callbacks} function returns a list of callback
-lists in descending order of time received. When the list is empty, it
+lists in reverse order of time received. When the list is empty, it
 blocks up to \var{timeout} milliseconds before returning. Each
 callback list has the form \code{(\var{callback} \var{result} \etc)},
 where \var{callback} is the callback procedure passed to the
@@ -142,8 +142,8 @@ it calls the \code{GetSystemTimeAsFileTime} function in
 \end{function}
 
 The \code{osi\_is\_tick\_over} function returns 1 if the current time
-from\code{uv\_hrtime} is greater than or equal to the threshold set by
-the most recent call to \code{osi\_set\_tick} and 0 otherwise.
+from \code{uv\_hrtime} is greater than or equal to the threshold set
+by the most recent call to \code{osi\_set\_tick} and 0 otherwise.
 
 \defineentry{osi\_make\_uuid}
 \begin{function}
