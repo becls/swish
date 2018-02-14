@@ -840,12 +840,21 @@
          [() (no-interrupts (eq-hashtable-ref ht self initial))]
          [(u) (no-interrupts (eq-hashtable-set! ht self u))]))]))
 
+  ;; to get better names for match continuations than native or
+  (define-syntax match-or
+    (syntax-rules ()
+      [(_) #f]
+      [(_ e) e]
+      [(_ e0 e1 ...)
+       (let ([matched-pattern e0]) ;; could we get actual source info for these?
+         (if matched-pattern matched-pattern (match-or e1 ...)))]))
+
   (define-syntax (match x)
     (syntax-case x ()
       [(_ exp (pattern b1 b2 ...) ...)
        #`(let ([v exp])
-           ((or (match-pattern v pattern b1 b2 ...) ...
-                (bad-match v #,(find-source x)))))]))
+           ((match-or (match-pattern v pattern b1 b2 ...) ...
+              (bad-match v #,(find-source x)))))]))
 
   (define-syntax match-pattern
     (syntax-rules ()
