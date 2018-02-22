@@ -612,6 +612,11 @@ static void process_exit_cb(uv_process_t* process, int64_t exit_status, int term
   uv_close((uv_handle_t*)process, close_handle_data_cb);
 }
 
+static void list_uv_cb(uv_handle_t* handle, void* arg) {
+  ptr* pls = (ptr*)arg;
+  *pls = Scons(Scons(Sunsigned((uptr)handle), Sinteger32(handle->type)), *pls);
+}
+
 size_t osi_get_bytes_used(void) {
 #if defined(__APPLE__)
   malloc_zone_pressure_relief(NULL, 0);
@@ -977,6 +982,12 @@ uint64_t osi_get_time(void) {
 #endif
 }
 
+ptr osi_list_uv_handles(void) {
+  ptr ls = Snil;
+  uv_walk(g_loop, list_uv_cb, &ls);
+  return ls;
+}
+
 ptr osi_open_file(const char* path, int flags, int mode, ptr callback) {
   uv_fs_t* req = malloc_container(uv_fs_t);
   if (!req)
@@ -990,11 +1001,6 @@ ptr osi_open_file(const char* path, int flags, int mode, ptr callback) {
     return make_error_pair("uv_fs_close", rc);
   }
   return Strue;
-}
-
-void osi_print_all_handles(void) {
-  uv_print_all_handles(g_loop, stderr);
-  fflush(stderr);
 }
 
 ptr osi_remove_directory(const char* path, ptr callback) {

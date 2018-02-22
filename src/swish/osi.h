@@ -62,8 +62,8 @@ EXPORT ptr osi_get_hostname(void);
 EXPORT uint64_t osi_get_hrtime(void);
 EXPORT uint64_t osi_get_time(void);
 EXPORT int osi_is_tick_over(void);
+EXPORT ptr osi_list_uv_handles(void);
 EXPORT ptr osi_make_uuid(void);
-EXPORT void osi_print_all_handles(void);
 EXPORT void osi_set_tick(uint64_t nanoseconds);
 
 // Ports

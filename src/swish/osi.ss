@@ -70,6 +70,7 @@
    osi_kill*
    osi_list_directory
    osi_list_directory*
+   osi_list_uv_handles
    osi_listen_tcp
    osi_listen_tcp*
    osi_make_directory
@@ -82,7 +83,6 @@
    osi_open_file*
    osi_prepare_statement
    osi_prepare_statement*
-   osi_print_all_handles
    osi_read_port
    osi_read_port*
    osi_remove_directory
@@ -138,8 +138,8 @@
   (fdefine osi_get_hrtime unsigned-64)
   (fdefine osi_get_time unsigned-64)
   (fdefine osi_is_tick_over boolean)
+  (fdefine osi_list_uv_handles ptr)
   (define-osi osi_make_uuid)
-  (fdefine osi_print_all_handles void)
   (fdefine osi_set_tick (nanoseconds unsigned-64) void)
 
   ;; Ports

@@ -182,13 +182,15 @@ uppercase or lowercase hexadecimal digits and hyphens as shown in
 \code{uuid->string}, exception \code{\#(bad-arg string->uuid \var{s})}
 is raised.
 
-\defineentry{osi\_print\_all\_handles}
+\defineentry{osi\_list\_uv\_handles}
 \begin{function}
-  void \code{osi\_print\_all\_handles}(void);
+  ptr \code{osi\_list\_uv\_handles}(void);
 \end{function}
 
-The \code{osi\_print\_all\_handles} function calls
-\code{uv\_print\_all\_handles} to print all libuv handles to stderr.
+The \code{osi\_list\_uv\_handles} function calls \code{uv\_walk} and
+returns a list of pairs \code{(\var{handle} . \var{type})}, where
+\var{handle} is the address of the \code{uv\_handle\_t} and \var{type}
+is the \code{uv\_handle\_type}.
 
 \defineentry{osi\_set\_tick}
 \begin{function}
