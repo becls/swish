@@ -86,9 +86,10 @@ process receives it.
 
 \paragraph {\code{pcb}}\index{pcb@\code{pcb}}
 A \emph{process} is an instance of \code{pcb}, a Scheme record type
-that extends \code{q} with an immutable \code{id} field, the
-process's unique positive exact integer, and the following mutable
-fields:
+that extends \code{q} with an immutable \code{id} field, the process's
+unique positive exact integer, an immutable \code{create-time} field,
+the process's create time from \code{erlang:now}, and the following
+mutable fields:
 \begin{itemize}
 \item \code{name}: registered name or \code{\#f}
 \item \code{cont}: one-shot continuation if live and not currently

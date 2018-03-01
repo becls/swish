@@ -144,6 +144,7 @@
     (nongenerative)
     (fields
      (immutable id)
+     (immutable create-time)
      (mutable name)
      (mutable cont)
      (mutable sic)
@@ -160,7 +161,7 @@
     (protocol
      (lambda (new)
        (lambda (id cont)
-         ((new) id #f cont 0 '() #f (make-queue) 0 0 '() '() #f)))))
+         ((new) id (erlang:now) #f cont 0 '() #f (make-queue) 0 0 '() '() #f)))))
 
   (define (pcb-sleeping? p)
     (fxlogbit? 0 (pcb-flags p)))
@@ -361,7 +362,7 @@
     (let ([id (+ last-process-id 1)])
       (set! last-process-id id)
       (let ([process (make-pcb id cont)])
-        (eq-hashtable-set! process-table process id)
+        (eq-hashtable-set! process-table process 0)
         process)))
 
   (define pps
@@ -405,34 +406,36 @@
   (define (process? p) (pcb? p))
 
   (define (print-process p op)
-    (define (fmt-src src)
-      (if src
-          (match-let* ([#(,at ,offset ,file) src])
-            (format " ~a char ~d of ~a" at offset file))
-          ""))
+    (define (print-src src op)
+      (when src
+        (match-let* ([#(,at ,offset ,file) src])
+          (fprintf op " ~a char ~d of ~a" at offset file))))
     (let-values
         ([(name precedence sleeping? blocked-io? enqueued? completed? src)
           (with-interrupts-disabled
            (values (pcb-name p) (pcb-precedence p) (pcb-sleeping? p)
              (pcb-blocked-io? p) (enqueued? p) (not (alive? p)) (pcb-src p)))])
-      (fprintf op "~6d: " (pcb-id p))
+      (fprintf op " ~6d: " (pcb-id p))
       (when name
-        (fprintf op "~a " name))
+        (display name op)
+        (write-char #\space op))
       (cond
        [(eq? self p)
-        (display-string "running\n" op)]
+        (display-string "running" op)]
        [sleeping?
-        (fprintf op "waiting for up to ~as~a\n"
-          (/ (max (- precedence (erlang:now)) 0) 1000.0)
-          (fmt-src src))]
+        (fprintf op "waiting for up to ~as"
+          (/ (max (- precedence (erlang:now)) 0) 1000.0))
+        (print-src src op)]
        [blocked-io?
-        (fprintf op "waiting for ~a\n" src)]
+        (fprintf op "waiting for ~a" src)]
        [enqueued?
-        (display-string "ready to run\n" op)]
+        (display-string "ready to run" op)]
        [completed?
-        (fprintf op "exited with reason ~s\n" (pcb-exception-state p))]
+        (fprintf op "exited with reason ~s" (pcb-exception-state p))]
        [else
-        (fprintf op "waiting indefinitely~a\n" (fmt-src src))])))
+        (display-string "waiting indefinitely" op)
+        (print-src src op)])
+      (fprintf op ", created ~d\n" (pcb-create-time p))))
 
   (define process-id
     (case-lambda
