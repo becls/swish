@@ -28,6 +28,7 @@
    SQLITE_OPEN_READWRITE
    SQLITE_STATUS_MEMORY_USED
    columns
+   database-count
    db:filename
    db:log
    db:start&link
@@ -37,6 +38,7 @@
    execute-sql
    lazy-execute
    parse-sql
+   print-databases
    sqlite:bind
    sqlite:close
    sqlite:columns
@@ -324,9 +326,34 @@
   ;; Low-level SQLite interface
 
   (define database-guardian (make-guardian))
+  (define database-table (make-weak-eq-hashtable))
 
-  (define (register-database db)
+  (define (database-count) (hashtable-size database-table))
+
+  (define print-databases
+    (case-lambda
+     [() (print-databases (current-output-port))]
+     [(op)
+      (let ([v (with-interrupts-disabled (hashtable-keys database-table))])
+        (vector-sort!
+         (lambda (d1 d2)
+           (let ([t1 (database-create-time d1)] [t2 (database-create-time d2)])
+             (cond
+              [(< t1 t2) #t]
+              [(> t1 t2) #f]
+              [else (< (database-handle d1) (database-handle d2))])))
+         v)
+        (vector-for-each
+         (lambda (d)
+           (fprintf op "  ~d: ~a opened ~d\n"
+             (database-handle d)
+             (database-filename d)
+             (database-create-time d)))
+         v))]))
+
+  (define (@register-database db)
     (database-guardian db)
+    (eq-hashtable-set! database-table db 0)
     db)
 
   (define (close-dead-databases)
@@ -339,6 +366,7 @@
     (nongenerative)
     (fields
      (immutable filename)
+     (immutable create-time)
      (mutable handle)))
 
   (define-record-type statement
@@ -365,8 +393,8 @@
                 (lambda (r)
                   (if (pair? r)
                       (set! result r)
-                      (set! result
-                        (register-database (make-database filename r))))
+                      (set! result (@register-database
+                                    (make-database filename (erlang:now) r))))
                   (complete-io p))))
        [#t
         (wait-for-io filename)
@@ -390,6 +418,7 @@
                       (complete-io p))))
            [#t
             (database-handle-set! db #f)
+            (eq-hashtable-delete! database-table db)
             (wait-for-io (database-filename db))
             (when (pair? result)
               (db-error 'close result db))]

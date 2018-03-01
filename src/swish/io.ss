@@ -49,9 +49,14 @@
    open-file-to-replace
    open-file-to-write
    open-utf8-bytevector
+   osi-port-count
    path-combine
+   path-watcher-count
    path-watcher-path
    path-watcher?
+   print-osi-ports
+   print-path-watchers
+   print-tcp-listeners
    read-bytevector
    read-file
    read-osi-port
@@ -63,6 +68,7 @@
    spawn-os-process
    stat-directory?
    stat-regular-file?
+   tcp-listener-count
    watch-path
    write-osi-port
    )
@@ -95,6 +101,7 @@
     (nongenerative)
     (fields
      (immutable name)
+     (immutable create-time)
      (mutable handle)))
 
   (define (read-osi-port port bv start n fp)
@@ -141,6 +148,7 @@
                       (complete-io p))))
            [#t
             (osi-port-handle-set! port #f)
+            (eq-hashtable-delete! osi-port-table port)
             (wait-for-io (osi-port-name port))]
            [(,who . ,errno) (io-error (osi-port-name port) who errno)])))))
 
@@ -198,10 +206,35 @@
               (cons x (f offset)))))))
 
   (define osi-port-guardian (make-guardian))
+  (define osi-port-table (make-weak-eq-hashtable))
+
+  (define (osi-port-count) (hashtable-size osi-port-table))
+
+  (define print-osi-ports
+    (case-lambda
+     [() (print-osi-ports (current-output-port))]
+     [(op)
+      (let ([v (with-interrupts-disabled (hashtable-keys osi-port-table))])
+        (vector-sort!
+         (lambda (p1 p2)
+           (let ([t1 (osi-port-create-time p1)] [t2 (osi-port-create-time p2)])
+             (cond
+              [(< t1 t2) #t]
+              [(> t1 t2) #f]
+              [else (< (osi-port-handle p1) (osi-port-handle p2))])))
+         v)
+        (vector-for-each
+         (lambda (p)
+           (fprintf op "  ~d: ~a opened ~d\n"
+             (osi-port-handle p)
+             (osi-port-name p)
+             (osi-port-create-time p)))
+         v))]))
 
   (define (@make-osi-port name handle)
-    (let ([port (make-osi-port name handle)])
+    (let ([port (make-osi-port name (erlang:now) handle)])
       (osi-port-guardian port)
+      (eq-hashtable-set! osi-port-table port 0)
       port))
 
   (define (close-dead-osi-ports)
@@ -216,10 +249,35 @@
   (define-record-type path-watcher
     (nongenerative)
     (fields
-     (mutable handle)
-     (immutable path)))
+     (immutable path)
+     (immutable create-time)
+     (mutable handle)))
 
   (define path-watcher-guardian (make-guardian))
+  (define path-watcher-table (make-weak-eq-hashtable))
+
+  (define (path-watcher-count) (hashtable-size path-watcher-table))
+
+  (define print-path-watchers
+    (case-lambda
+     [() (print-path-watchers (current-output-port))]
+     [(op)
+      (let ([v (with-interrupts-disabled (hashtable-keys path-watcher-table))])
+        (vector-sort!
+         (lambda (p1 p2)
+           (let ([t1 (path-watcher-create-time p1)] [t2 (path-watcher-create-time p2)])
+             (cond
+              [(< t1 t2) #t]
+              [(> t1 t2) #f]
+              [else (< (path-watcher-handle p1) (path-watcher-handle p2))])))
+         v)
+        (vector-for-each
+         (lambda (p)
+           (fprintf op "  ~d: ~a opened ~d\n"
+             (path-watcher-handle p)
+             (path-watcher-path p)
+             (path-watcher-create-time p)))
+         v))]))
 
   (define (close-dead-path-watchers)
     ;; This procedure runs in the finalizer process.
@@ -235,7 +293,8 @@
      (let ([handle (path-watcher-handle watcher)])
        (when handle
          (osi_close_path_watcher handle)
-         (path-watcher-handle-set! watcher #f)))))
+         (path-watcher-handle-set! watcher #f)
+         (eq-hashtable-delete! path-watcher-table watcher)))))
 
   (define (watch-path path process)
     (unless (string? path)
@@ -253,8 +312,9 @@
                   `#(path-watcher-failed ,path ,errno))]))
        [(,who . ,errno) (exit `#(watch-path-failed ,path ,who ,errno))]
        [,handle
-        (let ([w (make-path-watcher handle path)])
+        (let ([w (make-path-watcher path (erlang:now) handle)])
           (path-watcher-guardian w)
+          (eq-hashtable-set! path-watcher-table w 0)
           w)])))
 
   ;; Console Ports
@@ -262,7 +322,7 @@
   (define (make-console-input)
     ;; no need to register static stdin port with the guardian
     (define name "stdin-nb")
-    (binary->utf8 (make-iport name (make-osi-port name (osi_get_stdin)) #f)))
+    (binary->utf8 (make-iport name (make-osi-port name (erlang:now) (osi_get_stdin)) #f)))
 
   (define hook-console-input
     (let ([hooked? #f])
@@ -546,10 +606,35 @@
   (define-record-type listener
     (nongenerative)
     (fields
-     (mutable handle)
-     (immutable port-number)))
+     (immutable port-number)
+     (immutable create-time)
+     (mutable handle)))
 
   (define listener-guardian (make-guardian))
+  (define listener-table (make-weak-eq-hashtable))
+
+  (define (tcp-listener-count) (hashtable-size listener-table))
+
+  (define print-tcp-listeners
+    (case-lambda
+     [() (print-tcp-listeners (current-output-port))]
+     [(op)
+      (let ([v (with-interrupts-disabled (hashtable-keys listener-table))])
+        (vector-sort!
+         (lambda (l1 l2)
+           (let ([t1 (listener-create-time l1)] [t2 (listener-create-time l2)])
+             (cond
+              [(< t1 t2) #t]
+              [(> t1 t2) #f]
+              [else (< (listener-handle l1) (listener-handle l2))])))
+         v)
+        (vector-for-each
+         (lambda (l)
+           (fprintf op "  ~d: port ~d opened ~d\n"
+             (listener-handle l)
+             (listener-port-number l)
+             (listener-create-time l)))
+         v))]))
 
   (define (port-number? x) (and (fixnum? x) (fx<= 0 x 65535)))
 
@@ -581,9 +666,10 @@
        [(,who . ,errno)
         (exit `#(listen-tcp-failed ,port-number ,who ,errno))]
        [,handle
-        (let ([l (make-listener handle
-                   (osi_get_tcp_listener_port handle))])
+        (let ([l (make-listener (osi_get_tcp_listener_port handle)
+                   (erlang:now) handle)])
           (listener-guardian l)
+          (eq-hashtable-set! listener-table l 0)
           l)])))
 
   (define (close-tcp-listener listener)
@@ -594,7 +680,8 @@
      (let ([handle (listener-handle listener)])
        (when handle
          (osi_close_tcp_listener handle)
-         (listener-handle-set! listener #f)))))
+         (listener-handle-set! listener #f)
+         (eq-hashtable-delete! listener-table listener)))))
 
   (define (connect-tcp hostname port-spec)
     (define result

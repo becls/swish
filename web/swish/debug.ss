@@ -36,16 +36,21 @@
     (format "~a day~:p, ~a hour~:p, ~a minute~:p, ~a second~:p"
       days hours minutes seconds)))
 
+(when (find-param "collect")
+  (collect (collect-maximum-generation)))
+
 (hosted-page "Debug" '()
   `(pre
     ,(let-values ([(op get) (open-string-output-port)])
+       (let ([now (current-time)])
+         (fprintf op "Date: ~a [~d]\n"
+           (format-rfc2822 (time-utc->date now))
+           (+ (* (time-second now) 1000)
+              (quotient (time-nanosecond now) 1000000))))
        (fprintf op "Uptime: ~a\n" (uptime))
        (newline op)
        (fprintf op "  Scheme bytes: ~15:D\n" (bytes-allocated))
        (fprintf op "       C bytes: ~15:D\n" (osi_get_bytes_used))
-       #;; TODO: Implement
-       (fprintf op " private bytes: ~15:D\n"
-         (<memory-info> private-usage (GetMemoryInfo)))
        (match (osi_get_sqlite_status* SQLITE_STATUS_MEMORY_USED #f)
          [#(,current ,highwater)
           (fprintf op "   SQLite size: ~15:D\n" current)
@@ -53,17 +58,19 @@
          [,err
           (fprintf op "SQLite status error: ~a\n" err)])
        (newline op)
-       #;; TODO: Implement
-       (match (GetHandleCounts)
-         [`(<handle-counts> ,ports ,processes ,databases ,statements
-             ,listeners)
-          (fprintf op "         Ports: ~a\n" ports)
-          (fprintf op "     Processes: ~a\n" processes)
-          (fprintf op "     Databases: ~a\n" databases)
-          (fprintf op "    Statements: ~a\n" statements)
-          (fprintf op "     Listeners: ~a\n" listeners)])
-       (newline op)
        (display-statistics op)
        (newline op)
        (pps op)
+       (newline op)
+       (display-string "Databases:\n" op)
+       (print-databases op)
+       (newline op)
+       (display-string "Listeners:\n" op)
+       (print-tcp-listeners op)
+       (newline op)
+       (display-string "Path Watchers:\n" op)
+       (print-path-watchers op)
+       (newline op)
+       (display-string "Ports:\n" op)
+       (print-osi-ports op)
        (get))))

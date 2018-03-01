@@ -435,7 +435,7 @@
        [else
         (display-string "waiting indefinitely" op)
         (print-src src op)])
-      (fprintf op ", created ~d\n" (pcb-create-time p))))
+      (fprintf op ", spawned ~d\n" (pcb-create-time p))))
 
   (define process-id
     (case-lambda
