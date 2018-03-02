@@ -168,7 +168,7 @@
 
   ;; TCP/IP
   (define-osi osi_connect_tcp (node string) (service string) (callback ptr))
-  (define-osi osi_listen_tcp (port unsigned-16) (callback ptr))
+  (define-osi osi_listen_tcp (address string) (port unsigned-16) (callback ptr))
   (fdefine osi_close_tcp_listener (listener uptr) void)
   (define-osi osi_get_tcp_listener_port (listener uptr))
   (define-osi osi_get_ip_address (port uptr))

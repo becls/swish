@@ -42,7 +42,7 @@
   - added `directory?`
   - added `get-stat`
   - added `list-directory`
-  - `listen-tcp` now accepts automatically.
+  - `listen-tcp` now accepts automatically and takes an address. Use "::" for all IPv4 and IPv6 addresses.
   - added `listener?`
   - added `make-directory`
   - added `make-directory-path`

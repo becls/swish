@@ -37,6 +37,7 @@
    io-error
    list-directory
    listen-tcp
+   listener-address
    listener-port-number
    listener?
    make-directory
@@ -606,6 +607,7 @@
   (define-record-type listener
     (nongenerative)
     (fields
+     (immutable address)
      (immutable port-number)
      (immutable create-time)
      (mutable handle)))
@@ -630,8 +632,17 @@
          v)
         (vector-for-each
          (lambda (l)
-           (fprintf op "  ~d: port ~d opened ~d\n"
-             (listener-handle l)
+           (define (contains-period? s)
+             (let lp ([i 0] [n (string-length s)])
+               (and (< i n)
+                    (or (char=? (string-ref s i) #\.)
+                        (lp (+ i 1) n)))))
+           (fprintf op "  ~d: " (listener-handle l))
+           (let ([addr (listener-address l)])
+             (if (contains-period? addr)
+                 (display-string addr op)
+                 (fprintf op "[~a]" addr)))
+           (fprintf op ":~d opened ~d\n"
              (listener-port-number l)
              (listener-create-time l)))
          v))]))
@@ -645,29 +656,39 @@
         (close-tcp-listener l)
         (close-dead-listeners))))
 
-  (define (listen-tcp port-number process)
+  (define (listen-tcp address port-number process)
+    ;; Keep a weak reference to the listener in cell so that the
+    ;; callback can use it.
+    (define cell (weak-cons 0 0))
+    (unless (string? address)
+      (bad-arg 'listen-tcp address))
     (unless (port-number? port-number)
       (bad-arg 'listen-tcp port-number))
     (unless (process? process)
       (bad-arg 'listen-tcp process))
     (with-interrupts-disabled
-     (match (osi_listen_tcp* port-number
+     (match (osi_listen_tcp* address port-number
               (lambda (r)
                 ;; This procedure runs in the event loop.
-                (if (pair? r)
-                    (send process
-                      `#(accept-tcp-failed (car r) (cdr r)))
-                    (let* ([name (osi_get_ip_address r)]
-                           [port (@make-osi-port name r)])
-                      (send process
-                        `#(accept-tcp
-                           ,(make-iport name port #f)
-                           ,(make-oport name port)))))))
+                (let ([listener (car cell)])
+                  (if (listener? listener)
+                      (if (pair? r)
+                          (send process
+                            `#(accept-tcp-failed ,listener ,(car r) ,(cdr r)))
+                          (let* ([name (osi_get_ip_address r)]
+                                 [port (@make-osi-port name r)])
+                            (send process
+                              `#(accept-tcp ,listener
+                                  ,(make-iport name port #f)
+                                  ,(make-oport name port)))))
+                      (unless (pair? r)
+                        (osi_close_port* r))))))
        [(,who . ,errno)
-        (exit `#(listen-tcp-failed ,port-number ,who ,errno))]
+        (exit `#(listen-tcp-failed ,address ,port-number ,who ,errno))]
        [,handle
-        (let ([l (make-listener (osi_get_tcp_listener_port handle)
+        (let ([l (make-listener address (osi_get_tcp_listener_port handle)
                    (erlang:now) handle)])
+          (set-car! cell l)
           (listener-guardian l)
           (eq-hashtable-set! listener-table l 0)
           l)])))

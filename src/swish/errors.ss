@@ -28,6 +28,7 @@
    )
   (import
    (swish erlang)
+   (swish io)
    (swish osi)
    (swish string-utils)
    (except (chezscheme) define-record exit))
@@ -40,7 +41,7 @@
       [#(,reason #(gen-server call (,server ,request ,timeout))) (format "Call to server ~a with request ~s and timeout ~a ms failed: ~a" server request timeout (exit-reason->english reason))]
       [#(,reason #(gen-server call (,server ,request))) (format "Call to server ~a with request ~s failed: ~a" server request (exit-reason->english reason))]
       [#(EXIT ,x) (exit-reason->english x)]
-      [#(accept-tcp-failed ,port-number ,who ,errno) (format "Error ~d from ~a when accepting a connection on TCP port ~d: ~a." errno who port-number (errno->english errno))]
+      [#(accept-tcp-failed ,l ,who ,errno) (format "Error ~d from ~a when accepting a connection on ~a:~d: ~a." errno who (listener-address l) (listener-port-number l) (errno->english errno))]
       [#(bad-arg ,who ,arg) (format "Invalid argument to ~a: ~s." who arg)]
       [#(bad-journal-mode ,mode) (format "Invalid journal mode: ~s." mode)]
       [#(bad-match ,v ,src) (format "Pattern match failed~a: ~s." (src->english src) v)]
@@ -69,7 +70,7 @@
       [#(invalid-procedure ,proc) (format "Invalid procedure: ~s." proc)]
       [#(invalid-strategy ,x) (format "Invalid strategy: ~s." x)]
       [#(io-error ,name ,who ,errno) (format "I/O error ~d from ~a on ~a: ~a." errno who name (errno->english errno))]
-      [#(listen-tcp-failed ,port-number ,who ,errno) (format "Error ~d from ~a when listening on TCP port ~d: ~a." errno who port-number (errno->english errno))]
+      [#(listen-tcp-failed ,address ,port-number ,who ,errno) (format "Error ~d from ~a when listening on TCP port ~d: ~a." errno who port-number (errno->english errno))]
       [#(name-already-registered ,pid) (format "Name is already registered to ~s." pid)]
       [#(osi-error ,name ,who ,errno) (format "Error ~d from ~a during ~a: ~a." errno who name (errno->english errno))]
       [#(process-already-registered ,name) (format "Process is already registered as ~a." name)]

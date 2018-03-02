@@ -70,7 +70,7 @@
   (define (http-listener:start&link)
     (define (init)
       (process-trap-exit #t)
-      `#(ok ,(listen-tcp (http-port-number) self)))
+      `#(ok ,(listen-tcp "::" (http-port-number) self)))
     (define (terminate reason state) (close-tcp-listener state))
     (define (handle-call msg from state)
       (match msg
@@ -78,7 +78,7 @@
     (define (handle-cast msg state) (match msg))
     (define (handle-info msg state)
       (match msg
-        [#(accept-tcp ,ip ,op)
+        [#(accept-tcp ,_ ,ip ,op)
          (match-let*
           ([#(ok ,pid)
             (watcher:start-child 'http-sup (gensym "http-connection") 1000
@@ -88,9 +88,8 @@
                           (on-exit (force-close-output-port op)
                             (http:handle-input ip op)))))))])
           `#(no-reply ,state))]
-        [#(accept-tcp-failed ,who ,errno)
-         (exit `#(accept-tcp-failed ,(listener-port-number state)
-                   ,who ,errno))]))
+        [#(accept-tcp-failed ,l ,who ,errno)
+         (exit `#(accept-tcp-failed ,l ,who ,errno))]))
     (gen-server:start&link 'http-listener))
 
   (define (http-cache:get-content-type extension)

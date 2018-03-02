@@ -133,9 +133,10 @@ watcher is closed.
 
 \paragraph {\code{listener}}\index{listener@\code{listener}}
 A \emph{TCP listener}\index{TCP listener} is an instance of
-\code{listener}, a Scheme record type with a mutable \code{handle}
-field and an immutable \code{port-number} field. The \code{handle}
-field is set to \code{\#f} when the listener is closed.
+\code{listener}, a Scheme record type with immutable \code{address},
+\code{port-number}, and \code{create-time} fields and a mutable
+\code{handle} field. The \code{handle} field is set to \code{\#f} when
+the listener is closed.
 
 \section {Theory of Operation}\label{sec:erlang-theory}
 
@@ -1550,22 +1551,36 @@ The \code{directory-watcher-path} procedure returns the
 % ----------------------------------------------------------------------------
 \defineentry{listen-tcp}
 \begin{procedure}
-  \code{(listen-tcp \var{port-number})}
+  \code{(listen-tcp \var{address} \var{port-number} \var{process})}
 \end{procedure}
 \returns{} a TCP listener\index{TCP listener}
 
-The \code{listen-tcp} procedure calls \code{osi::ListenTCP} to
-create a TCP listener for \var{port-number} and returns a TCP listener
-that is registered with the listener guardian\index{listener
-  guardian}. If \var{port-number} is zero, the operating system will
-choose an available port number, which can be queried with
-\code{listener-port-number}.
+The \code{listen-tcp} procedure calls \code{osi\_listen\_tcp} to
+create a TCP listener on the given \var{address} and \var{port-number}
+and returns a TCP listener that is registered with the listener
+guardian\index{listener guardian}.
 
-If \var{port-number} is not a fixnum between 0 and 65535 inclusive,
-exception \code{\#(bad-arg listen-tcp \var{port-number})} is raised.
+For each accepted connection, the message \code{\#(accept-tcp
+  \var{listener} \var{ip} \var{op})} is sent to \var{process}, where
+\var{ip} is the input port and \var{op} is the output port.
 
-If \code{osi::ListenTCP} returns error pair \code{(\var{who}
-  . \var{errno})}, exception \code{\#(listen-tcp-failed
+For each failed connection, the message \code{\#(accept-tcp-failed
+  \var{listener} \var{who} \var{errno})} is sent to \var{process},
+where \var{who} and \var{errno} specify the error.
+
+The \var{address} is a dotted quad IPv4 address or an IPv6
+address. Use \code{"[::]"} to listen on all IPv4 and IPv6 interfaces.
+If \var{address} is not a string, exception \code{\#(bad-arg
+  listen-tcp \var{address})} is raised.
+
+If \var{port-number} is zero, the operating system will choose an
+available port number, which can be queried with
+\code{listener-port-number}. If \var{port-number} is not a fixnum
+between 0 and 65535 inclusive, exception \code{\#(bad-arg listen-tcp
+  \var{port-number})} is raised.
+
+If \code{osi\_listen\_tcp} returns error pair \code{(\var{who}
+  . \var{errno})}, exception \code{\#(listen-tcp-failed \var{address}
   \var{port-number} \var{who} \var{errno})} is raised.
 
 % ----------------------------------------------------------------------------
@@ -1583,6 +1598,16 @@ listener, exception \code{\#(bad-arg close-tcp-listener
 closed, \code{close-tcp-listener} does not raise an exception.
 
 % ----------------------------------------------------------------------------
+\defineentry{listener-address}
+\begin{procedure}
+  \code{(listener-address \var{listener})}
+\end{procedure}
+\returns{} the \code{address} field of \var{listener}
+
+The \code{listener-address} procedure returns the \code{address} of
+the given TCP \var{listener}\index{TCP listener}.
+
+% ----------------------------------------------------------------------------
 \defineentry{listener-port-number}
 \begin{procedure}
   \code{(listener-port-number \var{listener})}
@@ -1592,48 +1617,6 @@ closed, \code{close-tcp-listener} does not raise an exception.
 The \code{listener-port-number} procedure returns the
 \code{port-number} of the given TCP \var{listener}\index{TCP
   listener}.
-
-% ----------------------------------------------------------------------------
-\defineentry{accept-tcp}
-\begin{procedure}
-  \code{(accept-tcp \var{listener} \opt{\var{process}})}
-\end{procedure}
-\returns{} see below
-
-The \code{accept-tcp} procedure calls \code{osi::AcceptTCP} with a
-callback that fires in the event loop when an incoming connection to
-TCP \var{listener}\index{TCP listener} is made. The callback creates a
-custom binary input port that reads from the new connection and a
-custom binary output port that writes to the new connection. These
-ports do not track or report position. The operating system handle is
-closed when the output port is closed, not when the input port is
-closed, and the underlying osi-port is registered with the osi-port
-guardian\index{osi-port guardian}.  The callback sends one of the
-following messages to \var{process}, which defaults to \code{self}:
-
-\begin{itemize}
-\item \code{\#(accept-tcp \var{listener} \var{ip} \var{op})}, where
-  \var{ip} is the input port and \var{op} is the output port
-
-\item \code{\#(accept-tcp-failed \var{listener} \var{who}
-  \var{errno})}, where \var{who} and \var{errno} specify the error
-  from the callback to \code{osi::AcceptTCP}
-\end{itemize}
-
-When \var{process} is present, \code{accept-tcp} returns
-\var{listener} without waiting for the callback.
-
-When \var{process} is absent, \code{accept-tcp} waits to receive a
-message from the callback. If it receives the \code{accept-tcp}
-message, it returns two values, \var{ip} and \var{op}. If it receives
-the \code{accept-tcp-failed} message, it raises exception
-\code{\#(accept-tcp-failed \var{listener}\textrm{.}port-number
-  \var{who} \var{errno})}.
-
-If \var{listener} is not an open TCP listener, exception
-\code{\#(bad-arg accept-tcp \var{listener})} is raised.  If
-\var{process} is not a process, exception \code{\#(bad-arg
-  accept-tcp \var{process})} is raised.
 
 % ----------------------------------------------------------------------------
 \defineentry{connect-tcp}
@@ -1677,7 +1660,7 @@ the \code{connect-tcp-failed} message, it raises exception
 If \var{hostname} is not a string, exception \code{\#(bad-arg
   connect-tcp \var{hostname})} is raised. If \var{port-spec} is not a
 fixnum between 0 and 65535 inclusive or a string, exception
-\code{\#(bad-arg listen-tcp \var{port-spec})} is raised.
+\code{\#(bad-arg connect-tcp \var{port-spec})} is raised.
 
 % ----------------------------------------------------------------------------
 \subsection {Queues}

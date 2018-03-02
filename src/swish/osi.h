@@ -93,7 +93,7 @@ EXPORT void osi_close_path_watcher(uptr watcher);
 // TCP/IP
 
 EXPORT ptr osi_connect_tcp(const char* node, const char* service, ptr callback);
-EXPORT ptr osi_listen_tcp(uint16_t port, ptr callback);
+EXPORT ptr osi_listen_tcp(const char* address, uint16_t port, ptr callback);
 EXPORT void osi_close_tcp_listener(uptr listener);
 EXPORT ptr osi_get_tcp_listener_port(uptr listener);
 EXPORT ptr osi_get_ip_address(uptr port);

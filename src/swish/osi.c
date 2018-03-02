@@ -950,21 +950,27 @@ ptr osi_list_directory(const char* path, ptr callback) {
   return Strue;
 }
 
-ptr osi_listen_tcp(uint16_t port, ptr callback) {
+ptr osi_listen_tcp(const char* address, uint16_t port, ptr callback) {
+  struct sockaddr_storage addr;
+  const char* who;
+  int rc;
+  if (strchr(address, '.')) {
+    who = "uv_ip4_addr";
+    rc = uv_ip4_addr(address, port, (struct sockaddr_in*)&addr);
+  } else {
+    who = "uv_ip6_addr";
+    rc = uv_ip6_addr(address, port, (struct sockaddr_in6*)&addr);
+  }
+  if (rc < 0)
+    return make_error_pair(who, rc);
   uv_tcp_t* listener = malloc_container(uv_tcp_t);
   if (!listener)
     return make_error_pair("osi_listen_tcp", UV_ENOMEM);
   listener->data = 0;
-  int rc = uv_tcp_init(g_loop, listener);
+  rc = uv_tcp_init(g_loop, listener);
   if (rc < 0) {
     free(listener);
     return make_error_pair("uv_tcp_init", rc);
-  }
-  struct sockaddr_in6 addr;
-  rc = uv_ip6_addr("::", port, &addr);
-  if (rc < 0) {
-    uv_close((uv_handle_t*)listener, close_handle_data_cb);
-    return make_error_pair("uv_tcp_bind", rc);
   }
   rc = uv_tcp_bind(listener, (struct sockaddr*)&addr, 0);
   if (rc < 0) {

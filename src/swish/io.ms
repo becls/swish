@@ -112,21 +112,21 @@
 (isolate-mat tcp ()
   (define pid self)
   (define (run hostname)
-    (let* ([listener (listen-tcp 0 self)]
+    (let* ([listener (listen-tcp "::" 0 self)]
            [test-port (listener-port-number listener)])
       (on-exit (close-tcp-listener listener)
         (let-values ([(cip cop) (connect-tcp hostname test-port)])
           (receive (after 5000 (exit 'timeout-connecting-tcp))
-            [#(accept-tcp ,sip ,sop)
+            [#(accept-tcp ,@listener ,sip ,sop)
              (on-exit (force-close-output-port sop)
                (check-loopback sip cop)
                (check-loopback cip sop))]
-            [,(msg <= #(accept-tcp-failed ,_ ,_)) (exit msg)])))))
+            [,(msg <= #(accept-tcp-failed ,_ ,_ ,_)) (exit msg)])))))
   (run "127.0.0.1")
   (run "::1")
   ;; Test the listener guardian
   (let ([g (make-guardian)])
-    (g (listen-tcp 0 self))
+    (g (listen-tcp "::" 0 self))
     (gc)
     (assert (handle-gone? (g)))))
 
@@ -134,17 +134,18 @@
   (define pid self)
   (define (run hostname)
     (match-let*
-     ([#(EXIT #(bad-arg listen-tcp #f)) (catch (listen-tcp #f self))]
+     ([#(EXIT #(bad-arg listen-tcp #f)) (catch (listen-tcp #f 0 self))]
+      [#(EXIT #(bad-arg listen-tcp #f)) (catch (listen-tcp "::" #f self))]
       [#(EXIT #(bad-arg close-tcp-listener #f)) (catch (close-tcp-listener #f))]
       [#(EXIT #(bad-arg connect-tcp #f)) (catch (connect-tcp #f 0))]
       [#(EXIT #(bad-arg connect-tcp #f)) (catch (connect-tcp "" #f))]
       [#(EXIT #(io-error "[]:*nope*" uv_getaddrinfo ,_)) (catch (connect-tcp "" "*nope*"))])
      'ok)
-    (let* ([listener (listen-tcp 0 self)]
+    (let* ([listener (listen-tcp "::" 0 self)]
            [test-port (listener-port-number listener)])
       (on-exit (close-tcp-listener listener)
-        (match (catch (listen-tcp test-port self))
-          [#(EXIT #(listen-tcp-failed ,@test-port uv_listen ,_)) 'ok])
+        (match (catch (listen-tcp "::" test-port self))
+          [#(EXIT #(listen-tcp-failed "::" ,@test-port uv_listen ,_)) 'ok])
         (receive (after 10 (close-tcp-listener listener)))
         (match (catch (connect-tcp hostname test-port))
           [#(EXIT #(io-error ,_ uv_tcp_connect ,_))
