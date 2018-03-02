@@ -82,15 +82,10 @@
     osi-bytes-used
     sqlite-memory
     sqlite-memory-highwater
-    ports
-    processes
     databases
-    statements
     listeners
-    hashes
-    working-set-size
-    pagefile-usage
-    private-usage
+    ports
+    watchers
     cpu
     real
     bytes

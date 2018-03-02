@@ -88,18 +88,15 @@ operating system interface.
   \argrow{reason}{\code{startup}, \code{update}, \code{suspend},
     \code{resume}, or \code{shutdown}}
   \argrow{bytes-allocated}{Scheme heap size from \code{bytes-allocated}}
-  \argrow{osi-bytes-used}{C++ heap size from \code{osi::GetBytesUsed}}
-  \argrow{sqlite-memory}{SQLite memory used from \code{osi::GetSQLiteStatus}}
+  \argrow{osi-bytes-used}{C heap size from \code{osi\_get\_bytes\_used}}
+  \argrow{sqlite-memory}{SQLite memory used from
+    \code{osi\_get\_sqlite\_status}}
   \argrow{sqlite-memory-highwater}{SQLite memory highwater since
-    last event from \code{osi::GetSQLiteStatus}}
-  \argrow{ports}{number of open ports from \code{osi::GetHandleCounts}}
-  \argrow{processes}{number of open processes from \code{osi::GetHandleCounts}}
-  \argrow{databases}{number of open SQLite databases from \code{osi::GetHandleCounts}}
-  \argrow{statements}{number of open SQLite statements from \code{osi::GetHandleCounts}}
-  \argrow{listeners}{number of open TCP/IP listeners from \code{osi::GetHandleCounts}}
-  \argrow{working-set-size}{working set size from \code{osi::GetMemoryInfo}}
-  \argrow{pagefile-usage}{pagefile usage from \code{osi::GetMemoryInfo}}
-  \argrow{private-usage}{private usage from \code{osi::GetMemoryInfo}}
+    last event from \code{osi\_get\_sqlite\_status}}
+  \argrow{databases}{number of open SQLite databases}
+  \argrow{listeners}{number of open TCP/IP listeners}
+  \argrow{ports}{number of open osi-ports}
+  \argrow{watchers}{number of open path watchers}
   \argrow{cpu}{CPU time in seconds since last event}
   \argrow{real}{elapsed time in seconds since last event}
   \argrow{bytes}{Scheme heap bytes allocated since last event}

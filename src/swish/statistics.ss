@@ -22,17 +22,17 @@
 
 (library (swish statistics)
   (export
-   <handle-counts>
-   <memory-info>
    statistics:start&link
    statistics:resume
    statistics:suspend
    )
   (import
+   (swish db)
    (swish erlang)
    (swish event-mgr)
    (swish events)
    (swish gen-server)
+   (swish io)
    (swish osi)
    (except (chezscheme) define-record exit))
 
@@ -44,16 +44,6 @@
 
   (define (statistics:suspend)
     (gen-server:cast 'statistics 'suspend))
-
-  (define-record <handle-counts>
-    ports processes databases statements listeners hashes)
-
-  (define-record <memory-info> page-fault-count peak-working-set-size
-    working-set-size quota-peak-paged-pool-usage quota-paged-pool-usage
-    quota-peak-non-paged-pool-usage quota-non-paged-pool-usage
-    pagefile-usage peak-pagefile-usage private-usage)
-
-  (define sqlite:STATUS_MEMORY_USED 0)
 
   (define timeout (* 5 60 1000))
 
@@ -86,15 +76,14 @@
     (+ (time-second t)
        (/ (time-nanosecond t) 1000000000.0)))
   (define (update reason state)
-    (let-values ([(timestamp date stats)
-                  (with-interrupts-disabled
-                   (let* ([timestamp (erlang:now)]
-                          [date (current-date)])
-                     (values timestamp date (statistics))))])
-      ;; TODO: Update
+    (let* ([timestamp (erlang:now)]
+           [stats (statistics)]
+           [date (time-utc->date (make-time 'time-utc
+                                   (* (mod timestamp 1000) 1000000)
+                                   (div timestamp 1000)))])
       (match-let*
        ([#(,sqlite-memory ,sqlite-memory-highwater)
-         (osi_get_sqlite_status* sqlite:STATUS_MEMORY_USED #t)]
+         (osi_get_sqlite_status* SQLITE_STATUS_MEMORY_USED #t)]
         [,delta (sstats-difference stats state)])
        (system-detail <statistics>
          [timestamp timestamp]
@@ -104,15 +93,10 @@
          [osi-bytes-used (osi_get_bytes_used)]
          [sqlite-memory sqlite-memory]
          [sqlite-memory-highwater sqlite-memory-highwater]
-         [ports 0]
-         [processes 0]
-         [databases 0]
-         [statements 0]
-         [listeners 0]
-         [hashes 0]
-         [working-set-size 0]
-         [pagefile-usage 0]
-         [private-usage 0]
+         [databases (database-count)]
+         [listeners (tcp-listener-count)]
+         [ports (osi-port-count)]
+         [watchers (path-watcher-count)]
          [cpu (time-duration (sstats-cpu delta))]
          [real (time-duration (sstats-real delta))]
          [bytes (sstats-bytes delta)]
