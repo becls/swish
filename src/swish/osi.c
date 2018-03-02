@@ -879,28 +879,42 @@ ptr osi_get_ip_address(uptr port) {
   stream_port_t* p = (stream_port_t*)port;
   if (p->vtable != &tcp_vtable)
     return make_error_pair("osi_get_ip_address", UV_EINVAL);
-  struct sockaddr_in6 addr;
+  struct sockaddr_storage addr;
   int addr_len = sizeof(addr);
   int rc = uv_tcp_getpeername(&(p->h.tcp), (struct sockaddr*)&addr, &addr_len);
   if (rc < 0)
     return make_error_pair("uv_tcp_getpeername", rc);
   char name[256];
-  name[0] = '[';
-  rc = uv_ip6_name(&addr, name + 1, sizeof(name) - 8);
-  if (rc < 0)
-    return make_error_pair("uv_ip6_name", rc);
-  size_t len = strlen(name);
-  snprintf(name + len, sizeof(name) - len, "]:%d", ntohs(addr.sin6_port));
+  if (addr.ss_family == AF_INET) {
+    rc = uv_ip4_name((struct sockaddr_in*)&addr, name, sizeof(name) - 6);
+    if (rc < 0)
+      return make_error_pair("uv_ip4_name", rc);
+    size_t len = strlen(name);
+    snprintf(name + len, sizeof(name) - len, ":%d", ntohs(((struct sockaddr_in*)&addr)->sin_port));
+  } else if (addr.ss_family == AF_INET6) {
+    name[0] = '[';
+    rc = uv_ip6_name((struct sockaddr_in6*)&addr, name + 1, sizeof(name) - 8);
+    if (rc < 0)
+      return make_error_pair("uv_ip6_name", rc);
+    size_t len = strlen(name);
+    snprintf(name + len, sizeof(name) - len, "]:%d", ntohs(((struct sockaddr_in6*)&addr)->sin6_port));
+  } else
+    return make_error_pair("osi_get_ip_address", UV_EAI_FAMILY);
   return utf8_to_string(name);
 }
 
 ptr osi_get_tcp_listener_port(uptr listener) {
-  struct sockaddr_in6 addr;
+  struct sockaddr_storage addr;
   int addr_len = sizeof(addr);
   int rc = uv_tcp_getsockname((uv_tcp_t*)listener, (struct sockaddr*)&addr, &addr_len);
   if (rc < 0)
     return make_error_pair("uv_tcp_getsockname", rc);
-  return Sfixnum(ntohs(addr.sin6_port));
+  if (addr.ss_family == AF_INET)
+    return Sfixnum(ntohs(((struct sockaddr_in*)&addr)->sin_port));
+  if (addr.ss_family == AF_INET6)
+    return Sfixnum(ntohs(((struct sockaddr_in6*)&addr)->sin6_port));
+  else
+    return make_error_pair("osi_get_tcp_listener_port", UV_EAI_FAMILY);
 }
 
 ptr osi_get_hostname(void) {
