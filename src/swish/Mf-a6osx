@@ -21,8 +21,8 @@ io-constants: io-constants.c ${UvInclude}
 	$C -I${UvInclude} io-constants.c -o io-constants
 
 ${UvLib}: ${UvInclude}
-	  cd ../../libuv; ./gyp_uv.py -Duv_library=static_library -f xcode
-	  cd ../../libuv; xcodebuild -ARCHS="x86_64" -project uv.xcodeproj -configuration Release -target All
+	  cd ../../libuv; python2.7 gyp_uv.py -Duv_library=static_library -f xcode
+	  cd ../../libuv/out; xcodebuild -ARCHS="x86_64" -project uv.xcodeproj -configuration Release -target libuv
 
 clean:
 	rm -f ../../bin/libosi.dylib osi.o sqlite.o io-constants io-constants.ss
