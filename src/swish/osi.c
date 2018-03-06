@@ -335,6 +335,17 @@ static void get_file_size_cb(uv_fs_t* req) {
   free(req);
 }
 
+static void get_real_path_cb(uv_fs_t* req) {
+  ptr callback = (ptr)req->data;
+  if (req->result < 0)
+    add_callback1(callback, make_error_pair("uv_fs_realpath", (int)req->result));
+  else
+    add_callback1(callback, utf8_to_string(req->ptr));
+  uv_fs_req_cleanup(req);
+  Sunlock_object(callback);
+  free(req);
+}
+
 static void return_fs_result_cb(uv_fs_t* req) {
   ptr callback = (ptr)req->data;
   add_callback1(callback, Sinteger(req->result));
@@ -871,6 +882,21 @@ ptr osi_get_file_size(uptr port, ptr callback) {
     Sunlock_object(callback);
     free(req);
     return make_error_pair("uv_fs_fstat", rc);
+  }
+  return Strue;
+}
+
+ptr osi_get_real_path(const char* path, ptr callback) {
+  uv_fs_t* req = malloc_container(uv_fs_t);
+  if (!req)
+    return make_error_pair("osi_get_real_path", UV_ENOMEM);
+  Slock_object(callback);
+  req->data = callback;
+  int rc = uv_fs_realpath(g_loop, req, path, get_real_path_cb);
+  if (rc < 0) {
+    Sunlock_object(callback);
+    free(req);
+    return make_error_pair("uv_fs_realpath", rc);
   }
   return Strue;
 }

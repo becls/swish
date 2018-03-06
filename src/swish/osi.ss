@@ -52,6 +52,8 @@
    osi_get_ip_address*
    osi_get_last_insert_rowid
    osi_get_last_insert_rowid*
+   osi_get_real_path
+   osi_get_real_path*
    osi_get_sqlite_status
    osi_get_sqlite_status*
    osi_get_stat
@@ -155,6 +157,7 @@
   ;; File System
   (define-osi osi_open_file (path string) (flags int) (mode int) (callback ptr))
   (define-osi osi_get_file_size (port uptr) (callback ptr))
+  (define-osi osi_get_real_path (path string) (callback ptr))
   (fdefine osi_get_stdin uptr)
   (define-osi osi_chmod (path string) (mode int) (callback ptr))
   (define-osi osi_make_directory (path string) (mode int) (callback ptr))

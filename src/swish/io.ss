@@ -32,6 +32,7 @@
    directory?
    force-close-output-port
    get-file-size
+   get-real-path
    get-stat
    hook-console-input
    io-error
@@ -485,6 +486,21 @@
           [(,who . ,errno) (io-error (osi-port-name port) who errno)]
           [,size size])]
        [(,who . ,errno) (io-error (osi-port-name port) who errno)])))
+
+  (define (get-real-path path)
+    (define result)
+    (with-interrupts-disabled
+     (match (osi_get_real_path* path
+              (let ([p self])
+                (lambda (r)
+                  (set! result r)
+                  (complete-io p))))
+       [#t
+        (wait-for-io path)
+        (match result
+          [(,who . ,errno) (io-error path who errno)]
+          [,path path])]
+       [(,who . ,errno) (io-error path who errno)])))
 
   (define get-stat
     (case-lambda
