@@ -21,7 +21,7 @@
 ;;; DEALINGS IN THE SOFTWARE.
 
 (import
- (except (chezscheme) sleep)
+ (chezscheme)
  (swish erlang)
  (swish event-mgr)
  (swish events)
@@ -236,10 +236,10 @@
 
     ;; two requests within a specified time
     [ok (gen-server:call 'my-test-name `#(call-within 1000))]
-    [ok (sleep 500)]
+    [ok (sleep-ms 500)]
     [ok (gen-server:call 'my-test-name 'next-call)]
     [ok (gen-server:call 'my-test-name `#(call-within 1000))]
-    [ok (sleep 1500)]
+    [ok (sleep-ms 1500)]
     [#f (gen-server:call 'my-test-name 'next-call)]
 
     ;; timeout

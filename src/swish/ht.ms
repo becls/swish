@@ -21,7 +21,7 @@
 ;;; DEALINGS IN THE SOFTWARE.
 
 (import
- (except (chezscheme) sleep)
+ (chezscheme)
  (swish erlang)
  (swish ht)
  (swish mat)

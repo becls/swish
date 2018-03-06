@@ -21,7 +21,7 @@
 ;;; DEALINGS IN THE SOFTWARE.
 
 (import
- (except (chezscheme) sleep)
+ (chezscheme)
  (swish app-io)
  (swish erlang)
  (swish event-mgr)
@@ -497,7 +497,7 @@
     (path-combine (web-path) fn))
 
   (define (check s)
-    (sleep 10)
+    (sleep-ms 10)
     (let ([expected (format "HTTP/1.1 200 \r\nContent-Length: ~a\r\nCache-Control: no-cache\r\n\r\n~a"
                       (string-length s) s)]
           [actual (utf8->string (simple-get (string-append "/" file1)))])

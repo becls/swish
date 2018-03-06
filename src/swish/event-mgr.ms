@@ -21,7 +21,7 @@
 ;;; DEALINGS IN THE SOFTWARE.
 
 (import
- (except (chezscheme) sleep)
+ (chezscheme)
  (swish erlang)
  (swish event-mgr)
  (swish mat)
@@ -118,7 +118,7 @@
   (let-values ([(p get) (open-string-output-port)])
     (parameterize ([console-output-port p])
       (event-mgr:notify 'console-event)
-      (sleep 10))
+      (sleep-ms 10))
     (let ([lines (split (get) #\newline)])
       (match-prefix lines "Date:")
       (match-prefix lines "Timestamp:")

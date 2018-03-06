@@ -22,7 +22,7 @@
 
 #!chezscheme
 (import
- (except (chezscheme) sleep)
+ (chezscheme)
  (swish erlang)
  (swish json)
  (swish mat)

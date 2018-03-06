@@ -22,7 +22,7 @@
 
 #!chezscheme
 (import
- (except (chezscheme) sleep)
+ (chezscheme)
  (swish erlang)
  (swish gatekeeper)
  (swish gen-server)
@@ -626,7 +626,7 @@
             [no-src (spawn (lambda () (eval '(receive (after 10 'ok)))))]
             [forever (spawn&link (lambda () (receive (until 'infinity 'ok))))])
         (register 'named self)
-        (sleep 1)
+        (sleep-ms 1)
         (pps)))
     (let ([lines (split (get) #\newline)])
       (match-prefix lines "Processes:")))
@@ -967,11 +967,11 @@
     (continue p1 p2 p3)
     (match-let*
      ([#(timeout #(gen-server call ,_))
-       (begin (sleep 10) (send p4 'continue) (exit-reason p4))]
+       (begin (sleep-ms 10) (send p4 'continue) (exit-reason p4))]
       [#(EXIT #(unowned-resource A)) (catch (gatekeeper:leave 'A))]
       [#(EXIT #(unowned-resource D)) (catch (gatekeeper:leave 'D))]
       [#(deadlock A) (begin (continue p1 p2 p3) (exit-reason p3))]
-      [stop (begin (sleep 10) (kill p2 'stop) (exit-reason p2))]
+      [stop (begin (sleep-ms 10) (kill p2 'stop) (exit-reason p2))]
       [normal (exit-reason p1)]
       [shutdown (let ([pid (whereis 'gatekeeper)])
                   (kill pid 'shutdown)

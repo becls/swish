@@ -15,7 +15,7 @@
 ;;; Ported to Chez Scheme 9.5 by Bob Burger
 
 (import
- (except (chezscheme) sleep)
+ (chezscheme)
  (swish erlang)
  (swish mat)
  (swish pregexp)

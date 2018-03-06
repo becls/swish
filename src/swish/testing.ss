@@ -28,13 +28,13 @@
    isolate-mat
    match-prefix
    process-alive?
-   sleep
+   sleep-ms
    start-event-mgr
    start-silent-event-mgr
    system-mat
    )
   (import
-   (except (chezscheme) sleep)
+   (chezscheme)
    (swish app)
    (swish app-io)
    (swish erlang)
@@ -50,11 +50,11 @@
    (swish watcher)
    )
 
-  (define (sleep t) (receive (after t 'ok)))
+  (define (sleep-ms t) (receive (after t 'ok)))
 
   (define (gc)
     (collect (collect-maximum-generation))
-    (sleep 10))
+    (sleep-ms 10))
 
   (define (handle-gone? x)
     (and (record? x)

@@ -21,7 +21,7 @@
 ;;; DEALINGS IN THE SOFTWARE.
 
 (import
- (except (chezscheme) sleep)
+ (chezscheme)
  (swish erlang)
  (swish event-mgr)
  (swish events)
@@ -46,7 +46,7 @@
       [die `#(stop died ,state)]
       [stop `#(stop normal ,state)]
       [#(sleep ,t)
-       (sleep t)
+       (sleep-ms t)
        `#(no-reply ,state)]
       [,_ `#(no-reply ,state)]))
   (define child-ignored (make-process-parameter #f))
@@ -464,7 +464,7 @@
     [#(ok ,cpid1) (supervisor:start-child 'sup-test child1)])
 
    (send cpid1 'stop)
-   (sleep 100)
+   (sleep-ms 100)
 
    (match-let*
     ([(#(child1 ,pid worker)) (which-children 'sup-test)]
@@ -481,7 +481,7 @@
     [#(ok ,cpid1) (supervisor:start-child 'sup-test child1)])
 
    (send cpid1 'stop)
-   (sleep 100)
+   (sleep-ms 100)
 
    (match-let*
     ([(#(child1 #f worker)) (which-children 'sup-test)]
@@ -496,7 +496,7 @@
     [#(ok ,cpid1) (supervisor:start-child 'sup-test child1)])
 
    (send cpid1 'stop)
-   (sleep 100)
+   (sleep-ms 100)
 
    (match-let*
     ([(#(child1 #f worker)) (which-children 'sup-test)]
@@ -511,7 +511,7 @@
     [#(ok ,cpid1) (supervisor:start-child 'sup-test child1)])
 
    (send cpid1 'stop)
-   (sleep 100)
+   (sleep-ms 100)
 
    (match-let*
     ([() (which-children 'sup-test)]
@@ -526,7 +526,7 @@
     [#(ok ,cpid1) (supervisor:start-child 'sup-test child1)])
 
    (send cpid1 'die)
-   (sleep 100)
+   (sleep-ms 100)
 
    (match-let*
     ([(#(child1 ,pid worker)) (which-children 'sup-test)]
@@ -543,7 +543,7 @@
     [#(ok ,cpid1) (supervisor:start-child 'sup-test child1)])
 
    (send cpid1 'die)
-   (sleep 100)
+   (sleep-ms 100)
 
    (match-let*
     ([(#(child1 ,pid worker)) (which-children 'sup-test)]
@@ -560,7 +560,7 @@
     [#(ok ,cpid1) (supervisor:start-child 'sup-test child1)])
 
    (send cpid1 'die)
-   (sleep 100)
+   (sleep-ms 100)
 
    (match-let*
     ([(#(child1 #f worker)) (which-children 'sup-test)]
@@ -575,7 +575,7 @@
     [#(ok ,cpid1) (supervisor:start-child 'sup-test child1)])
 
    (send cpid1 'die)
-   (sleep 100)
+   (sleep-ms 100)
 
    (match-let*
     ([() (which-children 'sup-test)]
@@ -596,7 +596,7 @@
    (receive
     [#(EXIT ,@cpid1 died) 'ok]
     [#(EXIT ,@cpid1 ,reason) (raise `#(bad-exit-reason ,reason))])
-   (sleep 100)
+   (sleep-ms 100)
 
    (let ([children (which-children 'sup-test)])
      (unless (= (length children) 2)
@@ -614,7 +614,7 @@
    ;; restart frequency
    (send cpid2 'die)
    (receive [#(EXIT ,@cpid2 ,_) 'ok])
-   (sleep 100)
+   (sleep-ms 100)
    (match-let* ([(#(,_ ,pid4 ,_) . ,_) (which-children 'sup-test)])
      (send pid4 'die)
      (receive
@@ -658,7 +658,7 @@
     [#(EXIT ,@cpid1 died) 'ok]
     [#(EXIT ,@cpid1 ,reason) (raise `#(bad-exit-reason ,reason))])
    (receive [#(EXIT ,@cpid2 ,_) 'ok])
-   (sleep 100)
+   (sleep-ms 100)
 
    ;; no old children should be alive
    (let ([children (which-children 'sup-test)])
@@ -675,7 +675,7 @@
    ;; restart frequency
    (match-let* ([(#(,_ ,pid3 ,_) . ,_) (which-children 'sup-test)])
      (send pid3 'die)
-     (sleep 100)
+     (sleep-ms 100)
      (match-let* ([(#(,_ ,pid4 ,_) . ,_) (which-children 'sup-test)])
        (send pid4 'die)
        (receive
@@ -760,7 +760,7 @@
    (receive
     (after 10000 (raise 'child-was-not-killed))
     [#(EXIT ,@cpid4 ,_) 'ok])
-   (sleep 100)
+   (sleep-ms 100)
 
    (match-let*
     ([(#(,_ ,@cpid2 ,_) #(,_ ,@cpid1 ,_)) (which-children sup1)]
@@ -776,7 +776,7 @@
      [#(EXIT ,@cpid3 died) 'ok]
      [#(EXIT ,@cpid3 ,reason) (raise `#(bad-exit-reason ,reason))])
 
-    (sleep 1000)
+    (sleep-ms 1000)
     (receive
      (after 1000 (raise 'child-was-not-killed))
      [#(EXIT ,@new-cpid4 ,_) 'ok])
@@ -813,7 +813,7 @@
      (match-let*
       ([(#(child1 ,cpid1 worker)) (which-children 'sup-test)])
       (send cpid1 'die)
-      (sleep 50)))))
+      (sleep-ms 50)))))
 
 (supervisor-mat watcher ()
   (capture-events)
@@ -823,7 +823,7 @@
      (watcher:start-child pid 'child 1000 supervisor-1:start-child)])
 
    (send cpid 'stop)
-   (sleep 100)
+   (sleep-ms 100)
 
    (match-let*
     ([() (which-children pid)]
