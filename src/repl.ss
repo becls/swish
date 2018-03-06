@@ -4,3 +4,9 @@
 (include "swish/imports.ss")
 (include "init.ss")
 (hook-console-input)
+(let ([orig (waiter-prompt-and-read)])
+  (waiter-prompt-and-read
+   (lambda (x . rest)
+     (exit-handler (lambda x (app:shutdown) (receive)))
+     (waiter-prompt-and-read orig)
+     (apply orig x rest))))
