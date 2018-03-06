@@ -21,7 +21,13 @@
 ;;; DEALINGS IN THE SOFTWARE.
 
 ;;; Usage: (go) or (go <profile-filename>)
-(import (swish app-io) (swish io))
+(import
+ (chezscheme)
+ (swish app-io)
+ (swish io)
+ )
+
+(define $profile-dump-html)
 
 (define go
   (case-lambda

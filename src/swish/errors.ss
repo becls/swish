@@ -27,11 +27,12 @@
    swish-exit-reason->english
    )
   (import
+   (chezscheme)
    (swish erlang)
    (swish io)
    (swish osi)
    (swish string-utils)
-   (except (chezscheme) define-record exit))
+   )
 
   (define (exit-reason->english x)
     ((current-exit-reason->english) x))

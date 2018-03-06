@@ -166,15 +166,15 @@ With \code{match}:
     [(,first . ,rest) (fold f (f first acc) rest)]))
 \end{alltt}
 
-\subsection* {Use match or match-let* with records}
+\subsection* {Use match or match-let* with tuples}
 
-When binding multiple fields from a record, use \code{match} or
+When binding multiple fields from a tuple, use \code{match} or
 \code{match-let*} to minimize type checking.
 
 Given:
 \antipar
 \begin{alltt}
-(define-record <point> x y z)
+(define-tuple <point> x y z)
 \end{alltt}
 
 Don't extract each field:
@@ -206,14 +206,14 @@ Don't do this:
 \begin{alltt}
 (if \var{condition}
     (success)
-    (exit 'boom!))
+    (raise 'boom!))
 \end{alltt}
 
 Do this:
 \antipar
 \begin{alltt}
 (unless \var{condition}
-  (exit 'boom!))
+  (raise 'boom!))
 (success)
 \end{alltt}
 
@@ -275,7 +275,7 @@ For example in \texttt{swish/gen-server.ss} we find the
 \begin{alltt}
 (library (swish gen-server)
   (export
-   define-state-record
+   define-state-tuple
    gen-server:call
    gen-server:cast
    gen-server:debug
@@ -284,10 +284,10 @@ For example in \texttt{swish/gen-server.ss} we find the
    gen-server:start&link
    )
   (import
+   (chezscheme)
    (swish erlang)
    (swish event-mgr-notify)
    (swish events)
-   (except (chezscheme) define-record exit)
    )
 \end{alltt}
 

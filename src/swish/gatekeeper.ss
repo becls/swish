@@ -29,9 +29,10 @@
    with-gatekeeper-mutex
    )
   (import
+   (chezscheme)
    (swish erlang)
    (swish gen-server)
-   (except (chezscheme) define-record exit))
+   )
 
   (define (gatekeeper:start&link) (gen-server:start&link 'gatekeeper))
 
@@ -39,13 +40,13 @@
     (let ([e (gen-server:call 'gatekeeper `#(enter ,resource) timeout)])
       (if (eq? e 'ok)
           'ok
-          (exit e))))
+          (raise e))))
 
   (define (gatekeeper:leave resource)
     (match (catch (gen-server:call 'gatekeeper `#(leave ,resource)))
       [ok 'ok]
       [#(EXIT ,_) 'ok]
-      [,r (exit r)]))
+      [,r (raise r)]))
 
   (define-syntax (with-gatekeeper-mutex x)
     (syntax-case x ()
@@ -61,7 +62,7 @@
 
   ;; state = (<mutex> ...)
 
-  (define-record <mutex> resource process monitor count waiters)
+  (define-tuple <mutex> resource process monitor count waiters)
 
   (define $cp0.orig)
   (define $np-compile.orig)

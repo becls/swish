@@ -32,8 +32,9 @@
    ht:size
    )
   (import
+   (chezscheme)
    (swish erlang)
-   (except (chezscheme) define-record exit))
+   )
 
   (define seg-size 16)
   (define expand-load 5)
@@ -41,7 +42,7 @@
   (define empty (make-vector seg-size '()))
   (define empty-segments (vector empty))
 
-  (define-record <ht>
+  (define-tuple <ht>
     hash-key
     equal-key?
     valid-key?

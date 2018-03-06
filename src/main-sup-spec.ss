@@ -25,9 +25,10 @@
    main-sup-spec
    )
   (import
+   (chezscheme)
    (swish log-db)
    (swish sup-spec)
-   (except (chezscheme) define-record exit))
+   )
 
   (define (main-sup-spec) (swish-sup-spec (list swish-event-logger)))
   )

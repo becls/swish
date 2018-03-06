@@ -22,10 +22,11 @@
 
 #!chezscheme
 (import
+ (except (chezscheme) sleep)
  (swish erlang)
  (swish mat)
  (swish string-utils)
- (except (chezscheme) define-record exit sleep))
+ )
 
 (mat join ()
   (match-let*

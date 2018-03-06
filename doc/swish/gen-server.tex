@@ -250,12 +250,12 @@ event. The \var{message} field is populated when \code{message} is
 in \var{client-options}, and the \var{reply} field is populated when
 \code{reply} is in \var{client-options}.
 
-\defineentry{define-state-record}
+\defineentry{define-state-tuple}
 \begin{syntax}
-  \code{(define-state-record \var{name} \var{field} \etc)}
+  \code{(define-state-tuple \var{name} \var{field} \etc)}
 \end{syntax}
 
-This form defines a record type using \code{(define-record
+This form defines a tuple type using \code{(define-tuple
   \var{name} \var{field} \etc)} and defines a new syntactic form
 \code{\$state}. \code{\$state} provides a succinct syntax for the
 \code{state} variable.
@@ -266,7 +266,7 @@ to \code{(\var{name} \var{op} state \var{arg} \etc)} where
 
 Given this definition:
 
-\code{(define-state-record <my-state> x y z)}
+\code{(define-state-tuple <my-state> x y z)}
 
 The following code is equivalent:
 
@@ -277,8 +277,8 @@ The following code is equivalent:
   \code{(<my-state> z state)} & \code{(\$state z)} \\
 \end{tabular}
 
-There is no equivalent for constructing a state record because
-constructing a record does not require the \code{state}
+There is no equivalent for constructing a state tuple because
+constructing a tuple does not require the \code{state}
 variable. The \code{(<my-state> make \etc)} syntax must be used.
 
 \section {Published Events}

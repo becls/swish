@@ -51,6 +51,7 @@
    with-db
    )
   (import
+   (chezscheme)
    (swish erlang)
    (swish event-mgr)
    (swish events)
@@ -58,8 +59,8 @@
    (swish osi)
    (swish queue)
    (swish string-utils)
-   (except (chezscheme) define-record exit)
    )
+
   (define (db:start&link name filename mode)
     (gen-server:start&link name filename mode))
 
@@ -77,17 +78,17 @@
 
   (define (lazy-execute sql . bindings)
     (unless (statement-cache)
-      (exit `#(invalid-context lazy-execute)))
+      (raise `#(invalid-context lazy-execute)))
     ($lazy-execute sql bindings))
 
   (define (execute sql . bindings)
     (unless (statement-cache)
-      (exit `#(invalid-context execute)))
+      (raise `#(invalid-context execute)))
     ($execute sql bindings))
 
   (define (columns sql)
     (unless (statement-cache)
-      (exit `#(invalid-context columns)))
+      (raise `#(invalid-context columns)))
     (sqlite:columns (get-statement sql)))
 
   (define-syntax transaction
@@ -97,11 +98,11 @@
   (define ($transaction db thunk)
     (match (db:transaction db thunk)
       [#(ok ,result) result]
-      [#(error ,reason) (exit reason)]))
+      [#(error ,reason) (raise reason)]))
 
   (define commit-threshold 10000)
 
-  (define-state-record <db-state> filename db cache queue worker)
+  (define-state-tuple <db-state> filename db cache queue worker)
 
   (define current-database (make-process-parameter #f))
   (define statement-cache (make-process-parameter #f))
@@ -122,10 +123,10 @@
           [(#("wal")) 'ok]
           [(#(,mode))
            (sqlite:close db)
-           (exit `#(bad-journal-mode ,mode))]
+           (raise `#(bad-journal-mode ,mode))]
           [#(EXIT ,reason)
            (sqlite:close db)
-           (exit reason)]))
+           (raise reason)]))
       `#(ok ,(<db-state> make
                [filename filename]
                [db db]
@@ -230,7 +231,7 @@
       (lambda (pid)
         (receive
          [#(EXIT ,@pid normal) (flush (update ($state copy [worker #f])))]
-         [#(EXIT ,@pid ,reason) (exit reason)]))]
+         [#(EXIT ,@pid ,reason) (raise reason)]))]
      [else state]))
 
   (define ($execute sql bindings)
@@ -241,13 +242,13 @@
     (define sleep-times '(2 3 6 11 16 21 26 26 26 51 51 . #0=(101 . #0#)))
     (define (attempt stmt count sleep-times)
       (unless (< count 500)
-        (exit `#(db-retry-failed ,sql ,count)))
+        (raise `#(db-retry-failed ,sql ,count)))
       (match (catch (sqlite:execute stmt '()))
         [#(EXIT #(db-error ,_ (,_ . #x20000005) ,detail)) ; SQLITE_BUSY
          (match sleep-times
            [(,t . ,rest)
             (receive (after t (attempt stmt (+ count 1) rest)))])]
-        [#(EXIT ,reason) (exit reason)]
+        [#(EXIT ,reason) (raise reason)]
         [,_ count]))
     (let* ([stmt (get-statement sql)]
            [start-time (erlang:now)]
@@ -376,7 +377,7 @@
      (immutable database)))
 
   (define (db-error who error detail)
-    (exit `#(db-error ,who ,error ,detail)))
+    (raise `#(db-error ,who ,error ,detail)))
 
   (define-syntax with-db
     (syntax-rules ()

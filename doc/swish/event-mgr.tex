@@ -63,18 +63,18 @@ the process associated with a handler terminates, the event manager
 removes it from the list.
 
 \paragraph* {state}\index{event-mgr!state}
-\begin{record}\code{<event-mgr-state>}\end{record}\antipar
+\begin{tuple}\code{<event-mgr-state>}\end{tuple}\antipar
 \begin{argtbl}
   \argrow{event-buffer}{list of events to be processed (most recent
     first), or \code{\#f} when buffering is disabled}
-  \argrow{log-handler}{\code{<handler>} record or \code{\#f}}
-  \argrow{handlers}{list of \code{<handler>} records}
+  \argrow{log-handler}{\code{<handler>} tuple or \code{\#f}}
+  \argrow{handlers}{list of \code{<handler>} tuples}
 \end{argtbl}
 
-\begin{recorddef}{<handler>}
+\begin{tupledef}{<handler>}
   \argrow{proc}{procedure of one argument, the event}
   \argrow{owner}{process that owns the handler}
-\end{recorddef}
+\end{tupledef}
 
 \genserver{event-mgr}{init}The \code{init} procedure initializes the
 state of the gen-server. Event buffering is enabled.

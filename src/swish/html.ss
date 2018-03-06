@@ -28,9 +28,9 @@
    html:encode
    )
   (import
+   (chezscheme)
    (swish erlang)
    (swish io)
-   (except (chezscheme) define-record exit)
    )
 
   (define (html->bytevector x)

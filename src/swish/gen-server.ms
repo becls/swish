@@ -21,13 +21,13 @@
 ;;; DEALINGS IN THE SOFTWARE.
 
 (import
+ (except (chezscheme) sleep)
  (swish erlang)
  (swish event-mgr)
  (swish events)
  (swish gen-server)
  (swish mat)
  (swish testing)
- (except (chezscheme) define-record exit sleep)
  )
 
 (module (start-server start&link-server)
@@ -40,7 +40,7 @@
       [#(no-return ,from)
        (send from `#(no-return ,self))
        (receive)]
-      [crash (exit 'crashed)]
+      [crash (raise 'crashed)]
       [process-trap-exit
        (process-trap-exit #t)
        `#(ok ())]
@@ -52,7 +52,7 @@
       [#(,from stopped-info)
        (send from `#(,self stopped-info))]
       [crash-terminate
-       (exit 'crashed)]
+       (raise 'crashed)]
       [,_ (void)])
     'ok)
   (define (handle-call msg from state)
@@ -70,9 +70,9 @@
          [,_ `#(reply #f ())])]
       [bad-return 'bad-return]
       [stop `#(stop stopped ok ,state)]
-      [crash (exit 'crashed)]
+      [crash (raise 'crashed)]
       [crash-terminate `#(stop crash-terminate ok ,state)]
-      [shutdown-reason (exit `#(shutdown reason))]))
+      [shutdown-reason (raise `#(shutdown reason))]))
   (define (handle-cast msg state)
     (match msg
       [#(,from handle-cast)
@@ -114,7 +114,7 @@
 
 (define (busy-wait-for-process pid n)
   (if (process-alive? pid n)
-      (exit `#(process-still-alive ,pid))
+      (raise `#(process-still-alive ,pid))
       'ok))
 
 (isolate-mat start ()
@@ -154,7 +154,7 @@
     [#(ok ,pid) (start&link-server #f '())]
     [ok (gen-server:call pid 'started?)]
     [ok (gen-server:call pid 'stop)]
-    [ok (receive (after 5000 (exit 'not-stopped))
+    [ok (receive (after 5000 (raise 'not-stopped))
           [#(EXIT ,@pid stopped) 'ok])]
     ;; registered
     [#(ok ,pid) (start-server 'my-test-name '())]
@@ -168,7 +168,7 @@
     [ok (gen-server:call 'my-test-name 'started?)]
     [#(error #(name-already-registered ,@pid)) (start-server 'my-test-name '())]
     [ok (gen-server:call 'my-test-name 'stop)]
-    [ok (receive (after 5000 (exit 'not-stopped))
+    [ok (receive (after 5000 (raise 'not-stopped))
           [#(EXIT ,@pid stopped) 'ok])])
    'ok))
 
@@ -177,7 +177,7 @@
   (match-let*
    ([#(ok ,pid) (start&link-server #f 'process-trap-exit)])
    (kill pid 'shutdown)
-   (receive (after 5000 (exit 'not-stopped))
+   (receive (after 5000 (raise 'not-stopped))
      [#(EXIT ,@pid shutdown) 'ok])))
 
 (isolate-mat crash ()
@@ -202,10 +202,10 @@
         [state crash-state]
         [reason crashed])
      (void)]
-    [,other (exit `#(unexpected-event ,other))])
+    [,other (raise `#(unexpected-event ,other))])
 
    (receive (after 500 (void))
-     [,other (exit `#(unexpected-event ,other))])
+     [,other (raise `#(unexpected-event ,other))])
    'ok))
 
 (isolate-mat crash3 ()
@@ -220,10 +220,10 @@
         [state crash-state]
         [reason crashed])
      (void)]
-    [,other (exit `#(unexpected-event ,other))])
+    [,other (raise `#(unexpected-event ,other))])
 
    (receive (after 500 (void))
-     [,other (exit `#(unexpected-event ,other))])
+     [,other (raise `#(unexpected-event ,other))])
    'ok))
 
 (isolate-mat call ()
@@ -264,15 +264,15 @@
     [ok (gen-server:call 'my-test-name 'started?)]
 
     [ok (gen-server:cast 'my-test-name `#(,self handle-cast))]
-    [ok (receive (after 1000 (exit 'handle-cast))
+    [ok (receive (after 1000 (raise 'handle-cast))
           [#(,@pid handled-cast) 'ok])]
 
     [ok (gen-server:cast 'my-test-name `#(,self delayed-cast 1))]
-    [ok (receive (after 1000 (exit 'delayed-cast))
+    [ok (receive (after 1000 (raise 'delayed-cast))
           [#(,@pid delayed) 'ok])]
 
     [ok (gen-server:cast 'my-test-name `#(,self stop))]
-    [ok (receive (after 1000 (exit 'stop))
+    [ok (receive (after 1000 (raise 'stop))
           [#(,@pid stopped) 'ok])])
    'ok))
 
@@ -282,15 +282,15 @@
     [ok (gen-server:call 'my-test-name 'started?)]
 
     [,_ (send 'my-test-name `#(,self handle-info))]
-    [ok (receive (after 1000 (exit 'handle-info))
+    [ok (receive (after 1000 (raise 'handle-info))
           [#(,@pid handled-info) 'ok])]
 
     [,_ (send 'my-test-name `#(,self delayed-info 1))]
-    [ok (receive (after 1000 (exit 'delayed-info))
+    [ok (receive (after 1000 (raise 'delayed-info))
           [#(,@pid delayed-info) 'ok])]
 
     [,_ (send 'my-test-name `#(,self stop))]
-    [ok (receive (after 1000 (exit 'stop))
+    [ok (receive (after 1000 (raise 'stop))
           [#(,@pid stopped-info) 'ok])])
    'ok))
 

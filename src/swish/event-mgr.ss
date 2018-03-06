@@ -31,10 +31,10 @@
    system-detail
    )
   (import
+   (chezscheme)
    (swish erlang)
    (swish event-mgr-notify)
    (swish gen-server)
-   (except (chezscheme) define-record exit)
    )
 
   ;; event-mgr:notify and system-detail are defined in
@@ -57,13 +57,13 @@
   (define (event-mgr:unregister)
     (gen-server:call 'event-mgr 'unregister))
 
-  (define-state-record <event-mgr-state>
+  (define-state-tuple <event-mgr-state>
     event-buffer                        ; #f | (event ...)
     log-handler                         ; <handler> | #f
     handlers                            ; (<handler> ...)
     )
 
-  (define-record <handler> proc owner)
+  (define-tuple <handler> proc owner)
 
   (define (init)
     (process-trap-exit #t)

@@ -22,7 +22,7 @@
 
 (library (swish gen-server)
   (export
-   define-state-record
+   define-state-tuple
    gen-server:call
    gen-server:cast
    gen-server:debug
@@ -31,12 +31,13 @@
    gen-server:start&link
    )
   (import
+   (chezscheme)
    (swish erlang)
    (swish event-mgr-notify)
    (swish events)
-   (except (chezscheme) define-record exit)
    )
-  (define-record <gen-server-interface>
+
+  (define-tuple <gen-server-interface>
     init handle-call handle-cast handle-info terminate debug)
 
   (define-syntax (gen-server:start x)
@@ -96,17 +97,17 @@
          (loop parent (or name self) iface state (resolve-timeout timeout))]
         [#(stop ,reason)
          (reply `#(error ,reason))
-         (exit reason)]
+         (raise reason)]
         [ignore
          (reply 'ignore)
-         (exit 'normal)]
+         (raise 'normal)]
         [#(EXIT ,reason)
          (reply `#(error ,reason))
-         (exit reason)]
+         (raise reason)]
         [,other
          (let ([reason `#(bad-return-value ,other)])
            (reply `#(error ,reason))
-           (exit reason))])))
+           (raise reason))])))
 
   (define (make-thunk parent name proc)
     (lambda ()
@@ -142,7 +143,7 @@
          [#(stop ,reason ,reply0 ,new-state)
           (let ([r (terminate-reason reason name msg iface new-state)])
             (gen-server:reply from reply0)
-            (exit r))]
+            (raise r))]
          [,other
           (handle-common-reply other parent name msg iface state)])]
       [#($gen-cast ,msg)
@@ -169,7 +170,7 @@
        (terminate `#(bad-return-value ,reply) name msg iface state)]))
 
   (define (terminate reason name msg iface state)
-    (exit (terminate-reason reason name msg iface state)))
+    (raise (terminate-reason reason name msg iface state)))
 
   (define (terminate-reason reason name msg iface state)
     (match (catch (do-terminate iface reason state))
@@ -194,12 +195,12 @@
       (match (catch (do-call server request timeout))
         [#(ok ,res) res]
         [#(EXIT ,reason)
-         (exit `#(,reason #(gen-server call (,server ,request ,timeout))))])]
+         (raise `#(,reason #(gen-server call (,server ,request ,timeout))))])]
      [(server request)
       (match (catch (do-call server request 5000))
         [#(ok ,res) res]
         [#(EXIT ,reason)
-         (exit `#(,reason #(gen-server call (,server ,request))))])]))
+         (raise `#(,reason #(gen-server call (,server ,request))))])]))
 
   (define-syntax no-interrupts
     (syntax-rules ()
@@ -212,7 +213,7 @@
 
   (define (do-call server request timeout)
     (let* ([pid (if (symbol? server)
-                    (or (whereis server) (exit 'no-process))
+                    (or (whereis server) (raise 'no-process))
                     server)]
            [m (monitor pid)]
            [debug (no-interrupts (eq-hashtable-ref debug-table pid #f))]
@@ -223,7 +224,7 @@
          (demonitor&flush m)
          (when debug
            (debug-report 6 debug start self pid request #f 'timeout))
-         (exit 'timeout))
+         (raise 'timeout))
        [#(,@m ,reply)
         (demonitor&flush m)
         (when debug
@@ -232,7 +233,7 @@
        [#(DOWN ,@m ,_ ,reason)
         (when debug
           (debug-report 6 debug start self pid request #f reason))
-        (exit reason)])))
+        (raise reason)])))
 
   (define (gen-server:cast server request)
     (catch (send server `#($gen-cast ,request)))
@@ -243,7 +244,7 @@
       (unless (or (not options) (list? options))
         (bad-arg 'gen-server:debug options)))
     (let ([pid (if (symbol? server)
-                   (or (whereis server) (exit 'no-process))
+                   (or (whereis server) (raise 'no-process))
                    server)])
       (check-options server-options)
       (check-options client-options)
@@ -260,12 +261,12 @@
        (send pid `#(,tag ,reply))
        'ok]))
 
-  (define-syntax (define-state-record x)
+  (define-syntax (define-state-tuple x)
     (syntax-case x ()
       [(k1 name field ...)
        (with-implicit (k1 $state)
          #'(begin
-             (define-record name field ...)
+             (define-tuple name field ...)
              (define-syntax ($state x)
                (syntax-case x ()
                  [(k2 op arg (... ...))

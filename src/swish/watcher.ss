@@ -27,9 +27,10 @@
    watcher:start-child
    )
   (import
+   (chezscheme)
    (swish erlang)
    (swish supervisor)
-   (except (chezscheme) define-record exit))
+   )
 
   (define (watcher:start&link name)
     (supervisor:start&link name 'one-for-one 0 1 '()))

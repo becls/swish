@@ -33,7 +33,7 @@
    symbol-append
    )
   (import
-   (except (chezscheme) define-record exit))
+   (chezscheme))
 
   (define join
     (case-lambda

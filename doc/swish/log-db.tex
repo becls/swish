@@ -72,7 +72,7 @@ Swish events are logged. The \code{log-db} design allows for this
 type of extension.
 
 The \code{log-db:setup} procedure takes a list of
-\code{<event-logger>} records. Each logger represents an extension
+\code{<event-logger>} tuples. Each logger represents an extension
 to the log database schema and contains two procedures, \code{setup}
 and \code{log}. The \code{log-db:setup} procedure calls the
 \code{setup} procedure of logger to make sure that its portion of
@@ -100,12 +100,12 @@ respect to changes in the Swish implementation.
 
 \section {Programming Interface}
 
-\begin{recorddef}{<event-logger>}
+\begin{tupledef}{<event-logger>}
   \argrow{setup}{procedure of no arguments that makes sure this
     portion of the schema is created and up-to-date}
   \argrow{log}{procedure of one argument, an event, that logs the
     event if it recognizes it and otherwise ignores it}
-\end{recorddef}
+\end{tupledef}
 
 \defineentry{log-db:start\&link}
 \begin{procedure}
@@ -129,7 +129,7 @@ SQLite database and specifies \code{create} mode.
 \code{\#(error \var{error})}
 
 The argument \var{loggers} is a list of \code{<event-logger>}
-records. The \code{log-db:setup} makes sure the \code{log-db} is
+tuples. The \code{log-db:setup} makes sure the \code{log-db} is
 setup to run by doing the following in order.
 
 \begin{enumerate}
@@ -184,7 +184,7 @@ returns that identifier.
   \code{swish-event-logger}
 \end{property}
 
-The \code{swish-event-logger} is an \code{<event-logger>} record
+The \code{swish-event-logger} is an \code{<event-logger>} tuple
 that defines the schema for Swish events. It uses the name
 \code{swish} to store its schema version.
 
@@ -215,20 +215,20 @@ into a space separated string.
 \expandsto{} A definition of the \var{create} and \var{handle}
 procedures
 
-The \code{define-simple-events} syntax is used to log record types
+The \code{define-simple-events} syntax is used to log tuple types
 by inserting a row into a table with the same name and the same
-fields. Each \var{name} is a record type. Each \var{clause} is a valid
-\code{create-table} clause for one of the fields in that record
+fields. Each \var{name} is a tuple type. Each \var{clause} is a valid
+\code{create-table} clause for one of the fields in that tuple
 type.
 
 It defines \var{create} as a procedure of 0 arguments that consists of
 a \code{(create-table \var{name} \var{clause} \etc{})} for each
-record in the \code{define-simple-events}. This means that the name
-of the record type and each field are converted to SQL names by the
+tuple in the \code{define-simple-events}. This means that the name
+of the tuple type and each field are converted to SQL names by the
 \code{create-table} syntax.
 
 It defines \var{handle} as a procedure of 1 argument, an event. If the
-event is one of the record types in the \code{define-simple-events},
+event is one of the tuple types in the \code{define-simple-events},
 it calls \code{db:log} with an insert statement. If the event is
 unrecognized, it returns \code{\#f}.
 

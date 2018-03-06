@@ -27,6 +27,7 @@
    statistics:suspend
    )
   (import
+   (chezscheme)
    (swish db)
    (swish erlang)
    (swish event-mgr)
@@ -34,7 +35,7 @@
    (swish gen-server)
    (swish io)
    (swish osi)
-   (except (chezscheme) define-record exit))
+   )
 
   (define (statistics:start&link)
     (gen-server:start&link 'statistics))

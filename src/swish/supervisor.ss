@@ -31,13 +31,14 @@
    supervisor:terminate-child
    )
   (import
+   (chezscheme)
    (swish erlang)
    (swish event-mgr)
    (swish events)
    (swish gen-server)
-   (except (chezscheme) define-record exit)
    )
-  (define-state-record <supervisor-state>
+
+  (define-state-tuple <supervisor-state>
     strategy                            ; one-for-one | one-for-all
     intensity                           ; integer >= 0
     period                              ; integer > 0
@@ -45,7 +46,7 @@
     restarts                            ; (<restart-time> ...)
     )
 
-  (define-record <child>
+  (define-tuple <child>
     pid               ; process | #f
     name              ; symbol
     thunk             ; thunk

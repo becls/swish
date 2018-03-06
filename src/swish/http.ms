@@ -21,6 +21,7 @@
 ;;; DEALINGS IN THE SOFTWARE.
 
 (import
+ (except (chezscheme) sleep)
  (swish app-io)
  (swish erlang)
  (swish event-mgr)
@@ -28,9 +29,10 @@
  (swish http)
  (swish io)
  (swish mat)
+ (swish string-utils)
  (swish testing)
  (swish watcher)
- (except (chezscheme) define-record exit sleep))
+ )
 
 (define test-port 54333)
 
@@ -52,7 +54,7 @@
    [(whereis 'http-sup) =>
     (lambda (pid)
       (monitor pid)
-      (receive (after 60000 (exit 'http-sup-still-running))
+      (receive (after 60000 (raise 'http-sup-still-running))
         [#(DOWN ,_ ,@pid ,_) 'ok]))]))
 
 (define-syntax http-mat
@@ -64,9 +66,9 @@
   (let* ([pid (spawn thunk)]
          [m (monitor pid)])
     (on-exit (shutdown-http)
-      (receive (after 300000 (kill pid 'shutdown) (exit 'timeout))
+      (receive (after 300000 (kill pid 'shutdown) (raise 'timeout))
         [#(DOWN ,_ ,@pid normal) 'ok]
-        [#(DOWN ,_ ,@pid ,reason) (exit reason)]))))
+        [#(DOWN ,_ ,@pid ,reason) (raise reason)]))))
 
 (define (simple-tcp x)
   (let-values ([(ip op) (connect-tcp "127.0.0.1" test-port)])
@@ -420,7 +422,7 @@
   (let-values ([(ip op) (connect-tcp "127.0.0.1" test-port)])
     (put-bytevector op (string->utf8 "Malformed Request\r\n\r\n"))
     (flush-output-port op)
-    (receive (after 10 (exit 'no-child-log))
+    (receive (after 10 (raise 'no-child-log))
       [`(<child-end> [reason #(unhandled-input ,x)])
        (assert (string=? (utf8->string x) "Malformed Request"))])
     (close-port op))
@@ -436,13 +438,13 @@
       (spawn&link
        (lambda ()
          (send me `#(read ,(utf8->string (get-bytevector-all ip)))))))
-    (receive (after 100 (exit 'timeout))
+    (receive (after 100 (raise 'timeout))
       [#(read ,x)
        (unless (string=? x
                  (string-append
                   "HTTP/1.1 200 \r\nContent-Length: 1\r\nCache-Control: no-cache\r\n\r\n1"
                   "HTTP/1.1 200 \r\nContent-Length: 1\r\nCache-Control: no-cache\r\n\r\n2"))
-         (exit `#(unexpected ,x)))])
+         (raise `#(unexpected ,x)))])
     (close-port op))
 
   ;; fake an exit message, as if accept failed
@@ -450,7 +452,7 @@
   (let ([http (whereis 'http-listener)])
     (link http)
     (send http `#(EXIT ,self accept-failed))
-    (receive (after 100 (exit 'timeout))
+    (receive (after 100 (raise 'timeout))
       [#(EXIT ,@http ,_) 'ok])))
 
 (http-mat mime-types ()
@@ -500,7 +502,7 @@
                       (string-length s) s)]
           [actual (utf8->string (simple-get (string-append "/" file1)))])
       (or (string=? expected actual)
-          (exit `#(unexpected ,expected ,actual)))))
+          (raise `#(unexpected ,expected ,actual)))))
 
   ;; cache unrelated file which uses include (coverage)
   (simple-get "/include/mat?cmd=echo&echo=1")

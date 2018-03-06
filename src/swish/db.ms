@@ -21,6 +21,7 @@
 ;;; DEALINGS IN THE SOFTWARE.
 
 (import
+ (except (chezscheme) sleep)
  (swish app-io)
  (swish db)
  (swish erlang)
@@ -28,7 +29,7 @@
  (swish mat)
  (swish osi)
  (swish testing)
- (except (chezscheme) define-record exit sleep))
+ )
 
 (define filename (path-combine data-dir "test-db.db3"))
 
@@ -199,7 +200,7 @@
       (db:transaction db
         (lambda ()
           (execute "create table temp.foo(x)")
-          (exit 'boom)))])
+          (raise 'boom)))])
     (transaction db (execute "create table temp.foo(x)"))
     (transaction db (execute "drop table temp.foo")))
    (do ([i 0 (+ i 1)]) ((= i 150))
@@ -226,7 +227,7 @@
       (transaction db
         (columns "SELECT col1,col2,col3 AS Column3 FROM table1"))]
      [#(EXIT failed-transaction)
-      (catch (transaction db (exit 'failed-transaction)))])
+      (catch (transaction db (raise 'failed-transaction)))])
     (db:stop db)
     (catch (remove-file filename)))))
 

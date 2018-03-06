@@ -15,10 +15,11 @@
 ;;; Ported to Chez Scheme 9.5 by Bob Burger
 
 (import
+ (except (chezscheme) sleep)
  (swish erlang)
  (swish mat)
  (swish pregexp)
- (except (chezscheme) define-record exit sleep))
+ )
 
 (define-syntax test
   (syntax-rules ()

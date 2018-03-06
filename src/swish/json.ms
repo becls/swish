@@ -22,11 +22,12 @@
 
 #!chezscheme
 (import
+ (except (chezscheme) sleep)
  (swish erlang)
  (swish json)
  (swish mat)
  (swish testing)
- (except (chezscheme) define-record exit sleep))
+ )
 
 (define json-inline string->symbol)
 

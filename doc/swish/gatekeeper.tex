@@ -46,7 +46,7 @@ resource \code{\$cp0}, the \code{\$np-compile} procedure uses resource
 
 \paragraph* {state}\index{gatekeeper!state} The gatekeeper state is a
 list of \code{<mutex>}\index{gatekeeper!<mutex>@\code{<mutex>}}
-records, each of which has the following fields:\antipar
+tuples, each of which has the following fields:\antipar
 
 \begin{itemize}
 \item \var{resource}: resource compared for equality using \code{eq?}
@@ -65,7 +65,7 @@ use \code{with-gatekeeper-mutex} with a timeout of one minute, and it
 sets the \code{current-expand} parameter to the hooked
 \code{sc-expand} procedure. The process traps exits so that
 \code{terminate} can unhook the system primitives when the process is
-shut down. It returns an empty list of \code{<mutex>} records.
+shut down. It returns an empty list of \code{<mutex>} tuples.
 
 \genserver{gatekeeper}{terminate} The gatekeeper \code{terminate}
 procedure unhooks the system primitives listed in the introduction and
@@ -128,7 +128,7 @@ sets the \code{current-expand} parameter to the unhooked
 
 The \code{enter-mutex} procedure calls \code{(gen-server:reply
   \var{from} 'ok)} to reply to the caller waiting to enter the
-mutex. It adds a \code{<mutex>} record with
+mutex. It adds a \code{<mutex>} tuple with
 \var{resource} = \var{resource}, \var{process} = \var{from}.\var{process},
 \var{monitor} = \code{(monitor \var{process})}, \var{count} = 1, and
 \var{waiters} = \var{waiters} to \var{state}.

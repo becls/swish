@@ -21,12 +21,12 @@
 ;;; DEALINGS IN THE SOFTWARE.
 
 (import
+ (except (chezscheme) sleep)
  (swish erlang)
  (swish mat)
  (swish osi)
  (swish io)
  (swish testing)
- (except (chezscheme) define-record exit sleep)
  )
 (define (make-byte-stream prime)
   (let ([next 0])
@@ -43,7 +43,7 @@
 (define (start-watchdog timeout reason)
   (spawn&link
    (lambda ()
-     (receive (after timeout (exit reason))))))
+     (receive (after timeout (raise reason))))))
 
 (define (stop-watchdog x) (unlink x))
 
@@ -116,12 +116,12 @@
            [test-port (listener-port-number listener)])
       (on-exit (close-tcp-listener listener)
         (let-values ([(cip cop) (connect-tcp hostname test-port)])
-          (receive (after 5000 (exit 'timeout-connecting-tcp))
+          (receive (after 5000 (raise 'timeout-connecting-tcp))
             [#(accept-tcp ,@listener ,sip ,sop)
              (on-exit (force-close-output-port sop)
                (check-loopback sip cop)
                (check-loopback cip sop))]
-            [,(msg <= #(accept-tcp-failed ,_ ,_ ,_)) (exit msg)])))))
+            [,(msg <= #(accept-tcp-failed ,_ ,_ ,_)) (raise msg)])))))
   (run "127.0.0.1")
   (run "::1")
   ;; Test the listener guardian
@@ -182,11 +182,11 @@
       (receive
        (after 100
          (unless (and (null? renames-tbd) (null? updates-tbd))
-           (exit `#(path-changed-missing ,renames-tbd ,updates-tbd))))
+           (raise `#(path-changed-missing ,renames-tbd ,updates-tbd))))
        [#(path-changed ,@test-dir ,filename 1)
         (if (member filename renames-tbd)
             (lp (remove filename renames-tbd) updates-tbd updates-seen)
-            (exit `#(unexpected-path-rename ,filename ,renames)))]
+            (raise `#(unexpected-path-rename ,filename ,renames)))]
        [#(path-changed ,@test-dir ,filename 2)
         (cond
          [(member filename updates-tbd)
@@ -195,7 +195,7 @@
          [(member filename updates-seen)
           (lp renames-tbd updates-tbd updates-seen)]
          [else
-          (exit `#(unexpected-path-updated ,filename ,updates))])])))
+          (raise `#(unexpected-path-updated ,filename ,updates))])])))
   (define bullet "\x2022;")
   (define test-dir (string-append bullet "files-test" bullet "/"))
   (match-let*
@@ -304,7 +304,7 @@
       (do ([n #x110000 (- n 1)]) ((= n 0))
         (let ([c1 (read-char ip)] [c2 (stream)])
           (unless (eqv? c1 c2)
-            (exit `#(wrong-char ,n ,(char->integer c1) ,(char->integer c2))))))))
+            (raise `#(wrong-char ,n ,(char->integer c1) ,(char->integer c2))))))))
   (let ([op (open-file-to-replace fn)])
     (on-exit (force-close-output-port op)
       (display "nothing here" op)))

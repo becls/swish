@@ -21,17 +21,17 @@
 ;;; DEALINGS IN THE SOFTWARE.
 
 (import
+ (except (chezscheme) sleep)
  (swish erlang)
  (swish event-mgr)
  (swish mat)
  (swish string-utils)
  (swish testing)
- (except (chezscheme) define-record exit sleep)
  )
 
 (define (reported event)
   (receive
-   (after 1000 (exit `#(event-timeout ,event)))
+   (after 1000 (raise `#(event-timeout ,event)))
    [,@event 'ok]))
 
 (define (silence-log-handler)
@@ -92,15 +92,15 @@
   (let* ([caller self]
          [pid (spawn&link
                (lambda ()
-                 (event-mgr:add-handler exit)
+                 (event-mgr:add-handler raise)
                  (send caller 'ready)
-                 (receive (after 1000 (exit 'timeout)))))])
+                 (receive (after 1000 (raise 'timeout)))))])
     (receive
-     (after 1000 (exit 'timeout-waiting-to-start))
+     (after 1000 (raise 'timeout-waiting-to-start))
      [ready 'ok])
     (event-mgr:notify 'crash)
     (reported 'crash)
-    (receive (after 1000 (exit 'timeout-waiting))
+    (receive (after 1000 (raise 'timeout-waiting))
       [#(EXIT ,@pid crash) (void)]))
   'ok)
 

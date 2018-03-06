@@ -26,9 +26,9 @@
    system-detail
    )
   (import
+   (chezscheme)
    (swish erlang)
    (swish meta)
-   (except (chezscheme) define-record exit)
    )
 
   (define (event-mgr:notify event)

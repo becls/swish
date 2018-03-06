@@ -21,9 +21,11 @@
 ;;; DEALINGS IN THE SOFTWARE.
 
 (import
+ (except (chezscheme) sleep)
  (swish erlang)
+ (swish ht)
  (swish mat)
- (except (chezscheme) define-record exit sleep))
+ )
 
 (define new-value
   (let ([n -1]

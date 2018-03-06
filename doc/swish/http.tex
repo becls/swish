@@ -47,7 +47,7 @@ using \code{listen-tcp} and accepts new connections using
 supervisor to spawn and link a handler process.
 
 Each handler reads from its input port until a CR LF
-occurs. Well-formed input is converted to a \code{<request>} record,
+occurs. Well-formed input is converted to a \code{<request>} tuple,
 and the HTTP request header and any content parameters are read.
 
 When \code{Content-Length} appears in the header, the content bytes
@@ -118,7 +118,7 @@ variables to a dynamic page:
 \begin{argtbl}
   \argrow{ip}{binary input port}
   \argrow{op}{binary output port}
-  \argrow{request}{a \code{<request>} record}
+  \argrow{request}{a \code{<request>} tuple}
   \argrow{header}{an association list}
   \argrow{params}{an association list}
 \end{argtbl}
@@ -156,11 +156,11 @@ directory of the current file.
 
 \section {Programming Interface}
 
-\begin{recorddef}{<request>}
+\begin{tupledef}{<request>}
   \argrow{method}{a symbol}
   \argrow{path}{a decoded string}
   \argrow{query}{a decoded association list}
-\end{recorddef}
+\end{tupledef}
 
 \defineentry{http-sup:start\&link}
 \begin{procedure}

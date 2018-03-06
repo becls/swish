@@ -117,7 +117,7 @@
                [else (caar valid-charts)])]
        [cols (cond
               [(assoc chart valid-charts) => cdr]
-              [else (exit `#(invalid-chart ,chart))])]
+              [else (raise `#(invalid-chart ,chart))])]
        [limit (or (find-param "limit") "-7 days")])
   (with-db [db (log-path) SQLITE_OPEN_READONLY]
     (hosted-page "Charts"

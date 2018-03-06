@@ -86,7 +86,7 @@ interact with SQLite. To prevent memory leaks, raw database handles
 are wrapped in a Scheme record and registered with a guardian.
 
 \paragraph* {state}\index{db!state}
-\code{(define-state-record <db-state> filename db cache queue worker)}
+\code{(define-state-tuple <db-state> filename db cache queue worker)}
 \begin{itemize}
 \item \code{filename} is the database specified when the server was
   started.
@@ -176,7 +176,7 @@ processes the following message:
 
 \antipar\begin{itemize}
 
-\item \code{\#(log \var{sql} \var{bindings})}: Add this record to
+\item \code{\#(log \var{sql} \var{bindings})}: Add this tuple to
   the queue. Process the queue.
 
 \end{itemize}
@@ -329,7 +329,7 @@ this is a list of rows as returned by a \code{SELECT} query.
 \expandsto{} \antipar\begin{alltt}
 (match (db:transaction \var{db} (lambda () \var{body} \etc))
   [#(ok ,result) result]
-  [#(error ,reason) (exit reason)])
+  [#(error ,reason) (raise reason)])
 \end{alltt}
 
 The \code{transaction} macro runs the body in a transaction and

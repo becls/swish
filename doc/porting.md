@@ -6,7 +6,12 @@
   - removed `bin-dir`
 * `(swish erlang)`
   - added `complete-io` and `wait-for-io`
-  - `erlang:now` no longer drifts from clock time
+  - `exit` is now `raise` to eliminate a conflict with Chez Scheme.
+  - `define-record` is now `define-tuple` to eliminate a conflict with
+    Chez Scheme.
+  - `erlang:now` no longer drifts from clock time.
+* `(swish gen-server)`
+  - `define-state-record` is now `define-state-tuple`
 * `(swish io)`
   - removed constants `CREATE_ALWAYS`, `CREATE_NEW`,
     `FILE_SHARE_DELETE`, `FILE_SHARE_NONE`, `FILE_SHARE_READ`,
@@ -26,7 +31,7 @@
   - removed `find-files`, see `list-directory`
   - removed `move-file`, see `rename-path`
   - removed `watch-directory`, see `watch-path`
-  - added `<stat>` record
+  - added `<stat>` tuple
   - added directory-entry constants `DIRENT_BLOCK`, `DIRENT_CHAR`,
     `DIRENT_DIR`, `DIRENT_FIFO`, `DIRENT_FILE`, `DIRENT_LINK`,
     `DIRENT_SOCKET`, `DIRENT_UNKNOWN`

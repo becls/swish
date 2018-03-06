@@ -117,14 +117,14 @@
 (define (do-query db sql limit offset)
   (define (check-request)
     (cond
-     [(string=? sql "") (exit `#(db-query-failed empty-query ,sql))]
+     [(string=? sql "") (raise `#(db-query-failed empty-query ,sql))]
      [(or (starts-with-ci? sql "select ")
           (starts-with-ci? sql "with ")
           (starts-with-ci? sql "explain "))
       (if (and limit offset)
           'ok
-          (exit `#(db-query-failed missing-limit-offset ,limit ,offset ,sql)))]
-     [else (exit `#(db-query-failed not-a-query ,sql))]))
+          (raise `#(db-query-failed missing-limit-offset ,limit ,offset ,sql)))]
+     [else (raise `#(db-query-failed not-a-query ,sql))]))
   (define (home-link last-sql)
     `(a (@ (href ,(format "query-db?lastSql=~a"
                     (http:percent-encode last-sql))))
@@ -193,7 +193,7 @@
       (and string-value
            (if (and (integer? number-value) (>= number-value min-value))
                number-value
-               (exit `#(bad-integer-param ,name ,min-value ,number-value))))))
+               (raise `#(bad-integer-param ,name ,min-value ,number-value))))))
   (let ([sql (string-param "sql")]
         [last-sql (string-param "lastSql")]
         [limit (integer-param "limit" 0)]

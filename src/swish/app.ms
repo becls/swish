@@ -21,11 +21,12 @@
 ;;; DEALINGS IN THE SOFTWARE.
 
 (import
+ (except (chezscheme) sleep)
  (swish erlang)
  (swish log-db)
  (swish mat)
  (swish testing)
- (except (chezscheme) define-record exit sleep))
+ )
 
 (system-mat m1 ()
   'ok)

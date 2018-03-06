@@ -22,6 +22,7 @@
 
 #!chezscheme
 (import
+ (except (chezscheme) sleep)
  (swish erlang)
  (swish gatekeeper)
  (swish gen-server)
@@ -31,7 +32,7 @@
  (swish pregexp)
  (swish string-utils)
  (swish testing)
- (except (chezscheme) define-record exit sleep))
+ )
 
 (define-syntax assert-bad-match
   (syntax-rules ()
@@ -106,7 +107,7 @@
        (lambda ()
          (id-generator:start&link)
          (do ([n n (- n 1)]) ((= n 0)) (id-generator:get))
-         (exit 'done))))
+         (raise 'done))))
      (receive
       [#(DOWN ,_ ,_ ,_)
        (printf "id-generator test of ~d\n" n)]))))
@@ -139,12 +140,12 @@
           (receive
            (after 10000
              (osi_kill* os-pid 15)
-             (exit `#(pattern-not-found ,pattern ,(reverse lines))))
+             (raise `#(pattern-not-found ,pattern ,(reverse lines))))
            [,line (guard (string? line))
              (if (pregexp-match re line)
                  (receive (after 1000
                             (osi_kill* os-pid 15)
-                            (exit 'timeout))
+                            (raise 'timeout))
                    [#(<process-terminated> ,@os-pid ,_ ,_) 'ok])
                  (search re (cons line lines)))]))))))
 
@@ -157,34 +158,34 @@
   (process-trap-exit #t)
   (let ([pid (spawn&link (lambda () (kill self 'live-free-or-die-hard)))])
     (receive
-     (after 1000 (exit 'timeout))
+     (after 1000 (raise 'timeout))
      [#(EXIT ,@pid live-free-or-die-hard) 'ok])
     ;; link to a dead process should immediately give EXIT message
     (link pid)
     (receive
-     (after 0 (exit 'no-exit-from-link))
+     (after 0 (raise 'no-exit-from-link))
      [#(EXIT ,@pid live-free-or-die-hard) 'ok])
     ;; link to a dead process without trap-exit should die
-    (let ([pid2 (spawn&link (lambda () (link pid) (exit 'link-no-fail)))])
+    (let ([pid2 (spawn&link (lambda () (link pid) (raise 'link-no-fail)))])
       (receive
-       (after 10 (exit 'no-exit-from-link))
+       (after 10 (raise 'no-exit-from-link))
        [#(EXIT ,@pid2 live-free-or-die-hard) 'ok]))))
 
 (isolate-mat suicide-normal ()
   (process-trap-exit #t)
   (let ([pid (spawn&link (lambda () (kill self 'normal)))])
     (receive
-     (after 1000 (exit 'timeout))
+     (after 1000 (raise 'timeout))
      [#(EXIT ,@pid normal) 'ok])
     ;; link to a dead process should immediately give EXIT message
     (link pid)
     (receive
-     (after 0 (exit 'no-exit-from-link))
+     (after 0 (raise 'no-exit-from-link))
      [#(EXIT ,@pid normal) 'ok])
     ;; link to a dead process without trap-exit should die
-    (let ([pid2 (spawn&link (lambda () (link pid) (exit 'link-no-fail)))])
+    (let ([pid2 (spawn&link (lambda () (link pid) (raise 'link-no-fail)))])
       (receive
-       (after 10 (exit 'timeout))
+       (after 10 (raise 'timeout))
        [#(EXIT ,@pid2 link-no-fail) 'ok]))))
 
 (isolate-mat default-parameters ()
@@ -285,7 +286,7 @@
      (assert (find (lambda (x) (eq? x b-name)) names))
      (send a-name `#(ping ,self))
      (receive
-      (after 100 (exit 'timeout))
+      (after 100 (raise 'timeout))
       [pong 'ok])
      (unregister a-name)
      (unregister b-name)
@@ -322,11 +323,11 @@
   (define (start-after timeout)
     (spawn&link
      (lambda ()
-       (receive (after timeout (exit 'timeout))))))
+       (receive (after timeout (raise 'timeout))))))
   (define (start-until timeout)
     (spawn&link
      (lambda ()
-       (receive (until (+ (erlang:now) timeout) (exit 'timeout))))))
+       (receive (until (+ (erlang:now) timeout) (raise 'timeout))))))
   (define (test-loop start)
     (let lp ([i 12] [pids '()])
       (cond
@@ -351,7 +352,7 @@
     [timeout (receive (after 0 'timeout))])
    (receive
     [x 'ok]
-    [,other (exit `#(bad-message ,other))])))
+    [,other (raise `#(bad-message ,other))])))
 
 (isolate-mat receive-until-0 ()
   (send self 'x)
@@ -362,7 +363,7 @@
     [timeout (receive (until 0 'timeout))])
    (receive
     [x 'ok]
-    [,other (exit `#(bad-message ,other))])))
+    [,other (raise `#(bad-message ,other))])))
 
 (isolate-mat panic-run-queue-empty ()
   (repl-test
@@ -372,7 +373,7 @@
 (isolate-mat panic-event-loop-process-terminated ()
   (repl-test
    '(begin
-      (osi_list_directory "." (lambda (x) (exit 'kaboom)))
+      (osi_list_directory "." (lambda (x) (raise 'kaboom)))
       (receive (after 10 (osi_exit 10))))
    "Event: #\\(event-loop-process-terminated kaboom\\)")
   (repl-test
@@ -390,7 +391,7 @@
   (collect)
   (repl-test
    '(begin
-      (add-finalizer (lambda () (exit 'kaboom)))
+      (add-finalizer (lambda () (raise 'kaboom)))
       (collect)
       (receive (after 10 (osi_exit 10))))
    "Event: #\\(finalizer-process-terminated kaboom\\)")
@@ -423,7 +424,7 @@
         (link b)
         (sync)
         (match m
-          [#(die ,reason) (exit reason)]
+          [#(die ,reason) (raise reason)]
           [#(divide ,n)
            (/ 1 n)
            (wait)]
@@ -434,7 +435,7 @@
              [C (spawn&link (lambda () (c B m)))])
         (for-each
          (lambda (pid)
-           (receive (after 1000 (exit 'timeout-syncing))
+           (receive (after 1000 (raise 'timeout-syncing))
              [#(sync ,@pid) 'ok]))
          (list A B C))
         `#(,A ,B ,C))))
@@ -446,7 +447,7 @@
    ([#(,a ,b ,c) (start #f `#(die abc))]
     [#f (process-alive? b 0)]
     [#f (process-alive? c 0)]
-    [ok (receive (after 1000 (exit 'timeout))
+    [ok (receive (after 1000 (raise 'timeout))
           [#(msg-from ,@a #(EXIT ,@b abc)) 'ok])]
     [ok (flush)]
 
@@ -458,7 +459,7 @@
     [#(,a ,b ,c) (start #f `#(divide 0))]
     [#f (process-alive? b 0)]
     [#f (process-alive? c 0)]
-    [ok (receive (after 1000 (exit 'timeout))
+    [ok (receive (after 1000 (raise 'timeout))
           [#(msg-from ,@a #(EXIT ,@b ,cc))
            (guard (condition? cc))
            'ok])]
@@ -467,35 +468,35 @@
     [#(,a ,b ,c) (start #f `#(die kill))]
     [#f (process-alive? b 0)]
     [#f (process-alive? c 0)]
-    [ok (receive (after 1000 (exit 'timeout))
+    [ok (receive (after 1000 (raise 'timeout))
           [#(msg-from ,@a #(EXIT ,@b kill)) 'ok])]
     [ok (flush)]
 
     [#(,a ,b ,c) (start #t `#(die abc))]
     [#t (process-alive? b 0)]
     [#f (process-alive? c 0)]
-    [ok (receive (after 1000 (exit 'timeout))
+    [ok (receive (after 1000 (raise 'timeout))
           [#(msg-from ,@b #(EXIT ,@c abc)) 'ok])]
     [ok (flush)]
 
     [#(,a ,b ,c) (start #t `#(die normal))]
     [#t (process-alive? b 0)]
     [#f (process-alive? c 0)]
-    [ok (receive (after 1000 (exit 'timeout))
+    [ok (receive (after 1000 (raise 'timeout))
           [#(msg-from ,@b #(EXIT ,@c normal)) 'ok])]
     [ok (flush)]
 
     [#(,a ,b ,c) (start #t 'normal)]
     [#t (process-alive? b 0)]
     [#f (process-alive? c 0)]
-    [ok (receive (after 1000 (exit 'timeout))
+    [ok (receive (after 1000 (raise 'timeout))
           [#(msg-from ,@b #(EXIT ,@c normal)) 'ok])]
     [ok (flush)]
 
     [#(,a ,b ,c) (start #t `#(die kill))]
     [#t (process-alive? b 0)]
     [#f (process-alive? c 0)]
-    [ok (receive (after 1000 (exit 'timeout))
+    [ok (receive (after 1000 (raise 'timeout))
           [#(msg-from ,@b #(EXIT ,@c kill)) 'ok])]
     [ok (flush)])
    'ok))
@@ -530,7 +531,7 @@
              [C (spawn&link (lambda () (c B m)))])
         (for-each
          (lambda (pid)
-           (receive (after 1000 (exit 'timeout-syncing))
+           (receive (after 1000 (raise 'timeout-syncing))
              [#(sync ,@pid) 'ok]))
          (list A B C))
         `#(,A ,B ,C))))
@@ -542,9 +543,9 @@
    ([#(,a ,b ,c) (start #f 'abc)]
     [#f (process-alive? b 0)]
     [#t (process-alive? c 0)]
-    [ok (receive (after 1000 (exit 'timeout))
+    [ok (receive (after 1000 (raise 'timeout))
           [#(msg-from ,@a #(EXIT ,@b abc)) 'ok])]
-    [ok (receive (after 1000 (exit 'timeout))
+    [ok (receive (after 1000 (raise 'timeout))
           [#(msg-from ,@c #(EXIT ,@b abc)) 'ok])]
     [ok (flush)]
 
@@ -556,32 +557,32 @@
     [#(,a ,b ,c) (start #f 'kill)]
     [#f (process-alive? b 0)]
     [#t (process-alive? c 0)]
-    [ok (receive (after 1000 (exit 'timeout))
+    [ok (receive (after 1000 (raise 'timeout))
           [#(msg-from ,@a #(EXIT ,@b killed)) 'ok])]
-    [ok (receive (after 1000 (exit 'timeout))
+    [ok (receive (after 1000 (raise 'timeout))
           [#(msg-from ,@c #(EXIT ,@b killed)) 'ok])]
     [ok (flush)]
 
     [#(,a ,b ,c) (start #t 'abc)]
     [#t (process-alive? b 0)]
     [#t (process-alive? c 0)]
-    [ok (receive (after 1000 (exit 'timeout))
+    [ok (receive (after 1000 (raise 'timeout))
           [#(msg-from ,@b #(EXIT ,@c abc)) 'ok])]
     [ok (flush)]
 
     [#(,a ,b ,c) (start #t 'normal)]
     [#t (process-alive? b 0)]
     [#t (process-alive? c 0)]
-    [ok (receive (after 1000 (exit 'timeout))
+    [ok (receive (after 1000 (raise 'timeout))
           [#(msg-from ,@b #(EXIT ,@c normal)) 'ok])]
     [ok (flush)]
 
     [#(,a ,b ,c) (start #t 'kill)]
     [#f (process-alive? b 0)]
     [#t (process-alive? c 0)]
-    [ok (receive (after 1000 (exit 'timeout))
+    [ok (receive (after 1000 (raise 'timeout))
           [#(msg-from ,@a #(EXIT ,@b killed)) 'ok])]
-    [ok (receive (after 1000 (exit 'timeout))
+    [ok (receive (after 1000 (raise 'timeout))
           [#(msg-from ,@c #(EXIT ,@b killed)) 'ok])]
     [ok (flush)])
    'ok))
@@ -601,7 +602,7 @@
   (for-each
    (lambda (pid)
      (receive
-      (after 1000 (exit 'timeout))
+      (after 1000 (raise 'timeout))
       [#(EXIT ,@pid normal) 'ok]))
    (list (spin) (spin) (spin) (spin) (spin))))
 
@@ -611,11 +612,11 @@
          [pid (spawn&link
                (lambda ()
                  (if (monitor? (monitor host))
-                     (exit 'success!)
-                     (exit 'bad-monitor))))]
+                     (raise 'success!)
+                     (raise 'bad-monitor))))]
          [m (monitor pid)])
     (receive
-     (after 10 (exit 'timeout))
+     (after 10 (raise 'timeout))
      [#(DOWN ,@m ,@pid success!) 'ok])))
 
 (isolate-mat pps ()
@@ -663,81 +664,81 @@
     "duplicate pattern variable")
   (assert-syntax-error
    (let ()
-     (define-record <point> x y)
+     (define-tuple <point> x y)
      (match 0 [`(<point> ,x ,x) x]))
    "duplicate pattern variable")
   (assert-syntax-error (match-let* ([`(no-record-type) 12]) 12)
     "unknown record type in pattern")
   (assert-syntax-error (match 0 [,() 0]) "invalid match pattern")
-  (assert-syntax-error (define-record <point> (x y)) "invalid syntax")
-  (assert-syntax-error (define-record <point> make) "invalid field")
-  (assert-syntax-error (define-record <point> copy) "invalid field")
-  (assert-syntax-error (define-record <point> copy*) "invalid field")
-  (assert-syntax-error (define-record <point> is?) "invalid field")
-  (assert-syntax-error (define-record <point> x x) "duplicate field")
+  (assert-syntax-error (define-tuple <point> (x y)) "invalid syntax")
+  (assert-syntax-error (define-tuple <point> make) "invalid field")
+  (assert-syntax-error (define-tuple <point> copy) "invalid field")
+  (assert-syntax-error (define-tuple <point> copy*) "invalid field")
+  (assert-syntax-error (define-tuple <point> is?) "invalid field")
+  (assert-syntax-error (define-tuple <point> x x) "duplicate field")
   (assert-syntax-error
    (let ()
-     (define-record <point> x y)
+     (define-tuple <point> x y)
      (<point> make))
    "missing field x in")
   (assert-syntax-error
    (let ()
-     (define-record <point> x y)
+     (define-tuple <point> x y)
      (<point> make x))
    "invalid syntax")
   (assert-syntax-error
    (let ()
-     (define-record <point> x y)
+     (define-tuple <point> x y)
      (<point> copy (<point> make [x 0] [y 0]) [x 1] [x 2]))
    "duplicate field")
   (assert-syntax-error
    (let ()
-     (define-record <point> x y)
+     (define-tuple <point> x y)
      (<point> open (<point> make [x 1] [y 2]) (x x))
      x)
    "duplicate field")
   (assert-syntax-error
    (let ()
-     (define-record <point> x y)
+     (define-tuple <point> x y)
      (<point> open (<point> make [x 1] [y 2]) (z))
      z)
    "unknown field")
   (assert-syntax-error
    (let ()
-     (define-record <point> x y)
+     (define-tuple <point> x y)
      (<point> open (<point> make [x 1] [y 2]) amazing-prefix: (x x))
      x)
    "duplicate field")
   (assert-syntax-error
    (let ()
-     (define-record <point> x y)
+     (define-tuple <point> x y)
      (<point> open (<point> make [x 1] [y 2]) amazing-prefix: (z))
      z)
    "unknown field")
   (assert-syntax-error
    (let ()
-     (define-record <point> x y)
+     (define-tuple <point> x y)
      (<point> open (<point> make [x 1] [y 2]) "invalid-prefix" (z))
      z)
    "invalid syntax")
   (assert-syntax-error
    (let ()
-     (define-record <point> x y)
+     (define-tuple <point> x y)
      (<point> z))
    "unknown field")
   (assert-syntax-error
    (let ()
-     (define-record <point> x y)
+     (define-tuple <point> x y)
      (lambda (p) (<point> z p)))
    "unknown field")
   (assert-syntax-error
    (let ()
-     (define-record <point> x y)
+     (define-tuple <point> x y)
      (match 0 [`(<point> ,z) z]))
    "unknown field z in pattern")
   (assert-syntax-error
    (let ()
-     (define-record <point> x y)
+     (define-tuple <point> x y)
      (match 0 [`(<point> [z ,z]) z]))
    "unknown field z in pattern")
   (assert-syntax-error (match 0 [`((ooh!)) x]) "invalid match pattern")
@@ -746,7 +747,7 @@
 (mat t9 ()
   (assert
    (let ()
-     (define-record <point> x y)
+     (define-tuple <point> x y)
      (let ([pt (<point> make [y 1] [x 2])])
        (match-let* ([`(<point> [x 1] [y 1]) (<point> copy pt [x 1])])
          #t))))
@@ -757,7 +758,7 @@
   (assert (match (bytevector 1 2 3) ["foo" #f] [#vu8(1 2 3) #t])))
 
 (mat t10 ()
-  (define-record foo a b c)
+  (define-tuple foo a b c)
   (assert
    (equal?
     (match (foo make (a 1) (b 2) (c 3))
@@ -792,7 +793,7 @@
    (equal?
     '(a b b a)
     (let ()
-      (define-record <point> x y)
+      (define-tuple <point> x y)
       (let ([p (<point> make [x 'a] [y 'b])])
         (list
          (<point> x p)
@@ -801,18 +802,18 @@
          ((<point> x) p))))))
   (assert-error bad-record
     (let ()
-      (define-record <box> content)
+      (define-tuple <box> content)
       (<box> content 'box)))
   (assert-error bad-record
     (let ()
-      (define-record <box> content)
+      (define-tuple <box> content)
       (map (lambda (f) (f 3)) (list (<box> content)))))
                                         ; copy
   (assert
    (equal?
     '(#f #t (1 2) (1 2) (("outer x") 2) (1 #("outer y")) (5 7))
     (let ()
-      (define-record <point> x y)
+      (define-tuple <point> x y)
       (define (dump p) (list (<point> x p) (<point> y p)))
       (let ([p (<point> make [x 1] [y 2])]
             [x "outer x"]
@@ -829,14 +830,14 @@
             (<point> copy p [x 5] [y 7]))))))))
   (assert-error bad-record
     (let ()
-      (define-record <box> content)
+      (define-tuple <box> content)
       (<box> copy 27)))
                                         ; copy*
   (assert
    (equal?
     '(#f #t (1 2) (1 2) ((1 "outer y") 2) (1 #("outer x" 2)) ((1 2) #(1 2)) (2 1))
     (let ()
-      (define-record <point> x y)
+      (define-tuple <point> x y)
       (define (dump p) (list (<point> x p) (<point> y p)))
       (let ([p (<point> make [x 1] [y 2])]
             [x "outer x"]
@@ -854,14 +855,14 @@
             (<point> copy* p [x y] [y x]))))))))
   (assert-error bad-record
     (let ()
-      (define-record <box> content)
+      (define-tuple <box> content)
       (<box> copy* 27)))
                                         ; is?
   (assert
    (equal?
     '(#t #f #f #f #f #f #f #f #f #f #f)
     (let ()
-      (define-record <point> x y)
+      (define-tuple <point> x y)
       (map (lambda (p) (<point> is? p))
         (list (<point> make [x 1] [y 2]) #f #t 27 #\a "point" 'point '(point) '#(<point>) '#(<point> 1) '#(<point> 1 2 3))))))
                                         ; open
@@ -869,7 +870,7 @@
    (equal?
     '((1 bound-y) (bound-x 2) (1 2) (bound-x bound-y 1 2))
     (let ()
-      (define-record <point> x y)
+      (define-tuple <point> x y)
       (let ([p (<point> make [x 1] [y 2])])
         (list
          (let ([x 'bound-x] [y 'bound-y])
@@ -886,26 +887,26 @@
            (list x y p.x p.y)))))))
   (assert-error bad-record
     (let ()
-      (define-record <box> content)
+      (define-tuple <box> content)
       (<box> open 27 (content))
       content))
   (assert-error bad-record
     (let ()
-      (define-record <box> content)
+      (define-tuple <box> content)
       (<box> open 27 magical-prefix: (content))
       magical-prefix:content))
   (assert-error bad-record #(at ,_ "swish/erlang.ms")
     (let ()
-      (define-record <box> content)
+      (define-tuple <box> content)
       (<box> content 'gloves)))
   (assert-error bad-record #(at ,_ "swish/erlang.ms")
     (let ()
-      (define-record <box> content)
+      (define-tuple <box> content)
       (<box> open 'gloves [content])
       content))
   (assert-bad-match 'gloves #(at ,_ "swish/erlang.ms")
     (let ()
-      (define-record <box> content)
+      (define-tuple <box> content)
       (match 'gloves
         [`(<box> ,content) 'ok])))
 
@@ -933,7 +934,7 @@
     (send p2 'continue)
     (send p3 'continue))
   (define (exit-reason p)
-    (receive (after 1000 (exit 'timeout)) [#(EXIT ,@p ,r) r]))
+    (receive (after 1000 (raise 'timeout)) [#(EXIT ,@p ,r) r]))
 
   (process-trap-exit #t)
   (gatekeeper:start&link)
@@ -995,7 +996,7 @@
       (receive
        (after 1000
          (osi_kill* os-pid 15)
-         (exit 'timeout))
+         (raise 'timeout))
        [#(<process-terminated> ,@os-pid ,_ ,_) 'ok]))))
 
 (isolate-mat out-of-memory ()

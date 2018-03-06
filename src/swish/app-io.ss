@@ -31,10 +31,11 @@
    web-path
    )
   (import
+   (chezscheme)
    (software-info)
    (swish erlang)
    (swish io)
-   (except (chezscheme) define-record exit))
+   )
 
   (define bin-dir (cd))
 

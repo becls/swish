@@ -21,19 +21,21 @@
 ;;; DEALINGS IN THE SOFTWARE.
 
 (import
+ (chezscheme)
  (swish erlang)
  (swish io)
  (swish mat)
  (swish osi)
  (swish profile)
- (except (chezscheme) define-record exit))
+ (swish string-utils)
+ )
 
 (define (run-suite basename outdir)
   (define (start-profiler)
     (match (profile:start)
       [#(ok ,_) #t]
       [ignore #f]
-      [#(error ,reason) (exit 'profile-failed-to-start)]))
+      [#(error ,reason) (raise 'profile-failed-to-start)]))
   (reset-handler (lambda () (display "\nTest Failed\n") (abort 1)))
   (load (string-append basename ".ms"))
   (let ([profiling? (start-profiler)])
@@ -127,11 +129,11 @@
 
 (define (exit-summary indirs)
   (match indirs
-    [() (scheme-exit 0)]
+    [() (exit 0)]
     [(,indir . ,rest)
      (let-values ([(pass fail) (summarize-directory indir)])
        (if (> fail 0)
-           (scheme-exit 1)
+           (exit 1)
            (exit-summary rest)))]))
 
 (define (summarize-directory indir)

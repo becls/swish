@@ -80,20 +80,20 @@ dynamic children will not be automatically restarted if the supervisor
 itself terminates and is restarted.
 
 \paragraph*{state}\index{supervisor!state}
-\code{(define-state-record <supervisor-state> strategy intensity
+\code{(define-state-tuple <supervisor-state> strategy intensity
   period children restarts)}
 \begin{itemize}
   \item \code{strategy} defines how the supervisor processes a child
     termination: \code{one-for-one} or \code{one-for-all}.
   \item \code{intensity} is the maximum restart intensity.
   \item \code{period} is the maximum restart period in milliseconds.
-  \item \code{children} is a list of \code{<child>} records with
+  \item \code{children} is a list of \code{<child>} tuples with
     the most recently started child first.
   \item \code{restarts} is an ordered list of times when restarts
     have occurred.
 \end{itemize}
 
-\code{(define-record <child> pid name thunk restart-type shutdown
+\code{(define-tuple <child> pid name thunk restart-type shutdown
   type)}\linebreak \code{pid} stores the child process or
 \code{\#f}. The remaining fields are copied from the child
 specification described below.
@@ -429,7 +429,7 @@ The \code{supervisor:terminate-child} procedure calls
 \begin{procedure}
   \code{(supervisor:get-children \var{supervisor})}
 \end{procedure}
-\returns{} a list of \code{<child>} records
+\returns{} a list of \code{<child>} tuples
 
 This procedure returns the \var{supervisor} internal representation of
 child specifications.

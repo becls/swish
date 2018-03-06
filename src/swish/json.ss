@@ -31,9 +31,10 @@
    json:write
    )
   (import
+   (chezscheme)
    (swish erlang)
    (swish io)
-   (except (chezscheme) define-record exit))
+   )
 
   (define-syntax json:extend-object
     (syntax-rules ()
@@ -51,15 +52,15 @@
 
   (define (unexpected-input c ip)
     (if (eof-object? c)
-        (exit 'unexpected-eof)
-        (exit `#(unexpected-input ,c
-                  ,(and (port-has-port-position? ip)
-                        (- (port-position ip) 1))))))
+        (raise 'unexpected-eof)
+        (raise `#(unexpected-input ,c
+                   ,(and (port-has-port-position? ip)
+                         (- (port-position ip) 1))))))
 
   (define (next-char ip)
     (let ([x (read-char ip)])
       (if (eof-object? x)
-          (exit 'unexpected-eof)
+          (raise 'unexpected-eof)
           x)))
 
   (define (ws? x)
@@ -93,14 +94,14 @@
                     (expect-char #\u ip)
                     (let ([y (read-4hexdig ip)])
                       (unless (<= #xDC00 y #xDFFF)
-                        (exit 'invalid-surrogate-pair))
+                        (raise 'invalid-surrogate-pair))
                       (write-char
                        (integer->char
                         (+ (ash (bitwise-and x #x3FF) 10)
                            (bitwise-and y #x3FF)
                            #x10000))
                        op))]
-                   [(<= #xDC00 x #xDFFF) (exit 'invalid-surrogate-pair)]
+                   [(<= #xDC00 x #xDFFF) (raise 'invalid-surrogate-pair)]
                    [else (write-char (integer->char x) op)]))]
                [else (unexpected-input c ip)]))
            (lp op)]
@@ -272,7 +273,7 @@
               (write-char #\: op)
               (json:write op (cdr p))))))
       (write-char #\} op)]
-     [else (exit `#(invalid-datum ,x))]))
+     [else (raise `#(invalid-datum ,x))]))
 
   (define (json:object->string x)
     (let-values ([(op get) (open-string-output-port)])

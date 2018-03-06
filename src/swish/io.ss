@@ -74,13 +74,14 @@
    write-osi-port
    )
   (import
+   (chezscheme)
    (swish erlang)
    (swish osi)
-   (except (chezscheme) define-record exit))
+   )
 
   ;; Procedures starting with @ must be called with interrupts disabled.
 
-  (define-record <stat>
+  (define-tuple <stat>
     dev
     mode
     nlink
@@ -159,11 +160,11 @@
         [#(EXIT #(io-error ,_ osi_write_port ,_))
          (clear-output-port op)
          (close-output-port op)]
-        [#(EXIT ,reason) (exit reason)]
+        [#(EXIT ,reason) (raise reason)]
         [,_ (void)])))
 
   (define (io-error name who errno)
-    (exit `#(io-error ,name ,who ,errno)))
+    (raise `#(io-error ,name ,who ,errno)))
 
   (define (make-r! port)
     (lambda (bv start n)
@@ -311,7 +312,7 @@
                [(errno)
                 (send process
                   `#(path-watcher-failed ,path ,errno))]))
-       [(,who . ,errno) (exit `#(watch-path-failed ,path ,who ,errno))]
+       [(,who . ,errno) (raise `#(watch-path-failed ,path ,who ,errno))]
        [,handle
         (let ([w (make-path-watcher path (erlang:now) handle)])
           (path-watcher-guardian w)
@@ -575,7 +576,7 @@
               (let* ([bv (make-bytevector n)]
                      [count (read-osi-port port bv 0 n 0)])
                 (unless (eqv? count n)
-                  (exit `#(unexpected-eof ,name)))
+                  (raise `#(unexpected-eof ,name)))
                 bv)
               #vu8())))))
 
@@ -684,7 +685,7 @@
                       (unless (pair? r)
                         (osi_close_port* r))))))
        [(,who . ,errno)
-        (exit `#(listen-tcp-failed ,address ,port-number ,who ,errno))]
+        (raise `#(listen-tcp-failed ,address ,port-number ,who ,errno))]
        [,handle
         (let ([l (make-listener address (osi_get_tcp_listener_port handle)
                    (erlang:now) handle)])

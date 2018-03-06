@@ -26,10 +26,11 @@
    application:start
    )
   (import
+   (chezscheme)
    (swish erlang)
    (swish gen-server)
    (swish osi)
-   (except (chezscheme) define-record exit))
+   )
 
   (define application-exit-code 2)
 

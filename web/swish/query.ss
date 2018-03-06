@@ -51,11 +51,11 @@
 
 (define (doit op)
   (let ([query (find-param "sql")])
-    (unless query (exit "Missing sql"))
+    (unless query (raise "Missing sql"))
     (unless (or (starts-with-ci? query "select ")
                 (starts-with-ci? query "with ")
                 (starts-with-ci? query "explain "))
-      (exit "Query must start with select, with, or explain."))
+      (raise "Query must start with select, with, or explain."))
     (with-db [db (log-path) SQLITE_OPEN_READONLY]
       (let ([stmt (sqlite:prepare db query)])
         (put-string op "{\"instance\":\"")

@@ -29,7 +29,7 @@
    complete-io
    console-event-handler
    dbg
-   define-record
+   define-tuple
    demonitor
    demonitor&flush
    erlang:now
@@ -50,7 +50,6 @@
    profile-me
    receive
    register
-   scheme-exit
    self
    send
    spawn
@@ -61,12 +60,10 @@
    whereis
    )
   (import
+   (chezscheme)
    (swish meta)
    (swish osi)
-   (rename (except (chezscheme) define-record remove)
-     (exit scheme-exit)
-     (raise exit)))
-
+   )
   ;; Procedures starting with @ must be called with interrupts disabled.
 
   (define-syntax on-exit
@@ -202,7 +199,7 @@
     (when (eq? p finalizer-process)
       (panic `#(finalizer-process-terminated ,reason)))
     (when (enqueued? p)
-      (remove p))
+      (remove-q p))
     (pcb-cont-set! p #f)
     (pcb-winders-set! p '())
     (pcb-exception-state-set! p reason)
@@ -255,7 +252,7 @@
            (lambda () e1 e2 ...))))]))
 
   (define (bad-arg who arg)
-    (exit `#(bad-arg ,who ,arg)))
+    (raise `#(bad-arg ,who ,arg)))
 
   (define (kill p reason)
     (unless (pcb? p)
@@ -348,12 +345,12 @@
 
   (define (@enqueue process queue precedence)
     (when (enqueued? process)
-      (remove process))
+      (remove-q process))
     (pcb-precedence-set! process precedence)
     (let find ([next queue])
       (let ([prev (q-prev next)])
         (if (or (eq? prev queue) (<= (pcb-precedence prev) precedence))
-            (insert process next)
+            (insert-q process next)
             (find prev)))))
 
   (define last-process-id 0)
@@ -465,7 +462,7 @@
   (define (@send p x)
     (let ([inbox (pcb-inbox p)])
       (when inbox
-        (insert (make-msg x) inbox)
+        (insert-q (make-msg x) inbox)
         (cond
          [(pcb-sleeping? p)
           (pcb-sleeping?-set! p #f)
@@ -489,14 +486,14 @@
      [(and (or (fixnum? timeout) (bignum? timeout)) (>= timeout 0))
       ($receive matcher src (+ (erlang:now) timeout) timeout-handler)]
      [(eq? timeout 'infinity) ($receive matcher src #f #f)]
-     [else (exit `#(timeout-value ,timeout ,src))]))
+     [else (raise `#(timeout-value ,timeout ,src))]))
 
   (define (receive-until matcher src time timeout-handler)
     (cond
      [(and (or (fixnum? time) (bignum? time)) (>= time 0))
       ($receive matcher src time timeout-handler)]
      [(eq? time 'infinity) ($receive matcher src #f #f)]
-     [else (exit `#(timeout-value ,time ,src))]))
+     [else (raise `#(timeout-value ,time ,src))]))
 
   (define ($receive matcher src waketime timeout-handler)
     (disable-interrupts)
@@ -524,7 +521,7 @@
           (cond
            [(matcher (msg-contents msg)) =>
             (lambda (run)
-              (remove msg)
+              (remove-q msg)
               (run))]
            [else
             (disable-interrupts)
@@ -534,7 +531,7 @@
 
   (define tick-nanoseconds 1000000) ;; 1 millisecond
 
-  (define (insert x next)
+  (define (insert-q x next)
     ;; No interrupts occur within this procedure because the record
     ;; functions get inlined.
     (let ([prev (q-prev next)])
@@ -543,7 +540,7 @@
       (q-next-set! x next)
       (q-prev-set! next x)))
 
-  (define (remove x)
+  (define (remove-q x)
     ;; No interrupts occur within this procedure because the record
     ;; functions get inlined.
     (let ([prev (q-prev x)] [next (q-next x)])
@@ -586,14 +583,14 @@
            (pcb-cont-set! self k)
            (cond
             [queue (@enqueue self queue precedence)]
-            [(enqueued? self) (remove self)]))
+            [(enqueued? self) (remove-q self)]))
 
          ;; context switch
          (pcb-sic-set! self prev-sic)
          (let ([p (q-next run-queue)])
            (when (eq? p run-queue)
              (panic 'run-queue-empty))
-           (set-self! (remove p)))
+           (set-self! (remove-q p)))
 
          ;; adjust system interrupt counter for the new process
          (let loop ([sic (pcb-sic self)])
@@ -674,11 +671,11 @@
       (bad-arg 'register p))
     (with-interrupts-disabled
      (cond
-      [(not (alive? p)) (exit `#(process-dead ,p))]
+      [(not (alive? p)) (raise `#(process-dead ,p))]
       [(pcb-name p) =>
-       (lambda (name) (exit `#(process-already-registered ,name)))]
+       (lambda (name) (raise `#(process-already-registered ,name)))]
       [(eq-hashtable-ref registrar name #f) =>
-       (lambda (pid) (exit `#(name-already-registered ,pid)))]
+       (lambda (pid) (raise `#(name-already-registered ,pid)))]
       [else
        (pcb-name-set! p name)
        (eq-hashtable-set! registrar name p)
@@ -821,7 +818,7 @@
       [(_) #f]))
 
   (define (bad-match v src)
-    (exit `#(bad-match ,v ,src)))
+    (raise `#(bad-match ,v ,src)))
 
   (define-syntax (match-one x)
     (define (bad-pattern x)
@@ -958,7 +955,7 @@
        (match-help (#3%vector-ref v i) pattern fail
          (match-vector v (fx+ i 1) rest fail body))]))
 
-  (define-syntax (define-record x)
+  (define-syntax (define-tuple x)
     (syntax-case x ()
       [(_ name field ...)
        (and (identifier? #'name)
@@ -988,7 +985,7 @@
                        (define tmp
                          (let ([val #,expr])
                            (unless (name is? val)
-                             (exit `#(bad-record name ,val ,#,(find-source x))))
+                             (raise `#(bad-record name ,val ,#,(find-source x))))
                            val))
                        #,@(map make-accessor (syntax->list field-names)))))
              (define (handle-copy x e bindings mode)
@@ -996,7 +993,7 @@
                    #,(case mode
                        [copy
                         #`(unless (name is? src)
-                            (exit `#(bad-record name ,src ,#,(find-source x))))]
+                            (raise `#(bad-record name ,src ,#,(find-source x))))]
                        [copy*
                         (handle-open x #'src #f (get-binding-names bindings))])
                    (vector 'name #,@(copy-record #'(field ...) 1 bindings))))
@@ -1093,7 +1090,7 @@
                 (syntax-datum-eq? #'fn #'field)
                 #`(lambda (x)
                     (unless (name is? x)
-                      (exit `#(bad-record name ,x ,#,(find-source x))))
+                      (raise `#(bad-record name ,x ,#,(find-source x))))
                     (#3%vector-ref x #,(find-index #'fn #'(field ...) 1)))]
                ...
                [(name no-check fn e)

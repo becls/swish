@@ -21,13 +21,14 @@
 ;;; DEALINGS IN THE SOFTWARE.
 
 (import
+ (except (chezscheme) sleep)
  (swish erlang)
  (swish event-mgr)
  (swish events)
  (swish mat)
  (swish statistics)
  (swish testing)
- (except (chezscheme) define-record exit sleep))
+ )
 
 (isolate-mat stats ()
   (capture-events)
@@ -35,19 +36,19 @@
   (match-let*
    ([#(ok ,pid) (statistics:start&link)]
     [,@pid (whereis 'statistics)])
-   (receive (after 1000 (exit 'timeout))
+   (receive (after 1000 (raise 'timeout))
      [`(<statistics> [reason startup]) 'ok])
    (statistics:suspend)
-   (receive (after 1000 (exit 'timeout))
+   (receive (after 1000 (raise 'timeout))
      [`(<statistics> [reason suspend]) 'ok])
    (statistics:resume)
-   (receive (after 1000 (exit 'timeout))
+   (receive (after 1000 (raise 'timeout))
      [`(<statistics> [reason resume]) 'ok])
    (send pid 'timeout)
-   (receive (after 1000 (exit 'timeout))
+   (receive (after 1000 (raise 'timeout))
      [`(<statistics> [reason update]) 'ok])
    (kill pid 'shutdown)
-   (receive (after 1000 (exit 'timeout))
+   (receive (after 1000 (raise 'timeout))
      [`(<statistics> [reason shutdown]) 'ok])))
 
 (start-silent-event-mgr)

@@ -40,6 +40,7 @@
    http:write-status
    )
   (import
+   (chezscheme)
    (swish app-io)
    (swish erlang)
    (swish event-mgr)
@@ -53,8 +54,8 @@
    (swish string-utils)
    (swish supervisor)
    (swish watcher)
-   (except (chezscheme) define-record exit)
    )
+
   (define request-limit 4096)
   (define header-limit 1048576)
   (define content-limit 4194304)
@@ -89,7 +90,7 @@
                             (http:handle-input ip op)))))))])
           `#(no-reply ,state))]
         [#(accept-tcp-failed ,l ,who ,errno)
-         (exit `#(accept-tcp-failed ,l ,who ,errno))]))
+         (raise `#(accept-tcp-failed ,l ,who ,errno))]))
     (gen-server:start&link 'http-listener))
 
   (define (http-cache:get-content-type extension)
@@ -97,7 +98,7 @@
 
   (define (http-cache:get-handler method path)
     (match (gen-server:call 'http-cache `#(get-handler ,method ,path) 'infinity)
-      [#(error ,reason) (exit reason)]
+      [#(error ,reason) (raise reason)]
       [#(ok ,result) result]))
 
   (define (http-cache:start&link)
@@ -107,7 +108,7 @@
     ;; the watchers are cleared.  It uses separate processes to
     ;; interpret the files and a cookie to determine if the result is
     ;; valid to be placed in the cache.
-    (define-state-record <http-cache>
+    (define-state-tuple <http-cache>
       cookie     ; integer
       mime-types ; #f | file-extension -> content-type
       pages      ; path -> #(loaded ,handler) | #(loading ,path ,pid ,waiters)
@@ -123,7 +124,7 @@
               [(,ext . ,content-type)
                (guard (and (string? ext) (string? content-type)))
                (lp (ht:set ht ext content-type))]
-              [,x (exit `#(invalid-mime-type ,x))])))))
+              [,x (raise `#(invalid-mime-type ,x))])))))
     (define (update-mime-types state)
       (if ($state mime-types)
           state
@@ -200,7 +201,7 @@
                   `#(reply
                      #(ok ,(lambda (ip op request header params)
                              (not-found op)
-                             (exit `#(invalid-http-method ,method ,path))))
+                             (raise `#(invalid-http-method ,method ,path))))
                      ,state)]))]))]
         [#(get-content-type ,ext)
          (let ([state (update-mime-types state)])
@@ -283,7 +284,7 @@
           (let-values ([(op get) (open-bytevector-output-port)])
             (let lp ([n 0])
               (when (fx> n limit)
-                (exit 'input-limit-exceeded))
+                (raise 'input-limit-exceeded))
               (let ([x (get-u8 ip)])
                 (cond
                  [(eof-object? x) (get)]
@@ -365,7 +366,7 @@
       (fx- c (fx- (char->integer #\a) 10))]
      [else #f]))
 
-  (define-record <request> method path query)
+  (define-tuple <request> method path query)
 
   (define (http:parse-request bv)
     (match (bv-match-positions bv (char->integer #\space) 2)
@@ -391,7 +392,7 @@
                   (bv-extract-string line (bv-next-non-lws line (fx+ colon 1))
                     (bytevector-length line)))
             (http:read-header ip (fx- limit (bytevector-length line))))]
-         [,_ (exit 'invalid-header)])]))
+         [,_ (raise 'invalid-header)])]))
 
   (define multipart/form-data-regexp
     (pregexp "^multipart/form-data;\\s*boundary=(.+)$"))
@@ -401,18 +402,18 @@
      [(http:find-header "Content-Length" header) =>
       (lambda (x)
         (let ([len (or (string->number x)
-                       (exit `#(invalid-content-length ,x)))]
+                       (raise `#(invalid-content-length ,x)))]
               [type (or (http:find-header "Content-Type" header) "none")])
           (match (pregexp-match multipart/form-data-regexp type)
             [(,_ ,boundary) ;; multipart/form-data
              (parse-multipart/form-data ip (string-append "--" boundary))]
             [#f
              (when (> len content-limit)
-               (exit 'content-limit-exceeded))
+               (raise 'content-limit-exceeded))
              (let* ([content (make-bytevector len)]
                     [n (get-bytevector-n! ip content 0 len)])
                (when (or (eof-object? n) (not (= n len)))
-                 (exit 'unexpected-eof))
+                 (raise 'unexpected-eof))
                (if (starts-with? type "application/x-www-form-urlencoded")
                    (parse-encoded-kv content 0 len)
                    `(("unhandled-content" . ,content))))])))]
@@ -421,7 +422,7 @@
   (define (http:handle-input ip op)
     (let ([x (read-line ip request-limit)])
       (cond
-       [(eof-object? x) (exit 'normal)]
+       [(eof-object? x) (raise 'normal)]
        [(http:parse-request x) =>
         (lambda (request)
           (match request
@@ -434,7 +435,7 @@
                (when (keep-alive? header)
                  (http:handle-input ip op)))]))]
        [else
-        (exit `#(unhandled-input ,x))])))
+        (raise `#(unhandled-input ,x))])))
 
   (define (http:read-status ip limit)
     (let ([x (read-line ip limit)])
@@ -507,7 +508,7 @@
             (when (< fp n)
               (let ([count (read-osi-port port buffer 0 bufsize fp)])
                 (when (eqv? count 0)
-                  (exit 'unexpected-eof))
+                  (raise 'unexpected-eof))
                 (put-bytevector op buffer 0 count)
                 (lp (+ fp count))))))
         (flush-output-port op))))
@@ -528,7 +529,7 @@
 
   (define (http:get-header name header)
     (or (internal-find-header 'http:get-header name header)
-        (exit `#(invalid-header ,name ,header))))
+        (raise `#(invalid-header ,name ,header))))
 
   (define (internal-find-param who name params)
     (unless (string? name)
@@ -542,7 +543,7 @@
 
   (define (http:get-param name params)
     (or (internal-find-param 'http:get-param name params)
-        (exit `#(invalid-param ,name ,params))))
+        (raise `#(invalid-param ,name ,params))))
 
   (define (do-interpret-file abs-path)
     (do-interpret (read-bytevector abs-path (read-file abs-path))
@@ -608,14 +609,14 @@
     (cond
      [(not (validate-path path))
       (not-found op)
-      (exit `#(invalid-http-path ,path))]
+      (raise `#(invalid-http-path ,path))]
      [(http-cache:get-handler method path) =>
       (lambda (handler)
         (handler ip op request header params)
         (flush-output-port op))]
      [else
       (not-found op)
-      (exit `#(http-file-not-found ,path))]))
+      (raise `#(http-file-not-found ,path))]))
 
   (define (http:percent-encode s)
     (define (encode bv i op)
@@ -641,7 +642,7 @@
   (define (next-u8 ip)
     (let ([x (get-u8 ip)])
       (when (eof-object? x)
-        (exit 'unexpected-eof))
+        (raise 'unexpected-eof))
       x))
 
   (define (parse-multipart/form-data ip boundary)
@@ -659,7 +660,7 @@
                (eqv? (next-u8 ip) (char->integer #\return))
                (eqv? (next-u8 ip) (char->integer #\newline)))
           '()]
-         [else (exit 'invalid-multipart-boundary)])))
+         [else (raise 'invalid-multipart-boundary)])))
     (define (parse-next limit)
       (define header (http:read-header ip header-limit))
       (define data
@@ -688,13 +689,13 @@
           [#(EXIT ,reason)
            (force-close-output-port op)
            (delete-file fn)
-           (exit reason)]
+           (raise reason)]
           [,params params])))
     ;; The boundary occurs first.
     (do ([i 0 (fx+ i 1)] [bv (string->utf8 boundary)])
         [(= i (bytevector-length bv))]
       (unless (eqv? (next-u8 ip) (bytevector-u8-ref bv i))
-        (exit 'invalid-multipart-boundary)))
+        (raise 'invalid-multipart-boundary)))
     (parse-end content-limit))
 
   (define form-data-regexp (pregexp "^form-data;\\s*(.*)$"))
@@ -708,9 +709,9 @@
              (match (pregexp-match key-value-regexp params)
                [(,_ ,key ,val ,params)
                 (cons (cons key val) (lp params))]
-               [#f (exit `#(invalid-content-disposition ,d))])
+               [#f (raise `#(invalid-content-disposition ,d))])
              '()))]
-      [#f (exit `#(invalid-content-disposition ,d))]))
+      [#f (raise `#(invalid-content-disposition ,d))]))
 
   (define (delete-tmp-files params)
     (for-each
@@ -750,7 +751,7 @@
         (and limit
              (if (fx> limit 0)
                  (fx- limit 1)
-                 (exit 'content-limit-exceeded))))
+                 (raise 'content-limit-exceeded))))
       (populate-buffer 0 0 limit))
     ;; Build partial match table
     (fxvector-set! partial 0 -1)

@@ -30,6 +30,7 @@
    init-main-sup
    )
   (import
+   (chezscheme)
    (main-sup-spec)
    (software-info)
    (swish application)
@@ -37,7 +38,7 @@
    (swish io)
    (swish statistics)
    (swish supervisor)
-   (except (chezscheme) define-record exit))
+   )
 
   (define (app:start) (application:start init-main-sup))
 

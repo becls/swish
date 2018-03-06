@@ -28,12 +28,13 @@
    profile:start&link
    )
   (import
+   (chezscheme)
    (swish app-io)
    (swish erlang)
    (swish gen-server)
    (swish io)
    (swish meta)
-   (except (chezscheme) define-record exit))
+   )
 
   (define (source-object-bfp=? x y)
     (= (source-object-bfp x) (source-object-bfp y)))
@@ -129,7 +130,7 @@
        (match (catch (profile-update ht))
          [ok `#(no-reply ,ht 60000)]
          [#(EXIT #(io-error ,_ ,_ ,_)) `#(no-reply ,ht 1000)]
-         [#(EXIT ,reason) (exit reason)])]))
+         [#(EXIT ,reason) (raise reason)])]))
   (define (profile:start&link)
     (gen-server:start&link 'profiler))
   (define (profile:start)

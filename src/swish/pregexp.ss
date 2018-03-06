@@ -25,8 +25,8 @@
    pregexp-split
    )
   (import
+   (chezscheme)
    (swish erlang)
-   (except (chezscheme) define-record exit)
    )
 
   (define *pregexp-version* 20050502) ;;last change
@@ -43,7 +43,7 @@
 
   (define-syntax pregexp-error
     (syntax-rules ()
-      [(_ e1 e2 ...) (exit `#(pregexp-error ,e1 ,e2 ...))]))
+      [(_ e1 e2 ...) (raise `#(pregexp-error ,e1 ,e2 ...))]))
 
   (define pregexp-read-pattern
     (lambda (s i n)

@@ -31,7 +31,7 @@ language~\cite{armstrong-thesis,programming-erlang}.\footnote{Tuples,
   denoted by \{$e_1$, \ldots, $e_n$\} in Erlang, are implemented as
   vectors: \code{\#(\var{e$_1$}~\etc~\var{e$_n$})}. Similarly
   records, defined as syntactic sugar over tuples in Erlang, are
-  implemented as syntactic sugar over vectors.}  Record and pattern
+  implemented as syntactic sugar over vectors.}  Tuple and pattern
 matching macros provide succinct ways of composing and decomposing
 data structures.
 
@@ -389,20 +389,6 @@ registered process names from the registrar.
 \subsection {Process Termination, Links, and Monitors}
 
 % ----------------------------------------------------------------------------
-\defineentry{exit}
-\begin{procedure}
-  \code{(exit \var{reason})}
-\end{procedure}
-\returns{} never
-
-The \code{exit} procedure is the system \code{raise} procedure,
-which raises an exception of \var{reason}. If the calling process does
-not catch the exception, the process will exit with \var{reason}.
-
-The system \code{exit} procedure is exported as
-\code{scheme-exit}\index{scheme-exit@\code{scheme-exit}}.
-
-% ----------------------------------------------------------------------------
 \defineentry{catch}
 \begin{syntax}
   \code{(catch \var{e1} \var{e2} \etc{})}
@@ -552,7 +538,7 @@ provides a concise and expressive way to match data structures and
 bind variables to parts. The \code{receive}, \code{match}, and
 \code{match-let*} macros use this pattern language. The
 implementation uses two structurally recursive passes over the
-pattern. The first pass checks the pattern syntax including record
+pattern. The first pass checks the pattern syntax including tuple
 types and field names and accumulates the list of pattern
 variables. This list enables it to check for duplicate pattern
 variables.  The second pass emits code that matches the input against
@@ -586,7 +572,7 @@ the pattern left to right.
   matches \var{pattern} and binds a fresh \var{variable} to it \\
 
   \code{`(\var{type} \set{,\var{field}\alt{}[\var{field} \var{pattern}]} \etc{})} &
-  an instance of the record \var{type}, each \var{field} of which is
+  an instance of the tuple \var{type}, each \var{field} of which is
   bound to fresh variable \var{field} or matches the corresponding
   \var{pattern} \\
 
@@ -910,58 +896,58 @@ profiling is turned off, \code{(profile-me)} expands to
 \code{(void)}, and the system optimizer eliminates it.
 
 % ----------------------------------------------------------------------------
-\subsection {Records}
+\subsection {Tuples}
 
-For users of the concurrency model, a \emph{record}\index{record} is a
+For users of the concurrency model, a \emph{tuple}\index{tuple} is a
 container of named, immutable fields implemented as a vector whose
-first element is the record name and remaining elements are the
-fields. Each record definition is a macro that provides all record
+first element is the tuple name and remaining elements are the
+fields. Each tuple definition is a macro that provides all tuple
 operations using field names only, not field indices. The macro makes
-it easy to copy a record without having to specify the fields that
+it easy to copy a tuple without having to specify the fields that
 don't change.  We decided not to use the Scheme record facility
 because it does not provide name-based constructors, copy operators,
 or convenient serialization.
 
 % ----------------------------------------------------------------------------
-\index{record!define-record@\code{define-record}}
-\defineentry{define-record}
+\index{tuple!define-tuple@\code{define-tuple}}
+\defineentry{define-tuple}
 \begin{syntax}
-  \code{(define-record \var{name} \var{field} \etc{})}
+  \code{(define-tuple \var{name} \var{field} \etc{})}
 \end{syntax}
 \expandsto{} a macro definition of \var{name} described below
 
-The \code{define-record} macro defines a macro for creating,
-copying, identifying, and accessing record type \var{name}. \var{name}
+The \code{define-tuple} macro defines a macro for creating,
+copying, identifying, and accessing tuple type \var{name}. \var{name}
 and \var{field} \etc{} must be identifiers. No two field names can be
 the same. The following field names are reserved: \code{make},
 \code{copy}, \code{copy*}, and \code{is?}.
 
 % ----------------------------------------------------------------------------
-\index{record!make@\code{make}}
+\index{tuple!make@\code{make}}
 \begin{syntax}
   \code{(\var{name} make [\var{field} \var{value}] \etc{})}
 \end{syntax}
-\returns{} a new instance of record type \var{name} with \var{field} =
+\returns{} a new instance of tuple type \var{name} with \var{field} =
 \var{value} \etc{}
 
-The \code{make} form creates a new instance of the record type
+The \code{make} form creates a new instance of the tuple type
 \var{name}. \var{field} bindings may appear in any order. All fields
-from the record definition must be specified.
+from the tuple definition must be specified.
 
 % ----------------------------------------------------------------------------
-\index{record!field accessor}
+\index{tuple!field accessor}
 \begin{syntax}
   \code{(\var{name} \var{field} \var{instance})}
 \end{syntax}
 \returns{} \var{instance}.\var{field}
 
 The field accessor form retrieves the value of the specified
-\var{field} of \var{instance}. If $r$ = \var{instance} is not a record
-of type \var{name}, exception \code{\#(bad-record \var{name} $r$
+\var{field} of \var{instance}. If $r$ = \var{instance} is not a tuple
+of type \var{name}, exception \code{\#(bad-tuple \var{name} $r$
   \var{src})} is raised, where \var{src} is the source location of the
 field accessor form if available.
 
-\index{record!field accessor}
+\index{tuple!field accessor}
 \begin{syntax}
   \code{(\var{name} \var{field})}
 \end{syntax}
@@ -970,7 +956,7 @@ field accessor form if available.
 The \code{(\var{name} \var{field})} form expands to \code{(lambda (instance) (\var{name} \var{field} instance))}.
 
 % ----------------------------------------------------------------------------
-\index{record!open@\code{open}}
+\index{tuple!open@\code{open}}
 \begin{syntax}
   \code{(\var{name} open \var{instance} \opt{\var{prefix}} (\var{field} \etc{}))}
 \end{syntax}
@@ -979,11 +965,11 @@ The \code{(\var{name} \var{field})} form expands to \code{(lambda (instance) (\v
 The \code{open} form defines identifier syntax for each specified \var{field}
 so that a reference to \var{field} expands to \code{(\var{name} \var{field} $r$)}
 where $r$ is the value of \var{instance}.
-If $r$ is not a record of type \var{name}, exception
-\code{\#(bad-record \var{name} $r$ \var{src})} is raised, where
+If $r$ is not a tuple of type \var{name}, exception
+\code{\#(bad-tuple \var{name} $r$ \var{src})} is raised, where
 \var{src} is the source location of the \code{open} form if avalable.
 The \code{open} form is equivalent to the following, except that it
-checks the record type only once:
+checks the tuple type only once:
 \antipar\codebegin
 (begin
   (define instance \var{instance})
@@ -996,35 +982,35 @@ a definition for \code{\var{prefix}\var{field}} rather than \var{field} for
 each \var{field} specified.
 
 % ----------------------------------------------------------------------------
-\index{record!copy@\code{copy}}
+\index{tuple!copy@\code{copy}}
 \begin{syntax}
   \code{(\var{name} copy \var{instance} [\var{field} \var{value}] \etc{})}
 \end{syntax}
-\returns{} a new instance of record type \var{name} with \var{field} =
+\returns{} a new instance of tuple type \var{name} with \var{field} =
 \var{value} \etc{} and remaining fields copied from \var{instance}
 
 The \code{copy} form creates a copy of \var{instance} except that
 each specified \var{field} is set to the associated \var{value}. If
-$r$ = \var{instance} is not a record of type \var{name}, exception
-\code{\#(bad-record \var{name} $r$ \var{src})} is raised, where
+$r$ = \var{instance} is not a tuple of type \var{name}, exception
+\code{\#(bad-tuple \var{name} $r$ \var{src})} is raised, where
 \var{src} is the source location of the \code{copy} form if
 avalable.  \var{field} bindings may appear in any order.
 
 % ----------------------------------------------------------------------------
-\index{record!copy*@\code{copy*}}
+\index{tuple!copy*@\code{copy*}}
 \begin{syntax}
   \code{(\var{name} copy* \var{instance} [\var{field} \var{value}] \etc{})}
 \end{syntax}
-\returns{} a new instance of record type \var{name} with \var{field} =
+\returns{} a new instance of tuple type \var{name} with \var{field} =
 \var{value} \etc{} and remaining fields copied from \var{instance}
 
 The \code{copy*} form is like \code{copy} except that, within the \var{value} expressions,
 each specified \var{field} is bound to an identifier macro that returns the value of \var{instance.field}.
-If $r$ = \var{instance} is not a record of type \var{name}, exception
-\code{\#(bad-record \var{name} $r$ \var{src})} is raised, where
+If $r$ = \var{instance} is not a tuple of type \var{name}, exception
+\code{\#(bad-tuple \var{name} $r$ \var{src})} is raised, where
 \var{src} is the source location of the \code{copy*} form if avalable.
 The \code{copy*} form is equivalent to the following, except that it
-checks the record type only once:
+checks the tuple type only once:
 \antipar\codebegin
 (let ([instance \var{instance}])
   (\var{name} open instance (\var{field} \etc{}))
@@ -1032,14 +1018,14 @@ checks the record type only once:
 \codeend\antipar
 
 % ----------------------------------------------------------------------------
-\index{record!is?@\code{is?}}
+\index{tuple!is?@\code{is?}}
 \begin{syntax}
   \code{(\var{name} is? \var{x})}
 \end{syntax}
 \returns{} a boolean
 
 The \code{is?} form determines whether or not the datum \var{x} is
-an instance of record type \var{name}.
+an instance of tuple type \var{name}.
 
 % ----------------------------------------------------------------------------
 \subsection {I/O}

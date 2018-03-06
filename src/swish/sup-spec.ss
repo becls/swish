@@ -25,6 +25,7 @@
    swish-sup-spec
    )
   (import
+   (chezscheme)
    (software-info)
    (swish app-io)
    (swish application)
@@ -37,7 +38,7 @@
    (swish statistics)
    (swish supervisor)
    (swish watcher)
-   (except (chezscheme) define-record exit))
+   )
 
   (define (swish-sup-spec loggers)
     `(#(event-mgr ,event-mgr:start&link

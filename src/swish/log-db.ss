@@ -33,6 +33,7 @@
    swish-event-logger
    )
   (import
+   (chezscheme)
    (software-info)
    (swish app-io)
    (swish db)
@@ -42,10 +43,9 @@
    (swish io)
    (swish osi)
    (swish string-utils)
-   (except (chezscheme) define-record exit)
    )
 
-  (define-record <event-logger> setup log)
+  (define-tuple <event-logger> setup log)
 
   (define (log-db:start&link)
     (db:start&link 'log-db
@@ -366,7 +366,7 @@
         [#f
          (log-db:version schema-name schema-version)
          (create-db)]
-        [,version (exit `#(unsupported-db-version ,schema-name ,version))]))
+        [,version (raise `#(unsupported-db-version ,schema-name ,version))]))
 
     (define swish-event-logger
       (<event-logger> make [setup upgrade-db] [log log-simple-event]))

@@ -33,17 +33,17 @@
    <transaction-retry>
    )
   (import
+   (chezscheme)
    (swish erlang)
    (swish meta)
-   (except (chezscheme) define-record exit)
    )
 
-  (define-record <child-end>
+  (define-tuple <child-end>
     timestamp
     pid
     killed
     reason)
-  (define-record <child-start>
+  (define-tuple <child-start>
     timestamp
     supervisor
     pid
@@ -51,7 +51,7 @@
     restart-type
     type
     shutdown)
-  (define-record <gen-server-debug>
+  (define-tuple <gen-server-debug>
     timestamp
     duration
     type
@@ -60,13 +60,13 @@
     message
     state
     reply)
-  (define-record <gen-server-terminating>
+  (define-tuple <gen-server-terminating>
     timestamp
     name
     last-message
     state
     reason)
-  (define-record <http-request>
+  (define-tuple <http-request>
     timestamp
     pid
     host
@@ -74,7 +74,7 @@
     path
     header
     params)
-  (define-record <statistics>
+  (define-tuple <statistics>
     timestamp
     date
     reason            ; startup | update | suspend | resume | shutdown
@@ -93,19 +93,19 @@
     gc-cpu
     gc-real
     gc-bytes)
-  (define-record <supervisor-error>
+  (define-tuple <supervisor-error>
     timestamp
     supervisor
     error-context
     reason
     child-pid
     child-name)
-  (define-record <system-attributes>
+  (define-tuple <system-attributes>
     timestamp
     date
     software-version
     computer-name)
-  (define-record <transaction-retry>
+  (define-tuple <transaction-retry>
     timestamp
     database
     duration
