@@ -1555,9 +1555,11 @@ For each failed connection, the message \code{\#(accept-tcp-failed
 where \var{who} and \var{errno} specify the error.
 
 The \var{address} is a dotted quad IPv4 address or an IPv6
-address. Use \code{"[::]"} to listen on all IPv4 and IPv6 interfaces.
-If \var{address} is not a string, exception \code{\#(bad-arg
-  listen-tcp \var{address})} is raised.
+address. Use \code{"::"} to listen on all IPv4 and IPv6 interfaces.
+Use \code{"0.0.0.0"} to listen on all IPv4 interfaces. Otherwise, it
+listens on the given \var{address} only. If \var{address} is not a
+string, exception \code{\#(bad-arg listen-tcp \var{address})} is
+raised.
 
 If \var{port-number} is zero, the operating system will choose an
 available port number, which can be queried with
