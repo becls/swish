@@ -1,8 +1,6 @@
-(library-directories '(("." . "../bin")))
+(library-directories '(("." . "../lib")))
 (compile-imported-libraries #t)
-(include "load.ss")
 (include "swish/imports.ss")
-(include "init.ss")
 (hook-console-input)
 (let ([orig (waiter-prompt-and-read)])
   (waiter-prompt-and-read
