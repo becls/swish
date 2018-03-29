@@ -637,6 +637,10 @@
                                 (osi_set_tick tick-nanoseconds)
                                 (set-timer process-default-ticks)
                                 (enable-interrupts)
+                                (exit-handler
+                                 (case-lambda
+                                  [() (raise 'normal)]
+                                  [(x . args) (raise x)]))
                                 (thunk)
                                 'normal))])
                         ;; Process finished
@@ -1154,6 +1158,12 @@
         (unless (and (fixnum? x) (fx> x 0))
           (bad-arg 'custom-port-buffer-size x))
         x)))
+  (redefine exit-handler
+    (make-process-parameter (exit-handler)
+     (lambda (x)
+       (unless (procedure? x)
+         (bad-arg 'exit-handler x))
+       x)))
   (redefine pretty-initial-indent
     (make-process-parameter 0
       (lambda (x)
@@ -1218,6 +1228,18 @@
   (redefine print-unicode (make-process-parameter #t (lambda (x) (and x #t))))
   (redefine print-vector-length
     (make-process-parameter #f (lambda (x) (and x #t))))
+  (redefine reset-handler
+    (make-process-parameter (reset-handler)
+      (lambda (x)
+        (unless (procedure? x)
+          (bad-arg 'reset-handler x))
+        x)))
+  (redefine waiter-prompt-and-read
+    (make-process-parameter (waiter-prompt-and-read)
+      (lambda (x)
+        (unless (procedure? x)
+          (bad-arg 'waiter-prompt-and-read x))
+        x)))
 
   (osi_set_tick tick-nanoseconds)
   (set-timer process-default-ticks)

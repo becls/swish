@@ -999,7 +999,22 @@
          (raise 'timeout))
        [#(<process-terminated> ,@os-pid ,_ ,_) 'ok]))))
 
+;; on slower systems it may be helpful to limit the available virtual memory
+;; e.g., via ulimit, so that this test does not time out while paging
 (isolate-mat out-of-memory ()
   (repl-test
    '(make-vector (most-positive-fixnum))
    "out of memory"))
+
+(isolate-mat exit-handler ()
+  (define-syntax run-spawned
+    (syntax-rules ()
+      [(_ expr)
+       (let ([me self])
+         (spawn (lambda () (send me expr)))
+         (receive (after 500 (exit 'fail)) [,val val]))]))
+  (match-let*
+   ([,me self]
+    [#(EXIT 123) (run-spawned (catch (raise 123)))]
+    [#(EXIT 123) (run-spawned (catch (exit 123)))])
+   'ok))
