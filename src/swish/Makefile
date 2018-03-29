@@ -6,10 +6,11 @@ ifneq (,$(findstring nt,${MACHINE_TYPE}))
 EXESUFFIX := .exe
 endif
 SWISH_VERSION := $(shell "${SCHEME}" --script ../get-software-info short-version)
+LIBDIRS := .::../lib
 
-ready: io-constants.ss clibs ../../bin/swish.boot
+ready: io-constants.ss clibs
 
-all: ready ../../bin/swish${EXESUFFIX} ../../bin/swish.library ../../lib/swish/mat.so ../../lib/swish/profile.so ../../lib/swish/testing.so
+all: ready  ../../bin/swish${EXESUFFIX} ../../bin/swish.boot ../../bin/swish.library ../../lib/swish/mat.so ../../lib/swish/profile.so ../../lib/swish/testing.so
 
 ifneq (,$(wildcard Mf-${BASE_MACHINE_TYPE}))
 include Mf-${BASE_MACHINE_TYPE}
@@ -40,20 +41,21 @@ io-constants.ss: io-constants${EXESUFFIX}
 	'(cd "..")'\
 	'(import (swish imports))' \
 	'(compile-whole-library "../lib/swish/imports.wpo" "../bin/swish.library")' \
-	| ${SCHEME} -q --libdirs ".::../lib"
+	| ${SCHEME} -q --libdirs "${LIBDIRS}"
 
-../../lib/swish/%.so: %.ss ../../bin/swish ../../bin/swish.library
+../../lib/swish/%.so: %.ss ../../bin/swish${EXESUFFIX} ../../bin/swish.library
 	@echo \
 	'(waiter-prompt-string "")' \
 	'(base-exception-handler (lambda (e) (display-condition e) (newline) (exit 1)))' \
 	'(generate-wpo-files #t)' \
 	'(compile-imported-libraries #t)' \
 	'(cd "..")'\
-	'(library-directories ".::../lib")' \
+	'(library-directories "${LIBDIRS}")' \
 	'(import (swish $(<:.ss=)))' \
-	| ../../bin/swish
+	| ../../bin/swish${EXESUFFIX} -q
 
 clean: platform-clean
+	rm -f io-constants.ss
 	rm -f ../*.ss.html ../mat-report.html ../server-profile.html
 	rm -f *.mo *.ms.html *.ss.html
 
@@ -62,14 +64,16 @@ INSTWEBDIR := ${INSTALLROOT}/lib/swish${SWISH_VERSION}/web
 INSTDOCDIR := ${INSTALLROOT}/share/doc/swish${SWISH_VERSION}
 install: all
 ifeq (,${INSTALLROOT})
-	echo "TBD"
 	$(error INSTALLROOT is not set)
 else
 	install --directory ${INSTDOCDIR}
 	install ../../doc/swish.pdf ${INSTDOCDIR}
 	install --directory ${INSTLIBDIR}
-	install ../../bin/swish{,-build,.boot,.library} ${INSTLIBDIR}
-	install ${CLIBS} ${INSTLIBDIR}
+	install ../../bin/swish ${INSTLIBDIR}
+	install ../../bin/swish-build ${INSTLIBDIR}
+	install ../../bin/swish.boot ${INSTLIBDIR}
+	install ../../bin/swish.library ${INSTLIBDIR}
+	install ${SwishLibs} ${INSTLIBDIR}
 	install --directory ${INSTALLROOT}/bin
 	ln -sf ${INSTLIBDIR}/swish ${INSTALLROOT}/bin/swish
 	ln -sf ${INSTLIBDIR}/swish-build ${INSTALLROOT}/bin/swish-build

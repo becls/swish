@@ -1,22 +1,29 @@
-SchemeDir=C:/Program Files/Chez Scheme ${CHEZ_VERSION}
-SchemeInclude=${SchemeDir}/boot/${MACHINE_TYPE}
-SchemeLib=${SchemeDir}/bin/${MACHINE_TYPE}/csv$(subst .,,${CHEZ_VERSION}).lib
+SchemeDir ?= C:/Program Files/Chez Scheme ${CHEZ_VERSION}
+SchemeInclude ?= ${SchemeDir}/boot/${MACHINE_TYPE}
+SchemeLib ?= ${SchemeDir}/bin/${MACHINE_TYPE}/csv$(subst .,,${CHEZ_VERSION}).lib
 UvInclude=../../libuv/include
 UvLib=../../libuv/Release/lib/libuv.lib
 C=../vs64 cl /nologo /Ox /MD /W3
-LD=../vs64 link /nologo
+LD=../vs64 link /nologo /ltcg /nodefaultlib:libcmt
 PYTHON ?= C:\Python27\python.exe
+OsiObj=osi.obj sqlite.obj sqlite3.obj
+SystemLibs=rpcrt4.lib ole32.lib advapi32.lib User32.lib
+SwishLibs := ../../bin/osi.dll ../../lib/swish_kernel.obj
+LIBDIRS = .;;../lib
 
-all: ../../bin/osi.dll io-constants.ss
+clibs: ${SwishLibs}
 
-../../bin/osi.dll: osi.obj sqlite.obj sqlite3.obj ${UvLib}
-	${LD} /dll /ltcg /nodefaultlib:libcmt /out:../../bin/osi.dll osi.obj sqlite.obj sqlite3.obj "${SchemeLib}" "${UvLib}"
+../../bin/swish.exe: main.obj ../../lib/swish_kernel.obj
+	${LD} /out:$@ /subsystem:console $^ ${SystemLibs}
 
-osi.obj: osi.h osi.c ${UvInclude}
-	$C /I"${SchemeInclude}" /I"${UvInclude}" /c osi.c
+../../bin/osi.dll: ${OsiObj} ${UvLib}
+	${LD} /dll /out:../../bin/osi.dll ${OsiObj} "$(shell cygpath -w "${SchemeLib}")" "${UvLib}"
 
-sqlite.obj: osi.h sqlite.c ${UvInclude}
-	$C /I"${SchemeInclude}" /I"${UvInclude}" /c sqlite.c
+../../lib/swish_kernel.obj: ${UvLib} run.obj ${OsiObj} $(shell cygpath -u "${SchemeLib}")
+	../vs64 lib /nologo /ltcg /out:$@ run.obj ${OsiObj} "$(shell cygpath -w "${SchemeLib}")" "${UvLib}"
+
+%.obj: %.c osi.h ${UvInclude}
+	$C /I"${SchemeInclude}" /I"${UvInclude}" -c $<
 
 sqlite3.obj: sqlite3.h sqlite3.c
 	$C /DSQLITE_ENABLE_JSON1 /DSQLITE_THREADSAFE=2 /c sqlite3.c
@@ -28,8 +35,12 @@ ${UvLib}: ${UvInclude}
 	  if [ ! -f "$$(cygpath "${PYTHON}")" ]; then echo Please install Python 2.7 for Windows.; exit 1; fi
 	  -cd ../../libuv; PYTHON="${PYTHON}" cmd /c vcbuild.bat release vs2017 x64 static
 
-clean:
+platform-clean:
 	rm -f ../../bin/osi.{dll,exp,lib} osi.obj sqlite.obj io-constants.{exe,obj}
+	rm -f ../../bin/swish.{exe,boot,library,lib,exp,wpo}
+	rm -f swish.exe main.obj run.obj swish.boot
+	rm -f ${SwishLibs}
+	rm -f ../../lib/swish/*.{so,sop,wpo}
 
 pristine: clean
 	rm -rf sqlite3.obj ../../libuv/Release

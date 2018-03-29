@@ -7,7 +7,9 @@
 /swish
 /swish.boot
 /swish.exe
-/swish_kernel.o
-/swish_kernel.obj
+/swish.exp
+/swish.lib
 /swish.library
 /swish.wpo
+/swish_kernel.o
+/swish_kernel.obj

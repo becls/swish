@@ -12,12 +12,6 @@ if [ "$PROFILE_MATS" = "yes" ]; then
   rm -f ../data/server.profile
 fi
 
-if [ "$OUTDIR" != "" ]; then
-    outdir=$OUTDIR
-else
-    outdir=.
-fi
-
 rm -f ../data/TestLog.db3
 
 if [ ${1+x} ]; then
@@ -35,14 +29,21 @@ else
 fi
 
 # Swish
-source swish/run-mats
+for suite in $( find swish -name '*.ms' | sed 's/\.ms//' | sort ); do
+  echo "testing $suite"
+$launch > /dev/null <<EOF
+(run-suite "$suite")
+EOF
+done
 
 # finish up
 $launch <<EOF
-(html-report "$outdir" "$outdir/mat-report.html")
-(console-summary "$outdir")
+(html-report "." "mat-report.html")
+(console-summary ".")
 EOF
+echo "see file://${PWD}/mat-report.html"
 
-if [ "$PROFILE_MATS" != "no" ]; then
+if [ "$PROFILE_MATS" = "yes" ]; then
   ./dump-profile
+  echo "see file://${PWD}/server-profile.html"
 fi

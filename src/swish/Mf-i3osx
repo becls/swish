@@ -2,17 +2,23 @@ SchemeInclude=/usr/local/lib/csv${CHEZ_VERSION}/${MACHINE_TYPE}
 UvInclude=../../libuv/include
 UvLib=../../libuv/build/Release
 C = gcc -m32 -fPIC -Wall -Wextra -Werror -O2
+OsiObj=osi.o sqlite.o sqlite3.o
+SystemLibs=-liconv -lm -lncurses
+SwishLibs := ../../bin/libosi.dylib ../../lib/swish_kernel.o
 
-all: ../../bin/libosi.dylib io-constants.ss
+clibs: ${SwishLibs}
 
-../../bin/libosi.dylib: osi.o sqlite.o sqlite3.o ${UvLib}
-	$C -dynamiclib -undefined dynamic_lookup -L${UvLib} -o ../../bin/libosi.dylib osi.o sqlite.o sqlite3.o -luv
+../../bin/swish: main.o ../../lib/swish_kernel.o
+	$C -o $@ $^ ${SystemLibs}
 
-osi.o: osi.h osi.c ${UvInclude}
-	$C -I${SchemeInclude} -I${UvInclude} -c osi.c
+../../bin/libosi.dylib: ${OsiObj} ${UvLib}/libuv.a
+	$C -dynamiclib -undefined dynamic_lookup -L${UvLib} -o ../../bin/libosi.dylib ${OsiObj} -luv
 
-sqlite.o: osi.h sqlite.c ${UvInclude}
-	$C -I${SchemeInclude} -I${UvInclude} -c sqlite.c
+../../lib/swish_kernel.o: ${UvLib}/libuv.a run.o ${OsiObj} ${SchemeInclude}/kernel.o
+	ld -r -o $@ run.o ${OsiObj} ${SchemeInclude}/kernel.o ${UvLib}/libuv.a
+
+%.o: %.c osi.h ${UvInclude}
+	$C -I${SchemeInclude} -I${UvInclude} -c $<
 
 sqlite3.o: sqlite3.h sqlite3.c
 	$C -DSQLITE_ENABLE_JSON1 -DSQLITE_THREADSAFE=2 -c sqlite3.c
@@ -20,12 +26,16 @@ sqlite3.o: sqlite3.h sqlite3.c
 io-constants: io-constants.c ${UvInclude}
 	$C -I${UvInclude} io-constants.c -o io-constants
 
-${UvLib}: ${UvInclude}
-	  cd ../../libuv; python2.7 gyp_uv.py -Duv_library=static_library -f xcode
-	  cd ../../libuv/out; xcodebuild -ARCHS="x86_64" -project uv.xcodeproj -configuration Release -target libuv
+${UvLib}/libuv.a: ${UvInclude}
+	cd ../../libuv; python2.7 gyp_uv.py -Duv_library=static_library -Dtarget_arch="ia32" -f xcode
+	cd ../../libuv/out; xcodebuild -ARCHS="i386" -project uv.xcodeproj -configuration Release -target libuv
 
-clean:
-	rm -f ../../bin/libosi.dylib osi.o sqlite.o io-constants io-constants.ss
+platform-clean:
+	rm -f osi.o sqlite.o io-constants io-constants.ss
+	rm -f swish main.o run.o swish.boot
+	rm -f ${SwishLibs}
+	rm -f ../../bin/swish{,.boot,.library,.wpo}
+	rm -f ../../lib/swish/*.{so,sop,wpo}
 
 pristine: clean
 	rm -rf sqlite3.o ../../libuv/build/Release

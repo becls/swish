@@ -30,7 +30,7 @@
  (swish string-utils)
  )
 
-(define (run-suite basename outdir)
+(define (run-suite basename)
   (define (start-profiler)
     (match (profile:start)
       [#(ok ,_) #t]
@@ -40,7 +40,7 @@
   (load (string-append basename ".ms"))
   (let ([profiling? (start-profiler)])
     (on-exit (when profiling? (profile:save))
-      (run-mats-to-file (string-append outdir "/" basename ".mo")))))
+      (run-mats-to-file (string-append basename ".mo")))))
 
 (define (find-mo-files root)
   (define (find-mo root rel)

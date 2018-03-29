@@ -8,11 +8,9 @@ swish:
 
 test: swish
 	cd src; ./run-mats ${PWD}/bin
-	@echo "see file://${PWD}/src/mat-report.html"
 
 coverage:
 	cd src; PROFILE_MATS=yes ./run-mats
-	@echo "see file://${PWD}/src/server-profile.html"
 
 destknown:
 ifeq (,${INSTALLROOT})

@@ -6,31 +6,22 @@ ifneq (,$(shell gcc --help=warning | grep implicit-fallthrough))
 endif
 C = gcc -m32 -msse2 -fPIC -Wall -Wextra -Werror -O2
 OsiObj=osi.o sqlite.o sqlite3.o
-SwishLib=-lm -ldl -lncurses -luuid -lpthread
-CLIBS := ../../bin/libosi.so ../../lib/swish_kernel.o
+SystemLibs=-lm -ldl -lncurses -luuid -lpthread
+SwishLibs := ../../bin/libosi.so ../../lib/swish_kernel.o
 
-clibs: ${CLIBS}
+clibs: ${SwishLibs}
 
 ../../bin/swish: main.o ../../lib/swish_kernel.o
-	$C -o $@ $^ ${SwishLib}
+	$C -o $@ $^ -Wl,-E ${SystemLibs}
 
-../../bin/libosi.so: ${OsiObj} ${UvLib}
+../../bin/libosi.so: ${OsiObj} ${UvLib}/libuv.a
 	$C -shared -L${UvLib} -o ../../bin/libosi.so ${OsiObj} -luv -luuid
 
-../../lib/swish_kernel.o: ${UvLib} run.o ${OsiObj} ${SchemeInclude}/kernel.o
+../../lib/swish_kernel.o: ${UvLib}/libuv.a run.o ${OsiObj} ${SchemeInclude}/kernel.o
 	ld -melf_i386 -r -X -o $@ run.o ${OsiObj} ${SchemeInclude}/kernel.o ${UvLib}/libuv.a
 
-main.o: main.c
+%.o: %.c osi.h ${UvInclude}
 	$C -I${SchemeInclude} -I${UvInclude} -c $<
-
-run.o: run.c osi.h ${SchemeInclude}/scheme.h
-	$C -I${SchemeInclude} -I${UvInclude} -c $<
-
-osi.o: osi.h osi.c ${UvInclude}
-	$C -I${SchemeInclude} -I${UvInclude} -c osi.c
-
-sqlite.o: osi.h sqlite.c ${UvInclude}
-	$C -I${SchemeInclude} -I${UvInclude} -c sqlite.c
 
 sqlite3.o: sqlite3.h sqlite3.c
 	$C -DSQLITE_ENABLE_JSON1 -DSQLITE_THREADSAFE=2 ${HUSH} -c sqlite3.c
@@ -38,15 +29,15 @@ sqlite3.o: sqlite3.h sqlite3.c
 io-constants: io-constants.c ${UvInclude}
 	$C -I${UvInclude} io-constants.c -o io-constants
 
-${UvLib}: ${UvInclude}
+${UvLib}/libuv.a: ${UvInclude}
 	  cd ../../libuv; ./gyp_uv.py -Duv_library=static_library -f make
 	  BUILDTYPE=Release CFLAGS="-fPIC" make -C ../../libuv/out
 
 platform-clean:
 	rm -f osi.o sqlite.o io-constants io-constants.ss
 	rm -f swish main.o run.o swish.boot
-	rm -f ${CLIBS}
-	rm -f ../../bin/swish{,.boot,.library}
+	rm -f ${SwishLibs}
+	rm -f ../../bin/swish{,.boot,.library,.wpo}
 	rm -f ../../lib/swish/*.{so,sop,wpo}
 
 pristine: clean
