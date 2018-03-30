@@ -1,4 +1,4 @@
-#!/bin/bash -e
+#!/bin/sh -e
 #This is only meant to be run as part of the run-mats script in the src folder
 
 # Concurrency

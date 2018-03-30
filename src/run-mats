@@ -1,12 +1,12 @@
-#!/bin/bash -e
-if [[ "$PROFILE_MATS" == "no" ]]; then
+#!/bin/sh -e
+if [ "$PROFILE_MATS" = "no" ]; then
   launch="scheme --eedisable -q repl.ss run-mats.ss"
 else
   rm -f ../data/server.profile
   launch="scheme --eedisable -q replp.ss run-mats.ss"
 fi
 
-if [[ "$OUTDIR" != "" ]]; then
+if [ "$OUTDIR" != "" ]; then
     outdir=$OUTDIR
 else
     outdir=.
@@ -25,6 +25,6 @@ $launch <<EOF
 (console-summary "$outdir")
 EOF
 
-if [[ "$PROFILE_MATS" != "no" ]]; then
+if [ "$PROFILE_MATS" != "no" ]; then
   ./dump-profile
 fi
