@@ -1,11 +1,11 @@
-#!/bin/bash -e
+#!/bin/sh -e
 if [ -t 1 ]
 then
   MODE=spinner
 else
   MODE=silent
 fi
-if [ "$1" == "-q" ]; then
+if [ "$1" = "-q" ]; then
   MODE=silent
   shift
 fi
@@ -17,28 +17,33 @@ then
   exit 1
 fi
 
-function silent
+silent()
 {
   "$@" > /dev/null
 }
 
 # pdflatex and friends are very chatty and they create log files anyway.
 # We don't want folks to miss warnings, so replace the noise with a spinner.
-function spinner
+spinner()
 {
+  set +e
+  PIPE=$(mktemp -u)
+  mkfifo $PIPE
   # By default, awk gives us the unbuffered I/O we want for a spinner.
-  "$@" | awk 'BEGIN { n=0; s="|/-\\"; } { printf "%c\r", substr(s,n+1,1); n=(n+1)%4; }'
-  RESULT=${PIPESTATUS[0]}
-  echo -ne " \r"
+  awk 'BEGIN { n=0; s="|/-\\"; } { printf "%c\r", substr(s,n+1,1); n=(n+1)%4; }' < $PIPE &
+  "$@" > $PIPE
+  RESULT=$?
+  rm $PIPE
+  set -e
   return $RESULT
 }
 
-function runpdflatex
+runpdflatex()
 {
   ${MODE} pdflatex -halt-on-error -file-line-error -interaction nonstopmode "$1"
 }
 
-function runbibtex
+runbibtex()
 {
   # bibtex exits w/a nonzero value if there are no citations.
   # In order to allow this, we temporarily set +e to capture the result,
@@ -59,12 +64,12 @@ function runbibtex
   return $RESULT
 }
 
-function alert
+alert()
 {
   echo "$@" 1>&2
 }
 
-function update_indices
+update_indices()
 {
   if fgrep -asq "$1.idx" "$1.log"
   then
@@ -77,7 +82,7 @@ function update_indices
   fi
 }
 
-function display_warnings
+display_warnings()
 {
   if fgrep -a Warning "$1.log" | fgrep -v "Font Warning" | fgrep -v hyphenat
   then
@@ -87,7 +92,7 @@ function display_warnings
   fi
 }
 
-function display_errors
+display_errors()
 {
   egrep -aA 1 '^(\..*:..*:..*|l\.|.*LaTeX Error)' "$1.log"
 }

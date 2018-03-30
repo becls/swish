@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 make -C swish
 if [ -z ${SCHEME+x} ]; then SCHEME=scheme; fi
 "${SCHEME}" --eedisable repl.ss "$@"

@@ -1,4 +1,4 @@
-#!/bin/bash -e
+#!/bin/sh -e
 launch="scheme --eedisable -q replp.ss run-mats.ss"
 
 find . -name *.mo -delete
