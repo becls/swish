@@ -633,7 +633,7 @@ size_t osi_get_bytes_used(void) {
   malloc_zone_pressure_relief(NULL, 0);
   struct mstats ms = mstats();
   return ms.bytes_used;
-#elif defined(__linux__)
+#elif defined(__GLIBC__)
   struct mallinfo hinfo = mallinfo();
   return hinfo.hblkhd + hinfo.uordblks;
 #elif defined(_WIN32)
@@ -643,6 +643,8 @@ size_t osi_get_bytes_used(void) {
     if (_USEDENTRY == hinfo._useflag)
       used += hinfo._size;
   return used;
+#else
+  return 0;
 #endif
 }
 
