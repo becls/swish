@@ -699,7 +699,7 @@
                                   ,(make-iport name port #f)
                                   ,(make-oport name port)))))
                       (unless (pair? r)
-                        (osi_close_port* r))))))
+                        (osi_close_port* r 0))))))
        [(,who . ,errno)
         (raise `#(listen-tcp-failed ,address ,port-number ,who ,errno))]
        [,handle
