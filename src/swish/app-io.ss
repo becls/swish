@@ -32,7 +32,7 @@
    )
   (import
    (chezscheme)
-   (software-info)
+   (swish software-info)
    (swish erlang)
    (swish io)
    )

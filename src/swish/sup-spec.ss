@@ -26,7 +26,7 @@
    )
   (import
    (chezscheme)
-   (software-info)
+   (swish software-info)
    (swish app-io)
    (swish application)
    (swish erlang)

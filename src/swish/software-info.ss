@@ -1,4 +1,4 @@
-(library (software-info)
+(library (swish software-info)
   (export
    software-company
    software-company-dir
@@ -6,12 +6,9 @@
    software-internal-name
    software-product-name
    software-version
+   swish-version
    )
   (import (chezscheme))
-
-  ;; The content of this library is also parsed by get-software-info
-  ;; and used in the build system, so it must use simple string
-  ;; definitions.
 
   (define software-company "Beckman Coulter, Inc.")
 
@@ -22,11 +19,12 @@
   ;; The software-internal-name value is used as the name for the
   ;; compiled exe and boot files. It must not contain spaces or any
   ;; other character that requires quoting in GNU make.
-
-  (define software-internal-name "Swish")
+  (define software-internal-name "swish")
 
   (define software-product-name "Swish")
 
-  (define software-version "1.0.0.0")
+  (define software-version "2.0.0.0")
 
+  (define (swish-version)
+    (format "~a Version ~a" software-product-name software-version))
   )

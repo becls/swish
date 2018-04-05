@@ -32,10 +32,10 @@
   (import
    (chezscheme)
    (main-sup-spec)
-   (software-info)
    (swish application)
    (swish erlang)
    (swish io)
+   (swish software-info)
    (swish statistics)
    (swish supervisor)
    )
