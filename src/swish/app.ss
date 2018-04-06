@@ -23,19 +23,24 @@
 #!chezscheme
 (library (swish app)
   (export
+   app-sup-spec
    app:resume
    app:shutdown
    app:start
    app:suspend
    init-main-sup
+   make-swish-sup-spec
    swish-start
    )
   (import
    (chezscheme)
-   (main-sup-spec)
    (swish application)
    (swish erlang)
+   (swish event-mgr)
+   (swish gatekeeper)
+   (swish http)
    (swish io)
+   (swish log-db)
    (swish osi)
    (swish software-info)
    (swish statistics)
@@ -54,7 +59,40 @@
     ;; When one process at this level crashes, we want the supervisor
     ;; to shutdown which only happens during restart. Thus, each
     ;; process is marked permanent and the restart intensity is 0.
-    (supervisor:start&link 'main-sup 'one-for-all 0 1 (main-sup-spec)))
+    (supervisor:start&link 'main-sup 'one-for-all 0 1 (app-sup-spec)))
+
+  (define (make-swish-sup-spec loggers)
+    `(#(event-mgr ,event-mgr:start&link
+         permanent 1000 worker)
+      #(log-db ,log-db:start&link
+         permanent 10000 worker)
+      #(event-mgr-sentry
+        ,(lambda ()
+           `#(ok ,(spawn&link
+                   (lambda ()
+                     ;; Unregister event-mgr so that event-mgr:notify
+                     ;; no longer sends events to log-db but to the
+                     ;; console.  This prevents messages that occur
+                     ;; after log-db shuts down from getting lost.
+                     (process-trap-exit #t)
+                     (receive
+                      [#(EXIT ,_ ,_) (event-mgr:unregister)])))))
+        permanent 1000 worker)
+      #(log-db:setup ,(lambda () (log-db:setup loggers))
+         temporary 1000 worker)
+      #(statistics ,statistics:start&link
+         permanent 1000 worker)
+      #(gatekeeper ,gatekeeper:start&link
+         permanent 1000 worker)
+      #(http-sup ,http-sup:start&link permanent infinity supervisor)))
+
+  (define app-sup-spec
+    (make-parameter
+     (make-swish-sup-spec (list swish-event-logger))
+     (lambda (x)
+       (let ([reason (supervisor:validate-start-specs x)])
+         (when reason (exit reason)))
+       x)))
 
   (define (set-random-seed)
     (random-seed (+ (remainder (erlang:now) (- (ash 1 32) 1)) 1)))

@@ -29,6 +29,7 @@
    supervisor:start&link
    supervisor:start-child
    supervisor:terminate-child
+   supervisor:validate-start-specs
    )
   (import
    (chezscheme)
@@ -175,6 +176,11 @@
       [,reason
        (profile-me)
        `#(stop #(start-specs ,reason))]))
+
+  (define (supervisor:validate-start-specs specs)
+    (match (check-start-specs specs)
+      [#(ok ,_) #f]
+      [,reason reason]))
 
   (define (check-start-specs specs)
     (let lp ([specs specs] [children '()])
