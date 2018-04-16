@@ -31,7 +31,7 @@
 
 (define go
   (case-lambda
-   [() (go (path-combine data-dir "server.profile"))]
+   [() (go (path-combine (data-dir) "server.profile"))]
    [(filename)
     (if (file-regular? filename)
         (let ([ip (open-file-input-port filename

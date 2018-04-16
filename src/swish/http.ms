@@ -38,7 +38,7 @@
 
 (define (boot-http)
   (http-port-number test-port)
-  (web-path (path-combine base-dir "src" "swish" "web-mats"))
+  (web-path (path-combine (base-dir) "src" "swish" "web-mats"))
 
   (start-event-mgr)
   (event-mgr:set-log-handler            ; silence the event-mgr

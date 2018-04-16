@@ -67,7 +67,7 @@
             (lambda (count) (+ count (cdr item)))
             0)))))
 
-  (define server-filename (path-combine data-dir "server.profile"))
+  (define server-filename (path-combine (data-dir) "server.profile"))
 
   (define (profile-load filename ht)
     (let ([ip (open-file filename O_RDONLY #o777 'binary-input)])

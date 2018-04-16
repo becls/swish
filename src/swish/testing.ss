@@ -110,7 +110,7 @@
        [#(DOWN ,@m ,@x ,_) #f])))
 
   (define (boot-system)
-    (log-path (path-combine data-dir "TestLog.db3"))
+    (log-path (path-combine (data-dir) "TestLog.db3"))
     (match (init-main-sup)
       [#(ok ,pid) pid]))
 

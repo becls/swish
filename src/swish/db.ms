@@ -31,7 +31,7 @@
  (swish testing)
  )
 
-(define filename (path-combine data-dir "test-db.db3"))
+(define filename (path-combine (data-dir) "test-db.db3"))
 
 (define-syntax assert-syntax-error
   (syntax-rules ()

@@ -38,13 +38,24 @@
 
   (define bin-dir (cd))
 
-  (define base-dir (path-parent bin-dir))
+  (define data-dir (make-parameter #f))
 
-  (define data-dir (path-combine base-dir "data"))
+  (define log-path (make-parameter #f))
 
-  (define log-path (make-parameter (path-combine data-dir "Log.db3")))
+  (define tmp-path (make-parameter #f))
 
-  (define tmp-path (make-parameter (path-combine data-dir "tmp")))
+  (define web-path (make-parameter #f))
 
-  (define web-path (make-parameter (path-combine base-dir "web")))
+  (define base-dir
+    (make-parameter (path-parent bin-dir)
+      (lambda (base)
+        (match (catch (directory? base))
+          [#t
+           (data-dir (path-combine base "data"))
+           (log-path (path-combine (data-dir) "Log.db3"))
+           (tmp-path (path-combine (data-dir) "tmp"))
+           (web-path (path-combine base "web"))
+           base]
+          [#(EXIT ,reason) (exit reason)]
+          [#f (errorf 'base-dir "no directory ~s" base)]))))
   )
