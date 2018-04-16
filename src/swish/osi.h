@@ -78,6 +78,7 @@ EXPORT ptr osi_kill(int pid, int signum);
 
 // File System
 EXPORT ptr osi_open_file(const char* path, int flags, int mode, ptr callback);
+EXPORT ptr osi_get_executable_path(void);
 EXPORT ptr osi_get_file_size(uptr port, ptr callback);
 EXPORT ptr osi_get_real_path(const char* path, ptr callback);
 EXPORT uptr osi_get_stdin(void);

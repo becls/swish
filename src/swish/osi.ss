@@ -43,6 +43,7 @@
    osi_get_bytes_used
    osi_get_callbacks
    osi_get_error_text
+   osi_get_executable_path
    osi_get_file_size
    osi_get_file_size*
    osi_get_hostname
@@ -156,6 +157,7 @@
 
   ;; File System
   (define-osi osi_open_file (path string) (flags int) (mode int) (callback ptr))
+  (define-osi osi_get_executable_path)
   (define-osi osi_get_file_size (port uptr) (callback ptr))
   (define-osi osi_get_real_path (path string) (callback ptr))
   (fdefine osi_get_stdin uptr)

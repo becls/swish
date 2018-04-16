@@ -888,6 +888,15 @@ ptr osi_get_file_size(uptr port, ptr callback) {
   return Strue;
 }
 
+ptr osi_get_executable_path(void) {
+  char buf[32768];
+  size_t n = sizeof(buf);
+  int rc = uv_exepath(buf, &n);
+  if (rc < 0)
+    return make_error_pair("uv_exepath", rc);
+  return utf8_to_string2(buf, n);
+}
+
 ptr osi_get_real_path(const char* path, ptr callback) {
   uv_fs_t* req = malloc_container(uv_fs_t);
   if (!req)
