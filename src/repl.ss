@@ -1,6 +1,6 @@
 (library-directories '(("." . "../lib")))
 (compile-imported-libraries #t)
-(include "swish/imports.ss")
+(import (swish imports))
 (hook-console-input)
 (let ([orig (waiter-prompt-and-read)])
   (waiter-prompt-and-read
