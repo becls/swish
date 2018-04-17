@@ -74,7 +74,8 @@ else
 	ln -sf ${INSTLIBDIR}/swish ${INSTALLROOT}/bin/swish
 	ln -sf ${INSTLIBDIR}/swish-build ${INSTALLROOT}/bin/swish-build
 	install --directory ${INSTLIBDIR}/lib
-	cd ../.. ; find lib -type f -name '*.wpo' -exec install -D -T {} ${INSTLIBDIR}/{} \;
+	cd ../../lib ; find . -type f -name '*.wpo' -exec install -D -T {} ${INSTLIBDIR}/wpo/{} \;
+	cd ../../lib ; find . -type f -name '*.so' -exec install -D -T {} ${INSTLIBDIR}/lib/{} \;
 	install ../../lib/swish/mat.so ${INSTLIBDIR}/lib/swish
 	install ../../lib/swish/profile.so ${INSTLIBDIR}/lib/swish
 	install ../../lib/swish/testing.so ${INSTLIBDIR}/lib/swish

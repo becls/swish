@@ -1,0 +1,174 @@
+#!/usr/bin/env swish
+
+(base-exception-handler (lambda (e) (display-condition e) (newline) (exit 1)))
+
+(define-tuple <args> boot-files libdirs source-fn output-fn shebang? libs-visible? verbose?)
+
+(define swish-lib?
+  (let ([libs (filter (lambda (lib) (match lib [(swish . ,_) #t] [,_ #f])) (library-list))])
+    (lambda (lib)
+      (member lib libs))))
+
+(define (system-libdir stand-alone?)
+  (path-combine
+   (path-parent (osi_get_executable_path))
+   (if stand-alone? "wpo" "lib")))
+
+(define who (path-last (car (command-line))))
+
+(define (fail fmt . args) (apply errorf who fmt args))
+
+(define (default-args)
+  (<args> make
+    [boot-files '()]
+    [libdirs (library-directories)]
+    [source-fn #f]
+    [output-fn #f]
+    [shebang? #t]
+    [libs-visible? #f]
+    [verbose? #f]))
+
+(define (snoc ls a) (append ls (list a)))
+
+(define (usage)
+  (printf "Usage: ~a [option] ... source-fn\n" who)
+  (printf "Options:\n")
+  (printf "  -o out-file     write output to out-file\n")
+  (printf "  -L libdir       add libdir to library-directories\n")
+  (printf "  -b boot-file    make stand-alone application including boot-file\n")
+  (printf "  --libs-visible  make imported libraries visible to eval\n")
+  (printf "  -v              enable verbose build output\n")
+  (printf "  --help          show this help\n")
+  (printf "\n")
+  (printf "~a can make a stand-alone application or a linked application\n\n" who)
+  (printf "If -b is specified, ~a creates a stand-alone application\n" who)
+  (printf "by copying the ~a executable to <out-file> and creating a boot\n" software-internal-name)
+  (printf "file <out-file>.boot containing each -b boot-file in order, along\n")
+  (printf "with the libraries required by source-fn and the application code\n")
+  (printf "from source-fn.\n")
+  (printf "\n")
+  (printf "A stand-alone application executes by:\n")
+  (printf "  1. loading the application boot file, then\n")
+  (printf "  2. invoking the value of the swish-start parameter\n")
+  (printf "     with the command-line arguments\n")
+  (printf "The application boot file should customize the swish-start parameter.\n")
+  (printf "\n")
+  (printf "If -b is omitted, ~a creates a linked application.\n" who)
+  (printf "To run a linked application, ~a must be installed on the system.\n" software-internal-name)
+  (printf "A linked application executes by:\n")
+  (printf "  1. loading the standard ~a boot file, then\n" software-internal-name)
+  (printf "  2. invoking the default swish-start handler, which\n")
+  (printf "  3. calls the linked application with the command-line arguments\n")
+  (exit 0))
+
+(define (parse-library lib)
+  (parameterize ([library-directories lib])
+    (library-directories)))
+
+(define (parse-args args)
+  (when (null? args) (usage))
+  (let parse ([args args]
+              [acc (default-args)])
+    (match args
+      [() acc]
+      [("--help" . ,more) (usage)]
+      [("-L" ,lib . ,more)
+       (parse more (<args> copy* acc [libdirs (append libdirs (parse-library lib))]))]
+      [("-b" ,boot-file . ,more)
+       (parse more
+         (<args> copy* acc
+           [boot-files (snoc boot-files boot-file)]
+           [shebang? #f]))]
+      [("-o" ,output-fn . ,more)
+       (if (<args> output-fn acc)
+           (fail "duplicate -o ~a" output-fn)
+           (parse more (<args> copy acc [output-fn output-fn])))]
+      [("--libs-visible" . ,more)
+       (parse more (<args> copy acc [libs-visible? #t]))]
+      [("-v" . ,more)
+       (parse more (<args> copy acc [verbose? #t]))]
+      [(,other . ,unexpected)
+       (guard (starts-with? other "--"))
+       (fail "unexpected ~a~{ ~a~}; see --help" other unexpected)]
+      [(,source-fn . ,more)
+       (if (<args> source-fn acc)
+           (fail "extra input filename ~a" source-fn)
+           (parse more (<args> copy acc [source-fn source-fn])))])))
+
+(define (tmp-filename)
+  (path-combine (or (getenv "TMP") (getenv "TEMP") "/tmp")
+    (format "tmp~36r"
+      (bytevector-uint-ref (osi_make_uuid) 0 'little 16))))
+
+(define (copy ip op)
+  (define buflen (expt 2 16))
+  (define buf (make-bytevector buflen))
+  (let cp ()
+    (let ([n (get-bytevector-n! ip buf 0 buflen)])
+      (unless (eof-object? n)
+        (put-bytevector op buf 0 n)
+        (cp)))))
+
+(define (copy-to output-fn . input-fn*)
+  (let ([op (open-file output-fn (+ O_WRONLY O_CREAT) #o755 'binary-output)])
+    (on-exit (close-port op)
+      (for-each
+       (lambda (input-fn)
+         (let ([ip (open-file input-fn O_RDONLY 0 'binary-input)])
+           (on-exit (close-port ip)
+             (copy ip op))))
+       input-fn*))))
+
+(define (rm-f filename)
+  (catch (remove-file filename)))
+
+(match (parse-args (command-line-arguments))
+  [`(<args> [source-fn #f])
+   (fail "requires source filename; see --help")]
+  [`(<args> [output-fn #f])
+   (fail "requires output filename [-o file]; see --help")]
+  [`(<args> ,boot-files ,libdirs ,source-fn ,output-fn ,shebang? ,libs-visible? ,verbose?)
+   (define stand-alone? (not (null? boot-files)))
+   ;; Add location of swish system .wpo files only if we're building a
+   ;; stand-alone application (boot-files non-empty).
+   (library-directories (cons (system-libdir stand-alone?) libdirs))
+   (when verbose?
+     (printf "Library directories:\n~{ ~s\n~}" (library-directories)))
+   (import-notify verbose?)
+   (let ([tmp (tmp-filename)])
+     (on-exit (rm-f tmp)
+       (compile-imported-libraries #t)
+       (generate-wpo-files #t)
+       (compile-program source-fn tmp)
+       (let* ([wpo-file (string-append tmp ".wpo")]
+              [libs (compile-whole-program wpo-file output-fn libs-visible?)]
+              [missing-libs
+               ;; Stand-alone application should have found all required libraries;
+               ;; dependent application can use swish libraries included in runtime.
+               (if stand-alone?
+                   libs
+                   (remp swish-lib? libs))])
+         (rm-f wpo-file)
+         (unless (null? missing-libs)
+           (printf "These libraries must be provided at run time:\n~{ ~s\n~}" missing-libs)))))
+   (cond
+    [stand-alone?
+     (for-each
+      (lambda (boot)
+        (unless (file-exists? boot)
+          (fail "cannot find boot file ~a" boot)))
+      boot-files)
+     (let* ([app-stem (path-root output-fn)]
+            [app-boot (string-append app-stem ".boot")])
+       (apply make-boot-file app-boot '() (snoc boot-files output-fn))
+       (copy-to output-fn (osi_get_executable_path)))]
+    [shebang?
+     (let* ([tmp (tmp-filename)]
+            [ip (open-file output-fn O_RDONLY 0 'binary-input)]
+            [op (open-file tmp (+ O_WRONLY O_CREAT O_APPEND) #o755 'binary-output)])
+       (on-exit (begin (close-port ip) (close-port op))
+         (put-bytevector op (string->utf8 "#!/usr/bin/env swish\n"))
+         (copy ip op))
+       (delete-file output-fn)
+       (rename-file tmp output-fn))])
+   (chmod output-fn #o755)])
