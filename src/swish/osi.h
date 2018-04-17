@@ -55,6 +55,7 @@ ptr utf8_to_string(const char* utf8);
 ptr utf8_to_string2(const char* utf8, size_t count);
 
 // System
+EXPORT ptr osi_get_argv(void);
 EXPORT size_t osi_get_bytes_used(void);
 EXPORT ptr osi_get_callbacks(uint64_t timeout);
 EXPORT const char* osi_get_error_text(int err);
@@ -64,6 +65,7 @@ EXPORT uint64_t osi_get_time(void);
 EXPORT int osi_is_tick_over(void);
 EXPORT ptr osi_list_uv_handles(void);
 EXPORT ptr osi_make_uuid(void);
+void osi_set_argv(int argc, const char *argv[]);
 EXPORT void osi_set_tick(uint64_t nanoseconds);
 
 // Ports

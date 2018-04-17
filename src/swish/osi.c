@@ -628,6 +628,21 @@ static void list_uv_cb(uv_handle_t* handle, void* arg) {
   *pls = Scons(Scons(Sunsigned((uptr)handle), Sinteger32(handle->type)), *pls);
 }
 
+static iptr g_argc = 0;
+static const char **g_argv;
+void osi_set_argv(int argc, const char *argv[]) {
+  g_argc = argc;
+  g_argv = argv;
+}
+
+ptr osi_get_argv() {
+  ptr argv = Smake_vector(g_argc, Sfalse);
+  for(int i = 0; i < g_argc; i++) {
+    Svector_set(argv, i, utf8_to_string(g_argv[i]));
+  }
+  return argv;
+}
+
 size_t osi_get_bytes_used(void) {
 #if defined(__APPLE__)
   malloc_zone_pressure_relief(NULL, 0);

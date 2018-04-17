@@ -118,7 +118,11 @@
 (define (repl-test code pattern)
   (let-values
       ([(to-stdin from-stdout from-stderr os-pid)
-        (spawn-os-process "scheme" '("--eedisable" "repl.ss") self)])
+        (match (vector->list (osi_get_argv))
+          [()
+           (spawn-os-process "scheme" '("--eedisable" "repl.ss") self)]
+          [(,command . ,args)
+           (spawn-os-process command args self)])])
     (let ([to-stdin (binary->utf8 to-stdin)]
           [from-stdout (binary->utf8 from-stdout)]
           [from-stderr (binary->utf8 from-stderr)])

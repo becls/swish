@@ -40,6 +40,7 @@
    osi_exit
    osi_finalize_statement
    osi_finalize_statement*
+   osi_get_argv
    osi_get_bytes_used
    osi_get_callbacks
    osi_get_error_text
@@ -134,6 +135,7 @@
                     (raise `#(osi-error name ,(car x) ,(cdr x))))))))]))
 
   ;; System
+  (fdefine osi_get_argv ptr)
   (fdefine osi_get_bytes_used size_t)
   (fdefine osi_get_callbacks (timeout unsigned-64) ptr)
   (fdefine osi_get_error_text (err int) string)
