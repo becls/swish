@@ -162,6 +162,16 @@ directory of the current file.
   \argrow{query}{a decoded association list}
 \end{tupledef}
 
+\defineentry{http-port-number}
+\begin{parameter}
+  \code{http-port-number}
+\end{parameter}
+\hasvalue{} \code{\#f} or a fixnum $0 \le port \le 65535$
+
+The \code{http-port-number} parameter specifies whether or not
+\code{http-sup:start\&link} should start the HTTP server and,
+if started, on what port that server should listen for connections.
+
 \defineentry{http-sup:start\&link}
 \begin{procedure}
   \code{(http-sup:start\&link)}
@@ -169,7 +179,8 @@ directory of the current file.
 \returns{}
 \code{\#(ok \var{pid})} \alt{} \code{\#(error \var{error})}
 
-The \code{http-sup:start\&link} procedure creates a supervisor named
+If \code{(http-port-number)} is not \code{\#f},
+the \code{http-sup:start\&link} procedure creates a supervisor named
 \code{http-sup} using \code{supervisor:start\&link} configured
 one-for-one with up to 10 restarts every 10 seconds. The supervisor
 starts the \code{http-cache} and \code{http-listener} gen-servers.

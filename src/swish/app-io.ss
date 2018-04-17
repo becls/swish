@@ -25,7 +25,6 @@
   (export
    base-dir
    data-dir
-   http-port-number
    log-path
    tmp-path
    web-path
@@ -42,8 +41,6 @@
   (define base-dir (path-parent bin-dir))
 
   (define data-dir (path-combine base-dir "data"))
-
-  (define http-port-number (make-parameter 54321))
 
   (define log-path (make-parameter (path-combine data-dir "Log.db3")))
 

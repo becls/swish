@@ -24,6 +24,7 @@
 (library (swish http)
   (export
    <request>
+   http-port-number
    http-sup:start&link
    http:find-header
    http:find-param
@@ -59,11 +60,14 @@
   (define request-limit 4096)
   (define header-limit 1048576)
   (define content-limit 4194304)
+  (define http-port-number (make-parameter #f))
 
   (define (http-sup:start&link)
-    (supervisor:start&link 'http-sup 'one-for-one 10 10000
-      `(#(http-cache ,http-cache:start&link permanent 1000 worker)
-        #(http-listener ,http-listener:start&link permanent 1000 worker))))
+    (if (not (http-port-number))
+        'ignore
+        (supervisor:start&link 'http-sup 'one-for-one 10 10000
+          `(#(http-cache ,http-cache:start&link permanent 1000 worker)
+            #(http-listener ,http-listener:start&link permanent 1000 worker)))))
 
   (define (http:get-port-number)
     (gen-server:call 'http-listener 'get-port-number))
