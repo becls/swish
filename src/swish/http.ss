@@ -160,7 +160,7 @@
                `#(ok ,(spawn&link
                        (lambda ()
                          (send me `#(load-finished ,self ,abs-path ,cookie
-                                      ,(do-interpret-file abs-path))))))))])
+                                      ,(do-eval-file abs-path))))))))])
          (link pid)
          pid)))
     (define (init)
@@ -549,11 +549,11 @@
     (or (internal-find-param 'http:get-param name params)
         (raise `#(invalid-param ,name ,params))))
 
-  (define (do-interpret-file abs-path)
-    (do-interpret (read-bytevector abs-path (read-file abs-path))
+  (define (do-eval-file abs-path)
+    (do-eval (read-bytevector abs-path (read-file abs-path))
       (path-parent abs-path)))
 
-  (define (do-interpret exprs path)
+  (define (do-eval exprs path)
     (define (http:path-root path fn)
       (and (string? fn)
            (if (starts-with? fn "/") ; rooted
@@ -574,7 +574,7 @@
                        (syntax-case x ()
                          [(k fn) (',http:include-help #'k (datum fn) ,path)]))])
          ,@exprs))
-    (interpret
+    (eval
      `(lambda (ip op request header params)
         (define-syntax find-param
           (syntax-rules ()
