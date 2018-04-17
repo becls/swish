@@ -201,7 +201,16 @@
       (let ([op (open-output-string)])
         (display-condition x op)
         (write-char #\. op)
-        (format "~s" `#(error ,(get-output-string op))))]
+        (let ([reason-string (get-output-string op)]
+              [stack-string
+               (and (continuation-condition? x)
+                    (let ([op (open-output-string)])
+                      (dump-stack (condition-continuation x) op 'default)
+                      (get-output-string op)))])
+          (format "~s"
+            (if stack-string
+                `#(error ,reason-string ,stack-string)
+                `#(error ,reason-string)))))]
      [else (format "~s" x)]))
 
   (define-syntax (log-sql x)

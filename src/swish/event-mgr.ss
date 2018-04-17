@@ -102,6 +102,7 @@
          `#(reply #(error #(invalid-owner ,owner)) ,state)]
         [else
          (link owner)
+         (reset-console-event-handler)
          `#(reply ok
              ,($state copy
                 [log-handler (<handler> make [proc proc] [owner owner])]))])]

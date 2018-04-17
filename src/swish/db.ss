@@ -159,7 +159,7 @@
          (remove-dead-entries ($state cache))
          (no-reply state)]
         [#(EXIT ,@pid normal) (no-reply ($state copy [worker #f]))]
-        [#(EXIT ,@pid ,reason) `#(stop ,reason ,($state copy [worker #f]))])))
+        [#(EXIT ,_pid ,reason) `#(stop ,reason ,($state copy [worker #f]))])))
 
   (define (no-reply state)
     (let ([state (update state)])

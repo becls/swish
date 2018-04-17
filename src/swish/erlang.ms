@@ -1022,3 +1022,29 @@
     [#(EXIT 123) (run-spawned (catch (raise 123)))]
     [#(EXIT 123) (run-spawned (catch (exit 123)))])
    'ok))
+
+(mat dump-stack ()
+  (define (assert-depth s n)
+    (let ([lines (split-n s #\newline (+ n 2))])
+      (assert (string=? (list-ref lines n) (format "Stack dump truncated due to max-depth = ~s." n)))))
+  (let-values ([(p get) (open-string-output-port)])
+    (define (wrap n thunk)
+      (if (= n 0)
+          (thunk)
+          (list (wrap (- n 1) thunk))))
+    (parameterize ([current-output-port p])
+      (wrap 100 dump-stack))
+    (assert-depth (get) 10)
+    (wrap 100 (lambda () (call/cc (lambda (k) (dump-stack k p 4)))))
+    (assert-depth (get) 4)
+    (wrap 100 (lambda () (call/cc (lambda (k) (dump-stack k p #f)))))
+    (match (catch (match-prefix (split (get) #\newline) "Stack dump truncated due to max-depth ="))
+      [#(EXIT #(pattern-not-found ,_)) 'ok])
+    (match-let*
+     ([#(EXIT #(bad-arg dump-stack tofu)) (catch (dump-stack 'tofu))]
+      [#(EXIT #(bad-arg dump-stack tofu)) (catch (call/cc (lambda (k) (dump-stack k p 'tofu))))]
+      [#(EXIT #(bad-arg dump-stack 2.3)) (catch (call/cc (lambda (k) (dump-stack k p 2.3))))]
+      [#(EXIT #(bad-arg dump-stack -2)) (catch (call/cc (lambda (k) (dump-stack k p -2))))]
+      [,bignum (+ (most-positive-fixnum) 1)]
+      [#(EXIT #(bad-arg dump-stack ,@bignum)) (catch (call/cc (lambda (k) (dump-stack k p bignum))))])
+     'ok)))

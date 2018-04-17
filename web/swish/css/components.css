@@ -42,6 +42,7 @@ td, th { padding:1px 7px 1px 7px; border: 1px solid #999; }
 th { border-bottom:3px double #999; }
 td { }
 
+td.stack { white-space: pre; font-family: monospace; max-width: 20vw; }
 
 ul { margin:3px 0px 7px; }
 ul ul { margin:2px 0px 0px; }
@@ -198,3 +199,20 @@ div.row table { display:inline-table; margin-top:7px; width:300px;}
 
 .stilts { display:inline-block; }
 * html .stilts { display:inline; padding:0px; margin:0px;}
+
+td.elide {
+}
+input.elide {
+    display: none;
+}
+
+input.elide:checked + .elide {
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+    padding: .5em 0px .5em 0px;
+}
+
+input.elide + .elide {
+    overflow-x: scroll;
+}

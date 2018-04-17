@@ -32,6 +32,7 @@
    define-tuple
    demonitor
    demonitor&flush
+   dump-stack
    erlang:now
    exit
    get-registered
@@ -50,6 +51,7 @@
    profile-me
    receive
    register
+   reset-console-event-handler
    self
    send
    spawn
@@ -399,6 +401,49 @@
       (fold-right gather base
         (vector->list
          (no-interrupts (hashtable-keys process-table))))]))
+
+  (define dump-stack
+    (let ()
+      (define (source-path obj)
+        (call-with-values (lambda () (obj 'source-path))
+          (case-lambda
+           [() #f]
+           [(path) (format " in ~a" path)]
+           [(path line char)
+            (format " at line ~a, char ~a of ~a" line char path)])))
+      (define (dump-cont cont op)
+        (cont 'write op)
+        (cond
+         [(source-path cont) => (lambda (where) (display where op))]
+         [(source-path (cont 'code)) =>
+          (lambda (where) (fprintf op " in procedure~a" where))])
+        (newline op)
+        (when (cont 'source)
+          (do ([i 0 (fx+ i 1)] [len (cont 'length)])
+              ((fx= i len))
+            (let ([var (cont 'ref i)])
+              (fprintf op "  ~s: " (or (var 'name) i))
+              ((var 'ref) 'write op)
+              (newline op)))))
+      (case-lambda
+       [() (dump-stack (current-output-port))]
+       [(op) (call/cc (lambda (k) (dump-stack k op 'default)))]
+       [(k op max-depth)
+        (unless (output-port? op) (bad-arg 'dump-stack op))
+        (let ([max-depth
+               (match max-depth
+                 [#f #f]
+                 [default 10]
+                 [,n (guard (and (fixnum? n) (positive? n))) n]
+                 [,_ (bad-arg 'dump-stack max-depth)])])
+          (parameterize ([print-level 3] [print-length 6] [print-gensym #f] [print-extended-identifiers #t])
+            (let loop ([cont ((inspect/object k) 'link)] [depth 0])
+              (when (eq? (cont 'type) 'continuation)
+                (if (and max-depth (= depth max-depth))
+                    (fprintf op "Stack dump truncated due to max-depth = ~s.\n" max-depth)
+                    (begin
+                      (dump-cont cont op)
+                      (loop (cont 'link) (+ depth 1))))))))])))
 
   (define (process? p) (pcb? p))
 
@@ -757,10 +802,24 @@
 
   (define (console-event-handler event)
     (with-interrupts-disabled
-     (let ([op (console-output-port)])
+     (let ([op (console-output-port)]
+           [sop (open-output-string)]
+           [ht (or (event-condition-table) (make-eq-hashtable))])
+       (event-condition-table ht)
        (fprintf op "\nDate: ~a\n" (date-and-time))
        (fprintf op "Timestamp: ~a\n" (erlang:now))
-       (fprintf op "Event: ~s\n\n" event)
+       (fprintf op "Event: ~s\n" event)
+       (let* ([keys (hashtable-keys ht)]
+              [end (vector-length keys)])
+         (do ([i 0 (fx1+ i)]) ((fx= i end))
+           (let ([c (vector-ref keys i)])
+             (unless (eq? (eq-hashtable-ref ht c #f) 'dumped)
+               (eq-hashtable-set! ht c 'dumped)
+               (fprintf op "Condition: ") (display-condition c op) (newline op)
+               (when (continuation-condition? c)
+                 (fprintf op "Stack:\n")
+                 (dump-stack (condition-continuation c) op 'default))))))
+       (newline op)
        (flush-output-port op))))
 
   (define make-process-parameter
@@ -1115,6 +1174,9 @@
     (syntax-rules ()
       [(_ var e) (#%$set-top-level-value! 'var e)]))
 
+  (define event-condition-table (make-parameter #f))
+  (define (reset-console-event-handler) (event-condition-table #f))
+
   (record-writer (record-type-descriptor pcb)
     (lambda (r p wr)
       (display-string "#<process " p)
@@ -1130,7 +1192,10 @@
     (lambda (x p wr)
       (display-string "#<compound condition: " p)
       (display-condition x p)
-      (write-char #\> p)))
+      (write-char #\> p)
+      (let ([ht (event-condition-table)])
+        (when (and ht (not (eq-hashtable-ref ht x #f)))
+          (eq-hashtable-set! ht x #t)))))
 
   (disable-interrupts)
   (set-self! (@make-process #f))
