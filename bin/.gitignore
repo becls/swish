@@ -4,3 +4,10 @@
 /osi.dll
 /osi.exp
 /osi.lib
+/swish
+/swish.boot
+/swish.exe
+/swish_kernel.o
+/swish_kernel.obj
+/swish.library
+/swish.wpo

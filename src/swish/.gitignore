@@ -2,9 +2,15 @@
 /io-constants.exe
 /io-constants.obj
 /io-constants.ss
+/main.o
+/main.obj
 /osi.o
 /osi.obj
-/sqlite.o
-/sqlite.obj
+/run.o
+/run.obj
 /sqlite3.o
 /sqlite3.obj
+/sqlite.o
+/sqlite.obj
+/swish_kernel.o
+/swish_kernel.obj

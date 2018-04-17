@@ -1,9 +1,18 @@
 #!/bin/sh -e
-if [ "$PROFILE_MATS" = "no" ]; then
-  launch="scheme --eedisable -q repl.ss run-mats.ss"
-else
+# Usage: ./run-mats
+#     or ./run-mats bin-path
+#
+# If bin-path is absent or is ../bin, clean and run tests against code
+# in this repository.  Otherwise run the code installed at bin-path
+# against the tests in this repository.
+
+if [ -z ${SCHEME+x} ]; then SCHEME=scheme; fi
+
+repl="repl.ss"
+
+if [ "$PROFILE_MATS" = "yes" ]; then
+  repl="replp.ss"
   rm -f ../data/server.profile
-  launch="scheme --eedisable -q replp.ss run-mats.ss"
 fi
 
 if [ "$OUTDIR" != "" ]; then
@@ -12,9 +21,20 @@ else
     outdir=.
 fi
 
-git clean -fxd ../bin
 rm -f ../data/TestLog.db3
-make -s -C swish
+
+if [ ${1+x} ]; then
+  if [ ! -d "${1}" ]; then
+    echo "$1 is not a directory"
+    exit 1
+  elif [ "$1" = "../bin" ]; then
+    make -C swish clean all
+  fi
+  launch="/usr/bin/env PATH=${1}:${PATH} ../bin/swish-mat"
+else
+  make -C swish clean ready
+  launch="${SCHEME} --eedisable -q ${repl} run-mats.ss"
+fi
 
 # Swish
 source swish/run-mats

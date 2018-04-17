@@ -5,11 +5,26 @@ ifneq (,$(shell gcc --help=warning | grep implicit-fallthrough))
   HUSH=-Wimplicit-fallthrough=0
 endif
 C = gcc -m64 -msse2 -fPIC -Wall -Wextra -Werror -O2
+OsiObj=osi.o sqlite.o sqlite3.o
+SwishLib=-lm -ldl -lncurses -luuid -lpthread
+CLIBS := ../../bin/libosi.so ../../lib/swish_kernel.o
 
-all: ../../bin/libosi.so io-constants.ss
+clibs: ${CLIBS}
 
-../../bin/libosi.so: osi.o sqlite.o sqlite3.o ${UvLib}
-	$C -shared -L${UvLib} -o ../../bin/libosi.so osi.o sqlite.o sqlite3.o -luv -luuid
+../../bin/swish: main.o ../../lib/swish_kernel.o
+	$C -o $@ $^ ${SwishLib}
+
+../../bin/libosi.so: ${OsiObj} ${UvLib}
+	$C -shared -L${UvLib} -o ../../bin/libosi.so ${OsiObj} -luv -luuid
+
+../../lib/swish_kernel.o: ${UvLib} run.o ${OsiObj} ${SchemeInclude}/kernel.o
+	ld -melf_x86_64 -r -X -o $@ run.o ${OsiObj} ${SchemeInclude}/kernel.o ${UvLib}/libuv.a
+
+main.o: main.c
+	$C -I${SchemeInclude} -I${UvInclude} -c $<
+
+run.o: run.c osi.h ${SchemeInclude}/scheme.h
+	$C -I${SchemeInclude} -I${UvInclude} -c $<
 
 osi.o: osi.h osi.c ${UvInclude}
 	$C -I${SchemeInclude} -I${UvInclude} -c osi.c
@@ -27,8 +42,12 @@ ${UvLib}: ${UvInclude}
 	  cd ../../libuv; ./gyp_uv.py -Duv_library=static_library -f make
 	  BUILDTYPE=Release CFLAGS="-fPIC" make -C ../../libuv/out
 
-clean:
-	rm -f ../../bin/libosi.so osi.o sqlite.o io-constants io-constants.ss
+platform-clean:
+	rm -f osi.o sqlite.o io-constants io-constants.ss
+	rm -f swish main.o run.o swish.boot
+	rm -f ${CLIBS}
+	rm -f ../../bin/swish{,.boot,.library}
+	rm -f ../../lib/swish/*.{so,sop,wpo}
 
 pristine: clean
 	rm -rf sqlite3.o ../../libuv/out/Release

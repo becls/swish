@@ -1,24 +1,32 @@
-#!/usr/bin/perl
-use strict;
-use autodie;
+#!/usr/bin/env scheme-script
 
-if ($#ARGV < 0) {
-    print "Usage: $0 fieldname\n" ;
-    exit(1);
-}
-my $fieldname = $ARGV[0];
+(import (scheme))
 
-open INPUT, "software-info.ss";
-my @orig = <INPUT>;
-my $orig = join "", @orig;
-close INPUT;
+(define field-name
+  (cond
+   [(null? (command-line-arguments))
+    (printf "Usage: ~s fieldname\n" (car (command-line)))
+    (exit 1)]
+   [else (string->symbol (car (command-line-arguments)))]))
 
-$_ = $orig;
-if ( /\(define\s+$fieldname\s+\"([^\"]*)\"\)/ )
-{
-    print "$1\n";
-    exit(0);
-} else {
-    print "ERROR: $fieldname not found in software-info.ss\n";
-    exit(1);
-}
+(define (trim version)
+  (let ([ignore-suffix '(#\. #\0)])
+    (let scan ([i (- (string-length version) 1)])
+      (if (and (> i 0) (memv (string-ref version i) ignore-suffix))
+          (scan (- i 1))
+          (substring version 0 (+ i 1))))))
+
+(define (get field)
+  (interpret
+   `(begin
+      (import (swish software-info))
+      (if (top-level-bound? ',field)
+          ,field
+          (errorf #f "field ~s not found in software-info" ',field)))))
+
+(when (equal? "swish" (path-last (cd))) (cd ".."))
+
+(printf "~a\n"
+ (if (eq? field-name 'short-version)
+     (trim (get 'software-version))
+     (get field-name)))

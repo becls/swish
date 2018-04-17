@@ -1,5 +1,15 @@
 #!/bin/sh -e
-launch="scheme --eedisable -q repl.ss run-mats.ss"
+if [ -z ${SCHEME+x} ]; then SCHEME=scheme; fi
+if [ ${LAUNCH+X} ]; then
+  launch="${LAUNCH}"
+else
+  launch="${SCHEME} --eedisable -q repl.ss run-mats.ss"
+fi
+
+if [ $# != 1 ]; then
+  echo "Usage: $0 suite"
+  exit
+fi
 
 find . -name *.mo -delete
 rm -f ../data/server.profile
