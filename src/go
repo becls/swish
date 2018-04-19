@@ -1,4 +1,4 @@
 #!/bin/sh
 make -C swish ready
 if [ -z ${SCHEME+x} ]; then SCHEME=scheme; fi
-"${SCHEME}" --eedisable repl.ss "$@"
+"${SCHEME}" --eedisable --program repl.ss "$@"

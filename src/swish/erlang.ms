@@ -116,11 +116,16 @@
   (and (exact? x) (integer? x) (positive? x)))
 
 (define (repl-test code pattern)
+  (define scheme (or (getenv "SCHEME") "scheme"))
+  (define scheme-args
+    (list
+     "--eedisable"
+     "--program" "repl.ss"))
   (let-values
       ([(to-stdin from-stdout from-stderr os-pid)
         (match (vector->list (osi_get_argv))
           [()
-           (spawn-os-process "scheme" '("--eedisable" "repl.ss") self)]
+           (spawn-os-process scheme scheme-args self)]
           [(,command . ,args)
            (spawn-os-process command args self)])])
     (let ([to-stdin (binary->utf8 to-stdin)]

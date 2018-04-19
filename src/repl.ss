@@ -1,10 +1,13 @@
-(library-directories '(("." . "../lib")))
+(import (scheme))
+
+(meta-cond
+ [(and (equal? (getenv "PROFILE_MATS") "yes")
+       (compile-profile #t)
+       (cp0-effort-limit 0))
+  (void)])
+
 (compile-imported-libraries #t)
+(library-directories '(("." . "../lib")))
+
 (import (swish imports))
-(hook-console-input)
-(let ([orig (waiter-prompt-and-read)])
-  (waiter-prompt-and-read
-   (lambda (x . rest)
-     (exit-handler (lambda x (app:shutdown) (receive)))
-     (waiter-prompt-and-read orig)
-     (apply orig x rest))))
+((swish-start) (command-line-arguments))

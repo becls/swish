@@ -3,7 +3,7 @@ if [ -z ${SCHEME+x} ]; then SCHEME=scheme; fi
 if [ ${LAUNCH+X} ]; then
   launch="${LAUNCH}"
 else
-  launch="${SCHEME} --eedisable -q repl.ss run-mats.ss"
+  launch="./go -q -- run-mats.ss"
 fi
 
 if [ $# != 1 ]; then
@@ -11,7 +11,10 @@ if [ $# != 1 ]; then
   exit
 fi
 
-find . -name *.mo -delete
+find . -name "*.mo" -delete
+if [ "$PROFILE_MATS" = "yes" ]; then
+  find . -name "*.html" -and -not -iwholename "*/web-mats/*" -delete
+fi
 rm -f ../data/server.profile
 rm -f ../data/TestLog.db3
 make -s -C swish
@@ -25,3 +28,7 @@ $launch <<EOF
 (html-report "." "suite-report.html")
 (console-summary ".")
 EOF
+
+if [ "$PROFILE_MATS" = "yes" ]; then
+  ./dump-profile
+fi

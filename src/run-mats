@@ -8,10 +8,7 @@
 
 if [ -z ${SCHEME+x} ]; then SCHEME=scheme; fi
 
-repl="repl.ss"
-
 if [ "$PROFILE_MATS" = "yes" ]; then
-  repl="replp.ss"
   rm -f ../data/server.profile
 fi
 
@@ -30,10 +27,11 @@ if [ ${1+x} ]; then
   elif [ "$1" = "../bin" ]; then
     make -C swish clean all
   fi
-  launch="/usr/bin/env PATH=${1}:${PATH} ../bin/swish-mat"
+  PATH=${1}:${PATH}
+  launch="../bin/swish-mat"
 else
   make -C swish clean ready
-  launch="${SCHEME} --eedisable -q ${repl} run-mats.ss"
+  launch="./go -q -- run-mats.ss"
 fi
 
 # Swish

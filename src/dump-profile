@@ -1,2 +1,2 @@
 #!/bin/sh
-echo "(go)" | scheme -q --libdirs .::../lib dump-profile.ss
+echo "(go)" | ./go -q -- dump-profile.ss
