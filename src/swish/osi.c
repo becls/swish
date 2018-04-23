@@ -1227,10 +1227,7 @@ ptr osi_write_port(uptr port, ptr buffer, size_t start_index, uint32_t size, int
   return (*(port_vtable_t**)port)->write(port, buffer, start_index, size, offset, callback);
 }
 
-#ifndef _WIN32
-__attribute__((constructor))
-#endif
-static void osi_init(void) {
+void osi_init(void) {
   uv_disable_stdio_inheritance();
   g_loop = uv_default_loop();
   uv_timer_init(g_loop, &g_timer);
@@ -1239,11 +1236,3 @@ static void osi_init(void) {
   timeBeginPeriod(1); // Set timer resolution to 1 ms.
 #endif
 }
-
-#ifdef _WIN32
-BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
-  if (DLL_PROCESS_ATTACH == reason)
-    osi_init();
-  return TRUE;
-}
-#endif

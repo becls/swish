@@ -62,6 +62,7 @@ EXPORT const char* osi_get_error_text(int err);
 EXPORT ptr osi_get_hostname(void);
 EXPORT uint64_t osi_get_hrtime(void);
 EXPORT uint64_t osi_get_time(void);
+EXPORT void osi_init(void);
 EXPORT int osi_is_tick_over(void);
 EXPORT ptr osi_list_uv_handles(void);
 EXPORT ptr osi_make_uuid(void);
