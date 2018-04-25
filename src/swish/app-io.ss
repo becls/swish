@@ -31,9 +31,9 @@
    )
   (import
    (chezscheme)
-   (swish software-info)
    (swish erlang)
    (swish io)
+   (swish software-info)
    )
 
   (define bin-dir (cd))

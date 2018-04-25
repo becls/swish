@@ -26,6 +26,7 @@
    add-if-absent
    bad-syntax
    collect-clauses
+   compound-id
    find-clause
    find-source
    get-clause
@@ -34,7 +35,6 @@
    scar
    scdr
    snull?
-   compound-id
    syntax-datum-eq?
    with-annotated-syntax
    )

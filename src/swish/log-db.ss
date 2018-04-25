@@ -34,7 +34,6 @@
    )
   (import
    (chezscheme)
-   (swish software-info)
    (swish app-io)
    (swish db)
    (swish erlang)
@@ -42,6 +41,7 @@
    (swish events)
    (swish io)
    (swish osi)
+   (swish software-info)
    (swish string-utils)
    )
 

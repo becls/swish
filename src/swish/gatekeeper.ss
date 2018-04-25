@@ -23,9 +23,9 @@
 #!chezscheme
 (library (swish gatekeeper)
   (export
-   gatekeeper:start&link
    gatekeeper:enter
    gatekeeper:leave
+   gatekeeper:start&link
    with-gatekeeper-mutex
    )
   (import

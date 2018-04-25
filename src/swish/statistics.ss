@@ -22,8 +22,8 @@
 
 (library (swish statistics)
   (export
-   statistics:start&link
    statistics:resume
+   statistics:start&link
    statistics:suspend
    )
   (import
