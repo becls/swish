@@ -37,7 +37,8 @@
       [ignore #f]
       [#(error ,reason) (raise 'profile-failed-to-start)]))
   (reset-handler (lambda () (display "\nTest Failed\n") (abort 1)))
-  (load (string-append basename ".ms"))
+  (parameterize ([compile-profile #f])
+    (load (string-append basename ".ms")))
   (let ([profiling? (start-profiler)])
     (on-exit (when profiling? (profile:save))
       (run-mats-to-file (string-append basename ".mo")))))
