@@ -30,7 +30,7 @@ io-constants: io-constants.c ${UvInclude}
 	$C -I${UvInclude} io-constants.c -o io-constants
 
 ${UvLib}/libuv.a: ${UvInclude}
-	  cd ../../libuv; ./gyp_uv.py -Duv_library=static_library -f make
+	  cd ../../libuv; ./gyp_uv.py -Duv_library=static_library -Dtarget_arch="x64" -f make
 	  BUILDTYPE=Release CFLAGS="-fPIC" make -C ../../libuv/out
 
 platform-clean:
