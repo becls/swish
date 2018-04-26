@@ -63,7 +63,10 @@
      (mat name tags ($http-mat (lambda () (boot-http) (let () e1 e2 ...))))]))
 
 (define ($http-mat thunk)
-  (let* ([pid (spawn thunk)]
+  (let* ([pid (spawn
+               (lambda ()
+                 (parameterize ([compile-profile #f])
+                   (thunk))))]
          [m (monitor pid)])
     (on-exit (shutdown-http)
       (receive (after 300000 (kill pid 'shutdown) (raise 'timeout))
