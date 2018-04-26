@@ -115,7 +115,7 @@
 (define (pid? x)
   (and (exact? x) (integer? x) (positive? x)))
 
-(define (repl-test code pattern)
+(define (repl-test code . patterns)
   (define scheme (or (getenv "SCHEME") "scheme"))
   (define scheme-args
     (list
@@ -145,18 +145,23 @@
         (write code to-stdin)
         (newline to-stdin)
         (flush-output-port to-stdin)
-        (let search ([re (pregexp pattern)] [lines '()])
-          (receive
-           (after 10000
-             (osi_kill* os-pid 15)
-             (raise `#(pattern-not-found ,pattern ,(reverse lines))))
-           [,line (guard (string? line))
-             (if (pregexp-match re line)
-                 (receive (after 1000
-                            (osi_kill* os-pid 15)
-                            (raise 'timeout))
-                   [#(<process-terminated> ,@os-pid ,_ ,_) 'ok])
-                 (search re (cons line lines)))]))))))
+        (let check ([patterns patterns] [lines '()])
+          (match patterns
+            [()
+             (receive (after 1000
+                        (osi_kill* os-pid 15)
+                        (raise 'timeout))
+               [#(<process-terminated> ,@os-pid ,_ ,_) 'ok])]
+            [(,pattern . ,patterns)
+             (let search ([re (pregexp pattern)] [lines lines])
+               (receive
+                (after 10000
+                  (osi_kill* os-pid 15)
+                  (raise `#(pattern-not-found ,pattern ,(reverse lines))))
+                [,line (guard (string? line))
+                  (if (pregexp-match re line)
+                      (check patterns lines)
+                      (search re (cons line lines)))]))]))))))
 
 (isolate-mat kick-tires ()
   ;; each of these should take around 2 seconds
@@ -1026,7 +1031,23 @@
    ([,me self]
     [#(EXIT 123) (run-spawned (catch (raise 123)))]
     [#(EXIT 123) (run-spawned (catch (exit 123)))])
-   'ok))
+   'ok)
+  (repl-test
+   '(begin
+      (printf "attempting to app:start\n")
+      (app-sup-spec
+       `(#(event-mgr ,event-mgr:start&link permanent 1000 worker)))
+      (app:start)
+      (exit-handler
+       (let ([orig (exit-handler)])
+         (lambda args
+           (printf "exited properly~{ ~s~}\n" args)
+           (apply orig args))))
+      (exit 1 2 3))
+   "exited properly 1 2 3"
+   "Date: "
+   "Timestamp: "
+   "Event: "))
 
 (mat dump-stack ()
   (define (assert-depth s n)
