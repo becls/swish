@@ -408,7 +408,8 @@
         (call-with-values (lambda () (obj 'source-path))
           (case-lambda
            [() #f]
-           [(path) (format " in ~a" path)]
+           [(path char)
+            (format " at offset ~a of ~a" char path)]
            [(path line char)
             (format " at line ~a, char ~a of ~a" line char path)])))
       (define (dump-cont cont op)
@@ -437,7 +438,7 @@
                  [,n (guard (and (fixnum? n) (positive? n))) n]
                  [,_ (bad-arg 'dump-stack max-depth)])])
           (parameterize ([print-level 3] [print-length 6] [print-gensym #f] [print-extended-identifiers #t])
-            (let loop ([cont ((inspect/object k) 'link)] [depth 0])
+            (let loop ([cont (inspect/object k)] [depth 0])
               (when (eq? (cont 'type) 'continuation)
                 (if (and max-depth (= depth max-depth))
                     (fprintf op "Stack dump truncated due to max-depth = ~s.\n" max-depth)
