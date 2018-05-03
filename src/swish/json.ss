@@ -29,6 +29,7 @@
    json:read
    json:string->object
    json:write
+   json:write-object
    )
   (import
    (chezscheme)
@@ -119,15 +120,20 @@
       (unless (char=? c expected)
         (unexpected-input c ip))))
 
-  (define (write-string s op)
-    (write-char #\" op)
-    (do ([i 0 (+ i 1)] [n (string-length s)]) [(= i n)]
-      (let ([c (string-ref s i)])
-        (cond
-         [(memv c '(#\" #\\)) (write-char #\\ op) (write-char c op)]
-         [(char<=? c #\x1F) (fprintf op "\\u~4,'0x" (char->integer c))]
-         [else (write-char c op)])))
-    (write-char #\" op))
+  (define-syntax make-write-string
+    (syntax-rules ()
+      [(_ s op)
+       (lambda (s op)
+         (write-char #\" op)
+         (do ([i 0 (+ i 1)] [n (string-length s)]) [(= i n)]
+           (let ([c (string-ref s i)])
+             (cond
+              [(memv c '(#\" #\\)) (write-char #\\ op) (write-char c op)]
+              [(char<=? c #\x1F) (fprintf op "\\u~4,'0x" (char->integer c))]
+              [else (write-char c op)])))
+         (write-char #\" op))]))
+
+  (define write-string (make-write-string s op))
 
   (define (hex-digit ip)
     (let ([c (next-char ip)])
@@ -188,111 +194,188 @@
         (inexact (* mantissa (expt 10 exponent)))
         (inexact (/ mantissa (expt 10 (- exponent))))))
 
-  (define (json:read ip)
-    (let ([c (next-non-ws ip)])
-      (cond
-       [(eqv? c #\t)
-        (expect-char #\r ip)
-        (expect-char #\u ip)
-        (expect-char #\e ip)
-        #t]
-       [(eqv? c #\f)
-        (expect-char #\a ip)
-        (expect-char #\l ip)
-        (expect-char #\s ip)
-        (expect-char #\e ip)
-        #f]
-       [(eqv? c #\n)
-        (expect-char #\u ip)
-        (expect-char #\l ip)
-        (expect-char #\l ip)
-        #\nul]
-       [(eqv? c #\") (read-string ip)]
-       [(eqv? c #\[)
-        (let lp ([acc '()])
-          (let ([c (next-non-ws ip)])
-            (case c
-              [(#\]) '()]
-              [else
-               (unread-char c ip)
-               (let ([acc (cons (json:read ip) acc)])
-                 (let ([c (next-non-ws ip)])
-                   (case c
-                     [(#\,) (lp acc)]
-                     [(#\]) (reverse acc)]
-                     [else (unexpected-input c ip)])))])))]
-       [(eqv? c #\{)
-        (let lp ([obj (json:make-object)])
-          (let ([c (next-non-ws ip)])
-            (case c
-              [(#\")
-               (let ([key (read-string ip)])
-                 (let ([c (next-non-ws ip)])
-                   (unless (eqv? c #\:)
-                     (unexpected-input c ip)))
-                 (hashtable-set! obj key (json:read ip)))
-               (let ([c (next-non-ws ip)])
-                 (case c
-                   [(#\,) (lp obj)]
-                   [(#\}) obj]
-                   [else (unexpected-input c ip)]))]
-              [(#\}) obj]
-              [else (unexpected-input c ip)])))]
-       [(eqv? c #\-) (- (read-unsigned ip))]
-       [else (unread-char c ip) (read-unsigned ip)])))
-
-  (define (json:write op x)
-    (cond
-     [(eq? x #t) (display-string "true" op)]
-     [(eq? x #f) (display-string "false" op)]
-     [(eqv? x #\nul) (display-string "null" op)]
-     [(string? x) (write-string x op)]
-     [(symbol? x) (display-string (symbol->string x) op)]
-     [(or (fixnum? x) (bignum? x) (and (flonum? x) (finite? x)))
-      (display-string (number->string x) op)]
-     [(null? x) (display-string "[]" op)]
-     [(pair? x)
-      (write-char #\[ op)
-      (json:write op (car x))
-      (for-each
-       (lambda (x)
-         (write-char #\, op)
-         (json:write op x))
-       (cdr x))
-      (write-char #\] op)]
-     [(hashtable? x)
-      (write-char #\{ op)
-      (let-values ([(keys vals) (hashtable-entries x)])
-        (let ([v (vector-map cons keys vals)])
-          (vector-sort! (lambda (x y) (string<? (car x) (car y))) v)
-          (do ([i 0 (fx+ i 1)]) ((fx= i (vector-length v)))
-            (when (fx> i 0)
-              (write-char #\, op))
-            (let ([p (vector-ref v i)])
-              (write-string (car p) op)
-              (write-char #\: op)
-              (json:write op (cdr p))))))
-      (write-char #\} op)]
-     [else (raise `#(invalid-datum ,x))]))
-
-  (define (json:object->string x)
-    (let-values ([(op get) (open-string-output-port)])
-      (json:write op x)
-      (get)))
-
-  (define (json:string->object x)
-    (let* ([ip (open-string-input-port x)]
-           [obj (json:read ip)])
-      ;; Make sure there's nothing but whitespace left.
-      (let lp ()
-        (let ([x (read-char ip)])
+  (define json:read
+    (case-lambda
+     [(ip) (json:read ip no-custom-inflate)]
+     [(ip custom-inflate)
+      (define (rd ip)
+        (let ([c (next-non-ws ip)])
           (cond
-           [(eof-object? x) obj]
-           [(ws? x) (lp)]
-           [else (unexpected-input x ip)])))))
+           [(eqv? c #\t)
+            (expect-char #\r ip)
+            (expect-char #\u ip)
+            (expect-char #\e ip)
+            #t]
+           [(eqv? c #\f)
+            (expect-char #\a ip)
+            (expect-char #\l ip)
+            (expect-char #\s ip)
+            (expect-char #\e ip)
+            #f]
+           [(eqv? c #\n)
+            (expect-char #\u ip)
+            (expect-char #\l ip)
+            (expect-char #\l ip)
+            #\nul]
+           [(eqv? c #\") (read-string ip)]
+           [(eqv? c #\[)
+            (let lp ([acc '()])
+              (let ([c (next-non-ws ip)])
+                (case c
+                  [(#\]) '()]
+                  [else
+                   (unread-char c ip)
+                   (let ([acc (cons (rd ip) acc)])
+                     (let ([c (next-non-ws ip)])
+                       (case c
+                         [(#\,) (lp acc)]
+                         [(#\]) (reverse acc)]
+                         [else (unexpected-input c ip)])))])))]
+           [(eqv? c #\{)
+            (custom-inflate
+              (let lp ([obj (json:make-object)])
+                (let ([c (next-non-ws ip)])
+                  (case c
+                    [(#\")
+                     (let ([key (read-string ip)])
+                       (let ([c (next-non-ws ip)])
+                         (unless (eqv? c #\:)
+                           (unexpected-input c ip)))
+                       (hashtable-set! obj key (rd ip)))
+                     (let ([c (next-non-ws ip)])
+                       (case c
+                         [(#\,) (lp obj)]
+                         [(#\}) obj]
+                         [else (unexpected-input c ip)]))]
+                    [(#\}) obj]
+                    [else (unexpected-input c ip)]))))]
+           [(eqv? c #\-) (- (read-unsigned ip))]
+           [else (unread-char c ip) (read-unsigned ip)])))
+      (rd ip)]))
 
-  (define (json:object->bytevector x)
-    (call-with-bytevector-output-port
-     (lambda (op) (json:write op x))
-     (make-utf8-transcoder)))
+  (define json:write
+    (case-lambda
+     [(op x) (json:write op x no-custom-write)]
+     [(op x custom-write)
+      (define (wr op x)
+        (cond
+         [(eq? x #t) (display-string "true" op)]
+         [(eq? x #f) (display-string "false" op)]
+         [(eqv? x #\nul) (display-string "null" op)]
+         [(string? x) (write-string x op)]
+         [(or (fixnum? x) (bignum? x) (and (flonum? x) (finite? x)))
+          (display-string (number->string x) op)]
+         [(custom-write op x wr)]
+         [(null? x) (display-string "[]" op)]
+         [(pair? x)
+          (write-char #\[ op)
+          (wr op (car x))
+          (for-each
+           (lambda (x)
+             (write-char #\, op)
+             (wr op x))
+           (cdr x))
+          (write-char #\] op)]
+         [(hashtable? x)
+          (write-char #\{ op)
+          (let-values ([(keys vals) (hashtable-entries x)])
+            (let ([v (vector-map cons keys vals)])
+              (vector-sort! (lambda (x y) (string<? (car x) (car y))) v)
+              (do ([i 0 (fx+ i 1)]) ((fx= i (vector-length v)))
+                (when (fx> i 0)
+                  (write-char #\, op))
+                (let ([p (vector-ref v i)])
+                  (write-string (car p) op)
+                  (write-char #\: op)
+                  (wr op (cdr p))))))
+          (write-char #\} op)]
+         [else (raise `#(invalid-datum ,x))]))
+      (wr op x)]))
+
+  (define json:object->string
+    (case-lambda
+     [(x) (json:object->string x no-custom-write)]
+     [(x custom-write)
+      (let-values ([(op get) (open-string-output-port)])
+        (json:write op x custom-write)
+        (get))]))
+
+  (define json:string->object
+    (case-lambda
+     [(x) (json:string->object x no-custom-inflate)]
+     [(x custom-inflate)
+      (let* ([ip (open-string-input-port x)]
+             [obj (json:read ip custom-inflate)])
+        ;; Make sure there's nothing but whitespace left.
+        (let lp ()
+          (let ([x (read-char ip)])
+            (cond
+             [(eof-object? x) obj]
+             [(ws? x) (lp)]
+             [else (unexpected-input x ip)]))))]))
+
+  (define json:object->bytevector
+    (case-lambda
+     [(x) (json:object->bytevector x no-custom-write)]
+     [(x custom-write)
+      (call-with-bytevector-output-port
+       (lambda (op) (json:write op x custom-write))
+       (make-utf8-transcoder))]))
+
+  (define (no-custom-inflate x) x)
+
+  (define (no-custom-write op x wr) #f)
+
+  (define-syntax json-write-kv
+    (let ()
+      (define write-string (make-write-string s op))
+      (define (get-preamble prefix k)
+        (let-values ([(op get) (open-string-output-port)])
+          (write-char prefix op)
+          (write-string k op)
+          (write-char #\: op)
+          (get)))
+      (lambda (x)
+        (syntax-case x ()
+          [(_ op wr prefix k v #f)
+           (with-syntax ([str (get-preamble (datum prefix) (datum k))])
+             #'(begin (display str op) (wr op v)))]
+          [(_ op wr prefix k v-expr cw-expr)
+           (with-syntax ([str (get-preamble (datum prefix) (datum k))])
+             #`(let ([custom-writer cw-expr] [v v-expr])
+                 (display str op)
+                 (if custom-writer
+                     (custom-writer op v wr)
+                     (wr op v))))]))))
+
+  (define-syntax (json:write-object x)
+    (define (get-key x)
+      (syntax-case x ()
+        [(key . rest) (datum key)]))
+    (define (valid? keys)
+      (let ([novel (make-hashtable string-hash string=?)])
+        (define (ok? key)
+          (and (string? key)
+               (hashtable-ref novel key #t)
+               (begin (hashtable-set! novel key #f) #t)))
+        (andmap ok? keys)))
+    (define (parse-clause c)
+      (syntax-case c ()
+        [(key field) #'(key field #f)]
+        [(key field custom-write) c]
+        [_ (syntax-error c)]))
+    (syntax-case x ()
+      [(_ op-expr wr-expr [key . spec] ...)
+       (valid? (datum (key ...)))
+       (with-syntax ([([k0 f0 cw0] [k1 f1 cw1] ...)
+                      (sort
+                       (lambda (x y)
+                         (string<? (get-key x) (get-key y)))
+                       (map parse-clause #'([key . spec] ...)))])
+         #'(let ([op op-expr] [wr wr-expr])
+             (json-write-kv op wr #\{ k0 f0 cw0)
+             (json-write-kv op wr #\, k1 f1 cw1)
+             ...
+             (write-char #\} op)))]))
+
   )

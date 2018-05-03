@@ -40,11 +40,27 @@
    [(pair? x) (map dump x)]
    [else x]))
 
-(define (round-trip x)
-  (let ([y (json:string->object (json:object->string x))])
-    (assert (equal? (dump x) (dump y))))
-  (let ([y (json:string->object (utf8->string (json:object->bytevector x)))])
-    (assert (equal? (dump x) (dump y)))))
+(define round-trip
+  (case-lambda
+   [(x) (round-trip x #f #f)]
+   [(x custom-write custom-inflate)
+    (define (->string x)
+      (if custom-write
+          (json:object->string x custom-write)
+          (json:object->string x)))
+    (define (->bytevector x)
+      (if custom-write
+          (json:object->bytevector x custom-write)
+          (json:object->bytevector x)))
+    (define (string-> x)
+      (if custom-inflate
+          (json:string->object x custom-inflate)
+          (json:string->object x)))
+    (let ([y (string-> (->string x))])
+      (assert (equal? (dump x) (dump y))))
+    (let ([y (string-> (utf8->string (->bytevector x)))])
+      (assert (equal? (dump x) (dump y))))
+    'ok]))
 
 (define test-objs
   `(#(#\nul "null")
@@ -109,14 +125,126 @@
    test-objs))
 
 (mat google ()
+  (define (handle-symbol op x wr) (and (symbol? x) (display x op) #t))
   (match-let*
-   (["foo" (json:object->string (json-inline "foo"))]
-    ["new Date(123)" (json:object->string (json-inline "new Date(123)"))])
+   (["foo" (json:object->string (json-inline "foo") handle-symbol)]
+    ["new Date(123)" (json:object->string (json-inline "new Date(123)") handle-symbol)])
    'ok))
 
 (mat whitespace ()
   (match-let*
    ([(1 2 3) (json:string->object " \t\r\n[ \t\r\n1 \t\r\n, \t\r\n2 \t\r\n, \t\r\n3 \t\r\n] \t\r\n")])
+   'ok))
+
+(mat write-object ()
+  (let-values ([(op get) (open-string-output-port)])
+    (match-let*
+     ([,by-write
+       (let ()
+         (json:write op
+           (json:make-object
+            ["bar" "rel"]
+            ["foo" "tstep"]
+            ["ace" "rbic"]))
+         (get))]
+      [,@by-write
+       (let ()
+         (json:write-object op json:write
+           ["bar" "rel"]
+           ["foo" "tstep"]
+           ["ace" "rbic"])
+         (get))]
+      [,custom-write
+       (lambda (op v wr)
+         (if (vector? v)
+             (fprintf op "[~{\"~r\"~^,~}]" (vector->list v))
+             (wr op v)))]
+      ["{\"abc\":[\"four\",\"five\",\"six\"],\"def\":[7,8,9],\"ghi\":3}"
+       (begin
+         (json:write-object op json:write
+           ["ghi" 3]
+           ["abc" '#(4 5 6) custom-write]
+           ["def" '(7 8 9) custom-write])
+         (get))])
+     'ok)))
+
+(mat custom ()
+  (define-tuple <obj> a b c)
+  (define dne (box #t))
+  (define (must-ref ht key)
+    (let ([hit (hashtable-ref ht key dne)])
+      (if (eq? hit dne)
+          (errorf 'must-ref "did not find ~s" key)
+          hit)))
+  (define (custom-inflate x)
+    (match (hashtable-ref x "_type_" #f)
+      ["<obj>"
+       (<obj> make
+         [a (must-ref x "a")]
+         [b (must-ref x "b")]
+         [c (must-ref x "c")])]
+      ["symbol"
+       (string->symbol (must-ref x "name"))]
+      [,_ x]))
+  (define (custom-write op x wr)
+    (match x
+      [`(<obj> ,a ,b ,c)
+       (json:write-object op wr
+         ["_type_" "<obj>"]
+         ["a" a]
+         ["b" b]
+         ["c" c])]
+      [,x
+       (guard (symbol? x))
+       (json:write-object op wr
+         ["_type_" "symbol"]
+         ["name" (symbol->string x)])]
+      [,_ #f]))
+  (define (hashtable->alist ht)
+    (let-values ([(keys vals) (hashtable-entries ht)])
+      (sort (lambda (a b) (string<? (car a) (car b)))
+        (map cons (vector->list keys) (vector->list vals)))))
+  (define (compare x y)
+    (cond
+     [(eqv? x y) 'ok]
+     [(pair? x)
+      (and (pair? y)
+           (compare (car x) (car y))
+           (compare (cdr x) (cdr y)))]
+     [(string? x) (and (equal? x y) 'ok)]
+     [(vector? x)
+      (and (vector? y)
+           (compare (vector->list x) (vector->list y)))]
+     [(hashtable? x)
+      (and (hashtable? y)
+           (compare (hashtable->alist x) (hashtable->alist y)))]
+     [else #f]))
+  (define (nop-custom-inflate x) x)
+  (define (nop-custom-write op x wr) #f)
+  ;; test inert custom-write / custom-inflate
+  (for-each
+   (lambda (obj)
+     (match-let* ([#(,x ,_) obj])
+       (round-trip x nop-custom-write nop-custom-inflate)))
+   test-objs)
+  (match-let*
+   ([,x (<obj> make
+          [a "quick"]
+          [b 'line]
+          [c (list
+              (<obj> make [a 1] [b 2] [c 3])
+              (json:make-object
+               ["able" (<obj> make [a 4] [b 5] [c 6])]
+               ["baker" '("one" "two")]
+               ["charlie" "delta"])
+              (<obj> make
+                [a 'typical]
+                [b 'fore]
+                [c (json:make-object ["take" "cake"])]))])]
+    [,string (json:object->string x custom-write)]
+    [ok (compare x (json:string->object string custom-inflate))]
+    [,bv (json:object->bytevector x custom-write)]
+    [ok (compare x (json:string->object (utf8->string bv) custom-inflate))])
    'ok))
 
 (mat errors ()
