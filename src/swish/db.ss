@@ -502,68 +502,72 @@
       (sqlite:bind stmt bindings)
       (lambda () (sqlite:step stmt))))
 
-  (define (parse-sql x)
-    (define (stringify x)
-      (syntax-case x (unquote)
-        [(unquote _) "?"]
-        [_
-         (let ([v (syntax-object->datum x)])
-           (if (or (symbol? v) (string? v))
-               v
-               (syntax-error x "invalid SQL term")))]))
-    (define (collect-args x)
-      (syntax-case x (unquote)
-        [() '()]
-        [((unquote e) . rest) (cons #'e (collect-args #'rest))]
-        [(_ . rest) (collect-args #'rest)]))
-    (syntax-case x ()
-      [(insert table ([column e1 e2 ...] ...))
-       (and (eq? (datum insert) 'insert)
-            (identifier? #'table)
-            (for-all identifier? #'(column ...)))
-       (values
-        (format "insert into ~a(~a) values(~a)"
-          (datum table)
-          (join (datum (column ...)) ", ")
-          (join (map (lambda (args) (join (map stringify args) #\space))
-                  #'((e1 e2 ...) ...)) ", "))
-        (fold-right
-         (lambda (x ls) (append (collect-args x) ls))
-         '()
-         #'((e1 e2 ...) ...)))]
-      [(update table ([column e1 e2 ...] ...) where ...)
-       (and (eq? (datum update) 'update)
-            (identifier? #'table)
-            (for-all identifier? #'(column ...)))
-       (values
-        (join
-         (cons
-          (format "update ~a set ~a"
-            (datum table)
-            (join
-             (map (lambda (x)
-                    (syntax-case x ()
-                      [(column e1 e2 ...)
-                       (format "~a=~a" (datum column)
-                         (join (map stringify #'(e1 e2 ...)) #\space))]))
-               #'((column e1 e2 ...) ...))
-             ", "))
-          (map stringify #'(where ...)))
-         #\space)
-        (fold-right
-         (lambda (x ls) (append (collect-args x) ls))
-         (collect-args #'(where ...))
-         #'((e1 e2 ...) ...)))]
-      [(delete table where ...)
-       (and (eq? (datum delete) 'delete)
-            (identifier? #'table))
-       (values
-        (join
-         (cons
-          (format "delete from ~a" (datum table))
-          (map stringify #'(where ...)))
-         #\space)
-        (collect-args #'(where ...)))]))
+  (define parse-sql
+    (case-lambda
+     [(x) (parse-sql x (lambda (id) id))]
+     [(x symbol->sql)
+      (define (stringify x)
+        (syntax-case x (unquote)
+          [(unquote _) "?"]
+          [_
+           (let ([v (syntax-object->datum x)])
+             (cond
+              [(symbol? v) (symbol->sql v)]
+              [(string? v) v]
+              [else (syntax-error x "invalid SQL term")]))]))
+      (define (collect-args x)
+        (syntax-case x (unquote)
+          [() '()]
+          [((unquote e) . rest) (cons #'e (collect-args #'rest))]
+          [(_ . rest) (collect-args #'rest)]))
+      (syntax-case x ()
+        [(insert table ([column e1 e2 ...] ...))
+         (and (eq? (datum insert) 'insert)
+              (identifier? #'table)
+              (for-all identifier? #'(column ...)))
+         (values
+          (format "insert into ~a(~a) values(~a)"
+            (stringify #'table)
+            (join (map stringify #'(column ...)) ", ")
+            (join (map (lambda (args) (join (map stringify args) #\space))
+                    #'((e1 e2 ...) ...)) ", "))
+          (fold-right
+           (lambda (x ls) (append (collect-args x) ls))
+           '()
+           #'((e1 e2 ...) ...)))]
+        [(update table ([column e1 e2 ...] ...) where ...)
+         (and (eq? (datum update) 'update)
+              (identifier? #'table)
+              (for-all identifier? #'(column ...)))
+         (values
+          (join
+           (cons
+            (format "update ~a set ~a"
+              (stringify #'table)
+              (join
+               (map (lambda (x)
+                      (syntax-case x ()
+                        [(column e1 e2 ...)
+                         (format "~a=~a" (datum column)
+                           (join (map stringify #'(e1 e2 ...)) #\space))]))
+                 #'((column e1 e2 ...) ...))
+               ", "))
+            (map stringify #'(where ...)))
+           #\space)
+          (fold-right
+           (lambda (x ls) (append (collect-args x) ls))
+           (collect-args #'(where ...))
+           #'((e1 e2 ...) ...)))]
+        [(delete table where ...)
+         (and (eq? (datum delete) 'delete)
+              (identifier? #'table))
+         (values
+          (join
+           (cons
+            (format "delete from ~a" (stringify #'table))
+            (map stringify #'(where ...)))
+           #\space)
+          (collect-args #'(where ...)))])]))
 
   (define SQLITE_STATUS_MEMORY_USED 0)
 

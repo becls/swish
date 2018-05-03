@@ -169,21 +169,10 @@
                 (make-sql-name #'name)
                 (join (map create-table-clause #'(clause ...)) ", "))))]))
 
-  (define-syntax (insert-table x)
-    (define (parse-clauses r name clauses)
-      (syntax-case clauses ()
-        [() #'()]
-        [((field type . inline) . rest)
-         #`([#,(datum->syntax-object name
-                 (string->symbol (make-sql-name #'field)))
-             ,(#,name no-check field #,r)]
-            . #,(parse-clauses r name #'rest))]))
-    (syntax-case x ()
-      [(k r name clause ...)
-       #`(log-sql
-          (insert #,(datum->syntax-object #'k
-                      (string->symbol (make-sql-name #'name)))
-            #,(parse-clauses #'r #'name #'(clause ...))))]))
+  (define-syntax insert-table
+    (syntax-rules ()
+      [(_ r name [field type . inline] ...)
+       (log-sql (insert name ([field ,(name no-check field r)] ...)))]))
 
   (define (coerce x)
     (cond
@@ -216,7 +205,7 @@
   (define-syntax (log-sql x)
     (syntax-case x ()
       [(k sql)
-       (let-values ([(query args) (parse-sql #'sql)])
+       (let-values ([(query args) (parse-sql #'sql make-sql-name)])
          (with-syntax ([query (datum->syntax-object #'k query)]
                        [(arg ...) args])
            #'(db:log 'log-db query (coerce arg) ...)))]))

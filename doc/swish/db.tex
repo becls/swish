@@ -408,13 +408,17 @@ provided to \code{db:transaction}.
 using \code{GetStatementColumns}.
 
 \defineentry{parse-sql}
-\begin{procedure}\code{(parse-sql \var{x})}\end{procedure}
+\begin{procedure}\code{(parse-sql \var{x} \opt{\var{symbol->sql}})}\end{procedure}
 \returns{} two values: a query string and a list of syntax objects for
 the arguments
 
 The \code{parse-sql} procedure is used by macro transformers to take
 syntax object \var{x} and produce a query string and associated
 arguments according to the patterns below.
+When one of these patterns is matched, the \var{symbol->sql} procedure is
+applied to the remaining symbols of the input before they are spliced into the
+query string, as if by \code{(format "{\textasciitilde}a" (symbol->sql sym))}.
+By default, \var{symbol->sql} is the identity function.
 
 \begin{itemize}
 
