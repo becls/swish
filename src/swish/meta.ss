@@ -37,6 +37,7 @@
    scdr
    snull?
    syntax-datum-eq?
+   with-temporaries
    )
   (import (chezscheme))
 
@@ -164,5 +165,11 @@
         (lambda (ae)
           (rebuild x (annotation-expression ae)))]
        [else x])))
+
+  (define-syntax with-temporaries
+    (syntax-rules ()
+      [(_ (tmp ...) e0 e1 ...)
+       (with-syntax ([(tmp ...) (generate-temporaries '(tmp ...))])
+         e0 e1 ...)]))
 
   )

@@ -76,9 +76,14 @@
       [(_ e expected match-form) ($assert-syntax-error 'e expected match-form)]))
 
   (define ($assert-syntax-error e expected match-form)
+    (define (matches? msg)
+      (cond
+       [(string? expected) (string=? msg expected)]
+       [(procedure? expected) (expected msg)]
+       [(list? expected) (pregexp-match expected msg)]))
     (guard
      (x
-      [(and (syntax-violation? x) (string=? (condition-message x) expected))
+      [(and (syntax-violation? x) (matches? (condition-message x)))
        (when match-form
          (match-form e (syntax-violation-form x)))
        'ok])

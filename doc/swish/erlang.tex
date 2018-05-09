@@ -536,18 +536,16 @@ raised.
 
 The pattern matching syntax of Figure~\ref{fig:erlang-pattern-grammar}
 provides a concise and expressive way to match data structures and
-bind variables to parts. The \code{receive}, \code{match}, and
+bind variables to parts. The \code{receive}, \code{match},
+\code{match-define}, and
 \code{match-let*} macros use this pattern language. The
-implementation uses two structurally recursive passes over the
-pattern. The first pass checks the pattern syntax including tuple
-types and field names and accumulates the list of pattern
-variables. This list enables it to check for duplicate pattern
-variables.  The second pass emits code that matches the input against
-the pattern left to right.
+implementation makes a structurally recursive pass over the
+pattern to check for duplicate pattern variables as it emits
+code that matches the input against the pattern left to right.
 
 % ----------------------------------------------------------------------------
 \begin{figure}
-\begin{tabular}{lp{3.6in}}
+\begin{tabular}{p{1.8in}p{4.2in}}
   pattern & matches \\ \hline
 
   \var{symbol} & itself \\
@@ -572,13 +570,19 @@ the pattern left to right.
   \code{,(\var{variable} <= \var{pattern})} & any datum that
   matches \var{pattern} and binds a fresh \var{variable} to it \\
 
-  \code{`(\var{type} \set{,\var{field}\alt{}[\var{field} \var{pattern}]} \etc{})} &
-  an instance of the tuple \var{type}, each \var{field} of which is
+  \multicolumn{2}{l}{\code{`(\var{type} \set{,\var{field}\alt{},@\var{field}\alt{}[\var{field} \var{pattern}]} \etc{})}} \\
+  &
+  an instance of the tuple or native record \var{type}, each \var{field} of which is
   bound to fresh variable \var{field} or matches the corresponding
-  \var{pattern} \\
+  \var{pattern};
+  \code{,@\var{field}} is treated as \code{[\var{field}\ ,@\var{field}]};
+  \var{type} must be known at expand time \\
 
-  \hline
+  \code{`(\var{ext} \var{spec} \etc{})}
+  & as specified by \code{define-match-extension} for \var{ext} \\
+\hline
 \end{tabular}
+
 \caption{Pattern Grammar\label{fig:erlang-pattern-grammar}}
 \end{figure}
 
@@ -601,6 +605,25 @@ expressions \var{b1} \var{b2} \etc{} are evaluated in the scope of its
 pattern variables. If $v$ fails to match all patterns, exception
 \code{\#(bad-match $v$ \var{src})} is raised, where \var{src} is the
 source location of the \code{match} clause if available.
+
+See Figure~\ref{fig:erlang-pattern-grammar} for the pattern grammar.
+
+% ----------------------------------------------------------------------------
+\defineentry{match-define}
+\begin{syntax}
+\code{(match-define \nt{pattern} \var{exp})}
+\end{syntax}
+\expandsto{} see below
+
+The \code{match-define} macro evaluates \var{exp} and matches the resulting
+input against the pattern.
+Pattern-variable bindings are established via \code{define} and inhabit the
+same scope in which the \code{match-define} form appears.
+The \code{match-define} macro does not support guard expressions.
+If the pattern fails to match, exception
+\code{\#(bad-match $v$ \var{src})} is raised, where $v$ is the datum
+that failed to match the pattern at source location \var{src}
+if available.
 
 See Figure~\ref{fig:erlang-pattern-grammar} for the pattern grammar.
 
@@ -666,6 +689,77 @@ exception \code{\#(timeout-value $t$ \var{src})} is returned, where
 available.
 
 See Figure~\ref{fig:erlang-pattern-grammar} for the pattern grammar.
+
+% ----------------------------------------------------------------------------
+\defineentry{define-match-extension}
+\begin{syntax}
+\code{(define-match-extension \var{ext} \var{handle-object} \opt{\var{handle-field}})}
+\end{syntax}
+\expandsto{} see below
+
+The \code{define-match-extension} macro attaches a property
+to the identifier \var{ext}, via \code{define-property},
+so that the expander calls \var{handle-object} to translate
+\code{`(\var{ext} \var{spec} \etc{})} patterns
+when generating code for \code{match}, \code{match-define}, \code{match-let*},
+or \code{receive}.
+The \var{handle-object} procedure takes two arguments: \var{v}, an
+identifier that will be bound in the generated code to the value to be
+matched, and \var{pattern}, a syntax object for an expression of the form
+\code{`(\var{ext} \var{spec} \etc{})}.
+The \var{handle-object} procedure can return \code{\#f} to report
+an invalid \var{pattern}.
+Otherwise, \var{handle-object} should translate the given \var{pattern} to
+a list of one or more instructions in the following simple language:
+
+\begin{tabular}{ll}
+  \code{(bind \var{v} \var{e})}
+    & binds \var{v} to the value of \var{e} via \code{let} or \code{define} \\
+  \code{(guard \var{g})}
+    & rejects the match if \var{g} evaluates to \code{\#f} \\
+  \code{(sub-match \var{e} \var{pattern})}
+    & matches the value of \var{e} against \var{pattern} \\
+  \code{(handle-fields \var{input} \var{field-spec} \etc{})}
+    & invokes \var{handle-field} to translate each \var{field-spec}
+\end{tabular}
+
+The generated code evaluates the instructions in the order they are returned.
+For example, a \code{guard} expression may refer to a binding established
+by a \code{bind} earlier in the list of instructions.
+The \code{sub-match} and \code{handle-fields} instructions
+are processed at expand time and may appear only
+as the final instruction in the list returned by \var{handle-object}.
+
+The \code{(handle-fields \var{input} \var{field-spec} \etc{})} instruction
+parses each \var{field-spec} from left to right and calls
+\var{handle-field} with five arguments:
+the \var{input} from the instruction,
+the \var{field} identified,
+the \var{var} that should be bound to the value of \var{field},
+a list of \var{options} appearing in the \var{field-spec},
+and the original pattern \var{context}.
+The following table shows how each \var{field-spec} is parsed
+into arguments for \var{handle-field}:
+
+\begin{tabular}{lllll}
+  \var{field-spec} & \var{field} & \var{var} & \var{options} & notes \\ \hline
+  \code{,\var{field}} & \var{field} & \var{field} & \code{()} & \var{field} must be an identifier \\
+  \code{,@\var{field}} & \var{field} & \var{unique} & \code{()} & \var{field} must be an identifier \\
+  \code{[\var{field} \var{pattern} \var{option} \etc{}]} &
+    \var{field} & \var{unique} & \code{(\var{option} ...)} &
+    \var{unique} is matched against \var{pattern} \\
+\end{tabular}
+
+The \var{handle-field} procedure can return \code{\#f} to report an invalid
+\var{field}.
+Otherwise, \var{handle-field} should return a list of \code{bind} or
+\code{guard} instructions that bind \var{var} and perform any checks
+needed to confirm a match.
+The resulting instructions are evaluated in the order they are returned.
+
+Where temporaries are introduced in the generated output,
+the \var{handle-object} and \var{handle-field} procedures should use
+\code{with-temporaries} to avoid unintended variable capture.
 
 % ----------------------------------------------------------------------------
 \defineentry{send}
@@ -2686,3 +2780,19 @@ For \code{base64-encode-bytevector}, the alphabet also includes \code{+} and \co
 For \code{base64url-encode-bytevector} it includes \code{-} and \code{\_}.
 In keeping with Section 3.1 of~\cite{rfc4648}, these procedures
 do not introduce line breaks in the output.
+
+% ----------------------------------------------------------------------------
+\subsection{Macro Utilities}
+
+% ----------------------------------------------------------------------------
+\defineentry{with-temporaries}
+\begin{syntax}
+  \code{(with-temporaries (\var{id} ...) e0 e1 ...)}
+\end{syntax}
+\expandsto{}\begin{alltt}\antipar
+(with-syntax ([(id ...) (generate-temporaries '(id ...))])
+  e0 e1 ...)\end{alltt}
+
+The \code{with-temporaries} macro binds each macro-language
+pattern variable \var{id} to a fresh generated identifier
+within the body \code{(begin \var{e0}\ \var{e1}\ ...)}.

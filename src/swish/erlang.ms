@@ -734,7 +734,7 @@
      (match 0 [`(<point> ,x ,x) x]))
    "duplicate pattern variable")
   (assert-syntax-error (match-let* ([`(no-record-type) 12]) 12)
-    "unknown tuple type in pattern")
+    "unknown type")
   (assert-syntax-error (match 0 [,() 0]) "invalid match pattern")
   (assert-syntax-error
    ;; we won't be able to use #[foo] record syntax for patterns, since the
@@ -812,12 +812,12 @@
    (let ()
      (define-tuple <point> x y)
      (match 0 [`(<point> ,z) z]))
-   "unknown field z in pattern")
+   "unknown field")
   (assert-syntax-error
    (let ()
      (define-tuple <point> x y)
      (match 0 [`(<point> [z ,z]) z]))
-   "unknown field z in pattern")
+   "unknown field")
   (assert-syntax-error
    (let ()
      (define-tuple <point> x y)
@@ -854,7 +854,16 @@
    (equal?
     (match (foo make (a 1) (b 2) (c 3))
       [`(foo ,c ,b ,a) (list a b c)])
-    '(1 2 3))))
+    '(1 2 3)))
+  (assert
+   (equal?
+    (let ([a 4] [b 2])
+      ;; tuple now permits ,@fld syntax
+      (match (foo make (a 1) (b b) (c 3))
+        [`(foo ,@a) 'not-matched]
+        [`(foo ,a ,@b ,c) (list a c)]))
+    '(1 3)))
+  )
 
 (mat t11 ()
   (assert
@@ -1003,7 +1012,7 @@
      'ok))
   )
 
-(mat record ()
+(mat tuple ()
                                         ; accessors
   (assert
    (equal?
@@ -1127,6 +1136,1128 @@
         [`(<box> ,content) 'ok])))
 
   )
+
+(define-syntax with-cp0-disabled
+  (syntax-rules ()
+    [(_ e ...)
+     (parameterize ([run-cp0 (lambda (f x) x)])
+       (eval '(let () e ...)))]))
+
+(mat native-record ()
+  (with-cp0-disabled
+   ;; define-record-type
+   (let ()
+     (define-record-type foo
+       (nongenerative)
+       (fields a (mutable b) (mutable c get-c smash-c!)))
+     (define-record-type bar
+       (nongenerative)
+       (parent foo)
+       (fields a m)) ;; shadow foo's a field
+     ;; basic native-record match
+     (match-let*
+      ([,x (make-foo 1 "bee" "sea")]
+       [`(foo) x]
+       [`(foo [a 1]) x]
+       [`(foo ,a) x]
+       [1 a]
+       [`(foo [a 1] [b "bee"] [c "sea"]) x]
+       [`(foo ,a ,b ,c) x]
+       ["bee" b]
+       ["sea" c]
+       [ok (match x [`(foo [a 'nope]) 'bad] [`(foo) 'ok])]
+       [ok (match x [`(foo [b 'nope]) 'bad] [`(foo) 'ok])]
+       [ok (match x [`(foo [c 'nope]) 'bad] [`(foo) 'ok])]
+       [ok (match x [`(bar) 'bad] [`(foo) 'ok])]
+       [,! (smash-c! x "changed")]
+       [`(foo [a ,@a] [b ,@b] [c "changed"]) x]
+       [`(foo [b ,@b] [c "changed"] [a ,@a]) x]
+       [`(foo [c "changed"] [b ,@b] [a ,@a]) x]
+       [`(foo [b ,@b] [a ,@a] [c "changed"]) x])
+      'ok)
+     ;; record inheritance
+     (match-let*
+      ([,x (make-bar "foo A" "foo B" "foo C" "bar A" "bar M")]
+       [`(foo) x]
+       [`(bar) x]
+       [`(foo [a "foo A"]) x]
+       [`(foo ,a) x]
+       ["foo A" a]
+       [`(bar [a "bar A"]) x]
+       [`(bar ,a) x]
+       ["bar A" a]
+       [`(foo [a "foo A"] [b "foo B"] [c "foo C"]) x]
+       [`(foo ,a ,b ,c) x]
+       ["foo B" b]
+       ["foo C" c]
+       [ok (match x [`(bar [a 'nope]) 'bad] [`(bar) 'ok])]
+       [ok (match x [`(bar [b 'nope]) 'bad] [`(bar) 'ok])]
+       [ok (match x [`(bar [c 'nope]) 'bad] [`(bar) 'ok])]
+       [fine (match x [`(bar) 'fine] [`(foo) 'ok])]
+       [,! (smash-c! x "changed")]
+       [`(foo ,@a ,@b [c "changed"]) x]
+       [`(foo [a ,@a] [b ,@b] [c "changed"]) x]
+       [`(bar [a "bar A"] [m "bar M"] [b ,@b] [c "changed"]) x]
+       [`(bar [m "bar M"] [a "bar A"] [b ,@b] [c "changed"]) x]
+       [`(bar [m "bar M"] [b ,@b] [a "bar A"] [c "changed"]) x]
+       [`(bar [m "bar M"] [b ,@b] [c "changed"] [a "bar A"]) x]
+       [`(bar ,@b [m "bar M"] [c "changed"] [a "bar A"]) x]
+       [`(bar [b ,@b] [m "bar M"] [c "changed"] [a "bar A"]) x]
+       [`(bar [b ,@b] [c "changed"] [m "bar M"] [a "bar A"]) x]
+       [`(bar [b ,@b] [c "changed"] [a "bar A"] [m "bar M"]) x]
+       [`(bar [c "changed"] [b ,@b] [a "bar A"] [m "bar M"]) x]
+       [`(bar [c "changed"] [a "bar A"] [b ,@b] [m "bar M"]) x]
+       [`(bar [c "changed"] [a "bar A"] [m "bar M"] [b ,@b]) x])
+      'ok))
+   ;; define-record, Chez Scheme's high-octane record-definition macro
+   (let ()
+     (define-record foo
+       (f1
+        [immutable unsigned-short kurz]
+        [mutable   float          sam]
+        [immutable long           长]
+        [mutable   unsigned-8     bits]))
+     (define-record bar foo
+       ([immutable uptr       there]
+        [mutable   integer-64 n]
+        bits))
+     (define (maxval type)
+       (- (expt 2 (* 8 (foreign-sizeof type))) 1))
+     ;; basic native-record match
+     (match-let*
+      ([,ushort (maxval 'unsigned-short)]
+       [,input (make-foo "formula" ushort 3.2 (maxval 'long) (maxval 'unsigned-8))]
+       [`(foo) input]
+       [`(foo [f1 "formula"]) input]
+       [`(foo ,sam)
+        (guard (< (abs (- sam 3.2)) .0001))
+        input]
+       [`(foo [kurz ,@ushort]) input]
+       [`(foo [长 -1]) input]
+       [`(foo [bits 255]) input]
+       [`(foo ,f1 ,kurz ,sam ,长 ,bits) input]
+       ["formula" f1]
+       [,@ushort kurz]
+       [#t (< (abs (- sam 3.2)) .0001)]
+       [-1 长]
+       [255 bits]
+       [ok (match input [`(foo [f1 "racer"]) 'no] [`(foo) 'ok])]
+       [ok (match input [`(foo [kurz 'gesagt]) 'no] [`(foo) 'ok])]
+       [ok (match input [`(foo [长 'nope]) 'no] [`(foo) 'ok])]
+       [ok (match input [`(foo [bits 123]) 'no] [`(foo) 'ok])]
+       [,! (set-foo-sam! input 88.7)]
+       [,bits 32]
+       [,! (set-foo-bits! input bits)]
+       [`(foo ,@f1 ,sam ,@长 ,@bits)
+        (guard (< (abs (- sam 88.7)) .0001))
+        input]
+       [`(foo [f1 ,@f1] ,@sam ,@长 [bits ,@bits]) input]
+       [`(foo ,@sam [f1 ,@f1] ,@长 [bits ,@bits]) input]
+       [`(foo ,@sam ,@长 [f1 ,@f1] [bits ,@bits]) input]
+       [`(foo ,@sam ,@长 [bits ,@bits] [f1 ,@f1]) input]
+       [`(foo ,@长 ,@sam [bits ,@bits] [f1 ,@f1]) input])
+      'ok)
+     ;; record inheritance
+     (match-let*
+      ([,ushort 32768]
+       [,uptr (maxval 'uptr)]
+       [,input (make-bar "foo-f1" ushort 90.1 1025 201 uptr 37 '(a scheme object))]
+       [`(foo) input]
+       [`(bar) input]
+       [`(foo [f1 "foo-f1"]) input]
+       [`(bar [f1 "foo-f1"]) input]
+       [`(foo ,sam)
+        (guard (< (abs (- sam 90.1)) .0001))
+        input]
+       [`(bar ,sam)
+        (guard (< (abs (- sam 90.1)) .0001))
+        input]
+       [`(foo [kurz ,@ushort]) input]
+       [`(bar [kurz ,@ushort]) input]
+       [`(foo [长 1025]) input]
+       [`(bar [长 1025]) input]
+       [`(foo [bits 201]) input]
+       [`(bar [bits (a scheme object)]) input]
+       [`(bar [there ,@uptr]) input]
+       [`(bar [n 37]) input]
+       [`(foo ,f1 ,kurz ,sam ,长 ,bits) input]
+       [`(bar ,@f1 ,@kurz ,@sam ,@长 [bits ,bar-bits] ,there ,n) input]
+       ["foo-f1" f1]
+       [,@ushort kurz]
+       [#t (< (abs (- sam 90.1)) .0001)]
+       [1025 长]
+       [201 bits]
+       [(a scheme object) bar-bits]
+       [,@uptr there]
+       [37 n]
+       [ok (match input [`(bar [f1 "racer"]) 'no] [`(bar) 'ok])]
+       [ok (match input [`(bar [kurz 'gesagt]) 'no] [`(bar) 'ok])]
+       [ok (match input [`(bar [长 'nope]) 'no] [`(bar) 'ok])]
+       [ok (match input [`(bar [bits 123]) 'no] [`(bar) 'ok])]
+       [,bits 32]
+       [,! (set-foo-bits! input bits)]
+       [`(foo ,@f1 ,@sam ,@长 ,@bits) input]
+       [`(foo [f1 ,@f1] ,@sam ,@长 [bits ,@bits]) input]
+       [`(foo ,@sam [f1 ,@f1] ,@长 [bits ,@bits]) input]
+       [`(foo ,@sam ,@长 [f1 ,@f1] [bits ,@bits]) input]
+       [`(foo ,@sam ,@长 [bits ,@bits] [f1 ,@f1]) input]
+       [`(foo ,@长 ,@sam [bits ,@bits] [f1 ,@f1]) input]
+       [`(bar ,@f1 ,@sam ,@长 [bits ,@bar-bits] ,@there ,@n) input]
+       [`(bar ,@sam ,@f1 ,@长 [bits ,@bar-bits] ,@there ,@n) input]
+       [`(bar ,@sam ,@长 ,@f1 [bits ,@bar-bits] ,@there ,@n) input]
+       [`(bar ,@sam ,@长 [bits ,@bar-bits] ,@f1 ,@there ,@n) input]
+       [`(bar ,@sam ,@长 [bits ,@bar-bits] ,@there ,@f1 ,@n) input]
+       [`(bar ,@sam ,@长 [bits ,@bar-bits] ,@there ,@n ,@f1) input]
+       [`(bar [长 1025] ,@sam [bits ,@bar-bits] [there ,@uptr] ,@n ,@f1) input])
+      'ok))
+   ))
+
+(mat match-define-record ()
+  (define-record-type foo (nongenerative) (fields a b))
+  (define-record-type bar (nongenerative) (parent foo) (fields a c))
+  (define-record sand ([immutable ptr x] [immutable unsigned-16 y]))
+  (define-record silt sand ([immutable double y] z))
+  (define (check-err exception msg)
+    (starts-with?
+     (let ([os (open-output-string)])
+       (display-condition exception os)
+       (get-output-string os))
+     msg))
+  ;; define-record-type
+  (match-let*
+   ([,x (make-foo 1 2)]
+    [,y (make-bar "foo A" "foo B" "bar A" "bar C")]
+    [(1 2)
+     (let ()
+       (match-define `(foo , a,b) x)
+       (list a b))]
+    [("foo A" "foo B") ;; inheritance
+     (let ()
+       (match-define `(foo ,a ,b) y)
+       (assert (bar? y))
+       (list a b))]
+    [("bar A" "bar C") ;; bar's a shadows foo's a
+     (let ()
+       (match-define `(bar ,a ,c) y)
+       (list a c))]
+    [("foo B") ;; bar inherits foo's b
+     (let ()
+       (match-define `(bar ,b) y)
+       (list b))]
+    [("foo A" "bar A" "foo B" "bar C") ;; multiple binds
+     (let ()
+       (match-define `(foo [a ,foo.a] [b ,foo.b]) y)
+       (match-define `(bar [a ,bar.a] [c ,bar.c]) y)
+       (list foo.a bar.a foo.b bar.c))]
+    [("foo A" "foo B" "bar A" "foo B" "bar C") ;; multiple, shadow, inheritance
+     (let ()
+       (match-define `(foo [a ,foo.a] [b ,foo.b]) y)
+       (match-define `(bar [a ,bar.a] [b ,bar.b] [c ,bar.c]) y)
+       (list foo.a foo.b bar.a bar.b bar.c))]
+    [(3 2 4) ;; deeper inheritance, but no added fields
+     (let () ;; spam's a is bar's a, spam's b is foo's b, spam's c is bar's c
+       (define-record-type spam (nongenerative) (parent bar))
+       (define z (make-spam 1 2 3 4))
+       (match-define `(spam ,a ,b ,c) z)
+       (list a b c))]
+    [#(EXIT #(bad-match ,_ ,_))
+     (catch
+      (let ()
+        (define-record-type tofu (nongenerative))
+        (match-define `(bar ,a ,c) (make-tofu))
+        (list a c)))]
+    [#(EXIT #(bad-match 27 ,_))
+     (catch
+      (let ()
+        (match-define `(foo ,a ,b) 27)
+        (list a b)))]
+    [#(EXIT ,reason)
+     (guard (check-err reason "Exception: unknown type foo in (quasiquote (foo (unquote bogus)))"))
+     ;; local foo isn't visible at top-level
+     (catch (expand '(match-define `(foo ,bogus) x)))]
+    [#(EXIT ,reason)
+     (guard (check-err reason "Exception: unknown field bogus in (quasiquote (foo (unquote bogus)))"))
+     (catch
+      (expand
+       '(let ()
+          (define-record-type foo (nongenerative) (fields meadows))
+          (match-define `(foo ,bogus) x)
+          123)))]
+    [#(EXIT ,reason)
+     (guard (check-err reason "Exception: attempt to reference undefined variable x"))
+     (catch
+      (let ()
+        (define-record-type foo (nongenerative) (fields x y))
+        ;; wrong for same reason as (define (f x) (define x (cdr x)) x)
+        (define (f x) (match-define `(foo ,x) x) x)
+        (f (make-foo "X" "Y"))))])
+   'ok)
+  ;; define-record
+  (match-let*
+   ([,a (make-sand '#(whole "grain") 65000)]
+    [,b (make-silt "fine" 9000 98.6 '(#t a #f))]
+    [("grain" 65000)
+     (let ()
+       (match-define `(sand [x #(whole ,part)] ,y) a)
+       (list part y))]
+    [("fine" 9000)
+     (let ()
+       ;; inheritance
+       (match-define `(sand ,x ,y) b)
+       (assert (silt? b))
+       (list x y))]
+    ["fine" ;; silt inherits sand's x
+     (let ()
+       (match-define `(sand ,x) b)
+       x)]
+    [ok ;; silt's y shadows sand's y
+     (let ()
+       (match-define `(silt ,y) b)
+       (and (< (abs (- 98.6 y)) .0001) 'ok))]
+    [(a #t "fine" "fine" 9000) ;; prefix, multiple binds, shadow, inheritance
+     (let ()
+       (match-define `(sand [x ,a:x] [y ,a:y]) b)
+       (match-define `(silt [x ,blot-x] [y ,blot-y] [z (#t ,blot-middle #f)]) b)
+       (list
+        blot-middle
+        (< (abs (- blot-y 98.6)) .0001)
+        blot-x
+        a:x
+        a:y))]
+    [(2 1 3 4) ;; deeper inheritance, but no added fields
+     (let () ;; spam's x is sand's x, spam's y is silt's y, spam's z is silts's z
+       (define-record spam silt ())
+       (define c (make-spam 1 2 3.0 4))
+       (match-define `(sand ,y) c)
+       (match-define `(spam [x ,z.x] [y ,z.y] [z ,z.z]) c)
+       (list y z.x (exact z.y) z.z))]
+    [#(EXIT #(bad-match ,_ ,_))
+     (catch
+      (let ()
+        (define-record-type tofu (nongenerative))
+        (match-define `(silt ,x ,z) (make-tofu))
+        (list x z)))]
+    [#(EXIT #(bad-match 27 ,_))
+     (catch
+      (let ()
+        (match-define `(sand ,x ,y) 27)
+        (list x y)))]
+    [#(EXIT ,reason)
+     (guard (check-err reason "Exception: unknown type sand in (quasiquote (sand (unquote storm)))"))
+     ;; local foo isn't visible at top-level
+     (catch (expand '(match-define `(sand ,storm) x)))]
+    [#(EXIT ,reason)
+     (guard (check-err reason "Exception: unknown field bogus in (quasiquote (foo (unquote bogus)))"))
+     (catch
+      (expand
+       '(let ()
+          (define-record foo (meadows))
+          (match-define `(foo ,bogus) x)
+          123)))]
+    [#(EXIT ,reason)
+     (guard (check-err reason "Exception: attempt to reference undefined variable x"))
+     (catch
+      (let ()
+        (define-record foo (x y))
+        ;; wrong for same reason as (define (f x) (define x (cdr x)) x)
+        (define (f x) (match-define `(foo ,x) x) x)
+        (f (make-foo "X" "Y"))))]
+    [#(EXIT ,reason)
+     (guard (check-err reason "Exception: bad pattern (quasiquote (foo (a 1 opt)))"))
+     (catch
+      (expand
+       '(lambda (x)
+          (define-record foo (a b))
+          (match x
+            ;; [field pat] must not include options
+            [`(foo [a 1 opt]) 'ok]))))])
+   'ok))
+
+(mat match-define-tuple ()
+  (with-cp0-disabled
+   (define-tuple <foo> a b)
+   (define (check-err exception msg)
+     (starts-with?
+      (let ([os (open-output-string)])
+        (display-condition exception os)
+        (get-output-string os))
+      msg))
+   (match-let*
+    ([,x (<foo> make [a 1] [b 2])]
+     [(1 2)
+      (let ()
+        (match-define `(<foo> ,a ,b) x)
+        (list a b))]
+     [(2 1) ;; prefix
+      (let ()
+        (match-define `(<foo> [a ,foo.a] [b ,foo.b]) x)
+        (list foo.b foo.a))]
+     [(2 1 1 2) ;; prefix, multiple binds
+      (let ()
+        (match-define `(<foo> [a ,foo.a] [b ,foo.b]) x)
+        (match-define `(<foo> [a ,x.a] [b ,x.b]) x)
+        (list foo.b foo.a x.a x.b))]
+     [#(EXIT #(bad-match ,_ ,_))
+      (catch
+       (let ()
+         (define-record-type tofu (nongenerative))
+         (match-define `(<foo> ,a ,b) (make-tofu))
+         (list a b)))]
+     [#(EXIT #(bad-match 27 ,_))
+      (catch
+       (let ()
+         (match-define `(<foo> ,a ,b) 27)
+         (list a b)))]
+     [#(EXIT ,reason)
+      (guard (check-err reason "Exception: unknown type <foo> in (quasiquote (<foo> (unquote bogus)))"))
+      ;; local foo isn't visible at top-level
+      (catch (expand '(match-define `(<foo> ,bogus) x)))]
+     [#(EXIT ,reason)
+      (guard (check-err reason "Exception: unknown field bogus in (quasiquote (<foo> (unquote bogus)))"))
+      (catch
+       (expand
+        '(let ()
+           (define-tuple <foo> pine cone)
+           (match-define `(<foo> ,bogus) x)
+           123)))]
+     [#(EXIT ,reason)
+      (guard (check-err reason "Exception: attempt to reference undefined variable x"))
+      (catch
+       (let ()
+         (define-tuple <foo> x y)
+         ;; wrong for same reason as (define (f x) (define x (cdr x)) x)
+         (define (f x) (match-define `(<foo> ,x) x) x)
+         (f (<foo> make [x "X"] [y "Y"]))))]
+     [#(EXIT ,reason)
+      (guard (check-err reason "Exception: bad pattern (quasiquote (<foo> (a 1 opt)))"))
+      (catch
+       (expand
+        '(lambda (x)
+           (define-tuple <foo> a b)
+           (match x
+             ;; [field pat] must not include options
+             [`(<foo> [a 1 opt]) 'ok]))))])
+    'ok)))
+
+(isolate-mat match-etc ()
+  (with-cp0-disabled
+   (define (f x) (match-define #(#(a ,r) (c ,d ,e)) x) (list r e d))
+   ;; try nested patterns that will go haywire if match-help doesn't introduce fresh vars where it should
+   (match-let*
+    ([(#()) (list (vector))]
+     [(3 2 1) (f '#(#(a 3) (c 1 2)))]
+     [#(EXIT #(bad-match "foo" ,_)) (catch (f "foo"))]
+     [,x '#(#("foo" r) (c d e))]
+     [#(EXIT #(bad-match ,@x ,_)) (catch (f x))]
+     [,x '#(#(a r) ("foo" d e))]
+     [#(EXIT #(bad-match ,@x ,_)) (catch (f x))]
+     [#(#(,a) #(,b))
+      (guard (and (eqv? a 3) (eqv? b 4)))
+      '#(#(3) #(4))]
+     [#(#((#(,a))) #(b #(,c #(,d))))
+      (guard (and (eqv? a 1) (eqv? c 3) (eqv? d 4)))
+      '#(#((#(1))) #(b #(3 #(4))))]
+     [,input '(() #(#() (("asdf") . #(y)) z) #(#(#(#(p) d)) q))]
+     [(() #(#() (("asdf") . #(y)) z) #(#(#(#(p) d)) q)) input]
+     [ok (let ()
+           (match-define (() #(#() (("asdf") . #(y)) z) #(#(#(#(p) d)) q))
+             input)
+           'ok)]
+     [,input '#(((#vu8(1 2 3 4 5))))]
+     [#(((#vu8(1 2 3 4 5)))) input]
+     [ok (let () (match-define #(((#vu8(1 2 3 4 5)))) input) 'ok)]
+     [,input '#((a) ((#(b))) (((#(c)))) #(#(#(#(#(#(#(d) (e)) ((f))) (((g)))) ((((h)))))) "i"))]
+     [#((a) ((#(b))) (((#(c)))) #(#(#(#(#(#(#(d) (e)) ((f))) (((g)))) ((((h)))))) "i")) input]
+     [ok (let ()
+           (match-define
+            #((a)
+              ((#(b)))
+              (((#(c))))
+              #(#(#(#(#(#(#(d) (e)) ((f))) (((g)))) ((((h)))))) "i"))
+            input)
+           'ok)]
+     )
+    'ok)
+   ;; receive
+   (let ([pid
+          (spawn&link
+           (lambda ()
+             (let f ()
+               (receive (after 1000 (raise 'timeout))
+                 [quit 'ok]
+                 [(send ,who ,what) (send who what) (f)]))))])
+     (define-record-type one (nongenerative) (fields x y))
+     (define-record-type two (nongenerative) (parent one) (fields y z))
+     ;; vector with some nested stuff
+     (send pid `(send ,self #(marmoset ((lamp) ginger) corn)))
+     (receive (after 100 (raise 'timeout))
+       [#(marmoset ((lamp) ,biscuit) ,chowder)
+        (match-let* ([ginger biscuit] [corn chowder])
+          'ok)])
+     ;; native record
+     (send pid `(send ,self ,(make-one 'hundred "percent")))
+     (receive (after 100 (raise 'timeout))
+       [`(one ,x ,y) (match-let* ([hundred x] ["percent" y]) 'ok)])
+     ;; native record, inheritance
+     (send pid `(send ,self ,(make-two 'many 'fold "home" "improvement")))
+     (receive (after 100 (raise 'timeout))
+       [`(one ,x ,y) (match-let* ([many x] [fold y]) 'ok)])
+     ;; native record, inheritance
+     (send pid `(send ,self ,(make-two 'many 'fold "home" "improvement")))
+     (receive (after 100 (raise 'timeout))
+       [`(two ,x ,y) (match-let* ([many x] ["home" y]) 'ok)])
+     ;; native record, restricted match
+     (send pid `(send ,self ,(make-two 'many 'fold "home" '#("improvement"))))
+     (receive (after 100 (raise 'timeout))
+       [`(one ,x [y "home"]) (raise "don't match one's y with two's y value")]
+       [`(two [y fold]) (raise "don't match two's y with one's y value")]
+       [`(two ,x ,y [z (,val)]) (raise "z val is vector not list")]
+       [`(two ,x ,y [z #(,val)]) (match-let* ([many x] ["home" y] ["improvement" val]) 'ok)])
+     ;; nested record match
+     (send pid `(send ,self #((one ,(make-one 1 2)) (two ,(make-two 8 7 5 4)))))
+     (receive (after 100 (raise 'timeout))
+       [(,a ,b) (raise "should be vector")]
+       [#((two ,_) (one ,_)) (raise "wrong order")]
+       [#((one `(one ,x ,y)) (two `(two [x ,two.x] [y ,two.y] ,z)))
+        (match-let* ([1 x] [2 y] [8 two.x] [5 two.y] [4 z]) 'ok)])
+     ;; nested record match, inheritance case
+     (send pid `(send ,self ,(make-one (make-two 1 2 3 4) (make-one 5 (make-one 6 7)))))
+     (receive (after 100 (raise 'timeout))
+       [`(one [x `(one ,x ,y)] [y `(one [x 5] [y `(one [x ,x2] [y ,y2])])])
+        (match-let* ([1 x] [2 y] [6 x2] [7 y2]) 'ok)])
+     ;; nested record match, another inheritance case
+     (send pid `(send ,self ,(make-one (make-two 1 2 3 4) (make-two 5 (make-one 16 17) 11 12))))
+     (receive (after 100 (raise 'timeout))
+       [`(one [x `(two ,x ,y ,z)] [y `(one [x 5] [y `(one [x ,x2] [y ,y2])])])
+        (match-let* ([1 x] [3 y] [4 z] [16 x2] [17 y2]) 'ok)])
+     ;; done
+     (send pid 'quit))
+   ;; syntax-errors in receive
+   (assert-syntax-error (receive [`(great-unknown) 404]) "unknown type")
+   (assert-syntax-error (receive (after 100 'ok) [`(great-unknown) 404]) "unknown type")
+   (assert-syntax-error
+    (let ()
+      (define-record-type moo (nongenerative) (fields grass straw))
+      (receive [`(moo ,hay) 123]))
+    "unknown field")
+   (assert-syntax-error
+    (let ()
+      (define-record-type moo (nongenerative) (fields grass straw))
+      (define-record-type goo (nongenerative) (parent moo) (fields gai pan))
+      (receive [`(moo ,pan) 123]))
+    "unknown field")
+   ;; using pattern bindings in lieu of generalized prefix
+   (let ()
+     (define-record-type zip (nongenerative) (fields))
+     (define-record-type blat (nongenerative) (parent zip) (fields m))
+     (define-tuple <top> dog)
+     (match-let*
+      ([,nada (make-zip)]
+       [,input `(A #(b C) ,nada ,(make-blat "frozz") #(<top> "hat"))]
+       [(A C "hat" ,@nada "frozz")
+        (let ()
+          (match-define
+           (,a.a #(,_ ,a.c) ,a.z
+             `(blat [m ,a.m])
+             `(<top> [dog ,a.dog]))
+           input)
+          (list a.a a.c a.dog a.z a.m))]
+       [(1 2 3 4 A C ,@nada "frozz" food "hat")
+        ;; make sure we don't bind the original non-prefixed fields
+        (let ([a 1] [c 2] [z 3] [m 4] [dog 'food])
+          (match-define
+           (,a.a #(,_ ,a.c) ,a.z
+             `(blat [m ,a.m])
+             `(<top> [dog ,a.dog]))
+           input)
+          (list a c z m a.a a.c a.z a.m dog a.dog))]
+       [(A #(b C) "frozz" orig same fine ernate unimpeded untouched "hat" days bark)
+        ;; make sure we don't bind the original non-prefixed fields or prefix field rather than pattern var
+        (let ([a 'orig] [b 'same] [m 'fine] [alt 'ernate] [pfx:z 'unimpeded] [pfx:m 'untouched] [dog 'days] [pfx:dog 'bark])
+          (match-define (,pfx:a ,pfx:b ,_ `(blat [m ,pfx:alt]) `(<top> [dog ,pfx:pile]))
+            input)
+          (list pfx:a pfx:b pfx:alt a b m alt pfx:z pfx:m pfx:pile dog pfx:dog))]
+       [ok
+        (let ([m 'orig-m] [dog 'bark])
+          ;; make sure match-let* doesn't introduce binding for field when we have pattern var
+          (match-let* ([(,_ ,_ ,_ `(blat [m ,blam]) `(<top> [dog ,run])) input]
+                       ["frozz" blam]
+                       ["hat" run]
+                       [orig-m m]
+                       [bark dog])
+            'ok))]
+       [ok
+        (let ([m 'orig-m] [dog 'bark])
+          ;; make sure match doesn't introduce binding for field when we have pattern var
+          (match input
+            [nope 'boo]
+            [(not this either) 'hiss]
+            [(,_ ,_ ,_ `(blat [m ,blam]) `(<top> [dog ,run]))
+             (match-let* (["frozz" blam] ["hat" run] [orig-m m] [bark dog])
+               'ok)]))]
+       [#(EXIT #(bad-match 17 ,_))
+        ;; bad-match case where we use pattern bindings in lieu of general prefix
+        (catch
+         (let ()
+           (match-define (`(blat [m ,x:m]) `(blat [m ,y-m])) 17)
+           (list a b c)))]
+       )
+      'ok))
+   ;; duplicate pattern-variable binding
+   (assert-syntax-error
+    (lambda (x)
+      (define-record-type plow (nongenerative) (fields m n o))
+      (match-define #((a `(plow ,m ,n)) (b `(plow ,n ,o))) x)
+      (list m n o))
+    "duplicate pattern variable")
+   ;; no duplicate pattern-variable despite duplicate field names
+   (let ()
+     (define-record-type plow (nongenerative) (fields m n o))
+     (match-let*
+      ([,x (make-plow 3 5 7)]
+       [(`(plow ,m ,n ,o) == `(plow [m ,@m] [n ,n2] [o ,o2])) (list x '== x)])
+      'ok))
+   ;; deeper inheritance
+   (let ()
+     (define-record-type plow (nongenerative) (fields m n o))
+     (define-record-type share (nongenerative) (parent plow))
+     (define-record-type sword (nongenerative) (parent share) (fields pommel hilt blade))
+     (define-record-type shard (nongenerative) (parent sword) (fields o p))
+     (define-record-type shade (nongenerative) (parent shard) (fields groan p))
+     (define-record-type wraith (nongenerative) (parent shade) (fields m t))
+     (match-let*
+      ([,narsil (make-shard "m" "n" "o" "pommel" "hilt" "blade" "2o" "p")]
+       [,casper (make-wraith "m2" "n2" "o2" "pommel2" "hilt2" "blade2" "2o2" "p2" "q2" "2p2" "2m2" "t2")]
+       [(`(plow [m "m"])) (list narsil)]
+       [#(`(share [m "m"] [n "n"] [o "o"])) (vector narsil)]
+       [#((123 . `(sword [m "m"] [n "n"] [o "o"] [pommel "pommel"] [hilt "hilt"] [blade "blade"])))
+        (vector (cons 123 narsil))]
+       [(#(((`(shard [m "m"] [n "n"] [pommel "pommel"] [hilt "hilt"] [blade "blade"] [o "2o"] [p "p"]) . one))))
+        (list (vector (list (cons narsil 'one))))]
+       [ok (match narsil
+             [`(shade ,groan) "bad"]
+             [`(wraith ,m ,t) "wrong"]
+             [`(shard ,m [m ,@m]) 'ok])] ;; repeated field reference okay since no duplicated pattern var
+       [`(plow [m "m2"] [n "n2"] [o "o2"]) casper]
+       [`(share [m "m2"] [n "n2"] [o "o2"]) casper]
+       [`(sword [m "m2"] [n "n2"] [o "o2"] [pommel "pommel2"] [hilt "hilt2"] [blade "blade2"]) casper]
+       [`(shard [m "m2"] [n "n2"] [pommel "pommel2"] [hilt "hilt2"] [blade "blade2"] [o "2o2"] [p "p2"]) casper]
+       [`(shade [m "m2"] [n "n2"] [pommel "pommel2"] [hilt "hilt2"] [blade "blade2"] [o "2o2"] [groan "q2"] [p "2p2"]) casper]
+       [`(wraith [n "n2"] [pommel "pommel2"] [hilt "hilt2"] [blade "blade2"] [o "2o2"] [groan "q2"] [p "2p2"] [m "2m2"] [t "t2"]) casper])
+      'ok))
+   ;; cover near-miss cases deciphering compile-time values
+   (assert-syntax-error
+    (let ()
+      (define-syntax zor (make-compile-time-value '(a b c d)))
+      (match-let* ([`(zor) "blatt"]) 'ok))
+    "unknown type")
+   (assert-syntax-error
+    (let ()
+      (define-syntax zor (make-compile-time-value '(17)))
+      (match-let* ([`(zor) "blatt"]) 'ok))
+    "unknown type")
+   (assert-syntax-error
+    (let ()
+      (define-syntax zor (make-compile-time-value 404))
+      (match-let* ([`(zor) "blatt"]) 'ok))
+    "unknown type")
+   ;; unquote-splicing with field reference
+   (let ()
+     (define-tuple <foo> a b)
+     (define-record-type toast (nongenerative) (fields type doneness))
+     (match-let* ([`(<foo> ,a ,b) '#(<foo> 1 2)]
+                  [1 a]
+                  [2 b])
+       'ok)
+     (match-let* ([,a 1]
+                  [`(<foo> ,@a ,b) '#(<foo> 1 2)]
+                  [2 b])
+       'ok)
+     (match-let* ([,type "rye"]
+                  [`(toast ,@type ,doneness) (make-toast "rye" "burnt")]
+                  ["burnt" doneness])
+       'ok))
+   ;; bad field reference in unquote-splicing
+   (assert-syntax-error
+    (let ()
+      (define-tuple <bar> none)
+      (match-let* ([,stack 'hay]
+                   [`(<bar> ,@stack) (<bar> make [none 'such])])
+        'ok))
+    "unknown field")
+   (assert-syntax-error
+    (let ()
+      (define-record-type skate (nongenerative) (fields fins tail))
+      (match-let* ([,board 'plank]
+                   [`(skate ,@board) (make-stake '(dorsal pectoral) 'whiplike)])
+        'ok))
+    "unknown field"))
+  )
+
+(isolate-mat match-extension ()
+  (with-cp0-disabled
+   (define-tuple <tres> a b c)
+   ;; wrong number of args to define-match-extension
+   (assert-syntax-error
+    (let ()
+      (define-match-extension foo)
+      (match 3 [`(foo anything) 'ok]))
+    "invalid syntax")
+   ;; wrong number of args to define-match-extension
+   (assert-syntax-error
+    (let ()
+      (define-match-extension foo bar baz blam)
+      (match 3 [`(foo anything) 'ok]))
+    "invalid syntax")
+   ;; fail in syntax-case within handle-object
+   (assert-syntax-error
+    (let ()
+      (define-match-extension foo
+        (lambda (v pattern)
+          (syntax-case pattern ())))
+      (match 3 [`(foo anything) 'ok]))
+    "invalid syntax")
+   ;; handle-object returns invalid output
+   (assert-syntax-error
+    (let ()
+      (define-match-extension foo
+        (lambda (v pattern) '#(wrong)))
+      (match 3 [`(foo) 'ok]))
+    "invalid syntax")
+   ;; return #f from handle-object to reject pattern
+   (assert-syntax-error
+    (let ()
+      (define-match-extension reject
+        (lambda (v pattern) #f))
+      (match 3 [`(reject ,this) 'ok]))
+    "invalid match pattern")
+   ;; field specs must be ,id ,@id or [id pat opt ...]
+   ;;  - ,x where x not identifier
+   (assert-syntax-error
+    (let ()
+      (define-match-extension any
+        (lambda (v pattern)
+          (syntax-case pattern (quasiquote)
+            [`(any spec ...)
+             #`((handle-fields #t spec ...))]))
+        (lambda (input fld var options context)
+          #`((bind #,var #t))))
+      (match 3 [`(any ,3) 'ok]))
+    "invalid match pattern")
+   ;; field specs must be ,id ,@id or [id pat opt ...]
+   ;;  - ,@x where x not identifier
+   (assert-syntax-error
+    (let ()
+      (define-match-extension any
+        (lambda (v pattern)
+          (syntax-case pattern (quasiquote)
+            [`(any spec ...)
+             #`((handle-fields #t spec ...))]))
+        (lambda (input fld var options context)
+          #`((bind #,var #t))))
+      (match 3 [`(any ,@(thing)) 'ok]))
+    "invalid match pattern")
+   ;; field specs must be ,id ,@id or [id pat opt ...]
+   ;;  - none of the above
+   (assert-syntax-error
+    (let ()
+      (define-match-extension any
+        (lambda (v pattern)
+          (syntax-case pattern (quasiquote)
+            [`(any spec ...)
+             #`((handle-fields #t spec ...))]))
+        (lambda (input fld var options context)
+          #`((bind #,var #t))))
+      (match 3 [`(any #(1 home)) 'ok]))
+    "invalid match pattern")
+   ;; check that handle-object gets the expected pattern
+   (let ()
+     (meta define expected #'`(pat ,f1 ,@f2 [f3 3]))
+     (define-match-extension pat
+       (lambda (v pattern)
+         (assert (equal? (syntax->datum pattern) (syntax->datum expected)))
+         #'((guard #t))))
+     (let-syntax ([inject
+                   (lambda (x)
+                     #`(match 123 [#,expected 5]))])
+       (match-let* ([5 inject]) 'ok)))
+   ;; specify only handle-object
+   ;; - handle-object returns a bad bind
+   (assert-syntax-error
+    (let ()
+      (define-match-extension bad-bind
+        (lambda (v pattern)
+          (assert (identifier? v))
+          ;; attempting to bind the incoming v will fail in match-define
+          (syntax-case pattern (quasiquote)
+            [`(bad-bind) #`((bind #,v 17))])))
+      (match-define `(bad-bind) 123)
+      'ok)
+    (re "multiple definitions for #[{][^}]*[}] in body"))
+   ;; specify only handle-object
+   ;;  - handle-object returns guard, but no bind
+   (let ()
+     (define-match-extension seq
+       (lambda (v pattern)
+         (assert (identifier? v))
+         (syntax-case pattern (quasiquote)
+           [`(seq) #`((guard (equal? #,v (next!))))])))
+     (define n 0)
+     (define (next!) (set! n (+ n 1)) n)
+     (match-let* ([0 n]) 'ok)
+     ;; use seq in match, testing left-to-right evaluation
+     (match (<tres> make [a 1] [b 3] [c 2])
+       [`(<tres> [a `(seq)] [c `(seq)] [b `(seq)]) 'ok]
+       ;; more than one clause so we don't convert to match-let*
+       [other (match 'bad)])
+     ;; use seq in match-define
+     (let ()
+       (match-define `(seq) 4)
+       (match-define `(seq) 5)
+       'ok)
+     ;; use seq in match-let*
+     (match-let*
+      ([`(seq) 6]
+       [`(seq) 7]
+       [(`(seq) `(seq) `(seq)) '(8 9 10)])
+      'ok))
+   ;; specify only handle-object
+   ;; - handle-object returns multiple guards and a bind
+   (let ()
+     (define-match-extension even
+       (lambda (v pattern)
+         (syntax-case pattern (quasiquote)
+           [`(even var)
+            #`((guard (number? #,v))
+               (guard (even? #,v))
+               (bind var (list 'var #,v)))])))
+     ;; use even in match
+     (match (list 1 2 3 4)
+       [(`(even w) `(even x) `(even y) `(even z)) (match 'wrong)]
+       [(1 `(even x) 3 `(even y))
+        (match-let* ([(x 2) x] [(y 4) y]) 'ok)])
+     (match 5
+       [`(even x) (match 'wrong)]
+       [5 'ok])
+     ;; use even in match-define
+     (let ()
+       (match-define `(even a) 20)
+       (match-define (`(even b) `(even c)) '(10 4))
+       (match-let*
+        ([(a 20) a]
+         [(b 10) b]
+         [(c 4) c])
+        'ok))
+     (match-let*
+      ([#(EXIT #(bad-match 3 ,_))
+        (catch (let () (match-define `(even x) 3) x))])
+      'ok)
+     ;; use even in match-let*
+     (match-let*
+      ([#(`(even a) b `(even c) d) '#(8 b 2 d)]
+       [(a 8) a]
+       [(c 2) c])
+      'ok)
+     (match-let*
+      ([#(EXIT #(bad-match 7 ,_))
+        (catch (match-let* ([`(even h) 7]) 'ok))])
+      'ok))
+   ;; specify only handle-object
+   ;; - handle-object returns sub-match
+   (let ()
+     (define-match-extension twin
+       (lambda (v pattern)
+         (syntax-case pattern (quasiquote unquote)
+           [`(twin ,var ...)
+            #`((sub-match #,v (#(,var ...) (,@var ...))))])))
+     ;; use twin in match
+     (match '(#(a b c) (a b c))
+       [`(twin ,x ,y ,z)
+        (match-let* ([a x] [b y] [c z]) 'ok)]
+       [other (match 'bad)])
+     (match '(#(0 1 2 3) (0 1 2 7))
+       [`(twin ,w ,x ,y ,z) (match 'bad)]
+       [,_ 'ok])
+     (match '(#(0 1 2 3) (0 1 2))
+       [`(twin ,w ,x ,y ,z) (match 'bad)]
+       [,_ 'ok])
+     ;; use twin in match-define
+     (let ()
+       (define (f x)
+         (match-define `(twin ,a ,b ,c) x)
+         (list a b c))
+       (match-let*
+        ([(1 2 3) (f '(#(1 2 3) (1 2 3)))]
+         [(d e f) (f '(#(d e f) (d e f)))]
+         [#(EXIT #(bad-match (#(a b c) (a b d)) ,_))
+          (catch (f '(#(a b c) (a b d))))])
+        'ok))
+     ;; use twin in match-let*
+     (let ()
+       (define (f x)
+         (match-let* ([`(twin ,x ,y) x])
+           (list x y)))
+       (match-let*
+        ([(1 2) (f '(#(1 2) (1 2)))]
+         [(b c) (f '(#(b c) (b c)))]
+         [#(EXIT #(bad-match (#(r 2) (d 2)) ,_))
+          (catch (f '(#(r 2) (d 2))))])
+        'ok)))
+   ;; specify only handle-object
+   ;; - handle-object returns guard, bind, and sub-match
+   (let ()
+     (define-match-extension car
+       (lambda (v pattern)
+         (syntax-case pattern (quasiquote)
+           [`(car pat)
+            (with-temporaries (tmp)
+              #`((guard (pair? #,v))
+                 (bind tmp (car #,v))
+                 (sub-match tmp pat)))])))
+     (define (check f)
+       (match-let*
+        ([3 (f '((zoom 3) 4 5))]
+         [#(EXIT #(bad-match "string" ,_)) (catch (f "string"))])
+        'ok))
+     ;; use car in match
+     (check
+      (lambda (x)
+        (match x
+          [`(car (zoom ,z)) z]
+          [other (match 'bad)])))
+     ;; use car in match-define
+     (check
+      (lambda (x)
+        (match-define `(car (zoom ,z)) x)
+        z))
+     ;; use car in match-let*
+     (check
+      (lambda (x)
+        (match-let* ([`(car (zoom ,z)) x])
+          z))))
+   ;; specify only handle-object
+   ;; - handle-object returns handle-fields, but pattern has bad field syntax
+   (assert-syntax-error
+    (let ()
+      (define-match-extension goo
+        (lambda (v pattern)
+          (syntax-case pattern (quasiquote)
+            [`(goo spec ...)
+             #`((handle-fields #,v spec ...))])))
+      (match 3
+        [`(goo) 7] ;; okay
+        [`(goo fed) 8]))
+    "invalid match pattern")
+   ;; specify only handle-object
+   ;; - handle-object returns handle-fields and tries to convert viable fields
+   ;;   but we didn't provide a handle-field procedure
+   (match-let*
+    ([#(EXIT ,reason)
+      (catch
+       (expand
+        '(let ()
+           (define-match-extension goo
+             (lambda (v pattern)
+               (syntax-case pattern (quasiquote)
+                 [`(goo spec ...)
+                  #`((handle-fields #,v spec ...))])))
+           (lambda (x)
+             (match x
+               [`(goo ,foo) foo]
+               [other (match 'bad)])))))]
+     ["Exception in define-match-extension: no handle-field procedure provided for goo."
+      (exit-reason->english reason)])
+    'ok)
+   ;; specify handle-object and handle-field
+   ;; - handle-object returns sub-match, so handle-field never called
+   (let ()
+     (define-match-extension bool
+       (lambda (v pattern)
+         (syntax-case pattern (quasiquote)
+           [`(bool pat)
+            #`((guard (boolean? #,v))
+               (sub-match #,v pat))]))
+       (lambda x (match 'not-called)))
+     (define (check f)
+       (match-let*
+        ([#t (f '(#t #f #t))]
+         [#f (f '(#f #f #f))]
+         [#(EXIT #(bad-match (yes no yes) ,_)) (catch (f '(yes no yes)))])
+        'ok))
+     ;; use bool in match
+     (check
+      (lambda (x)
+        (match x
+          [other (match 'bad)]
+          [(`(bool ,var) `(bool #f) `(bool ,@var)) var])))
+     ;; use bool in match-define
+     (check
+      (lambda (x)
+        (match-define (`(bool ,var) `(bool #f) `(bool ,@var)) x)
+        var))
+     ;; use bool in match-let*
+     (check
+      (lambda (x)
+        (match-let*
+         ([(`(bool ,var) `(bool #f) `(bool ,@var)) x])
+         var))))
+   ;; specify handle-object and handle-field
+   ;; - handle-object returns handle-fields to pass info to handle-field
+   (let ()
+     (define-match-extension idx
+       (lambda (v pattern)
+         (syntax-case pattern (quasiquote)
+           [`(idx [i pat] ...)
+            (andmap (lambda (x) (and (fixnum? x) (nonnegative? x)))
+              (datum (i ...)))
+            (let ([n (apply max (datum (i ...)))])
+              (with-temporaries (len)
+                #`((guard (vector? #,v))
+                   (bind len (vector-length #,v))
+                   (guard (< #,n len))
+                   (handle-fields (#,v len) [i pat] ...))))]))
+       (lambda (input i var options context)
+         (syntax-case options () [() 'ok])
+         (assert (fixnum? (syntax->datum i)))
+         (syntax-case input ()
+           [(v len)
+            #`((bind #,var `(#,i of ,len = ,(vector-ref v #,i))))])))
+     (define (check f)
+       (match-let*
+        ([((1 of 4 = A) (3 of 4 = B)) (f '#(0 A 2 B))]
+         [((1 of 6 = D) (3 of 6 = E)) (f '#(0 D 2 E f g))]
+         [#(EXIT #(bad-match #(a b c) ,_)) (catch (f '#(a b c)))])
+        'ok))
+     ;; use idx in match
+     (check
+      (lambda (x)
+        (match x
+          [other (match 'bad)]
+          [`(idx [1 ,a] [3 ,bar]) (list a bar)])))
+     ;; use idx in match-define
+     (check
+      (lambda (x)
+        (match-define `(idx [1 ,a] [3 ,bar]) x)
+        (list a bar)))
+     ;; use idx in match-let*
+     (check
+      (lambda (x)
+        (match-let* ([`(idx [1 ,a] [3 ,bar]) x])
+          (list a bar)))))
+   ;; invalid output in handle-object
+   (assert-syntax-error
+    (let ()
+      (define-match-extension bad
+        (lambda (v pattern)
+          #'(bind var 3)))
+      (match 123 [`(bad) 7]))
+    "invalid syntax")
+   ;; invalid output in handle-field: sub-match
+   (assert-syntax-error
+    (let ()
+      (define-match-extension worse
+        (lambda (v pattern)
+          #`((handle-fields #,v [x 11] ,y)))
+        (lambda (input fld var options context)
+          #'((bind is okay)
+             (guard (is fine))
+             (sub-match #,input 404))))
+      (match 123 [`(worse) 7]))
+    "invalid syntax")
+   ;; invalid output in handle-field: handle-fields
+   (assert-syntax-error
+    (let ()
+      (define-match-extension worse
+        (lambda (v pattern)
+          #`((handle-fields #,v [x 11] ,y)))
+        (lambda (input fld var options context)
+          #'((bind is okay)
+             (guard (is fine))
+             (handle-fields #,input ,disallowed))))
+      (match 123 [`(worse) 7]))
+    "invalid syntax")
+   ;; handle-fields is not final clause in handle-object
+   (assert-syntax-error
+    (let ()
+      (define-match-extension worse
+        (lambda (v pattern)
+          #`((handle-fields #,v ,x)
+             (bind var something))))
+      (match 123 [`(worse) 7]))
+    "invalid syntax")
+   ;; sub-match is not final clause in handle-object
+   (assert-syntax-error
+    (let ()
+      (define-match-extension worse
+        (lambda (v pattern)
+          #`((sub-match #,v 7)
+             (guard door))))
+      (match 123 [`(worse) 7]))
+    "invalid syntax")
+   ;; return #f from handle-field to indicate invalid field
+   (assert-syntax-error
+    (let ()
+      (define-match-extension bad-field
+        (lambda (v pattern)
+          #`((handle-fields #,v [secret agent])))
+        (lambda (input fld var options context)
+          #f))
+      (match 3 [`(bad-field anything here) 7]))
+    "unknown field")
+   ;; fail with syntax-case error in handle-field
+   (assert-syntax-error
+    (let ()
+      (define-match-extension crash
+        (lambda (v pattern)
+          #`((handle-fields #,v [some 1])))
+        (lambda (input fld var options context)
+          (syntax-case 123 ())))
+      (match 3 [`(crash anything here) 7]))
+    "invalid syntax")
+   ;; check that handle-field field and options are as expected
+   (let ()
+     (define-match-extension hfop
+       (lambda (v pattern)
+         (syntax-case pattern (quasiquote)
+           [`(hfop spec ...)
+            #`((handle-fields #,v spec ...))]))
+       (lambda (input fld var options context)
+         (let* ([actual (syntax->datum options)]
+                [expected* '(() (chutney) (peanut butter cups))]
+                [found
+                 (ormap (lambda (o i) (and (equal? actual o) i))
+                   expected*
+                   (enumerate expected*))])
+           (assert found)
+           #`((bind #,var (cons #,found '#,fld))))))
+     (match 'anything
+       [`(hfop [a ,mango chutney] [dark ,chocolate peanut butter cups] [cheese ,cake])
+        (match-let*
+         ([(1 . a) mango]
+          [(2 . dark) chocolate]
+          [(0 . cheese) cake])
+         'ok)]))
+   ;; check that handle-field context is as expected
+   (let ()
+     (meta define expected
+       #'`(hfc ,x [y ,not] [z z top] ,@now))
+     (define-match-extension hfc
+       (lambda (v pattern)
+         (syntax-case pattern (quasiquote)
+           [`(hfc spec ...)
+            #`((handle-fields #,v spec ...))]))
+       (lambda (input fld var options context)
+         (assert (equal? (syntax->datum context) (syntax->datum expected)))
+         #`((bind #,var '#,fld))))
+     (let-syntax ([inject
+                   (lambda (x)
+                     #`(let ([now 'now] [z 'snoo])
+                         (match 'anything
+                           [#,expected
+                            (match-let* ([x x] [y not] [snoo z] [now now])
+                              'ok)])))])
+       inject))
+   ))
 
 (mat uuid ()
   (match-let*
