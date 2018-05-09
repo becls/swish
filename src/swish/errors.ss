@@ -46,7 +46,7 @@
       [#(bad-arg ,who ,arg) (format "Invalid argument to ~a: ~s." who arg)]
       [#(bad-journal-mode ,mode) (format "Invalid journal mode: ~s." mode)]
       [#(bad-match ,v ,src) (format "Pattern match failed~a: ~s." (src->english src) v)]
-      [#(bad-record ,name ,x ,src) (format "Invalid type for record ~a~a: ~s." name (src->english src) x)]
+      [#(bad-tuple ,name ,x ,src) (format "Invalid type for tuple ~a~a: ~s." name (src->english src) x)]
       [#(bad-return-value ,other) (format "Bad return value: ~s." other)]
       [#(connect-tcp-failed ,hostname ,port-spec ,who ,errno) (format "Error ~d from ~a when connecting to ~a on TCP port ~a: ~a." errno who hostname port-spec (errno->english errno))]
       [#(create-watched-process-failed ,command-line ,who ,errno) (format "Error ~d from ~a during create-watched-process ~s: ~a." errno who command-line (errno->english errno))]

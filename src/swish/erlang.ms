@@ -688,7 +688,7 @@
      (match 0 [`(<point> ,x ,x) x]))
    "duplicate pattern variable")
   (assert-syntax-error (match-let* ([`(no-record-type) 12]) 12)
-    "unknown record type in pattern")
+    "unknown tuple type in pattern")
   (assert-syntax-error (match 0 [,() 0]) "invalid match pattern")
   (assert-syntax-error (define-tuple <point> (x y)) "invalid syntax")
   (assert-syntax-error (define-tuple <point> make) "invalid field")
@@ -820,11 +820,11 @@
          (<point> y p)
          ((<point> y) p)
          ((<point> x) p))))))
-  (assert-error bad-record
+  (assert-error bad-tuple
     (let ()
       (define-tuple <box> content)
       (<box> content 'box)))
-  (assert-error bad-record
+  (assert-error bad-tuple
     (let ()
       (define-tuple <box> content)
       (map (lambda (f) (f 3)) (list (<box> content)))))
@@ -848,7 +848,7 @@
             (<point> copy p [x (list x)])
             (<point> copy p [y (vector y)])
             (<point> copy p [x 5] [y 7]))))))))
-  (assert-error bad-record
+  (assert-error bad-tuple
     (let ()
       (define-tuple <box> content)
       (<box> copy 27)))
@@ -873,7 +873,7 @@
             (<point> copy* p [y (vector x y)])
             (<point> copy* p [x (list x y)] [y (vector x y)])
             (<point> copy* p [x y] [y x]))))))))
-  (assert-error bad-record
+  (assert-error bad-tuple
     (let ()
       (define-tuple <box> content)
       (<box> copy* 27)))
@@ -905,21 +905,21 @@
          (let ([x 'bound-x] [y 'bound-y])
            (<point> open p p. (x y))
            (list x y p.x p.y)))))))
-  (assert-error bad-record
+  (assert-error bad-tuple
     (let ()
       (define-tuple <box> content)
       (<box> open 27 (content))
       content))
-  (assert-error bad-record
+  (assert-error bad-tuple
     (let ()
       (define-tuple <box> content)
       (<box> open 27 magical-prefix: (content))
       magical-prefix:content))
-  (assert-error bad-record #(at ,_ "swish/erlang.ms")
+  (assert-error bad-tuple #(at ,_ "swish/erlang.ms")
     (let ()
       (define-tuple <box> content)
       (<box> content 'gloves)))
-  (assert-error bad-record #(at ,_ "swish/erlang.ms")
+  (assert-error bad-tuple #(at ,_ "swish/erlang.ms")
     (let ()
       (define-tuple <box> content)
       (<box> open 'gloves [content])

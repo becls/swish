@@ -920,11 +920,11 @@
               (if (identifier? #'var)
                   ids
                   (bad-pattern x))]
-             [(quasiquote (record spec ...))
-              (identifier? #'record)
-              (let ([fields (lookup #'record #'fields)])
+             [(quasiquote (tuple spec ...))
+              (identifier? #'tuple)
+              (let ([fields (lookup #'tuple #'fields)])
                 (unless fields
-                  (syntax-error x "unknown record type in pattern"))
+                  (syntax-error x "unknown tuple type in pattern"))
                 (let check-specs ([ids ids] [specs #'(spec ...)])
                   (syntax-case specs (unquote)
                     [() ids]
@@ -967,10 +967,10 @@
            (if (equal? v var)
                body
                (fail)))]
-      [(_ e (quasiquote (record spec ...)) fail body)
+      [(_ e (quasiquote (tuple spec ...)) fail body)
        #`(let ([v e])
-           (if (record is? v)
-               (match-record v (record spec ...) fail body)
+           (if (tuple is? v)
+               (match-tuple v (tuple spec ...) fail body)
                (fail)))]
       [(_ e lit fail body)
        (let ([x (datum lit)])
@@ -1009,15 +1009,15 @@
                (match-vector v 0 (element ...) fail body)
                (fail)))]))
 
-  (define-syntax match-record
+  (define-syntax match-tuple
     (syntax-rules (unquote)
-      [(_ v (record) fail body) body]
-      [(_ v (record (unquote field) . rest) fail body)
-       (let ([field (record no-check field v)])
-         (match-record v (record . rest) fail body))]
-      [(_ v (record [field pattern] . rest) fail body)
-       (match-help (record no-check field v) pattern fail
-         (match-record v (record . rest) fail body))]))
+      [(_ v (tuple) fail body) body]
+      [(_ v (tuple (unquote field) . rest) fail body)
+       (let ([field (tuple no-check field v)])
+         (match-tuple v (tuple . rest) fail body))]
+      [(_ v (tuple [field pattern] . rest) fail body)
+       (match-help (tuple no-check field v) pattern fail
+         (match-tuple v (tuple . rest) fail body))]))
 
   (define-syntax match-vector
     (syntax-rules ()
@@ -1056,7 +1056,7 @@
                        (define tmp
                          (let ([val #,expr])
                            (unless (name is? val)
-                             (raise `#(bad-record name ,val ,#,(find-source x))))
+                             (raise `#(bad-tuple name ,val ,#,(find-source x))))
                            val))
                        #,@(map make-accessor (syntax->list field-names)))))
              (define (handle-copy x e bindings mode)
@@ -1064,10 +1064,10 @@
                    #,(case mode
                        [copy
                         #`(unless (name is? src)
-                            (raise `#(bad-record name ,src ,#,(find-source x))))]
+                            (raise `#(bad-tuple name ,src ,#,(find-source x))))]
                        [copy*
                         (handle-open x #'src #f (get-binding-names bindings))])
-                   (vector 'name #,@(copy-record #'(field ...) 1 bindings))))
+                   (vector 'name #,@(copy-tuple #'(field ...) 1 bindings))))
              (define (get-binding-names bindings)
                (syntax-case bindings ()
                  [((fn fv) . rest)
@@ -1089,7 +1089,7 @@
                       (valid? #'rest (cons f seen)))]
                    [() #t]
                    [_ #f])))
-             (define (make-record fields bindings)
+             (define (make-tuple fields bindings)
                (if (snull? fields)
                    '()
                    (let* ([f (scar fields)]
@@ -1098,17 +1098,17 @@
                        (syntax-error x
                          (format "missing field ~a in" (syntax->datum f))))
                      (cons v
-                       (make-record (scdr fields) (remove-binding f bindings))))))
-             (define (copy-record fields index bindings)
+                       (make-tuple (scdr fields) (remove-binding f bindings))))))
+             (define (copy-tuple fields index bindings)
                (if (snull? fields)
                    '()
                    (let* ([f (scar fields)]
                           [v (find-binding f bindings)])
                      (if v
-                         (cons v (copy-record (scdr fields) (+ index 1)
+                         (cons v (copy-tuple (scdr fields) (+ index 1)
                                    (remove-binding f bindings)))
                          (cons #`(#3%vector-ref src #,(datum->syntax f index))
-                           (copy-record (scdr fields) (+ index 1) bindings))))))
+                           (copy-tuple (scdr fields) (+ index 1) bindings))))))
              (define (find-binding f bindings)
                (syntax-case bindings ()
                  [((fn fv) . rest)
@@ -1131,7 +1131,7 @@
                [(name make . bindings)
                 (and (eq? (datum make) 'make)
                      (valid-bindings? #'bindings))
-                #`(vector 'name #,@(make-record #'(field ...) #'bindings))]
+                #`(vector 'name #,@(make-tuple #'(field ...) #'bindings))]
                [(name copy e . bindings)
                 (and (eq? (datum copy) 'copy)
                      (valid-bindings? #'bindings))
@@ -1161,7 +1161,7 @@
                 (syntax-datum-eq? #'fn #'field)
                 #`(lambda (x)
                     (unless (name is? x)
-                      (raise `#(bad-record name ,x ,#,(find-source x))))
+                      (raise `#(bad-tuple name ,x ,#,(find-source x))))
                     (#3%vector-ref x #,(find-index #'fn #'(field ...) 1)))]
                ...
                [(name no-check fn e)
