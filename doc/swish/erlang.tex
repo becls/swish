@@ -846,9 +846,10 @@ procedure of one argument that is applied to the \var{initial} and all
 subsequent values. If \var{filter} is not a procedure, exception
 \code{\#(bad-arg make-process-parameter \var{filter})} is raised.
 
-Because the parameters used by the system formatting and printing
-  routines are not process safe, they are redefined to use
-  \code{make-process-parameter}. These system parameters are
+The following system parameters are not process safe and have
+been redefined to use \code{make-process-parameter}.
+\code{custom-port-buffer-size},
+\code{exit-handler},
 \code{pretty-initial-indent},
 \code{pretty-line-length},
 \code{pretty-maximum-lines},
@@ -863,10 +864,10 @@ Because the parameters used by the system formatting and printing
 \code{print-precision},
 \code{print-radix},
 \code{print-record},
-\code{print-unicode}, and
-\code{print-vector-length}.
-The \code{custom-port-buffer-size} parameter is also redefined to be
-process safe.
+\code{print-unicode},
+\code{print-vector-length},
+\code{reset-handler}, and
+\code{waiter-prompt-and-read}.
 
 % -------------------------------------------------------------------------
 \defineentry{on-exit}
