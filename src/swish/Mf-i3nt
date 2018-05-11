@@ -19,7 +19,7 @@ clibs: ${SwishLibs}
 ../../bin/osi.dll: ${OsiObj} ${UvLib}
 	${LD} /dll /out:../../bin/osi.dll ${OsiObj} "$(shell cygpath -w "${SchemeLib}")" "${UvLib}"
 
-../../lib/swish_kernel.obj: ${UvLib} run.obj ${OsiObj} $(shell cygpath -u "${SchemeLib}")
+../../lib/swish_kernel.obj: ${UvLib} run.obj ${OsiObj}
 	../vs32 lib /nologo /ltcg /out:$@ run.obj ${OsiObj} "$(shell cygpath -w "${SchemeLib}")" "${UvLib}"
 
 %.obj: %.c osi.h ${UvInclude}

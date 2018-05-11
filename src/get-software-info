@@ -5,7 +5,7 @@
 (define field-name
   (cond
    [(null? (command-line-arguments))
-    (printf "Usage: ~s fieldname\n" (car (command-line)))
+    (printf "Usage: ~a fieldname\n" (path-last (car (command-line))))
     (exit 1)]
    [else (string->symbol (car (command-line-arguments)))]))
 

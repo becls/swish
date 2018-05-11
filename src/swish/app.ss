@@ -155,9 +155,8 @@
         [#f ;; TODO: (IsService) and I do mean TODO
          (console-event-handler `#(software-version ,software-version))
          (app:start)]))
-    (define (int32? x) (and (integer? x) (exact? x) (<= (integer-length x) 32)))
-    (interaction-environment
-     (copy-environment (environment '(scheme) '(swish imports)) #t))
+    (define (int32? x) (and (or (fixnum? x) (bignum? x)) (<= #x-7FFFFFFF x #x7FFFFFFF)))
+    (eval '(import (swish imports)))
     (call-with-values run
       (case-lambda
        [() (app:shutdown)]

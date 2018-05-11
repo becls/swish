@@ -36,8 +36,6 @@
    (swish software-info)
    )
 
-  (define bin-dir (cd))
-
   (define data-dir (make-parameter #f))
 
   (define log-path (make-parameter #f))
@@ -47,7 +45,7 @@
   (define web-path (make-parameter #f))
 
   (define base-dir
-    (make-parameter (path-parent bin-dir)
+    (make-parameter (path-parent (cd))
       (lambda (base)
         (match (catch (directory? base))
           [#t

@@ -27,7 +27,7 @@ io-constants.ss: io-constants${EXESUFFIX}
 
 ../../bin/swish.boot: boot.ss ../../bin/swish.library
 	@echo \
-	'(base-exception-handler (lambda (e) (display-condition e) (newline) (exit 1)))' \
+	'(reset-handler abort)' \
 	'(make-boot-file "$@" (quote ("scheme" "petite")) "../../bin/swish.library" "boot.ss")' \
 	| ${SCHEME} -q ../../bin/swish.library
 
@@ -35,7 +35,7 @@ io-constants.ss: io-constants${EXESUFFIX}
 	find ../../lib -name '*.so' -delete
 	@echo \
 	'(waiter-prompt-string "")' \
-	'(base-exception-handler (lambda (e) (display-condition e) (newline) (exit 1)))' \
+	'(reset-handler abort)' \
 	'(generate-wpo-files #t)' \
 	'(compile-imported-libraries #t)' \
 	'(cd "..")'\
@@ -46,7 +46,7 @@ io-constants.ss: io-constants${EXESUFFIX}
 ../../lib/swish/%.so: %.ss ../../bin/swish${EXESUFFIX} ../../bin/swish.library
 	@echo \
 	'(waiter-prompt-string "")' \
-	'(base-exception-handler (lambda (e) (display-condition e) (newline) (exit 1)))' \
+	'(reset-handler abort)' \
 	'(generate-wpo-files #t)' \
 	'(compile-imported-libraries #t)' \
 	'(cd "..")'\
