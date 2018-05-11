@@ -22,6 +22,31 @@
 
 int swish_run(int argc, const char *argv[], void (*custom_init)(void));
 
+#ifdef _WIN32
+#include <wchar.h>
+#include <windows.h>
+
+static char* to_utf8(wchar_t* arg) {
+  int len = WideCharToMultiByte(CP_UTF8, 0, arg, -1, NULL, 0, NULL, NULL);
+  if (0 == len) {
+    fwprintf_s(stderr, L"Invalid argument: %s\n", arg);
+    exit(1);
+  }
+  char* arg8 = (char*)malloc(len * sizeof(char));
+  WideCharToMultiByte(CP_UTF8, 0, arg, -1, arg8, len, NULL, NULL);
+  return arg8;
+}
+
+int wmain(int argc, wchar_t* argv[], wchar_t* envp[]) {
+  char** argv8 = (char**)malloc((argc + 1) * sizeof(char*));
+  for (int i = 0; i < argc; i++) {
+    argv8[i] = to_utf8(argv[i]);
+  }
+  argv8[argc] = NULL;
+  return swish_run(argc, argv8, 0);
+}
+#else
 int main(int argc, const char *argv[]) {
   return swish_run(argc, argv, 0);
 }
+#endif
