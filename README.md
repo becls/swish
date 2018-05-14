@@ -23,7 +23,7 @@ I/O.
 
 ## Linux
 
-- Chez Scheme 9.5
+- Chez Scheme 9.5.1 from May 14, 2018 or later
 - GCC, the GNU Compiler Collection
 - GNU C++ compilter for libuv
 - Python 2.7 for libuv
@@ -31,11 +31,11 @@ I/O.
 
 ## Mac
 
-- Chez Scheme 9.5
+- Chez Scheme 9.5.1 from May 14, 2018 or later
 
 ## Windows
 
-- Chez Scheme 9.5
+- Chez Scheme 9.5.1 from May 14, 2018 or later
 - Cygwin with bash, git, graphviz, grep, perl, texlive, etc.
 - Python 2.7 for Windows in C:\Python27
 - Put scheme in PATH.
