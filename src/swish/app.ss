@@ -97,13 +97,13 @@
   (define (set-random-seed)
     (random-seed (+ (remainder (erlang:now) (- (ash 1 32) 1)) 1)))
 
-  (define-tuple <args> cmd suppress-greeting? filenames)
+  (define-tuple <args> cmd quiet? filenames)
 
   (define (process-command-line args)
     (define init
       (<args> make
         [cmd 'repl]
-        [suppress-greeting? #f]
+        [quiet? #f]
         [filenames '()]))
     (let lp ([args args] [acc init])
       (match args
@@ -113,7 +113,7 @@
         [("--version" . ,_)
          (<args> copy acc [cmd "--version"])]
         [("-q" . ,rest)
-         (lp rest (<args> copy acc [cmd 'repl] [suppress-greeting? #t]))]
+         (lp rest (<args> copy acc [cmd 'repl] [quiet? #t]))]
         [("--" . ,filenames)
          (<args> copy acc [cmd 'repl] [filenames filenames])]
         [(,cmd . ,filenames)
@@ -128,17 +128,20 @@
          (printf "Options and arguments:\n")
          (printf " --help      print this help message\n")
          (printf " --version   print version information\n")
-         (printf " -q          suppress startup message\n")
+         (printf " -q          suppress startup message and prompt string\n")
          (printf " --          remaining arguments are files to load\n")
          (printf " file        execute file with remaining arguments\n")
          (values)]
         [`(<args> [cmd "--version"])
          (printf "~a\n" (swish-version))
          (values)]
-        [`(<args> [cmd repl] ,suppress-greeting? ,filenames)
-         (unless suppress-greeting?
+        [`(<args> [cmd repl] ,quiet? ,filenames)
+         (cond
+          [quiet?
+           (waiter-prompt-string "")]
+          [else
            (printf "\n~a Version ~a\n" software-product-name software-version)
-           (flush-output-port))
+           (flush-output-port)])
          (hook-console-input)
          (set-random-seed)
          (for-each load filenames)
