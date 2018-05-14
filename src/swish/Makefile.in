@@ -1,22 +1,11 @@
-SCHEME ?= scheme
-MACHINE_TYPE := $(shell echo '(machine-type)' | "${SCHEME}" -q)
-BASE_MACHINE_TYPE := $(patsubst t%,%,${MACHINE_TYPE})
-CHEZ_VERSION := $(shell "${SCHEME}" --version 2>&1)
-ifneq (,$(findstring nt,${MACHINE_TYPE}))
-EXESUFFIX := .exe
-endif
-SWISH_VERSION := $(shell "${SCHEME}" --script ../get-software-info short-version)
-LIBDIRS := .::../lib
+.PHONY: all clean platform-clean ready reminders
 
 ready: io-constants.ss clibs
 
-all: ready  ../../bin/swish${EXESUFFIX} ../../bin/swish.boot ../../bin/swish.library ../../lib/swish/mat.so ../../lib/swish/profile.so ../../lib/swish/testing.so
+CORE := ../../bin/swish${EXESUFFIX} ../../bin/swish.boot ../../bin/swish.library
+AUXLIB := ../../lib/swish/mat.so ../../lib/swish/profile.so ../../lib/swish/testing.so
 
-ifneq (,$(wildcard Mf-${BASE_MACHINE_TYPE}))
-include Mf-${BASE_MACHINE_TYPE}
-else
-$(error Machine type ${MACHINE_TYPE} is not supported)
-endif
+all: ready ${CORE} ${AUXLIB} ${REMINDERS}
 
 io-constants.ss: io-constants${EXESUFFIX}
 	./$< > $@
@@ -29,23 +18,21 @@ io-constants.ss: io-constants${EXESUFFIX}
 	@echo \
 	'(reset-handler abort)' \
 	'(make-boot-file "$@" (quote ("scheme" "petite")) "../../bin/swish.library" "boot.ss")' \
-	| ${SCHEME} -q ../../bin/swish.library
+	| "${SCHEME}" -q ../../bin/swish.library
 
 ../../bin/swish.library: *.ss
 	find ../../lib -name '*.so' -delete
 	@echo \
-	'(waiter-prompt-string "")' \
 	'(reset-handler abort)' \
 	'(generate-wpo-files #t)' \
 	'(compile-imported-libraries #t)' \
 	'(cd "..")'\
 	'(import (swish imports))' \
 	'(compile-whole-library "../lib/swish/imports.wpo" "../bin/swish.library")' \
-	| ${SCHEME} -q --libdirs "${LIBDIRS}"
+	| "${SCHEME}" -q --libdirs "${LIBDIRS}"
 
 ../../lib/swish/%.so: %.ss ../../bin/swish${EXESUFFIX} ../../bin/swish.library
 	@echo \
-	'(waiter-prompt-string "")' \
 	'(reset-handler abort)' \
 	'(generate-wpo-files #t)' \
 	'(compile-imported-libraries #t)' \
@@ -59,17 +46,27 @@ clean: platform-clean
 	rm -f ../*.ss.html ../mat-report.html ../server-profile.html
 	rm -f *.mo *.ms.html *.ss.html
 
+.PHONY: install install-bin install-check install-doc
 INSTLIBDIR := ${INSTALLROOT}/lib/swish${SWISH_VERSION}/${MACHINE_TYPE}
 INSTWEBDIR := ${INSTALLROOT}/lib/swish${SWISH_VERSION}/web
 INSTDOCDIR := ${INSTALLROOT}/share/doc/swish${SWISH_VERSION}
-install: all
+
+install: install-doc install-bin
+
+install-check:
 ifeq (,${INSTALLROOT})
 	$(error INSTALLROOT is not set)
-else
+endif
+
+install-doc: install-check
 	install --directory ${INSTDOCDIR}
+	install ../../LICENSE ${INSTDOCDIR}
+	install ../../NOTICE ${INSTDOCDIR}
 	install ../../doc/swish.pdf ${INSTDOCDIR}
+
+install-bin: install-check all
 	install --directory ${INSTLIBDIR}
-	install ../../bin/swish ${INSTLIBDIR}
+	install ../../bin/swish${EXESUFFIX} ${INSTLIBDIR}
 	install ../../bin/swish-build ${INSTLIBDIR}
 	install ../../bin/swish.boot ${INSTLIBDIR}
 	install ../../bin/swish.library ${INSTLIBDIR}
@@ -85,4 +82,3 @@ else
 	install ../../lib/swish/testing.so ${INSTLIBDIR}/lib/swish
 	install --directory ${INSTWEBDIR}
 	cd ../../web ; find . -type f -exec install -D -T {} ${INSTWEBDIR}/{} \;
-endif

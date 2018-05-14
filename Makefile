@@ -1,10 +1,17 @@
-all: swish doc/swish.pdf
+MAKEFLAGS += --no-print-directory
+.PHONY: all clean coverage doc install pristine swish test
 
-doc/swish.pdf: doc/*.sty doc/*.bib doc/swish/*.tex
-	make -C doc
+all: swish doc
 
-swish:
-	make -C src/swish all
+doc:
+	$(MAKE) -C doc
+
+swish: src/swish/Makefile
+	$(MAKE) -C src/swish all
+
+src/swish/Makefile:
+	@echo "Run ./configure to create $@"
+	@exit 1
 
 test: swish
 	cd src; ./run-mats ${PWD}/bin
@@ -12,14 +19,12 @@ test: swish
 coverage:
 	cd src; PROFILE_MATS=yes ./run-mats
 
-destknown:
-ifeq (,${INSTALLROOT})
-	$(error INSTALLROOT is not set)
-endif
+install: all
+	$(MAKE) -C src/swish install
 
-install: destknown all
-	make -C src/swish install
+clean: src/swish/Makefile
+	$(MAKE) -C doc clean
+	$(MAKE) -C src/swish clean
 
-clean:
-	make -C doc clean
-	make -C src/swish clean
+pristine: clean
+	rm -f src/swish/Makefile

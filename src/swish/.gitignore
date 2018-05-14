@@ -4,6 +4,7 @@
 /io-constants.ss
 /main.o
 /main.obj
+/Makefile
 /osi.o
 /osi.obj
 /run.o

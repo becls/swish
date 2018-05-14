@@ -1,0 +1,371 @@
+#!/bin/bash
+
+set -euo pipefail
+
+declare -a ERRORS
+ERRORS=()
+
+# accumulate errors if we haven't yet processed --help
+err() {
+  ERRORS+=("! $*")
+}
+
+no_errors() {
+  test ${#ERRORS[@]} -eq 0
+}
+
+checkerrs() {
+  if no_errors; then return; fi
+  echo ""
+  for error in "${ERRORS[@]}"; do echo "${error}"; done
+  exit 1
+}
+
+# minimal sanity check that we're being run from the right place
+if [ ! -d src/swish ] || [ ! -f src/swish/Makefile.in ]; then
+  err "Must run $(basename "$0") at the root of the swish source distribution"
+fi
+
+help=no
+PREFIX=
+PYTHON=
+SCHEME=
+CUSTOMPATH=
+CUSTOMHEAPDIRS=
+CONFIG_UNAME="$(uname -s)"
+
+case "${CONFIG_UNAME}" in
+  CYGWIN_NT-*)
+    Windows=yes
+    NORMALIZE_PATH="cygpath -au"
+    ;;
+  *)
+    Windows=no
+    NORMALIZE_PATH="realpath -m"
+    ;;
+esac
+
+if [ "${Windows}" = "yes" ]; then
+  EXESUFFIX=.exe
+  LIBDIRS=".;;../lib"
+else
+  EXESUFFIX=
+  LIBDIRS=".::../lib"
+fi
+
+setoption() {
+  local var opt val
+  var="$1"
+  opt="$2"
+  val="${3#${opt}}"
+  if [ -z "${val}" ]; then
+    err "Option requires value: ${opt}"
+  elif [ ! -z "${!var}" ]; then
+    err "Repeated option ${opt}=${val}"
+  else
+    declare -g "${var}"="${val}"
+  fi
+}
+
+while [ $# != 0 ]; do
+  case "$1" in
+    --help)
+      help=yes
+      ;;
+    --prefix=*)
+      setoption "PREFIX" "--prefix=" "$1"
+      ;;
+    --python=*)
+      setoption "PYTHON" "--python=" "$1"
+      ;;
+    --scheme=*)
+      setoption "SCHEME" "--scheme=" "$1"
+      ;;
+    *)
+      err "Unrecognized option ${1}"
+  esac
+  shift
+done
+
+resolve() {
+  local var opt val default resolved
+  var="$1"
+  opt="$2"
+  default="$3"
+  # dereference $var and take default if empty
+  val="${!var}"
+  val="${val:-${default}}"
+  # search PATH after limited tilde expansion
+  set +e
+  resolved=$(type -p "${val/#~\//$HOME/}" 2> /dev/null)
+  set -e
+  if [ -z "${resolved}" ]; then
+    err "Unable to resolve ${opt}${val} (no executable found)"
+  fi
+  declare -g "${var}=${resolved}"
+}
+
+resolve "PYTHON" "--python=" "python2.7"
+resolve "SCHEME" "--scheme=" "scheme"
+
+if no_errors; then
+  if [ "${Windows}" = "yes" ]; then
+    SCHEME="$(cygpath -au "${SCHEME}")"
+    PYTHON="$(cygpath -aw "${PYTHON}")"
+    set +e
+    ACTUAL="$(cmd /A /E:OFF /F:OFF /V:OFF /D /S /C "${PYTHON}" -c "import sys; print sys.version_info.major, sys.version_info.minor, sys.platform;" 2>&1)"
+    case "${ACTUAL}" in
+      2\ 7\ win*)
+      set -e
+      ;;
+      *)
+      err "Please install a Windows version of Python 2.7 to build libuv."
+      err "Tried ${PYTHON} to no avail."
+      err "Got: ${ACTUAL}"
+      ;;
+    esac
+  else
+    SCHEME="$(realpath -s "${SCHEME}")"
+  fi
+fi
+
+if [ ! -z "${PREFIX}" ]; then
+  # use absolute path, after limited tilde expansion, since "make install"
+  # runs in src/swish where a relative path would cause confusion
+  PREFIX="$(realpath -m "${PREFIX/#~\//$HOME/}")"
+fi
+
+notilde() {
+  local val
+  val="${!1}"
+  if [ "${val}" != "${val/\~/}" ]; then
+    err "Unable to resolve ~ in $1=${val}"
+  fi
+}
+
+notilde "PREFIX"
+notilde "PYTHON"
+notilde "SCHEME"
+
+if [ "${help}" = "yes" ]; then
+  configure="$(basename "$0")"
+  echo "Usage: ${configure} [options]"
+  echo ""
+  echo "${configure} creates a Makefile for the host machine type,"
+  echo "taking into account the following options."
+  echo ""
+  echo " --prefix=<pathname>  install directory base (${PREFIX})"
+  echo " --python=<pathname>  python 2.7 executable for libuv build (${PYTHON})"
+  echo " --scheme=<pathname>  Chez Scheme executable (${SCHEME})"
+  checkerrs
+  exit 0
+fi
+
+checkerrs
+
+set_machine_type() {
+  MACHINE_TYPE=$(echo '(machine-type)' | "${SCHEME}" -q 2>/dev/null)
+  return $?
+}
+
+try_custom() {
+  local bindir
+  if [ -z "${SCHEMEHEAPDIRS:-}" ]; then
+    # help the specified Scheme find its boot files
+    export SCHEMEHEAPDIRS
+    bindir="$(dirname "${SCHEME}")"
+    if [ "${Windows}" = "yes" ]; then
+      # The %x escape would work while using Scheme to build swish.library,
+      # e.g., SCHEMEHEAPDIRS="%x;%x\\..\\boot\\%m;", but this would not work
+      # when we use swish itself to compile mat.so and friends, since %x would
+      # be ./bin/swish.exe, so insert absolute Windows path to the directory
+      # containing scheme.exe in place of %x.
+      bindir="$(cygpath -w "${bindir}")"
+      SCHEMEHEAPDIRS="${bindir};${bindir}\\..\\boot\\%m;"
+    else
+      SCHEMEHEAPDIRS="$(realpath "${bindir}/../boot")/%m:"
+    fi
+    CUSTOMHEAPDIRS="${SCHEMEHEAPDIRS}"
+  fi
+  false
+}
+
+noscheme() {
+  err "Cannot run Scheme via \"${SCHEME}\""
+  err "Please retry with --scheme set appropriately."
+  if [ -z "${SCHEMEHEAPDIRS:-}" ]; then
+    err "* it may be necessary to set SCHEMEHEAPDIRS as well"
+  elif [ -z "${CUSTOMHEAPDIRS}" ]; then
+    err "* incompatible SCHEMEHEAPDIRS (${SCHEMEHEAPDIRS})"
+    err "  try unsetting to let configure take a guess"
+  fi
+  checkerrs
+}
+
+# find .lib file and .dll for Windows build; ensure .dll is in PATH
+if [ "${Windows}" = "yes" ]; then
+  SchemeLib="$(find "$(dirname "${SCHEME}")" -type f -name 'csv*.lib' | head -1)"
+  if [ -z "${SchemeLib}" ]; then
+    err "Cannot find csv*.lib for ${SCHEME}."
+    checkerrs
+  fi
+  SchemeDLL="$(find "$(dirname "${SCHEME}")" -type f -name 'csv*.dll' | head -1)"
+  if [ -z "${SchemeDLL}" ]; then
+    err "Cannot find csv*.dll for ${SCHEME}."
+    checkerrs
+  fi
+  set +e
+  DLLNAME="$(basename "${SchemeDLL}")"
+  DLLFOUND="$(type -p "${DLLNAME}")"
+  if [ "${DLLFOUND}" != "${SchemeDLL}" ]; then
+    CUSTOMPATH="$(dirname "${SchemeDLL}")"
+    export PATH
+    PATH="${CUSTOMPATH}:${PATH}"
+    if [ -z "${DLLFOUND}" ]; then
+      echo "* ${DLLNAME} is not in PATH; building with custom PATH"
+    else
+      echo "* found another ${DLLNAME} in PATH; building with custom PATH"
+    fi
+    echo ""
+    echo "  To run swish applications, either set"
+    echo "    PATH=\"${CUSTOMPATH}:\${PATH}\""
+    echo "  or"
+    echo "    copy ${DLLNAME} to the directory containing"
+    echo "    the swish executable"
+    echo ""
+  fi
+  set -e
+fi
+
+# try to determine machine type, setting custom SCHEMEHEAPDIRS if necessary
+set +e
+set_machine_type || try_custom || set_machine_type || noscheme
+set -e
+
+BASE_MACHINE_TYPE="${MACHINE_TYPE#t}"
+
+if [ ! -f "src/swish/Mf-${BASE_MACHINE_TYPE}" ]; then
+  err "Machine type ${MACHINE_TYPE} is not supported."
+  checkerrs
+fi
+
+path_first() {
+  local tmp rest
+  tmp="$1"
+  rest="${1#/*/*}"
+  if [ "${tmp}" = "${rest}" ]; then
+    echo "${tmp}"
+  else
+    echo "${tmp:0:${#tmp}-${#rest}}"
+  fi
+}
+
+find_boot_file() {
+  local bootfile binprefix bootprefix
+  PETITE_BOOT="$(echo |
+                "${SCHEME}" -q --verbose -b petite.boot 2>&1 |
+                tr -d '\r' |
+                grep '^trying .*opened' |
+                sed 's/^trying \(.*\)\.\.\.opened$/\1/')"
+  # now check to see if the boot file we found makes sense
+  if [ "${Windows}" = "yes" ]; then
+    bootfile="$(cygpath -u "${PETITE_BOOT}")"
+  else
+    bootfile="${PETITE_BOOT}"
+  fi
+  binprefix="$(path_first "${SCHEME}")"
+  bootprefix="$(path_first "${bootfile}")"
+  if [ "${binprefix}" != "${bootprefix}" ]; then
+    echo "* Scheme is under ${binprefix:-???}, but petite.boot is under ${bootprefix:-???}."
+    echo "  Perhaps you have installed Scheme but are now trying to build swish"
+    echo "  using a Scheme that was compiled from source."
+    echo ""
+    if [ -z "${SCHEMEHEAPDIRS:-}" ]; then
+      # The installed boot file may be sufficiently "compatible" with the Scheme
+      # that was compiled from source that we were able to determine machine-type,
+      # but that doesn't mean there isn't some more subtle difference, which may
+      # be why we built Scheme from source, so ...
+      echo "  Trying to set SCHEMEHEAPDIRS to ensure that we pick up changes in"
+      echo "  the include files, kernel.o, and boot files for the specified Scheme."
+      echo "  If you do not want this, set SCHEMEHEAPDIRS explicitly and retry."
+      echo ""
+      false
+    else
+      noscheme
+    fi
+  else
+    true
+  fi
+}
+
+# try to find boot file, setting custom SCHEMEHEAPDIRS if necessary
+find_boot_file || try_custom || find_boot_file
+
+# In cygwin, this is already a Windows path as needed by Mf-a6nt and Mf-i3nt.
+SchemeInclude="$(dirname "${PETITE_BOOT}")"
+
+check_missing() {
+  if [ ! -f "$2/$1" ]; then
+    err "Missing $1 at ${SchemeInclude}"
+    checkerrs
+  fi
+}
+
+# make sure we found scheme.h
+if [ "${Windows}" = "yes" ]; then
+  check_missing "scheme.h" "$(cygpath -au "${SchemeInclude}")"
+else
+  check_missing "scheme.h" "${SchemeInclude}"
+  check_missing "kernel.o" "${SchemeInclude}"
+fi
+
+SWISH_VERSION=$(cd src; "${SCHEME}" --script get-software-info software-version)
+
+add() {
+  echo -E "$@" >> src/swish/Makefile
+}
+rm -f src/swish/Makefile
+add "# DO NOT EDIT this file"
+add "# Instead, edit Makefile.in and re-run configure"
+add ""
+add "BASE_MACHINE_TYPE:=${BASE_MACHINE_TYPE}"
+add "EXESUFFIX:=${EXESUFFIX}"
+add "INSTALLROOT:=${PREFIX}"
+add "LIBDIRS:=${LIBDIRS}"
+add "MACHINE_TYPE:=${MACHINE_TYPE}"
+add "PYTHON:=${PYTHON}"
+add "SCHEME:=${SCHEME}"
+add "SWISH_VERSION:=${SWISH_VERSION}"
+add "SchemeInclude:=${SchemeInclude}"
+add "NORMALIZE_PATH:=${NORMALIZE_PATH}"
+if [ "${Windows}" = "yes" ]; then
+  add "SchemeLib:=$(cygpath -w "${SchemeLib:-}")"
+  if [ ! -z "${CUSTOMPATH}" ]; then
+    add "export PATH = ${PATH}"
+  fi
+fi
+if [ ! -z "${SCHEMEHEAPDIRS:-}" ]; then
+   add "export SCHEMEHEAPDIRS = ${SCHEMEHEAPDIRS}"
+fi
+if [ ! -z "${CUSTOMPATH}${CUSTOMHEAPDIRS}" ]; then
+  echo "* $(basename "$0") set the following environment variables in src/swish/Makefile:"
+  add ""
+  add ".PHONY: reminders"
+  add "REMINDERS:=reminders"
+  add "reminders:"
+  add -e "\\t@echo \"----------------------------------------------------\""
+  add -e "\\t@echo \"You may need to set the following environment variables:\""
+  if [ ! -z "${CUSTOMPATH}" ]; then
+    echo "  PATH=\"${CUSTOMPATH}:\${PATH}\""
+    add -e "\\t@echo ' export PATH=\"${CUSTOMPATH//\\/\\\\}:\$\${PATH}\"'"
+  fi
+  if [ ! -z "${CUSTOMHEAPDIRS}" ]; then
+    echo "  SCHEMEHEAPDIRS=\"${SCHEMEHEAPDIRS}\""
+    add -e "\\t@echo \" export SCHEMEHEAPDIRS=\\\"${CUSTOMHEAPDIRS//\\/\\\\}\\\"\""
+  fi
+  add -e "\\t@echo \"----------------------------------------------------\""
+fi
+add ""
+add "include Mf-${BASE_MACHINE_TYPE}"
+add ""
+cat src/swish/Makefile.in >> src/swish/Makefile

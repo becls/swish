@@ -12,8 +12,13 @@ I/O.
 
 # Notes
 
-- `cd src; ./go` builds and runs the engine.
-- Disable the expression editor with --eedisable because Chez Scheme's
+1. install the prerequisites (see Build System Requirements)
+2. `./configure` (see `./configure --help` for options)
+3. `make`
+4. `make test`
+
+- After `./configure`; you can also `cd src; ./go` to build and run the engine.
+- We disable the expression editor with --eedisable because Chez Scheme's
   expression editor does not use asynchronous console I/O. We would
   have to modify the places where s/expeditor.ss calls `$ee-read-char`
   in blocking mode to use libuv's asynchronous read function instead
@@ -26,6 +31,7 @@ I/O.
 - Chez Scheme 9.5.1 from June 14, 2018 or later
 - GCC, the GNU Compiler Collection
 - GNU C++ compilter for libuv
+- GNU make
 - Python 2.7 for libuv
 - uuid-dev package
 
@@ -35,24 +41,31 @@ I/O.
 - XCode must be installed and the command line tools must be set (Xcode->Preferences->Locations->command line tools)
 - pdflatex (can be installed through homebrew using `brew cask install mactex`)
 - dot (can be installed through homebrew using `brew install graphviz --with-app`)
+- GNU make
 
 ## Windows
 
 - Chez Scheme 9.5.1 from June 14, 2018 or later
-- Cygwin with bash, git, graphviz, grep, perl, texlive, etc.
+- Cygwin with bash, git, graphviz, grep, perl, texlive, GNU make, etc.
 - Microsoft Visual Studio 2017 or 2015 with Visual C++
-- Python 2.7 for Windows in C:\Python27
+- Python 2.7 for Windows in C:\Python27 (see below for other options)
 - Put scheme in PATH.
+
+### Building on Windows with Miniconda Python
+
+- Install [Python 2.7](https://conda.io/miniconda.html)
+- Provide the path to the python2.7 executable as an argument to the configure script:
+  ```
+  ./configure --python=~/Miniconda2/python.exe
+  ```
 
 ### Building on Windows with Anaconda Python
 
-- One time, make an [environment containing Python 2.7](https://conda.io/docs/user-guide/tasks/manage-python.html#installing-a-different-version-of-python)
+- Make an [environment containing Python 2.7](https://conda.io/docs/user-guide/tasks/manage-python.html#installing-a-different-version-of-python)
 
   `conda create -n py27 python=2.7 anaconda`
 
-- When libuv needs to be rebuilt:
-
+- Provide the path to the python2.7 executable as an argument to the configure script:
   ```
-  source activate py27
-  PYTHON="$(cygpath -w "$(type -p python)")" ./go
+  ./configure --python=~/Anaconda3/envs/py27/python.exe
   ```
