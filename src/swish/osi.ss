@@ -67,6 +67,8 @@
    osi_get_stdin
    osi_get_tcp_listener_port
    osi_get_tcp_listener_port*
+   osi_get_temp_directory
+   osi_get_temp_directory*
    osi_get_time
    osi_interrupt_database
    osi_is_tick_over
@@ -176,6 +178,7 @@
   (define-osi osi_get_file_size (port uptr) (callback ptr))
   (define-osi osi_get_real_path (path string) (callback ptr))
   (fdefine osi_get_stdin uptr)
+  (define-osi osi_get_temp_directory)
   (define-osi osi_chmod (path string) (mode int) (callback ptr))
   (define-osi osi_make_directory (path string) (mode int) (callback ptr))
   (define-osi osi_list_directory (path string) (callback ptr))

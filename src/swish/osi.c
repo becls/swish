@@ -1116,6 +1116,15 @@ uptr osi_get_stdin(void) {
   return (uptr)&stdin_port;
 }
 
+ptr osi_get_temp_directory(void) {
+  static char buffer[32768];
+  size_t len = sizeof(buffer);
+  int rc = uv_os_tmpdir(buffer, &len);
+  if (rc < 0)
+    return make_error_pair("uv_os_tmpdir", rc);
+  return utf8_to_string2(buffer, len);
+}
+
 const char* osi_get_error_text(int err) {
   static char buf[32];
   switch (err) {
