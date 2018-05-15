@@ -29,8 +29,6 @@
  (swish testing)
  )
 
-(define json-inline string->symbol)
-
 (define (dump x)
   (cond
    [(hashtable? x)
@@ -123,13 +121,6 @@
      (match-let* ([#(,x ,_) obj])
        (round-trip x)))
    test-objs))
-
-(mat google ()
-  (define (handle-symbol op x wr) (and (symbol? x) (display x op) #t))
-  (match-let*
-   (["foo" (json:object->string (json-inline "foo") handle-symbol)]
-    ["new Date(123)" (json:object->string (json-inline "new Date(123)") handle-symbol)])
-   'ok))
 
 (mat whitespace ()
   (match-let*
