@@ -75,7 +75,7 @@
        (<args> copy* (parse more acc) [libdirs (append (parse-library lib) libdirs)])]
       [("-b" ,boot-file . ,more)
        (<args> copy* (parse more acc)
-         [boot-files (cons boot-files boot-file)]
+         [boot-files (cons boot-file boot-files)]
          [shebang? #f])]
       [("-o" ,output-fn . ,more)
        (if (<args> output-fn acc)
