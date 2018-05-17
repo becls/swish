@@ -113,11 +113,29 @@ static char* get_boot_fn() {
   return bootfn;
 }
 
+static int allow_verbose_flag(const char* bootfn) {
+  size_t len = strlen(bootfn);
+#if _WIN32
+  const char* suffix =  "\\swish.boot";
+  #define COMPARE _strnicmp
+#else
+  const char* suffix =  "/swish.boot";
+  #define COMPARE strncmp
+#endif
+  size_t suffixlen = strlen(suffix);
+  return len >= suffixlen && !COMPARE(bootfn + len - suffixlen, suffix, suffixlen);
+}
+
 // custom_init may be NULL or a pointer to a function that performs application-specific
 // initialization during Sbuild_heap.
 int swish_run(int argc, const char *argv[], void (*custom_init)(void)) {
   char *bootfn = get_boot_fn();
   Sscheme_init(NULL);
+  // Don't interfere with swish scripts or stand-alone swish applications that
+  // want to support a --verbose option.
+  if (argc >= 2 && (strcmp(argv[1], "--verbose") == 0) && allow_verbose_flag(bootfn)) {
+    Sset_verbose(1);
+  }
   Sregister_boot_file(bootfn);
   osi_set_argv(argc, argv);
   g_aux_init = custom_init;

@@ -112,6 +112,9 @@
          (<args> copy acc [cmd "--help"])]
         [("--version" . ,_)
          (<args> copy acc [cmd "--version"])]
+        [("--verbose" . ,rest)
+         ;; --verbose must be handled by run.c
+         (lp rest acc)]
         [("-q" . ,rest)
          (lp rest (<args> copy acc [cmd 'repl] [quiet? #t]))]
         [("--" . ,filenames)
@@ -127,6 +130,7 @@
            (path-last (osi_get_executable_path)))
          (printf "Options and arguments:\n")
          (printf " --help      print this help message\n")
+         (printf " --verbose   trace boot file search\n")
          (printf " --version   print version information\n")
          (printf " -q          suppress startup message and prompt string\n")
          (printf " --          remaining arguments are files to load\n")
