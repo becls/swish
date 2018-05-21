@@ -9,13 +9,6 @@
     (exit 1)]
    [else (string->symbol (car (command-line-arguments)))]))
 
-(define (trim version)
-  (let ([ignore-suffix '(#\. #\0)])
-    (let scan ([i (- (string-length version) 1)])
-      (if (and (> i 0) (memv (string-ref version i) ignore-suffix))
-          (scan (- i 1))
-          (substring version 0 (+ i 1))))))
-
 (define (get field)
   (with-exception-handler
    (lambda (c) (when (error? c) (raise c)))
@@ -29,7 +22,4 @@
 
 (when (equal? "swish" (path-last (cd))) (cd ".."))
 
-(printf "~a\n"
- (if (eq? field-name 'short-version)
-     (trim (get 'software-version))
-     (get field-name)))
+(printf "~a\n" (get field-name))

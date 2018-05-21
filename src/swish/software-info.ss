@@ -26,7 +26,7 @@
 
   (define software-product-name "Swish")
 
-  (define software-version "2.0.0.0")
+  (define software-version "0.0.0")
 
   (define (swish-version)
     (format "~a Version ~a" software-product-name software-version))
