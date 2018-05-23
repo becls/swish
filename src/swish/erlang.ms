@@ -29,7 +29,6 @@
  (swish io)
  (swish mat)
  (swish osi)
- (swish pregexp)
  (swish string-utils)
  (swish testing)
  )
@@ -115,53 +114,26 @@
 (define (pid? x)
   (and (exact? x) (integer? x) (positive? x)))
 
-(define (repl-test code . patterns)
+(define (repl-test expected-exit code . patterns)
   (define scheme (or (getenv "SCHEME") "scheme"))
   (define scheme-args
     (list
      "--eedisable"
      "--program" "repl.ss"))
-  (let-values
-      ([(to-stdin from-stdout from-stderr os-pid)
-        (match (vector->list (osi_get_argv))
-          [()
-           (spawn-os-process scheme scheme-args self)]
-          [(,command . ,args)
-           (spawn-os-process command args self)])])
-    (let ([to-stdin (binary->utf8 to-stdin)]
-          [from-stdout (binary->utf8 from-stdout)]
-          [from-stderr (binary->utf8 from-stderr)])
-      (define (pump ip pid)
-        (let ([x (get-line ip)])
-          (when (string? x)
-            (send pid x)
-            (pump ip pid))))
-      (let ([pid self])
-        (spawn&link (lambda () (pump from-stdout pid)))
-        (spawn&link (lambda () (pump from-stderr pid))))
-      (on-exit (begin (close-output-port to-stdin)
-                      (close-input-port from-stdout)
-                      (close-input-port from-stderr))
-        (write code to-stdin)
-        (newline to-stdin)
-        (flush-output-port to-stdin)
-        (let check ([patterns patterns] [lines '()])
-          (match patterns
-            [()
-             (receive (after 1000
-                        (osi_kill* os-pid 15)
-                        (raise 'timeout))
-               [#(<process-terminated> ,@os-pid ,_ ,_) 'ok])]
-            [(,pattern . ,patterns)
-             (let search ([re (pregexp pattern)] [lines lines])
-               (receive
-                (after 10000
-                  (osi_kill* os-pid 15)
-                  (raise `#(pattern-not-found ,pattern ,(reverse lines))))
-                [,line (guard (string? line))
-                  (if (pregexp-match re line)
-                      (check patterns lines)
-                      (search re (cons line lines)))]))]))))))
+  (define (write-stdin op)
+    (fprintf op "~s\n" code)
+    (flush-output-port op))
+  (define (launch)
+    (match (vector->list (osi_get_argv))
+      [()
+       (run-os-process scheme scheme-args write-stdin 10000 '())]
+      [(,command . ,args)
+       (run-os-process command args write-stdin 10000 '())]))
+  (match (launch)
+    [`(<os-result> ,stdout ,stderr ,exit-status)
+     (unless (eqv? expected-exit exit-status)
+       (raise `#(repl-test-unexpected-exit ,expected-exit ,exit-status)))
+     (match-regexps patterns (append stdout stderr))]))
 
 (isolate-mat kick-tires ()
   ;; each of these should take around 2 seconds
@@ -386,17 +358,17 @@
     [,other (raise `#(bad-message ,other))])))
 
 (isolate-mat panic-run-queue-empty ()
-  (repl-test
+  (repl-test 80
    '(osi_list_directory "." (lambda (x) (receive (after 1000 'ok))))
    "Event: run-queue-empty"))
 
 (isolate-mat panic-event-loop-process-terminated ()
-  (repl-test
+  (repl-test 80
    '(begin
       (osi_list_directory "." (lambda (x) (raise 'kaboom)))
       (receive (after 10 (osi_exit 10))))
    "Event: #\\(event-loop-process-terminated kaboom\\)")
-  (repl-test
+  (repl-test 80
    '(osi_list_directory "." (lambda (x) (kill self 'kill)))
    "Event: #\\(event-loop-process-terminated killed\\)"))
 
@@ -409,13 +381,13 @@
          (collect)
          (set! go? #f)))))
   (collect)
-  (repl-test
+  (repl-test 80
    '(begin
       (add-finalizer (lambda () (raise 'kaboom)))
       (collect)
       (receive (after 10 (osi_exit 10))))
    "Event: #\\(finalizer-process-terminated kaboom\\)")
-  (repl-test
+  (repl-test 80
    '(begin
       (add-finalizer (lambda () (kill self 'kill)))
       (collect)
@@ -999,7 +971,7 @@
      'ok)))
 
 (isolate-mat application-start-failure ()
-  (repl-test
+  (repl-test 1
    '(application:start (lambda () '#(error kaboom!)))
    "Event: #\\(application-start-failed kaboom!\\)"))
 
@@ -1022,7 +994,7 @@
 ;; on slower systems it may be helpful to limit the available virtual memory
 ;; e.g., via ulimit, so that this test does not time out while paging
 (isolate-mat out-of-memory ()
-  (repl-test
+  (repl-test 1
    '(make-vector (most-positive-fixnum))
    "out of memory"))
 
@@ -1038,7 +1010,7 @@
     [#(EXIT 123) (run-spawned (catch (raise 123)))]
     [#(EXIT 123) (run-spawned (catch (exit 123)))])
    'ok)
-  (repl-test
+  (repl-test 1
    '(begin
       (printf "attempting to app:start\n")
       (app-sup-spec

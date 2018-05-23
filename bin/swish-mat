@@ -9,4 +9,8 @@
   (load (path-combine bindir "../src/run-mats.ss")))
 (hook-console-input)
 (waiter-prompt-string "")
-(new-cafe)
+(call-with-values
+  new-cafe
+  (case-lambda
+   [() (exit)]
+   [(x . _) (exit x)]))

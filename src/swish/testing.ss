@@ -22,12 +22,15 @@
 
 (library (swish testing)
   (export
+   <os-result>
    capture-events
    gc
    handle-gone?
    isolate-mat
    match-prefix
+   match-regexps
    process-alive?
+   run-os-process
    sleep-ms
    start-event-mgr
    start-silent-event-mgr
@@ -45,6 +48,7 @@
    (swish log-db)
    (swish mat)
    (swish osi)
+   (swish pregexp)
    (swish string-utils)
    (swish supervisor)
    (swish watcher)
@@ -134,4 +138,64 @@
         (receive (after 300000 (kill pid 'shutdown) (raise 'timeout))
           [#(DOWN ,_ ,@pid normal) 'ok]
           [#(DOWN ,_ ,@pid ,reason) (raise reason)]))))
+
+  (define-tuple <os-result> stdout stderr exit-status)
+
+  (define (run-os-process command args write-stdin timeout redirected)
+    (let-values
+        ([(to-stdin from-stdout from-stderr os-pid)
+          (spawn-os-process command args self)])
+      (let ([to-stdin (binary->utf8 to-stdin)]
+            [from-stdout (binary->utf8 from-stdout)]
+            [from-stderr (binary->utf8 from-stderr)])
+        (define (spawn-handler pid tag ip)
+          (define lines '())
+          (define (spawn-drain handle-input)
+            (spawn&link
+             (lambda ()
+               (handle-input)
+               (send pid `#(,tag ,os-pid ,(reverse lines))))))
+          (define (collect-lines)
+            (let ([line (get-line ip)])
+              (unless (eof-object? line)
+                (set! lines (cons line lines))
+                (collect-lines))))
+          (define (print)
+            (let ([c (read-char ip)])
+              (unless (eof-object? c)
+                (write-char c)
+                (flush-output-port)
+                (print))))
+          (spawn-drain (if (memq tag redirected) print collect-lines)))
+        (spawn-handler self 'stdout from-stdout)
+        (spawn-handler self 'stderr from-stderr)
+        (on-exit (begin (close-output-port to-stdin)
+                        (close-input-port from-stdout)
+                        (close-input-port from-stderr))
+          (write-stdin to-stdin)
+          (receive
+           (after timeout
+             (osi_kill* os-pid 15)
+             (raise
+              `#(os-process-timeout
+                 #(stdout ,(receive (after 10 '()) [#(stdout ,@os-pid ,lines) lines]))
+                 #(stderr ,(receive (after 10 '()) [#(stderr ,@os-pid ,lines) lines])))))
+           [#(<process-terminated> ,@os-pid ,exit-status ,_)
+            (<os-result> make
+              [stdout (receive [#(stdout ,@os-pid ,lines) lines])]
+              [stderr (receive [#(stderr ,@os-pid ,lines) lines])]
+              [exit-status exit-status])])))))
+
+  (define (match-regexps patterns ls)
+    (let check ([patterns patterns] [lines ls])
+      (match patterns
+        [() lines]
+        [(,pattern . ,patterns)
+         (let search ([re (pregexp pattern)] [lines lines])
+           (match lines
+             [() (raise `#(pattern-not-found ,pattern ,ls))]
+             [(,line . ,lines)
+              (if (pregexp-match re line)
+                  (check patterns lines)
+                  (search re lines))]))])))
   )
