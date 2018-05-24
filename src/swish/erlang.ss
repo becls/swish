@@ -1128,7 +1128,7 @@
                      index
                      (find-index fn (scdr fields) (+ index 1)))))
              (syntax-case x ()
-               [(name make . bindings)
+               [(_name make . bindings)
                 (and (eq? (datum make) 'make)
                      (valid-bindings? #'bindings))
                 #`(vector 'name #,@(make-tuple #'(field ...) #'bindings))]

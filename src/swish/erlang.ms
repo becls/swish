@@ -779,6 +779,34 @@
    (let ([x '(5 #f foo "abc" #\x #(1 2 3))])
      (equal? x (match x [,(exp <= (5 #f foo . ,_)) exp])))))
 
+(mat t14 ()
+  ;; Using identifier-syntax or a library rename, the tuple
+  ;; constructor should always create the original type.
+  (let ()
+    (define-tuple <point> x y)
+    (define-syntax <should-be-a-point> (identifier-syntax <point>))
+    (assert
+     (equal? (<point> make [x 1] [y 2])
+       (<should-be-a-point> make [x 1] [y 2]))))
+
+  (repl-test 0
+    '(begin
+       (library (A)
+         (export <point>)
+         (import (scheme) (swish erlang))
+         (define-tuple <point> x y))
+
+       (library (B)
+         (export <should-be-a-point>)
+         (import (rename (A) (<point> <should-be-a-point>))))
+
+       (let ()
+         (import (scheme) (A) (B))
+         (assert
+          (equal? (<point> make [x 1] [y 2])
+            (<should-be-a-point> make [x 1] [y 2])))
+         (exit 0)))))
+
 (mat record ()
                                         ; accessors
   (assert
