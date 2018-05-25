@@ -673,6 +673,18 @@
         (close-tcp-listener l)
         (close-dead-listeners))))
 
+  (define (accept-tcp name port)
+    (define fp 0)
+    (define w! (make-w! port))
+    (define (counting-w! bv start n)
+      (let ([count (w! bv start n)])
+        (set! fp (+ fp count))
+        count))
+    (define (gp) fp)
+    (values (make-iport name port #f)
+      (make-custom-binary-output-port name counting-w! gp #f
+        (make-close port))))
+
   (define (listen-tcp address port-number process)
     ;; Keep a weak reference to the listener in cell so that the
     ;; callback can use it.
@@ -694,10 +706,9 @@
                             `#(accept-tcp-failed ,listener ,(car r) ,(cdr r)))
                           (let* ([name (osi_get_ip_address r)]
                                  [port (@make-osi-port name r)])
-                            (send process
-                              `#(accept-tcp ,listener
-                                  ,(make-iport name port #f)
-                                  ,(make-oport name port)))))
+                            (let-values ([(ip op) (accept-tcp name port)])
+                              (send process
+                                `#(accept-tcp ,listener ,ip ,op)))))
                       (unless (pair? r)
                         (osi_close_port* r 0))))))
        [(,who . ,errno)

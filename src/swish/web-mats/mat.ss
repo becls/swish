@@ -22,4 +22,9 @@
    (http:respond-file op 200 '(("Cache-Control" . "no-cache")
                                ("Content-Type" . "text/plain"))
      (path-combine (web-dir) "static" "ok.txt"))]
+  ["internal-error"
+   (cond
+    [(find-param "partial") =>
+     (lambda (x) (put-bytevector op (string->utf8 x)))])
+   (raise 'internal-error)]
   )

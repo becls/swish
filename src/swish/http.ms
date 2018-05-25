@@ -94,6 +94,13 @@
     (let-values ([(op get) (open-bytevector-output-port)])
       (http:handle-input (open-bytevector-input-port (string->utf8 input)) op)
       (utf8->string (get))))
+  (define (test-error&output input)
+    (let-values ([(op get) (open-bytevector-output-port)])
+      (cons
+       (catch (http:handle-input
+               (open-bytevector-input-port (string->utf8 input))
+               op))
+       (utf8->string (get)))))
   (when (file-directory? (tmp-dir))
     (for-each (lambda (x)
                 (when (ends-with? x ".tmp")
@@ -129,6 +136,12 @@
                    "Content-Length: none\r\n"
                    "\r\n")))]
 
+    ;; internal server errors
+    [(#(EXIT internal-error) .
+      "HTTP/1.1 500 \r\nContent-Length: 216\r\nCache-Control: no-cache\r\n\r\n<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>Internal server error</title></head><body><h1>The server encountered an unexpected condition which prevented it from fullfilling the request.</h1></body></html>")
+     (test-error&output "GET /mat?cmd=internal-error HTTP/1.1\r\n\r\n")]
+    [(#(EXIT internal-error) . "partial-output")
+     (test-error&output "GET /mat?cmd=internal-error&partial=partial-output HTTP/1.1\r\n\r\n")]
     ;; static content
     [#(EXIT #(invalid-http-method PUT "/static/ok.txt"))
      (catch (test "PUT /static/ok.txt HTTP/1.1\r\n\r\n"))]

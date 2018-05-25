@@ -601,6 +601,16 @@
          (body
           (h1 "This is not the web page you are looking for."))))))
 
+  (define (internal-server-error op)
+    (http:respond op 500 '()
+      (html->bytevector
+       `(html5
+         (head
+          (meta (@ (charset "UTF-8")))
+          (title "Internal server error"))
+         (body
+          (h1 "The server encountered an unexpected condition which prevented it from fullfilling the request."))))))
+
   (define (http:file-handler ip op request header params)
     (<request> open request (method path))
     (system-detail <http-request>
@@ -610,17 +620,25 @@
       [path path]
       [header header]
       [params params])
-    (cond
-     [(not (validate-path path))
-      (not-found op)
-      (raise `#(invalid-http-path ,path))]
-     [(http-cache:get-handler method path) =>
-      (lambda (handler)
-        (handler ip op request header params)
-        (flush-output-port op))]
-     [else
-      (not-found op)
-      (raise `#(http-file-not-found ,path))]))
+    (let ([start-pos (port-position op)])
+      (match
+       (catch
+        (cond
+         [(not (validate-path path))
+          (not-found op)
+          (raise `#(invalid-http-path ,path))]
+         [(http-cache:get-handler method path) =>
+          (lambda (handler)
+            (handler ip op request header params)
+            (flush-output-port op))]
+         [else
+          (not-found op)
+          (raise `#(http-file-not-found ,path))]))
+       [#(EXIT ,reason)
+        (when (= start-pos (port-position op))
+          (internal-server-error op))
+        (raise reason)]
+       [,_ (void)])))
 
   (define (http:percent-encode s)
     (define (encode bv i op)
