@@ -17,12 +17,15 @@
           (substring version 0 (+ i 1))))))
 
 (define (get field)
-  (interpret
-   `(begin
-      (import (swish software-info))
-      (if (top-level-bound? ',field)
-          ,field
-          (errorf #f "field ~s not found in software-info" ',field)))))
+  (with-exception-handler
+   (lambda (c) (when (error? c) (raise c)))
+   (lambda ()
+     (interpret
+      `(begin
+         (import (swish software-info))
+         (if (top-level-bound? ',field)
+             ,field
+             (errorf #f "field ~s not found in software-info" ',field)))))))
 
 (when (equal? "swish" (path-last (cd))) (cd ".."))
 

@@ -1,11 +1,21 @@
 .PHONY: all clean platform-clean ready reminders
 
-ready: io-constants.ss clibs
+ready: io-constants.ss clibs git.revision
 
 CORE := ../../bin/swish${EXESUFFIX} ../../bin/swish.boot ../../bin/swish.library
 AUXLIB := ../../lib/swish/mat.so ../../lib/swish/profile.so ../../lib/swish/testing.so
 
 all: ready ${CORE} ${AUXLIB} ${REMINDERS}
+
+# force evaluation
+.PHONY: git.revision
+git.revision:
+	@git describe --always --exclude='*' --abbrev=40 --dirty > git.revision.tmp
+	@if cmp --quiet git.revision git.revision.tmp; then \
+	  rm git.revision.tmp; \
+	else \
+	  mv git.revision.tmp git.revision; touch software-info.ss; echo "git-revision changed"; \
+	fi
 
 io-constants.ss: io-constants${EXESUFFIX}
 	./$< > $@
@@ -42,6 +52,7 @@ io-constants.ss: io-constants${EXESUFFIX}
 	| ../../bin/swish${EXESUFFIX} -q
 
 clean: platform-clean
+	rm -f git.revision
 	rm -f io-constants.ss
 	rm -f ../*.ss.html ../mat-report.html ../server-profile.html
 	rm -f *.mo *.ms.html *.ss.html
