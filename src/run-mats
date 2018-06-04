@@ -21,7 +21,7 @@ if [ ${1+x} ]; then
   elif [ "$1" = "../bin" ]; then
     make -C swish clean all
   fi
-  PATH=${1}:${PATH}
+  PATH="${1}:${PATH}"
   launch="../bin/swish-mat"
 else
   make -C swish clean ready

@@ -1,6 +1,6 @@
 #!/bin/sh -e
 
-if [ $# != 1 -a $# != 2 ]; then
+if [ $# != 1 ] && [ $# != 2 ]; then
   echo "Usage: $0 suite"
   echo "   or: $0 suite test"
   echo ""
@@ -13,7 +13,7 @@ fi
 
 launch="./go -q -- $1.ms"
 
-find . -name *.mo -delete
+find . -name "*.mo" -delete
 rm -f ../data/server.profile
 rm -f ../data/TestLog.db3
 make -s -C swish

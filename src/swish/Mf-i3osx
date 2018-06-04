@@ -33,8 +33,13 @@ platform-clean:
 	rm -f osi.o sqlite.o io-constants io-constants.ss
 	rm -f swish main.o run.o swish.boot
 	rm -f ${SwishLibs}
-	rm -f ../../bin/swish{,.boot,.library,.wpo}
-	rm -f ../../lib/swish/*.{so,sop,wpo}
+	rm -f ../../bin/swish
+	rm -f ../../bin/swish.boot
+	rm -f ../../bin/swish.library
+	rm -f ../../bin/swish.wpo
+	rm -f ../../lib/swish/*.so
+	rm -f ../../lib/swish/*.sop
+	rm -f ../../lib/swish/*.wpo
 
 pristine: clean
 	rm -rf sqlite3.o ../../libuv/build/Release

@@ -1,10 +1,6 @@
 #!/bin/sh -e
 if [ -z ${SCHEME+x} ]; then SCHEME=scheme; fi
-if [ ${LAUNCH+X} ]; then
-  launch="${LAUNCH}"
-else
-  launch="./go -q -- run-mats.ss"
-fi
+launch="${LAUNCH:-./go -q -- run-mats.ss}"
 
 if [ $# != 1 ]; then
   echo "Usage: $0 suite"

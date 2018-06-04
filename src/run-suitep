@@ -1,2 +1,2 @@
 #!/bin/sh -e
-PROFILE_MATS="yes" ./run-suite $@
+PROFILE_MATS="yes" ./run-suite "$@"
