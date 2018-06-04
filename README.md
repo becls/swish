@@ -37,6 +37,7 @@ I/O.
 
 - Chez Scheme 9.5.1 from May 14, 2018 or later
 - Cygwin with bash, git, graphviz, grep, perl, texlive, etc.
+- Microsoft Visual Studio 2017 or 2015 with Visual C++
 - Python 2.7 for Windows in C:\Python27
 - Put scheme in PATH.
 
