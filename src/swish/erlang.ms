@@ -212,7 +212,10 @@
 (isolate-mat bad-args ()
   (match-let*
    ([#(EXIT #(bad-arg add-finalizer 12)) (catch (add-finalizer 12))]
+    [#(EXIT #(bad-arg custom-port-buffer-size -1))
+     (catch (custom-port-buffer-size -1))]
     [#(EXIT #(bad-arg demonitor 12)) (catch (demonitor 12))]
+    [#(EXIT #(bad-arg exit-handler 12)) (catch (exit-handler 12))]
     [#(EXIT #(bad-arg uuid->string #f)) (catch (uuid->string #f))]
     [#(EXIT #(bad-arg uuid->string #vu8(1 2 3)))
      (catch (uuid->string #vu8(1 2 3)))]
@@ -238,6 +241,7 @@
     [#(EXIT #(bad-arg process-id 12)) (catch (process-id 12))]
     [#(EXIT #(bad-arg register 12)) (catch (register (gensym) 12))]
     [#(EXIT #(bad-arg register 12)) (catch (register 12 'bad))]
+    [#(EXIT #(bad-arg reset-handler 12)) (catch (reset-handler 12))]
     [#(EXIT #(bad-arg send 12)) (catch (send 12 'msg))]
     [#(EXIT #(bad-arg spawn 12)) (catch (spawn 12))]
     [#(EXIT #(bad-arg spawn&link 12)) (catch (spawn&link 12))]
@@ -258,6 +262,8 @@
      (catch (string->uuid "498e2279-1301-421e-9a2ex4001acf565e67"))]
     [#(EXIT #(bad-arg unlink 12)) (catch (unlink 12))]
     [#(EXIT #(bad-arg unregister 12)) (catch (unregister 12))]
+    [#(EXIT #(bad-arg waiter-prompt-and-read 12))
+     (catch (waiter-prompt-and-read 12))]
     [#(EXIT #(bad-arg whereis 12)) (catch (whereis 12))]
     [#(EXIT #(bad-arg who arg)) (catch (bad-arg 'who 'arg))])
    (print-char-name #t)
