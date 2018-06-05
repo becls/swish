@@ -75,7 +75,7 @@ else
 	install ../../bin/swish.library ${INSTLIBDIR}
 	install ${SwishLibs} ${INSTLIBDIR}
 	install --directory ${INSTALLROOT}/bin
-	ln -sf ${INSTLIBDIR}/swish ${INSTALLROOT}/bin/swish
+	ln -sf ${INSTLIBDIR}/swish${EXESUFFIX} ${INSTALLROOT}/bin/swish
 	ln -sf ${INSTLIBDIR}/swish-build ${INSTALLROOT}/bin/swish-build
 	install --directory ${INSTLIBDIR}/lib
 	cd ../../lib ; find . -type f -name '*.wpo' -exec install -D -T {} ${INSTLIBDIR}/wpo/{} \;
