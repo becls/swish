@@ -14,9 +14,11 @@ src/swish/Makefile:
 	@exit 1
 
 test: swish
+	$(MAKE) -C src/swish mat-prereq
 	cd src; ./run-mats "${PWD}/bin"
 
 coverage:
+	$(MAKE) -C src/swish mat-prereq
 	cd src; PROFILE_MATS=yes ./run-mats
 
 install: all

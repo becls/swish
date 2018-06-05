@@ -2,7 +2,7 @@
 
 ready: io-constants.ss clibs git.revision
 
-CORE := ../../bin/swish${EXESUFFIX} ../../bin/swish.boot ../../bin/swish.library
+CORE := ../../bin/swish${EXESUFFIX} ../../bin/swish.boot ../../bin/swish.library ../../bin/swish-build
 AUXLIB := ../../lib/swish/mat.so ../../lib/swish/profile.so ../../lib/swish/testing.so
 
 all: ready ${CORE} ${AUXLIB} ${REMINDERS}
@@ -93,3 +93,7 @@ install-bin: install-check all
 	install ../../lib/swish/testing.so ${INSTLIBDIR}/lib/swish
 	install --directory ${INSTWEBDIR}
 	cd ../../web ; find . -type f -exec install -D -T {} ${INSTWEBDIR}/{} \;
+
+.PHONY: mat-prereq
+mat-prereq:
+	make install-bin INSTALLROOT="$$(${NORMALIZE_PATH} ../../data/tmp/mat-prereq)"
