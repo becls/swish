@@ -24,6 +24,7 @@
   (export
    <os-result>
    capture-events
+   delete-tree
    gc
    handle-gone?
    isolate-mat
@@ -198,4 +199,14 @@
               (if (pregexp-match re line)
                   (check patterns lines)
                   (search re lines))]))])))
+
+  (define (delete-tree path)
+    (if (file-directory? path)
+        (or (delete-directory path)
+            (begin
+              (for-each (lambda (p) (delete-tree (path-combine path p)))
+                (directory-list path))
+              (receive (after 10 'ok))
+              (delete-directory path)))
+        (delete-file path)))
   )

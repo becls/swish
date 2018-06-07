@@ -23,9 +23,9 @@
 (import
  (chezscheme)
  (swish erlang)
+ (swish io)
  (swish mat)
  (swish osi)
- (swish io)
  (swish testing)
  )
 (define (make-byte-stream prime)
@@ -98,16 +98,6 @@
               (set! next candidate)
               (lp candidate))))
       (integer->char next))))
-
-(define (delete-tree path)
-  (if (file-directory? path)
-      (or (delete-directory path)
-          (begin
-            (for-each (lambda (p) (delete-tree (path-combine path p)))
-              (directory-list path))
-            (receive (after 10 'ok))
-            (delete-directory path)))
-      (delete-file path)))
 
 (isolate-mat tcp ()
   (define pid self)
