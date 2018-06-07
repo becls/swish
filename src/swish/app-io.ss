@@ -45,7 +45,7 @@
   (define web-path (make-parameter #f))
 
   (define base-dir
-    (make-parameter (path-parent (cd))
+    (make-parameter (cd)
       (lambda (base)
         (match (catch (directory? base))
           [#t

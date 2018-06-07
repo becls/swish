@@ -11,4 +11,5 @@
   (void))
 
 (import (swish imports))
+(base-dir (path-parent (cd)))
 ((swish-start) (command-line-arguments))
