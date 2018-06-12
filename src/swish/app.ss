@@ -172,7 +172,9 @@
          (cond
           [(int32? exit-code) exit-code]
           [(eq? exit-code (void)) 0]
-          [else 1]))]))
+          [else
+           (console-event-handler (format "app:shutdown due to (exit ~s)" exit-code))
+           1]))]))
     (receive))
 
   (define swish-start

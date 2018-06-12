@@ -411,3 +411,20 @@
       "--rtlib" "swish"))
   (run-fat "rtlibs-swish-fat" '()
     (list (format "abc: ~a" software-product-name))))
+
+(isolate-mat non-numeric-exit ()
+  ;; Attempt to call exit with a non-numeric exit code and is
+  ;; confusing enough that we output a message with the
+  ;; console-event-handler.
+  (write-example "non-numeric-exit"
+    `((import
+       (scheme)
+       (swish imports))
+      (exit 'foo)))
+  (build-example "non-numeric-exit" '())
+  (match (catch (run-thin "non-numeric-exit" '() '()))
+    [#(EXIT `(<os-process-failed>
+              [exit-status 1]
+              [stdout ,stdout]
+              [stderr ()]))
+     (match-regexps '("app:shutdown due to \\(exit foo\\)") stdout)]))
