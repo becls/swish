@@ -24,6 +24,7 @@
 (library (swish log-db)
   (export
    <event-logger>
+   coerce
    create-table
    define-simple-events
    log-db:get-instance-id
@@ -82,15 +83,13 @@
 
   (define next-child-id 1)
 
-  (define get-child-id
+  (define process->child-id
     (let ([ht (make-weak-eq-hashtable)])
       (lambda (x)
-        (if (process? x)
-            (let ([id (cdr (eq-hashtable-cell ht x next-child-id))])
-              (when (= next-child-id id)
-                (set! next-child-id (+ id 1)))
-              id)
-            x))))
+        (let ([id (cdr (eq-hashtable-cell ht x next-child-id))])
+          (when (= next-child-id id)
+            (set! next-child-id (+ id 1)))
+          id))))
 
   (define log-db:instance-id #f)
 
@@ -184,7 +183,7 @@
      [(real? x) (inexact x)]
      [(bytevector? x) x]
      [(symbol? x) (symbol->string x)]
-     [(process? x) (get-child-id x)]
+     [(process? x) (process->child-id x)]
      [(date? x) (format-rfc2822 x)]
      [(condition? x)
       (let ([op (open-output-string)])

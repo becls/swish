@@ -228,9 +228,37 @@ of the tuple type and each field are converted to SQL names by the
 \code{create-table} syntax.
 
 It defines \var{handle} as a procedure of 1 argument, an event. If the
-event is one of the tuple types in the \code{define-simple-events},
-it calls \code{db:log} with an insert statement. If the event is
-unrecognized, it returns \code{\#f}.
+event is one of the tuple types in the \code{define-simple-events}, it
+calls \code{db:log} with an insert statement applying \code{coerce} to
+each value. If the event is unrecognized, it returns \code{\#f}.
+
+\defineentry{coerce}
+\begin{procedure}
+  \code{(coerce \var{x})}
+\end{procedure}
+\returns{} a Scheme object
+
+The argument \var{x} is a Scheme object mapped to a SQLite value.
+
+\begin{tabular}{lp{0.75\textwidth}}
+  \var{type} & transformation\\ \hline
+  \var{string} & \var{string} \\
+  \var{bytevector} & \var{bytevector} \\
+  \var{number} & \var{number, if it fits in 64 bits} \\
+  \var{symbol} & \code{symbol->string} \\
+  \var{date} & {\code{format-rfc2822}} \\
+  \var{process} & integer key for \var{process}, unique in this database instance \\
+  \var{condition} & a string containing \code{\#(error \var{reason})}
+  where the \var{reason} is obtained from \code{display-condition} \\
+  \var{continuation-condition} & a string containing \code{\#(error
+    \var{reason} \var{stack})} where the \var{stack} is obtained from
+  \code{dump-stack} \\
+  \hline
+\end{tabular}
+
+\code{coerce} passes \code{\#f} through unmodified which SQLite
+interprets as NULL.  Other values are converted to string using
+\code{write}.
 
 \section {Published Events}
 
