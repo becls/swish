@@ -20,7 +20,7 @@
   - removed `absolute-path`
   - removed `accept-tcp`, see `listen-tcp`
   - removed `close-directory-watcher`, see `close-path-watcher`
-  - removed `connect-ucb`
+  - removed `connect-usb`
   - removed `create-client-pipe`
   - removed `create-directory-path`, see `make-directory-path`
   - removed `create-file`, see `open-file`
