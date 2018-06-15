@@ -80,7 +80,7 @@ static void database_worker(void* arg) {
 static ptr make_sqlite_error(const char* who, int rc, sqlite3* db) {
   return Scons(Sstring_to_symbol(who),
                Scons(Sinteger(TRANSLATE_SQLITE_ERRNO(rc)),
-                     utf8_to_string(sqlite3_errmsg(db))));
+                     Sstring_utf8(sqlite3_errmsg(db), -1)));
 }
 
 static void open_worker(uv_work_t* req) {
@@ -359,7 +359,7 @@ ptr osi_get_statement_columns(uptr statement) {
   int count = sqlite3_column_count(s->stmt);
   ptr v = Smake_vector(count, Sfixnum(0));
   for (int i=0; i < count; ++i) {
-    ptr name = utf8_to_string(sqlite3_column_name(s->stmt, i));
+    ptr name = Sstring_utf8(sqlite3_column_name(s->stmt, i), -1);
     if (Spairp(name))
       return name;
     Svector_set(v, i, name);
@@ -371,7 +371,7 @@ ptr osi_get_statement_sql(uptr statement) {
   statement_t* s = (statement_t*)statement;
   if (s->database->busy)
     return make_error_pair("osi_get_statement_sql", UV_EBUSY);
-  return utf8_to_string(sqlite3_sql(s->stmt));
+  return Sstring_utf8(sqlite3_sql(s->stmt), -1);
 }
 
 ptr osi_reset_statement(uptr statement) {
@@ -417,12 +417,8 @@ static void step_cb(uv_async_t* handle) {
         x = Sflonum(sqlite3_column_double(stmt, i));
         break;
       case SQLITE_TEXT: {
-        x = utf8_to_string2((const char*)sqlite3_column_text(stmt, i),
-                            sqlite3_column_bytes(stmt, i));
-        if (Spairp(x)) {
-          add_callback1(callback, x);
-          return;
-        }
+        x = Sstring_utf8((const char*)sqlite3_column_text(stmt, i),
+                         sqlite3_column_bytes(stmt, i));
         break;
       }
       default: { // SQLITE_BLOB

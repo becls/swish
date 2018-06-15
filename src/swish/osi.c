@@ -103,71 +103,6 @@ ptr make_error_pair(const char* who, int error)
   return Scons(Sstring_to_symbol(who), Sinteger(error));
 }
 
-ptr utf8_to_string(const char* utf8) {
-  return utf8_to_string2(utf8, strlen(utf8));
-}
-
-ptr utf8_to_string2(const char* utf8, size_t count)
-{
-  // Determine len, the number of Unicode characters.
-  int len = 0;
-  const char* s = utf8;
-  while (count > 0) {
-    char uc = s[0];
-    len += 1;
-    if ((uc & 0x80) == 0)
-      s += 1, count -= 1;
-    else if ((uc & 0x40) == 0)
-      return make_error_pair("utf8_to_string", UV_ECHARSET);
-    else if ((uc & 0x20) == 0)
-      if ((count >= 2) && ((s[1] & 0xC0) == 0x80))
-        s += 2, count -= 2;
-      else
-        return make_error_pair("utf8_to_string", UV_ECHARSET);
-    else if ((uc & 0x10) == 0)
-      if ((count >= 3) &&
-          ((s[1] & 0xC0) == 0x80) &&
-          ((s[2] & 0xC0) == 0x80))
-        s += 3, count -= 3;
-      else
-        return make_error_pair("utf8_to_string", UV_ECHARSET);
-    else
-      if ((count >= 4) &&
-          ((uc & 0x08) == 0) &&
-          ((s[1] & 0xC0) == 0x80) &&
-          ((s[2] & 0xC0) == 0x80) &&
-          ((s[3] & 0xC0) == 0x80))
-        s += 4, count -= 4;
-      else
-        return make_error_pair("utf8_to_string", UV_ECHARSET);
-  }
-  // Decode it into the Scheme string.
-  ptr ss = Smake_uninitialized_string(len);
-  s = utf8;
-  for (int i = 0; i < len; i++) {
-    char uc = s[0];
-    uptr c;
-    if ((uc & 0x80) == 0) {
-      c = uc;
-      s += 1;
-    } else if ((uc & 0x20) == 0) {
-      c = ((uc & 0x1F) << 6) | (s[1] & 0x3F);
-      s += 2;
-    } else if ((uc & 0x10) == 0) {
-      c = ((uc & 0x0F) << 12) | ((s[1] & 0x3F) << 6) | (s[2] & 0x3F);
-      s += 3;
-      // Surrogates D800-DFFF are invalid.
-      if ((c & 0xF800) == 0xD800)
-        return make_error_pair("utf8_to_string", UV_ECHARSET);
-    } else {
-      c = ((uc & 0x07) << 18) | ((s[1] & 0x3F) << 12) | ((s[2] & 0x3F) << 6) | (s[3] & 0x3F);
-      s += 4;
-    }
-    Sstring_set(ss, i, c);
-  }
-  return ss;
-}
-
 char* string_to_utf8(ptr s, size_t* utf8_len) {
   // utf8_len does not include the nul terminator character.
   size_t n = Sstring_length(s);
@@ -340,7 +275,7 @@ static void get_real_path_cb(uv_fs_t* req) {
   if (req->result < 0)
     add_callback1(callback, make_error_pair("uv_fs_realpath", (int)req->result));
   else
-    add_callback1(callback, utf8_to_string(req->ptr));
+    add_callback1(callback, Sstring_utf8(req->ptr, -1));
   uv_fs_req_cleanup(req);
   Sunlock_object(callback);
   free(req);
@@ -396,7 +331,7 @@ static void list_directory_cb(uv_fs_t* req) {
     ptr ls = Snil;
     uv_dirent_t ent;
     while (uv_fs_scandir_next(req, &ent) >= 0)
-      ls = Scons(Scons(utf8_to_string(ent.name), Sinteger(ent.type)), ls);
+      ls = Scons(Scons(Sstring_utf8(ent.name, -1), Sinteger(ent.type)), ls);
     add_callback1(callback, ls);
   }
   uv_fs_req_cleanup(req);
@@ -593,7 +528,7 @@ static void watch_path_cb(uv_fs_event_t* handle, const char* filename, int event
     add_callback1(callback, Sinteger(status));
     return;
   }
-  add_callback2(callback, utf8_to_string(filename), Sinteger(events));
+  add_callback2(callback, Sstring_utf8(filename, -1), Sinteger(events));
 }
 
 static int string_list_length(ptr x) {
@@ -638,7 +573,7 @@ void osi_set_argv(int argc, const char *argv[]) {
 ptr osi_get_argv() {
   ptr argv = Smake_vector(g_argc, Sfalse);
   for(int i = 0; i < g_argc; i++) {
-    Svector_set(argv, i, utf8_to_string(g_argv[i]));
+    Svector_set(argv, i, Sstring_utf8(g_argv[i], -1));
   }
   return argv;
 }
@@ -909,7 +844,7 @@ ptr osi_get_executable_path(void) {
   int rc = uv_exepath(buf, &n);
   if (rc < 0)
     return make_error_pair("uv_exepath", rc);
-  return utf8_to_string2(buf, n);
+  return Sstring_utf8(buf, n);
 }
 
 ptr osi_get_real_path(const char* path, ptr callback) {
@@ -952,7 +887,7 @@ ptr osi_get_ip_address(uptr port) {
     snprintf(name + len, sizeof(name) - len, "]:%d", ntohs(((struct sockaddr_in6*)&addr)->sin6_port));
   } else
     return make_error_pair("osi_get_ip_address", UV_EAI_FAMILY);
-  return utf8_to_string(name);
+  return Sstring_utf8(name, -1);
 }
 
 ptr osi_get_tcp_listener_port(uptr listener) {
@@ -974,7 +909,7 @@ ptr osi_get_hostname(void) {
   size_t size = sizeof(buf);
   int rc = uv_os_gethostname(buf, &size);
   if (0 == rc)
-    return utf8_to_string2(buf, size);
+    return Sstring_utf8(buf, size);
   else
     return make_error_pair("uv_os_gethostname", rc);
 }
@@ -1122,7 +1057,7 @@ ptr osi_get_temp_directory(void) {
   int rc = uv_os_tmpdir(buffer, &len);
   if (rc < 0)
     return make_error_pair("uv_os_tmpdir", rc);
-  return utf8_to_string2(buffer, len);
+  return Sstring_utf8(buffer, len);
 }
 
 const char* osi_get_error_text(int err) {
