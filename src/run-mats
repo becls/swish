@@ -38,6 +38,7 @@ mkdir -p data
 for suite in $( find src/swish -name '*.ms' | sed 's/\.ms//' | sort ); do
   echo "testing $suite"
 $launch > /dev/null <<EOF
+(source-directories '("." "src"))
 (library-directories "build/mat-prereq/lib/swish.x.y.z/arch/lib")
 (load "src/run-mats.ss")
 (run-suite "$suite")
@@ -46,6 +47,7 @@ done
 
 # finish up
 $launch <<EOF
+(source-directories '("." "src"))
 (library-directories "build/mat-prereq/lib/swish.x.y.z/arch/lib")
 (load "src/run-mats.ss")
 (html-report "." "mat-report.html")

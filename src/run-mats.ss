@@ -37,7 +37,7 @@
       [ignore #f]
       [#(error ,reason) (raise 'profile-failed-to-start)]))
   (reset-handler (lambda () (display "\nTest Failed\n") (abort 1)))
-  (base-dir (path-parent (cd)))
+  (base-dir (cd))
   (parameterize ([compile-profile #f])
     (load (string-append basename ".ms")))
   (let ([profiling? (start-profiler)])

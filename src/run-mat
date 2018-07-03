@@ -20,5 +20,6 @@ make -s -C swish
 
 $launch <<EOF
 (import (swish mat))
+(cd "..")
 (run-mats $2)
 EOF

@@ -270,7 +270,7 @@
       (assert (handle-gone? (g))))))
 
 (isolate-mat read ()
-  (read-bytevector "swish/io.ms" (read-file "swish/io.ms")))
+  (read-bytevector "src/swish/io.ms" (read-file "src/swish/io.ms")))
 
 (isolate-mat unicode ()
   (define fn (gensym->unique-string (gensym)))
