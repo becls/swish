@@ -70,34 +70,38 @@
   (define sc-expand.orig)
 
   (define (init)
-    (set! $cp0.orig (#%$top-level-value '$cp0))
-    (set! $np-compile.orig (#%$top-level-value '$np-compile))
-    (set! pretty-print.orig (#%$top-level-value 'pretty-print))
-    (set! sc-expand.orig (#%$top-level-value 'sc-expand))
-    (#%$set-top-level-value! '$cp0
-      (lambda args
-        (with-gatekeeper-mutex $cp0 60000
-          (apply $cp0.orig args))))
-    (#%$set-top-level-value! '$np-compile
-      (lambda (original-input-expression pt?)
-        (with-gatekeeper-mutex $np-compile 60000
-          ($np-compile.orig original-input-expression pt?))))
-    (#%$set-top-level-value! 'pretty-print
-      (lambda args
-        (with-gatekeeper-mutex pretty-print 60000
-          (apply pretty-print.orig args))))
-    (#%$set-top-level-value! 'sc-expand
-      (lambda args
-        (with-gatekeeper-mutex sc-expand 60000
-          (apply sc-expand.orig args))))
-    (current-expand sc-expand)
+    (with-interrupts-disabled
+     (set! $cp0.orig (#%$top-level-value '$cp0))
+     (set! $np-compile.orig (#%$top-level-value '$np-compile))
+     (set! pretty-print.orig (#%$top-level-value 'pretty-print))
+     (set! sc-expand.orig (#%$top-level-value 'sc-expand))
+     (#%$set-top-level-value! '$cp0
+       (lambda args
+         (with-gatekeeper-mutex $cp0 60000
+           (apply $cp0.orig args))))
+     (#%$set-top-level-value! '$np-compile
+       (lambda (original-input-expression pt?)
+         (with-gatekeeper-mutex $np-compile 60000
+           ($np-compile.orig original-input-expression pt?))))
+     (#%$set-top-level-value! 'pretty-print
+       (lambda args
+         (with-gatekeeper-mutex pretty-print 60000
+           (apply pretty-print.orig args))))
+     (#%$set-top-level-value! 'sc-expand
+       (lambda args
+         (with-gatekeeper-mutex sc-expand 60000
+           (apply sc-expand.orig args))))
+     (current-expand sc-expand))
     (process-trap-exit #t)
     '#(ok ()))
 
   (define (terminate reason state)
-    (#%$set-top-level-value! '$cp0 $cp0.orig)
-    (#%$set-top-level-value! 'sc-expand sc-expand.orig)
-    (current-expand sc-expand)
+    (with-interrupts-disabled
+     (#%$set-top-level-value! '$cp0 $cp0.orig)
+     (#%$set-top-level-value! '$np-compile $np-compile.orig)
+     (#%$set-top-level-value! 'pretty-print pretty-print.orig)
+     (#%$set-top-level-value! 'sc-expand sc-expand.orig)
+     (current-expand sc-expand))
     'ok)
 
   (define (handle-call msg from state)
