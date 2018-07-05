@@ -38,7 +38,9 @@
     [(_ v e) (assert-bad-match v ,_ e)]
     [(_ v expected-src e)
      (match (catch e)
-       [#(EXIT #(bad-match ,x expected-src)) (guard (equal? v x)) #t]
+       [#(EXIT #(bad-match ,x ,actual-src))
+        (guard (and (equal? v x) (match-src expected-src actual-src)))
+        #t]
        [#(EXIT #(bad-match ,x ,actual-src)) (guard (equal? v x))
         (errorf 'assert-bad-match "expected to raise bad-match with source ~s but got ~s" 'expected-src actual-src)]
        [,x
@@ -51,9 +53,25 @@
      (match (catch e)
        [#(EXIT #(type ,name ,val expected-src)) #t]
        [#(EXIT #(type ,name ,val ,actual-src))
+        (guard (match-src expected-src actual-src))
+        #t]
+       [#(EXIT #(type ,name ,val ,actual-src))
         (errorf 'assert-error "expected to raise ~a with source ~s but got ~s" 'type 'expected-src actual-src)]
        [,x
         (errorf 'assert-error "failed to raise ~a: ~s" 'type x)])]))
+
+(define-syntax (match-src x)
+  (syntax-case x ()
+    [(? expected-src actual-src)
+     (equal? ',_ (datum expected-src))
+     #'#t]
+    [(? expected-src actual-src)
+     #'(match-let* ([#(at ,_ ,expected-filename) 'expected-src])
+         (match actual-src
+           [#(at ,_ ,actual-filename)
+            (or (equal? expected-filename actual-filename)
+                (equal? expected-filename (join (split actual-filename #\\) "/")))]
+           [,_ #f]))]))
 
 (define-syntax assert-syntax-error
   (syntax-rules ()
