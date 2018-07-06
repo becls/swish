@@ -85,50 +85,6 @@
    (eval e)
    (errorf 'assert-syntax-error "failed to raise syntax error: ~s" e)))
 
-(define (fib n)
-  (if (< n 2)
-      1
-      (+ (fib (- n 1)) (fib (- n 2)))))
-
-(define (go n)
-  (time
-   (begin
-     (monitor
-      (spawn
-       (lambda ()
-         (process-trap-exit #t)
-         (do ([n n (- n 1)]) ((= n 0)) (spawn&link (lambda () (fib 28))))
-         (do ([n n (- n 1)]) ((= n 0)) (receive [#(EXIT ,_ ,_) 'ok])))))
-     (receive
-      [#(DOWN ,_ ,_ ,_)
-       (printf "fib(28) test of ~d processes\n" n)]))))
-
-(define (go2 n)
-  (define (id-generator:start&link) (gen-server:start&link 'id-generator))
-
-  (define (id-generator:get)
-    (gen-server:call 'id-generator 'get))
-
-  (define (init) `#(ok 1))
-  (define (terminate reason next) 'ok)
-  (define (handle-call msg from next)
-    (match msg
-      [get `#(reply ,next ,(+ next 1))]))
-  (define (handle-cast msg next)
-    `#(no-reply ,next))
-  (define handle-info handle-cast)
-  (time
-   (begin
-     (monitor
-      (spawn
-       (lambda ()
-         (id-generator:start&link)
-         (do ([n n (- n 1)]) ((= n 0)) (id-generator:get))
-         (raise 'done))))
-     (receive
-      [#(DOWN ,_ ,_ ,_)
-       (printf "id-generator test of ~d\n" n)]))))
-
 (define (pid? x)
   (and (exact? x) (integer? x) (positive? x)))
 
@@ -153,10 +109,36 @@
        (raise `#(repl-test-unexpected-exit ,expected-exit ,exit-status)))
      (match-regexps patterns (append stdout stderr))]))
 
-(isolate-mat kick-tires ()
-  ;; each of these should take around 2 seconds
-  (go 200)
-  (go2 200000))
+(isolate-mat many-fib28 ()
+  (define n 200)
+  (define (fib n)
+    (if (< n 2)
+        1
+        (+ (fib (- n 1)) (fib (- n 2)))))
+  (process-trap-exit #t)
+  (do ([n n (- n 1)]) ((= n 0))
+    (spawn&link (lambda () (match-let* ([514229 (fib 28)]) 'ok))))
+  (do ([n n (- n 1)]) ((= n 0))
+    (receive
+     [#(EXIT ,_ normal) 'ok]
+     [#(EXIT ,_ ,reason) (raise reason)])))
+
+(isolate-mat id-generator ()
+  (define n 200000)
+  (define (id-generator:start&link) (gen-server:start&link 'id-generator))
+  (define (id-generator:get) (gen-server:call 'id-generator 'get))
+  (define (init) `#(ok 1))
+  (define (terminate reason next) 'ok)
+  (define (handle-call msg from next)
+    (match msg
+      [get `#(reply ,next ,(+ next 1))]))
+  (define (handle-cast msg next)
+    `#(no-reply ,next))
+  (define handle-info handle-cast)
+  (id-generator:start&link)
+  (do ([i 1 (+ i 1)]) ((> i n) 'ok)
+    (match-let* ([,@i  (id-generator:get)])
+      'ok)))
 
 (isolate-mat suicide ()
   (process-trap-exit #t)
