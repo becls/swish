@@ -28,6 +28,7 @@
     (swish app)
     (swish app-io)
     (swish application)
+    (swish cli)
     (swish db)
     (swish erlang)
     (swish errors)

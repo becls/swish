@@ -1,0 +1,411 @@
+% Copyright 2018 Beckman Coulter, Inc.
+%
+% Permission is hereby granted, free of charge, to any person
+% obtaining a copy of this software and associated documentation files
+% (the "Software"), to deal in the Software without restriction,
+% including without limitation the rights to use, copy, modify, merge,
+% publish, distribute, sublicense, and/or sell copies of the Software,
+% and to permit persons to whom the Software is furnished to do so,
+% subject to the following conditions:
+%
+% The above copyright notice and this permission notice shall be
+% included in all copies or substantial portions of the Software.
+%
+% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+% EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+% MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+% NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+% BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+% ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+% CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+% SOFTWARE.
+
+\chapter {Command Line Interface}\label{chap:cli}
+
+% For long options we want to explicitly see two hyphen characters
+% rather than an en-dash. For normal text use sopt and lopt. Inside
+% codebegin/end blocks Emacs may convert the characters but LaTeX will
+% still render them properly.
+
+\newcommand{\sopt}[1]{\code{{-}#1}}
+\newcommand{\lopt}[1]{\code{{-}{-}#1}}
+\newcommand{\str}[1]{\code{"#1"}}
+
+\section {Introduction}
+
+The command-line interface (\code{cli}) provides parsing of
+command-line arguments as well as consistent usage of common options
+and display of help.
+
+\section {Theory of Operation}
+
+Many programs parse command-line arguments and perform actions based
+on them.  The \code{cli} library helps to make programs that process
+arguments and display help simple and consistent. Command-line
+arguments are parsed left to right in a single pass. Command-line
+interface specifications, or \code{cli-specs}, are used for parsing
+and error checking a command line, displaying one-line usage, and
+displaying a full help summary.
+
+Arguments may be preceded by a single dash (\sopt{}), a double
+dash (\lopt{}), or no dash at all.
+A single dash precedes short, single character arguments. The API does
+not allow numbers as they could be mistaken as a negative numerical
+value supplied to another argument. A double dash precedes longer,
+more descriptive arguments, \lopt{repl} for example.
+Positional arguments are not preceded by any dashes.  As arguments
+with dashes are consumed, the remaining arguments are matched against
+the positional specifications in order.
+
+Argument specifications include a type such as: \code{bool},
+\code{count}, \code{string}, and \code{list}.  A set of \code{bool}
+and \code{count} arguments can be specified together (\sopt{abc} is
+equivalent to \sopt{a} \sopt{b} \sopt{c}). Arguments of type
+\code{list} collect values in left to right order.
+
+The API does not directly support sub-commands and alternate usage
+help text. These can be implemented using the primitives provided. The
+implementations of \code{swish-build} and \code{swish-test} provide
+examples of advanced command-line handling.
+
+In the following REPL transcript, we define \code{example-cli} using
+\code{cli-specs}. We then set the \code{command-line-arguments}
+parameter as they would be for an application. Calling
+\code{parse-command-line-arguments} returns a procedure, \code{opt},
+which we can use to access the parsed command-line values. Finally, we use
+\code{display-help} to display the automatically generated help.
+
+\codebegin
+> (define example-cli
+    (cli-specs
+     default-help
+     ["verbose" -v count "indicates verbosity level"]
+     ["output" -o (string "<output>") "print output to an <output> file"]
+     ["repl" --repl bool "start a repl"]
+     ["files" (list "<file>" ...) "a list of input files"]))
+> (command-line-arguments '("-vvv" "-o" "file.out" "file.in"))
+> (define opt (parse-command-line-arguments example-cli))
+> (opt "verbose")
+3
+> (opt "output")
+"file.out"
+> (opt "files")
+("file.in")
+> (display-help "sample" example-cli)
+Usage: sample [-hv] [-o <output>] [--repl] <file> ...
+
+  -h, --help        display this help and exit
+  -v                indicates verbosity level
+  -o <output>       print output to an <output> file
+  --repl            start a repl
+  <file> ...        a list of input files
+\codeend
+
+Putting the parts together into \code{sample.ss}, we have a working
+example albeit incomplete.
+
+\codebegin
+#!/usr/bin/env swish
+
+(define example-cli
+  (cli-specs
+   default-help
+   ["verbose" -v count "indicates verbosity level"]
+   ["output" -o (string "<output>") "print output to an <output> file"]
+   ["repl" --repl bool "start a repl"]
+   ["files" (list "<file>" ...) "a list of input files"]))
+
+(let ([opt (parse-command-line-arguments example-cli)])
+  (when (opt "help")
+    (display-help "sample" example-cli)
+    (exit 0))
+  (let ([verbosity (or (opt "verbose") 0)])
+    (when (> verbosity 0)
+      (printf "showing verbosity level: ~a~n" verbosity)))
+  (when (opt "repl")
+    (new-cafe)))
+\codeend
+
+\section {Programming Interface}
+
+\defineentry{cli-specs}
+\begin{syntax}
+  \begin{alltt}
+(cli-specs
+  \opt{default-help}
+  (\var{name} \opt{\var{short}} \opt{\var{long}} \var{type} \var{help}
+    \opt{(conflicts \var{conflicts})}
+    \opt{(requires \var{requires})}
+    \opt{(usage \opt{\var{visibility}} \opt{\var{how}})})
+  \etc{})\strut\end{alltt}
+\end{syntax}
+\expandsto{}\begin{alltt}\antipar
+a list of \code{<arg-spec>} tuples
+\end{alltt}
+
+The \code{cli-specs} macro simplifies the creation of the
+\code{<arg-spec>} tuples. The \code{<arg-spec>} \code{name} field
+uniquely identifies a specification, and is used to retrieve parsed
+argument values and check constraints.
+
+\begin{argtbl}
+  \argrow{name}{a string to identify the argument}
+  \argrow{short}{a symbol of the form \sopt{x}, where \var{x} is a
+    single character, see below}
+  \argrow{long}{a symbol of the form \lopt{x}, where \var{x} is a string}
+  \argrow{type}{see Figure~\ref{fig:cli-types}}
+  \argrow{help}{a string or list of strings that describes the
+    argument}
+  \argrow{conflicts}{a list of \code{<arg-spec>} names}
+  \argrow{requires}{a list of \code{<arg-spec>} names}
+\end{argtbl}
+
+To specify \sopt{i} or \sopt{I} for \var{short}, use |\sopt{i}| and
+|\sopt{I}| respectively to prevent Chez Scheme from reading them as
+the complex number $0-1i$.
+
+\begin{figure}[H]
+\begin{tabular}{lp{3.6in}}
+  Type & Result \\ \hline
+  \code{bool} & \code{\#t} \\
+  \code{count} & a positive integer \\
+  \code{(string \var{x})} & a string \\
+  \code{(list \var{x})} & a list of one item \\
+  \code{(list \var{x} ...)} & a list of one or more items up to the
+  next argument \\
+  \code{(list . \var{x})} & a list of the rest of the arguments \\
+  \hline
+\end{tabular}\par\medskip
+For each type where \var{x} is specified, \var{x} is a string that is
+used in the help display.
+\caption{Command-line argument types\label{fig:cli-types}}
+\end{figure}
+
+The \code{list} types can support multiple \var{x} arguments, for
+instance \code{(list "i1" "i2")} would specify a list of two
+arguments.
+
+\begin{grammar}
+  \prodrow{\var{visibility}}{\code{show}}
+  \altrow{\code{hide}}
+  \altrow{\code{fit}}
+\end{grammar}
+
+When printing the help usage line, a \var{visiblility} of \code{show}
+means the argument must be displayed. \code{hide} forces the argument
+to be hidden. \code{fit} displays the argument if it fits on the
+line.
+
+\begin{grammar}
+  \prodrow{\var{how}}{\code{short}}
+  \altrow{\code{long}}
+  \altrow{\code{opt}}
+  \altrow{\code{req}}
+\end{grammar}
+
+The \var{how} expands into input of the \code{format-spec} procedure
+according to Figure~\ref{fig:cli-usage-keywords}.
+
+\begin{figure}[H]
+  \begin{tabular}{r l}
+    Keyword & Expands into: \\
+    \code{short} & \code{(opt (and short args))} \\
+    \code{long} & \code{(opt (and long args))} \\
+    \code{opt} & \code{(opt (and (or short long) args))} \\
+    \code{req} & \code{(req (and (or short long) args))}
+  \end{tabular}
+  \caption{\code{cli-specs} \var{how} field\label{fig:cli-usage-keywords}}
+\end{figure}
+
+For options with \var{short} or \var{long} specified, \code{fit} and
+\code{opt} are the defaults. For other options, \code{show} and
+\code{req} are the defaults.
+
+\var{conflicts} is a list of specification names that prevent this
+argument from processing correctly. When multiple command-line
+arguments are specified that are in conflict, an exception is raised.
+
+\var{requires} is a list of other specification names that are
+necessary for this argument to be processed correctly. Unless all the
+required command-line arguments are specified, an exception is raised.
+
+The \code{conflicts}, \code{requires}, and \code{usage} clauses may be
+specified in any order.
+
+\defineentry{display-help}
+\begin{procedure}
+  \code{(display-help \var{exe-name} \var{specs} \opt{\var{args}} \opt{\var{op}})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{display-help} procedure is equivalent to calling
+\code{display-usage} with a prefix of \str{Usage:} followed by
+\code{display-options}.
+
+\defineentry{display-options}
+\begin{procedure}
+  \code{(display-options \var{specs} \opt{\var{args}} \opt{\var{op}})}
+\end{procedure}
+\returns{} unspecified
+
+For each specification in \var{specs}, the \code{display-options}
+procedure renders two columns of output to \var{op}, which defaults to
+the current output port. The first column renders the short and long
+form of the argument with its additional inputs. The second column
+renders the \code{<arg-spec>} \code{help} field and will automatically
+wrap if the \code{help-wrap-width} is exceeded.
+
+If an \var{args} hash table is specified, the specified value appended
+to the second column. This is useful for displaying default or current
+values.
+
+\defineentry{display-usage}
+\begin{procedure}
+  \code{(display-usage \var{prefix} \var{exe-name} \var{specs} \opt{\var{width}} \opt{\var{op}})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{display-usage} procedure displays the first line of help
+output to \var{op}, which defaults to the current output port. It
+starts with \var{prefix} and \var{exe-name} then attempts to fit
+\var{specs} onto the line using \code{format-spec}. When the line will
+exceed \var{width} characters, some arguments may collapse to
+\code{[options]}.
+
+A \var{width} of \code{\#f} defaults the line width to
+\code{help-wrap-width}.
+
+\defineentry{format-spec}
+\begin{procedure}
+  \code{(format-spec \var{spec} \opt{\var{how}})}
+\end{procedure}
+\returns{} a string
+
+The \code{format-spec} procedure is responsible rendering \var{spec}
+as a string as specified by \var{how}.  \code{format-spec} can display
+dashes in front of arguments, ellipses on list types, and brackets
+around optional arguments. A \var{how} of \code{\#f} defaults to the
+\code{<arg-spec>} \code{usage} field.
+
+\begin{tabular}{lp{3.6in}}
+  \var{how} & Return value: \\
+  \hline
+  \code{short} & \str{\sopt{x}} if \var{spec} \var{short} is \code{x},
+  else \code{\#f}\\
+
+  \code{long} & \str{\lopt{x}} if \var{spec} \var{long} is \code{x},
+  else \code{\#f}\\
+
+  \code{args} & The \var{spec} \var{type} is evaluated as follows: \\
+  &
+  \begin{minipage}{.75\textwidth}
+  \begin{tabular}{l l}
+   % \code{<arg-spec>} \code{type}
+    \var{type} & Return value:\\
+    \hline
+    \code{bool} & \code{\#f}\\
+    \code{count} & \code{\#f}\\
+    \code{(string \var{x})} & \str{x}\\
+    \code{(list \var{x})} & \str{x}\\
+    \code{(list \var{x} ...)} & \str{x ...}\\
+    \code{(list . \var{x})} & \str{x ...}\\
+    \hline
+  \end{tabular}
+  \end{minipage}\\
+
+  \code{(or \var{how} \etc{})} & Recur and use the first
+  non-\code{\#f}\\
+
+  \code{(and \var{how} \etc{})} & Recur and concatenate all
+  non-\code{\#f} values\\
+
+  \code{(opt \var{how})} & Recur and surround the result with square
+  brackets \code{[]} if non-\code{\#f}\\
+
+  \code{(req \var{how})} & Recur and use the result\\
+  \hline
+\end{tabular}
+
+\defineentry{help-wrap-width}
+\begin{parameter}
+  \code{help-wrap-width}
+\end{parameter}
+\hasvalue{} a positive fixnum
+
+The \code{help-wrap-width} parameter specifies the default width for
+\code{display-usage} and \code{display-options}.
+
+\defineentry{parse-command-line-arguments}
+\begin{procedure}
+  \code{(parse-command-line-arguments \var{specs} \opt{\var{ls}} \opt{\var{fail}})}
+\end{procedure}
+\returns{} a procedure
+
+The \code{parse-command-line-arguments} procedure processes the elements
+of \var{ls} from left to right in a single pass.
+As it scans each \var{x} in \var{ls}, the parser must find a suitable \var{s}
+within \var{specs}.
+If a suitable \var{s} cannot be found, the parser reports an error by
+calling \var{fail}.
+Based on the type of \var{s}, the parser may consume additional elements
+following \var{x}.
+The type of \var{s} determines what data the parser records for that
+argument.
+% When \var{s} is satisfied, the parser resumes its scan of \var{ls}.
+When \var{s} is satisfied, the parser continues scanning the
+remaining elements of \var{ls}.
+
+% say more about how it finds ``suitable'' spec
+%  - looks for - or --
+%  - explodes -abc to -a -b -c on demand
+
+The parser returns a procedure \var{p} that accepts zero or one
+argument. When called with no arguments, \var{p} returns a hash table
+that maps the name of each \var{s} found while processing \var{ls}
+to the data recorded for that argument.
+When called with the name of an element \var{s} in \var{specs},
+\var{p} returns the data, if any, recorded for that name in the hash table
+or else \code{\#f}.
+If a particular \var{s} was not found while processing \var{ls},
+the internal hash table has no entry for the name of \var{s}
+and \var{p} returns \code{\#f} when given that name.
+If called with a name that is not in \var{specs}, \var{p}
+raises an exception.
+
+The following table summarizes the parser's behavior.
+
+\begin{tabular}{lll}
+  \code{<arg-spec> type} & extra arguments consumed / recorded & return value of \code{(\var{p} \var{name})}\\ \hline
+  \code{bool}
+  & none
+  & \code{\#t} \\
+  \code{count}
+  & none
+  & an exact positive integer \\
+  \code{(string \var{x})}
+  & one
+  & a string \\
+  \code{(list \var{$x_0$} \etc{} \var{$x_n$} ...)}
+  & $n$ or more, up to the next option
+  & a list of strings \\
+  \code{(list \var{$x_0$} \etc{} \var{$x_n$} . \var{rest})}
+  & at least $n$ and all remaining
+  & a list of strings \\
+\end{tabular}
+
+By default \var{ls} is the value of \code{(command-line-arguments)}
+and \var{fail} is a procedure that applies \code{errorf} to its
+arguments. Providing a \var{fail} procedure allows a developer to
+accumulate parsing errors without necessarily generating exceptions.
+
+\begin{tupledef}{<arg-spec>}
+  \argrow{name}{a string to use as the key of the output hash table}
+  \argrow{type}{see Figure~\ref{fig:cli-types}}
+  \argrow{short}{\code{\#f} $|$ a character}
+  \argrow{long}{\code{\#f} $|$ a string }
+  \argrow{help}{a string or list of strings describing argument}
+  \argrow{conflicts}{a list of \code{<arg-spec>} names}
+  \argrow{requires}{a list of \code{<arg-spec>} names}
+  \argrow{usage}{a list containing one \var{visibility} symbol and a
+    \code{format-spec} \var{how} expression}
+\end{tupledef}
