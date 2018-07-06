@@ -133,12 +133,13 @@
        (mat name tags ($system-mat (lambda () (boot-system) e1 e2 ...)))]))
 
   (define ($system-mat thunk)
-    (let* ([pid (spawn thunk)]
-           [m (monitor pid)])
-      (on-exit (shutdown-system)
-        (receive (after 300000 (kill pid 'shutdown) (raise 'timeout))
-          [#(DOWN ,_ ,@pid normal) 'ok]
-          [#(DOWN ,_ ,@pid ,reason) (raise reason)]))))
+    (parameterize ([console-output-port (open-output-string)])
+      (let* ([pid (spawn thunk)]
+             [m (monitor pid)])
+        (on-exit (shutdown-system)
+          (receive (after 300000 (kill pid 'shutdown) (raise 'timeout))
+            [#(DOWN ,_ ,@pid normal) 'ok]
+            [#(DOWN ,_ ,@pid ,reason) (raise reason)])))))
 
   (define-tuple <os-result> stdout stderr exit-status)
 
