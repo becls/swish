@@ -22,7 +22,21 @@
 ;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 ;;; DEALINGS IN THE SOFTWARE.
 
-(define-tuple <args> boot-files libdirs rt-libs source-fn output-fn shebang? libs-visible? verbose?)
+(define cli
+  (cli-specs
+   ["output-file" -o (string "<output>") "write output to <output>"]
+   ["libdirs" -L (list "<libdir>") "add <libdir> to library-directories"]
+   ["boot-files" -b (list "<boot-file>")
+    "make stand-alone application including <boot-file>"]
+   ["libs-visible" --libs-visible bool
+    "make imported libraries visible to eval"]
+   ["rt-libs" --rtlib (list "<lib>")
+    "add compiled library to stand-alone boot file"]
+   ["source-file" (string "<source>") "source filename"]
+   ["verbose" -v bool "enable verbose build output"]
+   default-help
+   ["doc" --doc (string "<type>")
+    "show doc <type>={all|help|details|examples}"]))
 
 (define swish-lib?
   (let ([libs (filter (lambda (lib) (match lib [(swish . ,_) #t] [,_ #f])) (library-list))])
@@ -46,30 +60,10 @@
 
 (define (fail fmt . args) (apply errorf who fmt args))
 
-(define (default-args)
-  (<args> make
-    [boot-files '()]
-    [libdirs (library-directories)]
-    [rt-libs '()]
-    [source-fn #f]
-    [output-fn #f]
-    [shebang? #t]
-    [libs-visible? #f]
-    [verbose? #f]))
-
-(define (usage doc-type)
+(define (usage doc-type ht)
   (case doc-type
     [(all help)
-     (printf "Usage: ~a [option] ... source-fn\n" who)
-     (printf "Options:\n")
-     (printf "  -o out-file     write output to out-file\n")
-     (printf "  -L libdir       add libdir to library-directories\n")
-     (printf "  -b boot-file    make stand-alone application including boot-file\n")
-     (printf "  --libs-visible  make imported libraries visible to eval\n")
-     (printf "  --rtlib lib     add compiled library to stand-alone boot file\n")
-     (printf "  -v              enable verbose build output\n")
-     (printf "  --help          show this help\n")
-     (printf "  --doc <type>    show doc <type>={all|help|details|examples}\n")
+     (display-help who cli ht)
      (newline)])
   (case doc-type
     [(all details)
@@ -120,63 +114,6 @@
 (define (parse-library lib)
   (parameterize ([library-directories lib])
     (library-directories)))
-
-(define-syntax match-required
-  (syntax-rules ()
-    [(_ args clause ...)
-     (match args
-       [(,option . ,more)
-        (define (need-arg) (fail "~a requires an argument; see --help" option))
-        (match more
-          [() (need-arg)]
-          [(,option . ,_)
-           (guard (starts-with? option "--"))
-           (need-arg)]
-          clause ...)])]))
-
-(define (parse-args args)
-  (when (null? args) (usage 'help))
-  (let parse ([args args]
-              [acc (default-args)])
-    (match args
-      [() acc]
-      [("--help" . ,_) (usage 'help)]
-      [("--doc" . ,_)
-       (match-required args
-         [(,doc-type . ,_) (usage (string->symbol doc-type))])]
-      [("-L" . ,_)
-       (match-required args
-         [(,lib . ,more)
-          (<args> copy* (parse more acc)
-            [libdirs (append (parse-library lib) libdirs)])])]
-      [("-b" . ,_)
-       (match-required args
-         [(,boot-file . ,more)
-          (<args> copy* (parse more acc)
-            [boot-files (cons boot-file boot-files)]
-            [shebang? #f])])]
-      [("-o" . ,_)
-       (match-required args
-         [(,output-fn . ,more)
-          (if (<args> output-fn acc)
-              (fail "duplicate -o ~a" output-fn)
-              (parse more (<args> copy acc [output-fn output-fn])))])]
-      [("--libs-visible" . ,more)
-       (parse more (<args> copy acc [libs-visible? #t]))]
-      [("-v" . ,more)
-       (parse more (<args> copy acc [verbose? #t]))]
-      [("--rtlib" . ,_)
-       (match-required args
-         [(,lib . ,more)
-          (<args> copy* (parse more acc)
-            [rt-libs (cons (get-real-path (resolve-rt-lib lib)) rt-libs)])])]
-      [(,other . ,unexpected)
-       (guard (starts-with? other "-"))
-       (fail "unexpected ~a~{ ~a~}; see --help" other unexpected)]
-      [(,source-fn . ,more)
-       (if (<args> source-fn acc)
-           (fail "extra input filename ~a" source-fn)
-           (parse more (<args> copy acc [source-fn source-fn])))])))
 
 ;; create tmp file:
 ;;  - on the same filesystem as basis, else rename-path will fail
@@ -266,47 +203,63 @@
    [(equal? rt-lib "swish") swish-library-filename]
    [else (fail "cannot resolve --rtlib ~s" rt-lib)]))
 
-(match (parse-args (command-line-arguments))
-  [`(<args> [source-fn #f])
-   (fail "requires source filename; see --help")]
-  [`(<args> [output-fn #f])
-   (fail "requires output filename [-o file]; see --help")]
-  [`(<args> ,boot-files ,libdirs ,source-fn ,output-fn ,shebang? ,libs-visible? ,rt-libs ,verbose?)
-   (define stand-alone? (not (null? boot-files)))
-   ;; Add location of swish system .wpo files only if we're building a
-   ;; stand-alone application (boot-files non-empty).
-   (import-notify verbose?)
-   (cond
-    [stand-alone?
-     (let* ([boot-files (map resolve-boot-file boot-files)]
-            [swish-wpo?
-             (or (null? rt-libs)
-                 ;; don't use wpo for swish library if we're including it as a
-                 ;; run-time library, else we could duplicate code
-                 (not (member swish-library-filename rt-libs)))])
-       (library-setup swish-wpo? verbose? libdirs)
-       (do-compile source-fn output-fn libs-visible? swish-wpo?)
-       (let* ([app-stem (path-root output-fn)]
-              [app-boot (string-append app-stem ".boot")])
-         (when verbose?
-           (printf "making application boot file ~s from:~{\n-b      ~s~}~{\n--rtlib ~s~}\n        ~s\n"
-             app-boot boot-files rt-libs source-fn))
-         (apply make-boot-file app-boot '() (append boot-files rt-libs (list output-fn)))
-         (copy-to output-fn (osi_get_executable_path))))]
-    [shebang?
-     (library-setup #f verbose? libdirs)
-     (do-compile source-fn output-fn libs-visible? #f)
-     (let* ([tmp (tmp-filename output-fn)]
-            [ip (open-file output-fn O_RDONLY 0 'binary-input)]
-            [op (open-file tmp (+ O_WRONLY O_CREAT O_APPEND) #o777 'binary-output)])
-       (on-exit (begin (close-port ip) (close-port op))
-         (put-bytevector op (string->utf8 "#!/usr/bin/env swish\n"))
-         (for-each
-          (lambda (rt-lib)
-            (unless (equal? rt-lib swish-library-filename)
-              (let ([ip (open-file rt-lib O_RDONLY 0 'binary-input)])
-                (on-exit (close-port ip)
-                  (copy ip op)))))
-          rt-libs)
-         (copy ip op))
-       (rename-path tmp output-fn))])])
+(let ([opt (parse-command-line-arguments cli)])
+  (cond
+   [(opt "doc") =>
+    (lambda (doc-type) (usage (string->symbol doc-type) (opt)))]
+   [(opt "help")
+    (usage 'help (opt))])
+  (let ([source-fn (opt "source-file")]
+        [output-fn (opt "output-file")]
+        [boot-files (or (opt "boot-files") '())]
+        [libdirs (fold-right
+                  (lambda (x acc)
+                    (append (parse-library x) acc))
+                  (library-directories)
+                  (or (opt "libdirs") '()))]
+        [libs-visible? (opt "libs-visible")]
+        [rt-libs (map (lambda (x) (get-real-path (resolve-rt-lib x)))
+                   (or (opt "rt-libs") '()))]
+        [verbose? (opt "verbose")])
+    (define stand-alone? (not (null? boot-files)))
+    (unless source-fn
+      (fail "requires source filename"))
+    (unless output-fn
+      (fail "requires output filename"))
+    ;; Add location of swish system .wpo files only if we're building a
+    ;; stand-alone application (boot-files non-empty).
+    (import-notify verbose?)
+    (cond
+     [stand-alone?
+      (let* ([boot-files (map resolve-boot-file boot-files)]
+             [swish-wpo?
+              (or (null? rt-libs)
+                  ;; don't use wpo for swish library if we're including it as a
+                  ;; run-time library, else we could duplicate code
+                  (not (member swish-library-filename rt-libs)))])
+        (library-setup swish-wpo? verbose? libdirs)
+        (do-compile source-fn output-fn libs-visible? swish-wpo?)
+        (let* ([app-stem (path-root output-fn)]
+               [app-boot (string-append app-stem ".boot")])
+          (when verbose?
+            (printf "making application boot file ~s from:~{\n-b      ~s~}~{\n--rtlib ~s~}\n        ~s\n"
+              app-boot boot-files rt-libs source-fn))
+          (apply make-boot-file app-boot '() (append boot-files rt-libs (list output-fn)))
+          (copy-to output-fn (osi_get_executable_path))))]
+     [else
+      (library-setup #f verbose? libdirs)
+      (do-compile source-fn output-fn libs-visible? #f)
+      (let* ([tmp (tmp-filename output-fn)]
+             [ip (open-file output-fn O_RDONLY 0 'binary-input)]
+             [op (open-file tmp (+ O_WRONLY O_CREAT O_APPEND) #o777 'binary-output)])
+        (on-exit (begin (close-port ip) (close-port op))
+          (put-bytevector op (string->utf8 "#!/usr/bin/env swish\n"))
+          (for-each
+           (lambda (rt-lib)
+             (unless (equal? rt-lib swish-library-filename)
+               (let ([ip (open-file rt-lib O_RDONLY 0 'binary-input)])
+                 (on-exit (close-port ip)
+                   (copy ip op)))))
+           rt-libs)
+          (copy ip op))
+        (rename-path tmp output-fn))])))

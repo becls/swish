@@ -94,8 +94,8 @@
 (isolate-mat help ()
   (swish-build-test '("--help")
     '("Usage:"
-      "Options:"
-      "show this help")))
+      "write output"
+      "source filename")))
 
 (define hello-fat
   `((import

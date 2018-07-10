@@ -35,6 +35,7 @@
   (import
    (chezscheme)
    (swish application)
+   (swish cli)
    (swish erlang)
    (swish event-mgr)
    (swish gatekeeper)
@@ -97,71 +98,46 @@
   (define (set-random-seed)
     (random-seed (+ (remainder (erlang:now) (- (ash 1 32) 1)) 1)))
 
-  (define-tuple <args> cmd quiet? filenames)
-
-  (define (process-command-line args)
-    (define init
-      (<args> make
-        [cmd 'repl]
-        [quiet? #f]
-        [filenames '()]))
-    (let lp ([args args] [acc init])
-      (match args
-        [() acc]
-        [("--help" . ,_)
-         (<args> copy acc [cmd "--help"])]
-        [("--version" . ,_)
-         (<args> copy acc [cmd "--version"])]
-        [("--verbose" . ,rest)
-         ;; --verbose must be handled by run.c
-         (lp rest acc)]
-        [("-q" . ,rest)
-         (lp rest (<args> copy acc [cmd 'repl] [quiet? #t]))]
-        [("--" . ,filenames)
-         (<args> copy acc [cmd 'repl] [filenames filenames])]
-        [(,cmd . ,filenames)
-         (<args> copy acc [cmd cmd] [filenames filenames])])))
+  (define cli
+    (cli-specs
+     default-help
+     ["verbose" --verbose bool "trace boot file search"]
+     ["version" --version bool "print version information"]
+     ["quiet" -q bool "suppress startup message and prompt string"]
+     ["args" -- (list . "arg") "remaining arguments are files to load"]
+     ["files" (list . "file") "execute file with remaining arguments"]))
 
   (define (default-swish-start cmdline)
     (define (run)
-      (match (process-command-line cmdline)
-        [`(<args> [cmd "--help"])
-         (printf "Usage: ~a [option] ... [ file | -- ] [arg] ...\n"
-           (path-last (osi_get_executable_path)))
-         (printf "Options and arguments:\n")
-         (printf " --help      print this help message\n")
-         (printf " --verbose   trace boot file search\n")
-         (printf " --version   print version information\n")
-         (printf " -q          suppress startup message and prompt string\n")
-         (printf " --          remaining arguments are files to load\n")
-         (printf " file        execute file with remaining arguments\n")
-         (values)]
-        [`(<args> [cmd "--version"])
-         (printf "~a\n" (swish-version))
-         (values)]
-        [`(<args> [cmd repl] ,quiet? ,filenames)
-         (cond
-          [quiet?
-           (waiter-prompt-string "")]
-          [else
-           (printf "\n~a Version ~a\n" software-product-name software-version)
-           (flush-output-port)])
-         (hook-console-input)
-         (set-random-seed)
-         (for-each load filenames)
-         (new-cafe)]
-        [`(<args> [cmd ,script-file])
-         (command-line cmdline)
-         (command-line-arguments (cdr cmdline))
-         (set-random-seed)
-         (call/cc
-          (lambda (return)
-            (exit-handler return)
-            (load script-file)
-            ((exit-handler))))]
-        [#f ;; TODO: (IsService) and I do mean TODO
-         (console-event-handler `#(software-version ,software-version))
-         (app:start)]))
+      (let* ([opt (parse-command-line-arguments cli cmdline)]
+             [files (or (opt "files") '())])
+        (when (opt "quiet") (waiter-prompt-string ""))
+        (cond
+         [(opt "help")
+          (display-help (path-last (osi_get_executable_path)) cli (opt))
+          (values)]
+         [(opt "version")
+          (printf "~a\n" (swish-version))
+          (values)]
+         [(null? files)                 ; repl
+          (let ([filenames (or (opt "args") '())])
+            (unless (opt "quiet")
+              (printf "\n~a Version ~a\n" software-product-name software-version)
+              (flush-output-port))
+            (hook-console-input)
+            (set-random-seed)
+            (for-each load filenames)
+            (new-cafe))]
+         [else                          ; script
+          (let ([script-file (car files)])
+            (command-line cmdline)
+            (command-line-arguments (cdr cmdline))
+            (set-random-seed)
+            (call/cc
+             (lambda (return)
+               (exit-handler return)
+               (load script-file)
+               ((exit-handler)))))])))
     (define (int32? x) (and (or (fixnum? x) (bignum? x)) (<= #x-7FFFFFFF x #x7FFFFFFF)))
     (eval '(import (swish imports)))
     (call-with-values run
