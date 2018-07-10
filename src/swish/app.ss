@@ -91,7 +91,7 @@
      (make-swish-sup-spec (list swish-event-logger))
      (lambda (x)
        (let ([reason (supervisor:validate-start-specs x)])
-         (when reason (exit reason)))
+         (when reason (raise reason)))
        x)))
 
   (define (set-random-seed)
