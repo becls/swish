@@ -1,4 +1,3 @@
-(reset-handler abort)
 (compile-imported-libraries #t)
 (when (equal? (getenv "PROFILE_MATS") "yes")
   (compile-profile #t)
@@ -6,3 +5,7 @@
   (cp0-effort-limit 0)
   (run-cp0 (lambda (f x) x)))
 (cd "..")
+(new-cafe
+ (lambda (x)
+   (reset-handler abort)
+   (eval x)))
