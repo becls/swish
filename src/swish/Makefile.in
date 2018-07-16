@@ -2,7 +2,7 @@
 
 ready: io-constants.ss clibs git.revision
 
-CORE := ../../bin/swish${EXESUFFIX} ../../bin/swish.boot ../../bin/swish.library ../../bin/swish-build
+CORE := ../../bin/swish${EXESUFFIX} ../../bin/swish.boot ../../bin/swish.library
 AUXLIB := ../../lib/swish/mat.so ../../lib/swish/profile.so ../../lib/swish/testing.so
 
 all: ready ${CORE} ${AUXLIB} ${REMINDERS}
@@ -78,7 +78,7 @@ install-doc: install-check
 install-bin: install-check all
 	install --directory ${INSTLIBDIR}
 	install ../../bin/swish${EXESUFFIX} ${INSTLIBDIR}
-	install ../../bin/swish-build ${INSTLIBDIR}
+	install swish-build ${INSTLIBDIR}
 	install ../../bin/swish.boot ${INSTLIBDIR}
 	install ../../bin/swish.library ${INSTLIBDIR}
 	install ${SwishLibs} ${INSTLIBDIR}
