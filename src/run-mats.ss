@@ -94,15 +94,13 @@
       (if c3
           (html-encode (stringify c3))
           "<p style='color:#007F00;'>PASS</p>")))
-  (define (output-result op name tags result)
-    (match result
-      [pass (output-row op "" name #f)]
-      [(fail . ,reason)
-       (output-row op "" name reason)]))
+  (define (output-result op result)
+    (let ([name (mat-result-test result)])
+      (match (mat-result-type result)
+        [pass (output-row op "" name #f)]
+        [fail (output-row op "" name (mat-result-message result))])))
   (define (results< x y)
-    (match-let* ([(,name1 . ,_) x]
-                 [(,name2 . ,_) y])
-      (string-ci<? (symbol->string name1) (symbol->string name2))))
+    (string-ci<? (symbol->string (mat-result-test x)) (symbol->string (mat-result-test y))))
   (call-with-output-file filename
     (lambda (op)
       (fprintf op "<html>\n")
@@ -117,7 +115,7 @@
       (for-each
        (lambda (in-file)
          (output-row op in-file "" "")
-         (for-each (lambda (ls) (apply output-result op ls))
+         (for-each (lambda (r) (output-result op r))
            (sort results< (load-results (string-append indir "/" in-file)))))
        (find-mo-files indir))
       (fprintf op "</table>\n")

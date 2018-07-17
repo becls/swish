@@ -26,6 +26,13 @@
    for-each-mat
    load-results
    mat
+   mat-result
+   mat-result-message
+   mat-result-tags
+   mat-result-test
+   mat-result-test-file
+   mat-result-type
+   mat-result?
    run-mat
    run-mats
    run-mats-to-file
@@ -38,6 +45,15 @@
   (define mat-name car)
   (define mat-tags cadr)
   (define mat-test cddr)
+
+  (define-record-type mat-result
+    (nongenerative)
+    (fields
+     (immutable test-file)
+     (immutable test)
+     (immutable tags)
+     (immutable type)
+     (immutable message)))
 
   (define-syntax mat
     (syntax-rules ()
@@ -112,51 +128,57 @@
                 [else
                  (errorf '$run-mats "unknown result ~s" result)]))))])))
 
+  ;; make adapter so we can use parameterize syntax for dynamic-wind
+  (define (make-param record-io-param key)
+    (case-lambda
+     [() (record-io-param key)]
+     [(v) (record-io-param key v)]))
+  (define (make-record-reader rtd) (make-param record-reader (record-type-name rtd)))
+  (define mat-result-rtd (record-type-descriptor mat-result))
+  (define mat-result-reader (make-record-reader mat-result-rtd))
+
   (define (run-mats-to-file filename)
-    (call-with-output-file filename
-      (lambda (op)
-        (for-each-mat
-         (lambda (name tags)
-           (run-mat name
-             (lambda (name tags result)
-               (write
-                (list name tags
-                  (case (result-type result)
-                    [pass 'pass]
-                    [fail (cons 'fail (extract (cdr result)))]
-                    [else
-                     (errorf 'run-mats-to-file "unknown result ~s" result)]))
-                op)
-               (newline op))))))
-      'replace))
+    (parameterize ([print-gensym #f])
+      (call-with-output-file filename
+        (lambda (op)
+          (for-each-mat
+           (lambda (name tags)
+             (run-mat name
+               (lambda (name tags result)
+                 (fprintf op "~s\n"
+                   (case (result-type result)
+                     [pass (make-mat-result filename name tags 'pass "")]
+                     [fail (make-mat-result filename name tags 'fail (extract (cdr result)))]
+                     [else (errorf 'run-mats-to-file "unknown result ~s" result)])))))))
+        'replace)))
 
   (define (load-results filename)
-    (call-with-input-file filename
-      (lambda (ip)
-        (let lp ()
-          (let ([x (read ip)])
-            (if (eof-object? x)
-                '()
-                (cons x (lp))))))))
+    (parameterize ([mat-result-reader mat-result-rtd])
+      (call-with-input-file filename
+        (lambda (ip)
+          (let lp ()
+            (let ([x (read ip)])
+              (if (eof-object? x)
+                  '()
+                  (cons x (lp)))))))))
 
   (define (summarize files)
     (let ([pass 0] [fail 0])
       (for-each
        (lambda (in-file)
          (for-each
-          (lambda (ls)
+          (lambda (r)
             (cond
-             [(and (list? ls) (= (length ls) 3) (caddr ls)) =>
-              (lambda (result)
-                (case (result-type result)
-                  [pass (set! pass (+ pass 1))]
-                  [fail (set! fail (+ fail 1))]
-                  [else
-                   (errorf 'summarize "unknown result ~s in file ~a"
-                     result in-file)]))]
+             [(mat-result? r)
+              (case (mat-result-type r)
+                [pass (set! pass (+ pass 1))]
+                [fail (set! fail (+ fail 1))]
+                [else
+                 (errorf 'summarize "unknown result ~s in file ~a" (mat-result-type r) in-file)])]
              [else
-              (errorf 'summarize "unknown entry ~s in file ~a" ls in-file)]))
+              (errorf 'summarize "unknown entry ~s in file ~a" r in-file)]))
           (load-results in-file)))
        files)
       (values pass fail)))
+
   )
