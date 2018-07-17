@@ -28,6 +28,7 @@
    mat
    mat-result
    mat-result-message
+   mat-result-sstats
    mat-result-tags
    mat-result-test
    mat-result-test-file
@@ -38,6 +39,7 @@
    run-mats-to-file
    summarize
    )
+  ;; deliberately limiting ourselves to Chez Scheme imports
   (import (chezscheme))
 
   (define mats (make-parameter '()))
@@ -53,7 +55,8 @@
      (immutable test)
      (immutable tags)
      (immutable type)
-     (immutable message)))
+     (immutable message)
+     (immutable sstats)))
 
   (define-syntax mat
     (syntax-rules ()
@@ -67,14 +70,18 @@
 
   (define (run-mat name reporter)
     (cond
-     [(assq name (mats)) =>
-      (lambda (mat)
-        (let ([result (guard (e [else (cons 'fail e)])
-                        ((mat-test mat))
-                        'pass)])
-          (reporter name (mat-tags mat) result)))]
+     [(assq name (mats)) => (lambda (mat) (do-run-mat mat reporter))]
      [else
       (errorf 'run-mat "mat ~a is not defined." name)]))
+
+  (define (do-run-mat mat reporter)
+    (let* ([before (statistics)]
+           [result
+            (guard (e [else (cons 'fail e)])
+              ((mat-test mat))
+              'pass)])
+      (reporter (mat-name mat) (mat-tags mat) result
+        (sstats-difference (statistics) before))))
 
   (define (for-each-mat procedure)
     (for-each (lambda (mat) (procedure (mat-name mat) (mat-tags mat)))
@@ -114,7 +121,7 @@
         (flush-output-port)]
        [else
         (run-mat (car mat-names)
-          (lambda (name tags result)
+          (lambda (name tags result sstats)
             (let ([rest (cdr mat-names)])
               (case (result-type result)
                 [pass
@@ -128,32 +135,42 @@
                 [else
                  (errorf '$run-mats "unknown result ~s" result)]))))])))
 
+  (define sstats (statistics))
+  (define sstats-rtd (record-rtd sstats))
+  (define time-rtd (record-rtd (sstats-real sstats)))
+  (define default-record-writer (record-writer sstats-rtd))
   ;; make adapter so we can use parameterize syntax for dynamic-wind
   (define (make-param record-io-param key)
     (case-lambda
      [() (record-io-param key)]
      [(v) (record-io-param key v)]))
+  (define time-writer (make-param record-writer time-rtd))
   (define (make-record-reader rtd) (make-param record-reader (record-type-name rtd)))
+  (define time-reader (make-record-reader time-rtd))
+  (define sstats-reader (make-record-reader sstats-rtd))
   (define mat-result-rtd (record-type-descriptor mat-result))
   (define mat-result-reader (make-record-reader mat-result-rtd))
 
   (define (run-mats-to-file filename)
-    (parameterize ([print-gensym #f])
+    ;; sstats already uses default-record-writer
+    (parameterize ([print-gensym #f] [time-writer default-record-writer])
       (call-with-output-file filename
         (lambda (op)
           (for-each-mat
            (lambda (name tags)
              (run-mat name
-               (lambda (name tags result)
+               (lambda (name tags result sstats)
                  (fprintf op "~s\n"
                    (case (result-type result)
-                     [pass (make-mat-result filename name tags 'pass "")]
-                     [fail (make-mat-result filename name tags 'fail (extract (cdr result)))]
+                     [pass (make-mat-result filename name tags 'pass "" sstats)]
+                     [fail (make-mat-result filename name tags 'fail (extract (cdr result)) sstats)]
                      [else (errorf 'run-mats-to-file "unknown result ~s" result)])))))))
         'replace)))
 
   (define (load-results filename)
-    (parameterize ([mat-result-reader mat-result-rtd])
+    (parameterize ([mat-result-reader mat-result-rtd]
+                   [sstats-reader sstats-rtd]
+                   [time-reader time-rtd])
       (call-with-input-file filename
         (lambda (ip)
           (let lp ()

@@ -86,7 +86,7 @@ is \code{pass}. If the test procedure raises exception \var{e}, the
 mat result is \code{(fail~.~\var{e})}.
 
 After the mat completes, the \code{run-mat} procedure tail calls
-\code{(\var{reporter} \var{name} \var{tags} \var{result})}.
+\code{(\var{reporter} \var{name} \var{tags} \var{result} \var{statistics})}.
 
 If no mat with the given \var{name} exists, an exception is raised.
 
