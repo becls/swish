@@ -35,9 +35,9 @@ io-constants.ss: io-constants${EXESUFFIX}
 	| "${SCHEME}" -q ../../${BUILD}/bin/swish.library compile.ss
 
 ../../${BUILD}/bin/swish.library: *.ss
-	find ../../${BUILD}/lib -name '*.so' -delete
 	@echo \
 	'(library-directories (quote (("." . "../${BUILD}/lib"))))' \
+	'(library-extensions (quote ((".ss" . ".wpo"))))' \
 	'(generate-wpo-files #t)' \
 	'(import (swish imports))' \
 	'(printf "compiling swish.library~%")' \
