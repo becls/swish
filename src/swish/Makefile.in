@@ -3,7 +3,10 @@
 CORE := ../../${BUILD}/bin/swish${EXESUFFIX} ../../${BUILD}/bin/swish.boot ../../${BUILD}/bin/swish.library
 AUXLIB := ../../${BUILD}/lib/swish/mat.so ../../${BUILD}/lib/swish/profile.so ../../${BUILD}/lib/swish/testing.so
 
-ready: build-dirs io-constants.ss clibs git.revision
+ready: Makefile build-dirs io-constants.ss clibs git.revision
+
+Makefile: Makefile.in ../../configure
+	$(error re-run configure to update Makefile)
 
 build-dirs:
 	@mkdir -p ../../${BUILD}/bin
@@ -62,7 +65,7 @@ INSTLIBDIR := ${INSTALLROOT}/lib/swish${SWISH_VERSION}/${MACHINE_TYPE}
 INSTWEBDIR := ${INSTALLROOT}/lib/swish${SWISH_VERSION}/web
 INSTDOCDIR := ${INSTALLROOT}/share/doc/swish${SWISH_VERSION}
 
-install: install-doc install-bin
+install: ready install-doc install-bin
 
 install-check:
 ifeq (,${INSTALLROOT})
