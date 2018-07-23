@@ -119,7 +119,7 @@
               [(assoc chart valid-charts) => cdr]
               [else (raise `#(invalid-chart ,chart))])]
        [limit (or (find-param "limit") "-7 days")])
-  (with-db [db (log-path) SQLITE_OPEN_READONLY]
+  (with-db [db (log-file) SQLITE_OPEN_READONLY]
     (hosted-page "Charts"
       (list
        (js-include "https://www.google.com/jsapi")

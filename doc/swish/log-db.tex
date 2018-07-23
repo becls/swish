@@ -35,7 +35,7 @@ events (see Chapter~\ref{chap:event-mgr}).
 The \code{log-db} gen-server handles startup and setup through two
 separate procedures. Startup uses the \code{db:start\&link}
 procedure to connect to the the SQLite log database specified by the
-\code{(log-path)} parameter. It creates the file if it does not
+\code{(log-file)} parameter. It creates the file if it does not
 exist, but otherwise startup does not modify the database.
 
 Setup makes sure the schema of the log database has been created and
@@ -117,7 +117,7 @@ respect to changes in the Swish implementation.
 
 The \code{log-db:start\&link} procedure creates a new \code{db}
 gen-server named \code{log-db} using \code{db:start\&link}. It
-uses the value of the \code{(log-path)} parameter as the path to the
+uses the value of the \code{(log-file)} parameter as the path to the
 SQLite database and specifies \code{create} mode.
 
 \defineentry{log-db:setup}

@@ -56,7 +56,7 @@
                 (starts-with-ci? query "with ")
                 (starts-with-ci? query "explain "))
       (raise "Query must start with select, with, or explain."))
-    (with-db [db (log-path) SQLITE_OPEN_READONLY]
+    (with-db [db (log-file) SQLITE_OPEN_READONLY]
       (let ([stmt (sqlite:prepare db query)])
         (put-string op "{\"instance\":\"")
         (put-string op (log-db:get-instance-id))

@@ -71,7 +71,7 @@
     [#(error ,_reason ,stack) stack]
     [,_ ""]))
 
-(with-db [db (log-path) SQLITE_OPEN_READONLY]
+(with-db [db (log-file) SQLITE_OPEN_READONLY]
   (match (get-param "type")
     ["child"
      (hosted-page "Child Errors" '()

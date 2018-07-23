@@ -198,7 +198,7 @@
         [last-sql (string-param "lastSql")]
         [limit (integer-param "limit" 0)]
         [offset (integer-param "offset" 0)])
-    (with-db [db (log-path) SQLITE_OPEN_READONLY]
+    (with-db [db (log-file) SQLITE_OPEN_READONLY]
       (if sql
           (match (catch (do-query db sql limit offset))
             [#(EXIT ,reason) (respond:error reason sql)]

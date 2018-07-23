@@ -25,7 +25,7 @@
   (export
    base-dir
    data-dir
-   log-path
+   log-file
    tmp-dir
    web-dir
    )
@@ -38,7 +38,7 @@
 
   (define data-dir (make-parameter #f))
 
-  (define log-path (make-parameter #f))
+  (define log-file (make-parameter #f))
 
   (define tmp-dir (make-parameter #f))
 
@@ -50,7 +50,7 @@
         (match (catch (directory? base))
           [#t
            (data-dir (path-combine base "data"))
-           (log-path (path-combine (data-dir) "Log.db3"))
+           (log-file (path-combine (data-dir) "Log.db3"))
            (tmp-dir (path-combine (data-dir) "tmp"))
            (web-dir (path-combine base "web"))
            base]

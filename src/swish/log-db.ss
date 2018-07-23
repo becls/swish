@@ -49,7 +49,7 @@
 
   (define (log-db:start&link)
     (db:start&link 'log-db
-      (make-directory-path (log-path))
+      (make-directory-path (log-file))
       'create))
 
   (define (log-db:setup loggers)
