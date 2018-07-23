@@ -26,7 +26,7 @@
    base-dir
    data-dir
    log-path
-   tmp-path
+   tmp-dir
    web-dir
    )
   (import
@@ -40,7 +40,7 @@
 
   (define log-path (make-parameter #f))
 
-  (define tmp-path (make-parameter #f))
+  (define tmp-dir (make-parameter #f))
 
   (define web-dir (make-parameter #f))
 
@@ -51,7 +51,7 @@
           [#t
            (data-dir (path-combine base "data"))
            (log-path (path-combine (data-dir) "Log.db3"))
-           (tmp-path (path-combine (data-dir) "tmp"))
+           (tmp-dir (path-combine (data-dir) "tmp"))
            (web-dir (path-combine base "web"))
            base]
           [#(EXIT ,reason) (exit reason)]

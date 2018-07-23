@@ -94,11 +94,11 @@
     (let-values ([(op get) (open-bytevector-output-port)])
       (http:handle-input (open-bytevector-input-port (string->utf8 input)) op)
       (utf8->string (get))))
-  (when (file-directory? (tmp-path))
+  (when (file-directory? (tmp-dir))
     (for-each (lambda (x)
                 (when (ends-with? x ".tmp")
-                  (delete-file (path-combine (tmp-path) x))))
-      (directory-list (tmp-path))))
+                  (delete-file (path-combine (tmp-dir) x))))
+      (directory-list (tmp-dir))))
   (match-let*
    ([#(EXIT normal) (catch (test ""))]
     [#(EXIT #(unhandled-input ,bv))
@@ -335,7 +335,7 @@
              (make-string 4194304 #\space)
              "\r\n"
              "------WebKitFormBoundaryRMHyBKLIXfhX3ZNy--\r\n")))]
-    [() (filter (lambda (x) (ends-with? x ".tmp")) (directory-list (tmp-path)))]
+    [() (filter (lambda (x) (ends-with? x ".tmp")) (directory-list (tmp-dir)))]
 
     ;; paths
     [#(EXIT #(http-file-not-found "/no-file"))

@@ -681,7 +681,7 @@
               (parse-end (- limit (bytevector-length content))))))]))
     (define (parse-file name limit)
       (let* ([fn (make-directory-path
-                  (path-combine (tmp-path)
+                  (path-combine (tmp-dir)
                     (format "~36r.tmp"
                       (bytevector-uint-ref (osi_make_uuid) 0 'little 16))))]
              [op (parameterize ([custom-port-buffer-size (ash 1 16)])

@@ -56,7 +56,7 @@ or \code{application/x-www-form-urlencoded}, the content is
 converted to an association list. Otherwise, parameter
 \code{"unhandled-content"} is included with the value of the raw
 bytevector of data. Each uploaded file is stored in
-\code{(tmp-path)}, and the association list value is
+\code{(tmp-dir)}, and the association list value is
 \code{\#(<file> \var{filename})}.
 
 \code{http:file-handler} is then called combining the
