@@ -21,5 +21,5 @@
   ["file-headers"
    (http:respond-file op 200 '(("Cache-Control" . "no-cache")
                                ("Content-Type" . "text/plain"))
-     (path-combine (web-path) "static" "ok.txt"))]
+     (path-combine (web-dir) "static" "ok.txt"))]
   )

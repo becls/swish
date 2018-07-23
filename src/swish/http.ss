@@ -120,7 +120,7 @@
       )
     (define empty-ht (ht:make string-ci-hash string-ci=? string?))
     (define (read-mime-types)
-      (let ([ip (open-file-to-read (path-combine (web-path) "mime-types"))])
+      (let ([ip (open-file-to-read (path-combine (web-dir) "mime-types"))])
         (on-exit (close-port ip)
           (let lp ([ht empty-ht])
             (match (read ip)
@@ -136,7 +136,7 @@
             ($state copy [mime-types (read-mime-types)]))))
     (define (url->abs-paths path)
       (map
-       (lambda (x) (path-combine (web-path) x))
+       (lambda (x) (path-combine (web-dir) x))
        (cond
         [(char=? (string-ref path (- (string-length path) 1)) #\/)
          (list (string-append path "index.ss"))]
@@ -223,7 +223,7 @@
          (cons (watch-path path self) watchers)
          (list-directory path)))
       (if (null? ($state watchers))
-          ($state copy [watchers (watch (web-path) '())])
+          ($state copy [watchers (watch (web-dir) '())])
           state))
     (define (clear-cache state)
       ($state copy*
@@ -245,7 +245,7 @@
       (match msg
         [#(path-changed ,path ,filename ,_)
          `#(no-reply
-            ,(if (and (string=? path (web-path))
+            ,(if (and (string=? path (web-dir))
                       (string=? filename "mime-types"))
                  ($state copy [mime-types #f])
                  (clear-cache state)))]
@@ -557,7 +557,7 @@
     (define (http:path-root path fn)
       (and (string? fn)
            (if (starts-with? fn "/") ; rooted
-               (web-path)
+               (web-dir)
                path)))
     (define (http:include-help k fn path)
       (define (fail)

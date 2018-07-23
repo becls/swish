@@ -38,7 +38,7 @@
 
 (define (boot-http)
   (http-port-number test-port)
-  (web-path (path-combine (base-dir) "src" "swish" "web-mats"))
+  (web-dir (path-combine (base-dir) "src" "swish" "web-mats"))
 
   (start-event-mgr)
   (event-mgr:set-log-handler            ; silence the event-mgr
@@ -460,7 +460,7 @@
 
 (http-mat mime-types ()
   (capture-events)
-  (let* ([mime-types (path-combine (web-path) "mime-types")]
+  (let* ([mime-types (path-combine (web-dir) "mime-types")]
          [mime-types.bak (string-append mime-types ".bak")])
     (rename-path mime-types mime-types.bak)
     (on-exit (rename-path mime-types.bak mime-types)
@@ -497,7 +497,7 @@
   (define inc3 "inc3")
 
   (define (full fn)
-    (path-combine (web-path) fn))
+    (path-combine (web-dir) fn))
 
   (define (check s)
     (sleep-ms 10)
@@ -553,7 +553,7 @@
 
 (http-mat path-watcher-fail ()
   (capture-events)
-  (let ([path (web-path)])
+  (let ([path (web-dir)])
     (send 'http-cache `#(path-watcher-failed ,path -1234))
     (receive (after 1000 'timeout-waiting-for-cache-to-fail)
       [`(<gen-server-terminating> [name http-cache] ,reason)

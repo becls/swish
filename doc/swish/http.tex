@@ -74,10 +74,10 @@ request from the input port.
 The \code{http-cache} is a gen-server that stores page handlers and
 provides a mapping from file extension to content type. It creates a
 directory watcher using \code{watch-directory} to invalidate the
-cache when anything in the \code{(web-path)} tree changes.
+cache when anything in the \code{(web-dir)} tree changes.
 
 The \code{http-cache} considers a path that ends in ``.ss'' a
-dynamic page loaded from \code{(web-path)}. Other paths are
+dynamic page loaded from \code{(web-dir)}. Other paths are
 considered static and are sent directly over the connection using
 \code{http:respond-file}.
 
@@ -89,7 +89,7 @@ exploits cannot be used against the system.
 User input should be carefully checked before calling \code{eval} or
 invoking a database query.
 
-A URL which directs the system away from \code{(web-path)} using
+A URL which directs the system away from \code{(web-dir)} using
 ``..'' could allow access to system files. \code{http:file-handler}
 explicitly checks for relative paths.
 
@@ -104,7 +104,7 @@ runs out of space, the handler process will exit with an I/O error.
 \section {Dynamic Pages}
 
 A dynamic page is a sequence of definitions followed by a sequence of
-expressions stored in ``.ss'' files in \code{(web-path)}.  The
+expressions stored in ``.ss'' files in \code{(web-dir)}.  The
 definitions and expressions are placed in a \code{lambda} expression
 that is evaluated by the \code{interpret} system procedure.  The
 page is responsible for sending the HTTP response. The output port is
@@ -143,7 +143,7 @@ variables to a dynamic page:
 \end{syntax}\antipar
 
 The \code{http:include} construct includes the definitions from
-\var{filename}, a path relative to \code{(web-path)} if
+\var{filename}, a path relative to \code{(web-dir)} if
 \var{filename} begins with a forward slash, else relative to the
 directory of the current file.
 
@@ -334,7 +334,7 @@ header is added, if it is not already present, with value
 \code{max-age=3600}. The \code{Content-Type} header is added if
 it is not already present and the extension of \var{filename} matches
 (case insensitively) an extension in the \code{mime-types} file of
-\code{(web-path)}. Each line of \code{mime-types} has the form
+\code{(web-dir)}. Each line of \code{mime-types} has the form
 \code{("\var{extension}"~.~"\var{Content-Type}")}. The content of
 the file is streamed to the output port so that the file does not need
 to be loaded into memory. The output port is flushed.

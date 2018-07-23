@@ -27,7 +27,7 @@
    data-dir
    log-path
    tmp-path
-   web-path
+   web-dir
    )
   (import
    (chezscheme)
@@ -42,7 +42,7 @@
 
   (define tmp-path (make-parameter #f))
 
-  (define web-path (make-parameter #f))
+  (define web-dir (make-parameter #f))
 
   (define base-dir
     (make-parameter (cd)
@@ -52,7 +52,7 @@
            (data-dir (path-combine base "data"))
            (log-path (path-combine (data-dir) "Log.db3"))
            (tmp-path (path-combine (data-dir) "tmp"))
-           (web-path (path-combine base "web"))
+           (web-dir (path-combine base "web"))
            base]
           [#(EXIT ,reason) (exit reason)]
           [#f (errorf 'base-dir "no directory ~s" base)]))))
