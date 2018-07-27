@@ -449,48 +449,38 @@ gen-server, as well as the following events.
   & \code{<child-end>} \\
 \end{grammar}
 
-\defineentry{<supervisor-error>}
-\begin{event}\code{<supervisor-error>}\end{event}
-\antipar
-\begin{tabular}{r l}
-  \code{timestamp} & the time the event occured \\
-  \code{supervisor} & the supervisor's process id \\
-  \code{error-context} & the context in which the event occured \\
-  \code{reason} & the reason for the error \\
-  \code{child-pid} & the child's process id \\
-  \code{child-name} & the child's name \\
-\end{tabular}
+\begin{pubevent}{<supervisor-error>}
+  \argrow{timestamp}{the time the event occured}
+  \argrow{supervisor}{the supervisor's process id}
+  \argrow{error-context}{the context in which the event occured}
+  \argrow{reason}{the reason for the error}
+  \argrow{child-pid}{the child's process id}
+  \argrow{child-name}{the child's name}
+\end{pubevent}
 
 This event is fired when the supervisor fails to start its children,
 fails to restart its children, or when it has exceeded the maximum
 restart frequency.
 
-\defineentry{<child-start>}
-\begin{event}\code{<child-start>}\end{event}
-\antipar
-\begin{tabular}{r l}
-  \code{timestamp} & the time the event occured \\
-  \code{supervisor} & the supervisor's process id \\
-  \code{pid} & the child's process id \\
-  \code{name} & the child's name \\
-  \code{restart-type} & the child's restart-type \\
-  \code{shutdown} & the child's shutdown \\
-  \code{type} & the child's type \\
-\end{tabular}
+\begin{pubevent}{<child-start>}
+  \argrow{timestamp}{the time the event occured}
+  \argrow{supervisor}{the supervisor's process id}
+  \argrow{pid}{the child's process id}
+  \argrow{name}{the child's name}
+  \argrow{restart-type}{the child's restart-type}
+  \argrow{shutdown}{the child's shutdown}
+  \argrow{type}{the child's type}
+\end{pubevent}
 
 This event is fired after the child start procedure has returned a
 valid value.
 
-\defineentry{<child-end>}
-\begin{event}\code{<child-end>}\end{event}
-\antipar
-\begin{tabular}{r l}
-  \code{timestamp} & the time the event occured \\
-  \code{pid} & the child's process id \\
-  \code{killed} & 1 indicates the supervisor terminated the child, 0
-  otherwise \\
-  \code{reason} & the reason the child has terminated \\
-\end{tabular}
+\begin{pubevent}{<child-end>}
+  \argrow{timestamp}{the time the event occured}
+  \argrow{pid}{the child's process id}
+  \argrow{killed}{1 indicates the supervisor terminated the child, 0 otherwise}
+  \argrow{reason}{the reason the child has terminated}
+\end{pubevent}
 
 This event is fired after the supervisor terminates a child process,
 and after the supervisor detects a failure in a child.
