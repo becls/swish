@@ -4,6 +4,9 @@
 
 * `(swish app-io)`
   - removed `bin-dir`
+  - renamed `log-path` to `log-file`
+  - renamed `tmp-path` to `tmp-dir`
+  - renamed `web-path` to `web-dir`
 * `(swish erlang)`
   - added `complete-io` and `wait-for-io`
   - `exit` is now `raise` to eliminate a conflict with Chez Scheme.
@@ -64,4 +67,4 @@
   - added `stat-directory?`
   - added `stat-regular-file?`
   - added `watch-path`
-* `(swish osi)` was completed revamped.
+* `(swish osi)` was completely revamped.
