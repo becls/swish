@@ -26,7 +26,7 @@
  )
 
 (define (prereq-path)
-  (path-combine "build" "mat-prereq" "lib" "swish.x.y.z" "arch"))
+  (path-combine (base-dir) "build" "mat-prereq" "lib" "swish.x.y.z" "arch"))
 
 (define (output-dir)
   (path-combine (tmp-dir) "mat-output"))
@@ -426,3 +426,84 @@
               [stdout ,stdout]
               [stderr ()]))
      (match-regexps '("app:shutdown due to \\(exit foo\\)") stdout)]))
+
+(isolate-mat compile-library ()
+  (define scheme (or (getenv "SCHEME") "scheme"))
+  (define source (input-file "clib"))
+  (define compiled (string-append (path-root source) ".so"))
+  (define wpo (string-append (path-root source) ".wpo"))
+  (write-example "clib"
+    `((library (clib)
+        (export x y)
+        (import (scheme))
+        (define w "hidden")
+        (define x 123)
+        (define y "not"))))
+  (swish-build-test `("-o" ,compiled "--library" ,source) '())
+  ;; expected outputs exist
+  (assert (regular-file? compiled))
+  (assert (regular-file? wpo))
+  ;; see if it worked, making sure (import (clib))
+  ;; can't just fall back on the source
+  (assert (delete-file source))
+  (test-os-process scheme `("-q" ,compiled)
+    (format "~{~s\n~}" `((import (clib)) (printf "y: ~a x: ~a\n" y x) #!eof))
+    `("^y: not x: 123$")))
+
+(isolate-mat missing-libs ()
+  (define scheme (or (getenv "SCHEME") "scheme"))
+  (define source (input-file "miss"))
+  (define compiled (string-append (path-root source) ".so"))
+  (define wpo (string-append (path-root source) ".wpo"))
+  (define lib-compiled (path-combine (output-dir) "lib.so"))
+  (write-example "miss"
+    `((library (miss)
+        (export xyz)
+        (import (scheme))
+        (define xyz "PDQ"))))
+  (write-example "lib"
+    `((library (lib)
+        (export a)
+        (import (miss) (scheme))
+        (define a (list xyz "Bach")))))
+  (write-example "app"
+    `((import (lib) (scheme))
+      (printf "got:~{ ~a~}\n" a)))
+  (swish-build-test `("-o" ,compiled "--library" ,source) '())
+  ;; ensure we have only the compiled library, no source or wpo
+  (assert (delete-file source))
+  (assert (delete-file wpo))
+  ;; thin
+  (swish-build-test `("-L" ,(output-dir) "-o" ,(output-file "thin-ml") ,(input-file "app"))
+    (list (format "^~a$" (pregexp-quote "Added without whole-program optimization: (miss)"))))
+  (run-thin "thin-ml" '() '("^got: PDQ Bach$"))
+  ;; fat
+  (write-example "app"
+    `((import (lib) (scheme) (swish imports))
+      (swish-start
+       (lambda (cmdline)
+         (printf "got:~{ ~a~}\n" a)))))
+  (swish-build-test `("-L" ,(output-dir) "-o" ,(output-file "fat-ml") ,(input-file "app") "-b" "petite")
+    (list (format "^~a$" (pregexp-quote "Added without whole-program optimization: (miss)"))))
+  (run-fat "fat-ml" '() '("^got: PDQ Bach$"))
+  ;; library
+  (swish-build-test
+   `("-L" ,(output-dir) "--library" "-o" ,lib-compiled ,(input-file "lib"))
+    (list (format "^~a$" (pregexp-quote "These libraries must be provided at run time: (miss)"))))
+  ;; delete lib.ss, but leave miss.so so we can check that the
+  ;; compiled library works so long as (miss) can be found
+  (assert (delete-file (input-file "lib")))
+  (test-os-process scheme `("-q" "--import-notify" "--libdirs" ,(output-dir) ,lib-compiled)
+    (format "~{~s\n~}"
+      `((import (lib))
+        (pretty-print a)
+        #!eof))
+    (list
+     "^import: found object file \".*miss\\.so\""
+     "^import: loading object file \".*miss\\.so\""
+     (pregexp-quote (format "~s" '("PDQ" "Bach")))))
+  ;; now delete miss.so so using compiled library fails
+  (assert (delete-file compiled))
+  (test-os-process scheme `("-q" "--libdirs" ,(output-dir) ,lib-compiled)
+    (format "~{~s\n~}" `((reset-handler exit) (console-error-port (console-output-port)) (import (lib))))
+    (list "^Exception: library \\(miss\\) not found")))
