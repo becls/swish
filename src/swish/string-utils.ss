@@ -32,9 +32,12 @@
    starts-with?
    symbol-append
    trim-whitespace
+   wrap-text
    )
   (import
-   (chezscheme))
+   (chezscheme)
+   (swish erlang)
+   (swish pregexp))
 
   (define join
     (case-lambda
@@ -139,4 +142,55 @@
             s
             (substring s start (fx+ i 1)))]))
     (find-start s 0 (string-length s)))
+
+  (define (extract text)
+    (define compiled (pregexp "[^ \\n]+| |\\n"))
+    (let lp ([start 0] [acc '()])
+      (match (pregexp-match-positions compiled text start)
+        [#f (reverse acc)]
+        [((,start . ,end))
+         (let ([s (substring text start end)])
+           (lp end
+             (cons
+              (match s
+                [" " 'ws]
+                ["\n" 'line]
+                [,_ s])
+              acc)))])))
+
+  (define (minimize-whitespace ls)
+    (let lp ([ls ls] [bol? #t] [ws? #f])
+      (match ls
+        [() '()]
+        [(ws . ,rest) (lp rest bol? #t)]
+        [(line . ,rest) (cons 'line (lp rest #t #f))]
+        [(,x . ,rest)
+         (let ([rest (cons x (lp rest #f ws?))])
+           (if (or bol? (not ws?))
+               rest
+               (cons 'ws rest)))])))
+
+  (define (wrap-text op width initial-indent subsequent-indent text)
+    (let lp ([ls (minimize-whitespace (extract text))]
+             [pos 0] [indent initial-indent] [indent? #t])
+      (match ls
+        [() (void)]
+        [(ws . ,(rest <= (,text . ,_)))
+         (guard (string? text))
+         (cond
+          [(< (+ (string-length text) pos) width)
+           (fprintf op " ")
+           (lp rest (+ pos 1) indent indent?)]
+          [else
+           (newline op)
+           (lp rest 0 subsequent-indent #t)])]
+        [(line . ,rest)
+         (newline op)
+         (lp rest 0 subsequent-indent #t)]
+        [(,text . ,rest)
+         (when indent?
+           (display-string (make-string indent #\space) op))
+         (display text op)
+         (lp rest (+ pos (string-length text)) indent #f)])))
+
   )

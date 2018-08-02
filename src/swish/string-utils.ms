@@ -155,3 +155,52 @@
     ["A" (trim-whitespace " \n A \n ")]
     ["Z" (trim-whitespace "Z")])
    'ok))
+
+(mat wrap-text ()
+  (define (wt w first-w rest-w text)
+    (let ([os (open-output-string)])
+      (wrap-text os w first-w rest-w text)
+      (get-output-string os)))
+  (match-let*
+   ([,in "Not even room for 1 character. All must wrap."]
+    [,s (join (split in #\space) #\newline)]
+    [,@s (wt 0 0 0 in)]
+    [,in "NoSpacesSoNothingWrapsDespiteBeingOverWidth"]
+    [,@in (wt 0 0 0 in)]
+    [,s (join '("Nothing" "split:" "newlines" "were" "preserved.") #\newline)]
+    [,@s (wt 999 0 0 s)]
+    [,s (join '("We" "preserve" "tabs" "but" "don't" "account" "for" "width") #\tab)]
+    [,@s (wt 0 0 0 s)]
+    [,s (join '("This will wrap" "and tab\twill" "fit as single" "character.") #\newline)]
+    [,@s (wt 14 0 0 (join (split s #\newline) #\space))]
+    [,s (join '("0 1 2" "3 4 5" "6 7 8" "9") #\newline)]
+    [,@s (wt 5 0 0 "0 1 2 3 4 5 6 7 8 9")]
+    [,in "This      string contains    consecutive      spaces."]
+    [,s (join '("This string" "contains" "consecutive" "spaces.") #\newline)]
+    [,@s (wt 11 0 0 in)]
+    [,in "      Leading spaces       and    some at   the end.           "]
+    [,s (join '("Leading spaces and" "some at the end.") #\newline)]
+    [,@s (wt 18 0 0 in)]
+    ["foo\nbar" (wt 99 0 0 "   foo   \nbar")]
+    ["foo\nbar" (wt 99 0 0 "   foo   \n    bar      ")]
+    ["" (wt 999 0 0 "                         ")]
+    ["\r\na b c \r\n" ;; \r is just another character, not a line marker
+     (wt 10 0 0 "\r\n    a    b    c    \r\n")]
+    [,in
+     (join
+      '("This did not need to wrap, since we had plenty of room."
+        "Even more text here that will also go on the same line."
+        "Wow, this is going to be a pretty long line.")
+      #\space)]
+    [,@in (wt 1000 0 0 in)]
+    ["   Hi\nmom" (wt 0 3 0 "Hi mom")]
+    ["   Hi\n mom" (wt 0 3 1 "Hi mom")]
+    [" Hi\n   mom" (wt 0 1 3 "Hi mom")]
+    ["   Hi\nmom\nand\ndad" (wt 0 3 0 "Hi mom and dad")]
+    ["   Hi\n mom\n and\n dad" (wt 0 3 1 "Hi mom and dad")]
+    [" Hi\n   mom\n   and\n   dad" (wt 0 1 3 "Hi mom and dad")]
+    ["  Hi\n  mom" (wt 0 2 2 "Hi mom")]
+    ["  Hi\n  mom\n  and\n  dad" (wt 0 2 2 "Hi mom and dad")]
+    ["     Hi\n  mom\n  and\n  dad\n  just\n  two?"
+     (wt 0 5 2 "Hi mom and\ndad\njust\ntwo?")])
+   'ok))
