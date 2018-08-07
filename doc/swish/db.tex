@@ -487,6 +487,16 @@ iteratively calls \code{(sqlite:step \var{stmt})} to build the
 resulting list of rows. It resets the statement when the procedure
 exits.
 
+\defineentry{sqlite:expanded-sql}
+\begin{procedure}
+  \code{(sqlite:expanded-sql \var{stmt})}
+\end{procedure}
+\returns{} a string
+
+The \code{sqlite:expanded-sql} procedure returns the SQL string
+expanded with the binding values for the statement record instance
+\var{stmt}.
+
 \defineentry{sqlite:finalize}
 \begin{procedure}
   \code{(sqlite:finalize \var{stmt})}
@@ -518,6 +528,15 @@ library.
 The \code{sqlite:prepare} procedure returns a statement record
 instance for the \var{sql} statement in the database record instance
 \var{db}.
+
+\defineentry{sqlite:sql}
+\begin{procedure}
+  \code{(sqlite:sql \var{stmt})}
+\end{procedure}
+\returns{} a string
+
+The \code{sqlite:sql} procedure returns the unexpanded SQL string for
+the statement record instance \var{stmt}.
 
 \defineentry{sqlite:step}
 \begin{procedure}

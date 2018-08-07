@@ -111,6 +111,7 @@ EXPORT ptr osi_bind_statement(uptr statement, int index, ptr datum);
 EXPORT ptr osi_clear_statement_bindings(uptr statement);
 EXPORT ptr osi_get_last_insert_rowid(uptr database);
 EXPORT ptr osi_get_statement_columns(uptr statement);
+EXPORT ptr osi_get_statement_expanded_sql(uptr statement);
 EXPORT ptr osi_get_statement_sql(uptr statement);
 EXPORT ptr osi_reset_statement(uptr statement);
 EXPORT ptr osi_step_statement(uptr statement, ptr callback);

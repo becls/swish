@@ -1234,10 +1234,10 @@
         x)))
   (redefine exit-handler
     (make-process-parameter (exit-handler)
-     (lambda (x)
-       (unless (procedure? x)
-         (bad-arg 'exit-handler x))
-       x)))
+      (lambda (x)
+        (unless (procedure? x)
+          (bad-arg 'exit-handler x))
+        x)))
   (redefine pretty-initial-indent
     (make-process-parameter 0
       (lambda (x)

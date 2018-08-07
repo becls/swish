@@ -367,6 +367,18 @@ ptr osi_get_statement_columns(uptr statement) {
   return v;
 }
 
+ptr osi_get_statement_expanded_sql(uptr statement) {
+  statement_t* s = (statement_t*)statement;
+  if (s->database->busy)
+    return make_error_pair("osi_get_statement_expanded_sql", UV_EBUSY);
+  char* sql = sqlite3_expanded_sql(s->stmt);
+  if (NULL == sql)
+    return make_error_pair("osi_get_statement_expanded_sql", UV_ENOMEM);
+  ptr r = Sstring_utf8(sql, -1);
+  free(sql);
+  return r;
+}
+
 ptr osi_get_statement_sql(uptr statement) {
   statement_t* s = (statement_t*)statement;
   if (s->database->busy)

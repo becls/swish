@@ -170,10 +170,10 @@
 
   (define swish-start
     (make-parameter default-swish-start
-     (lambda (x)
-       (unless (procedure? x)
-         (bad-arg 'swish-start x))
-       x)))
+      (lambda (x)
+        (unless (procedure? x)
+          (bad-arg 'swish-start x))
+        x)))
 
   (suppress-greeting #t)
 

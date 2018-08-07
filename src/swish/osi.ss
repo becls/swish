@@ -62,6 +62,8 @@
    osi_get_stat*
    osi_get_statement_columns
    osi_get_statement_columns*
+   osi_get_statement_expanded_sql
+   osi_get_statement_expanded_sql*
    osi_get_statement_sql
    osi_get_statement_sql*
    osi_get_stdin
@@ -249,6 +251,7 @@
   (define-osi osi_clear_statement_bindings (statement uptr))
   (define-osi osi_get_last_insert_rowid (database uptr))
   (define-osi osi_get_statement_columns (statement uptr))
+  (define-osi osi_get_statement_expanded_sql (statement uptr))
   (define-osi osi_get_statement_sql (statement uptr))
   (define-osi osi_reset_statement (statement uptr))
   (define-osi osi_step_statement (statement uptr) (callback ptr))

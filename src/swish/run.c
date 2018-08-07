@@ -53,6 +53,8 @@ static void swish_init(void) {
   add_foreign(osi_get_sqlite_status);
   add_foreign(osi_get_stat);
   add_foreign(osi_get_statement_columns);
+  add_foreign(osi_get_statement_expanded_sql);
+  add_foreign(osi_get_statement_sql);
   add_foreign(osi_get_statement_sql);
   add_foreign(osi_get_stdin);
   add_foreign(osi_get_tcp_listener_port);
@@ -63,8 +65,8 @@ static void swish_init(void) {
   add_foreign(osi_is_tick_over);
   add_foreign(osi_kill);
   add_foreign(osi_list_directory);
-  add_foreign(osi_listen_tcp);
   add_foreign(osi_list_uv_handles);
+  add_foreign(osi_listen_tcp);
   add_foreign(osi_make_directory);
   add_foreign(osi_make_uuid);
   add_foreign(osi_open_database);

@@ -43,9 +43,11 @@
    sqlite:close
    sqlite:columns
    sqlite:execute
+   sqlite:expanded-sql
    sqlite:finalize
    sqlite:open
    sqlite:prepare
+   sqlite:sql
    sqlite:step
    transaction
    with-db
@@ -485,6 +487,12 @@
 
   (define (sqlite:columns stmt)
     (osi_get_statement_columns (statement-handle stmt)))
+
+  (define (sqlite:sql stmt)
+    (osi_get_statement_sql (statement-handle stmt)))
+
+  (define (sqlite:expanded-sql stmt)
+    (osi_get_statement_expanded_sql (statement-handle stmt)))
 
   (define ($lazy-execute sql bindings)
     (let* ([cache (statement-cache)]
