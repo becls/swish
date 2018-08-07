@@ -182,7 +182,7 @@
   (define (make-utf8-transcoder)
     (make-transcoder (utf-8-codec)
       (eol-style none)
-      (error-handling-mode raise)))
+      (error-handling-mode replace)))
 
   (define (binary->utf8 bp)
     (transcoded-port bp (make-utf8-transcoder)))
