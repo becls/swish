@@ -23,6 +23,7 @@
 (library (swish testing)
   (export
    <os-result>
+   assert-syntax-error
    capture-events
    delete-tree
    gc
@@ -54,6 +55,18 @@
    (swish supervisor)
    (swish watcher)
    )
+
+  (define-syntax assert-syntax-error
+    (syntax-rules ()
+      [(_ e expected) ($assert-syntax-error 'e expected)]))
+
+  (define ($assert-syntax-error e expected)
+    (guard
+     (x
+      [(and (syntax-violation? x) (string=? (condition-message x) expected))
+       'ok])
+     (eval e)
+     (errorf 'assert-syntax-error "failed to raise syntax error: ~s" e)))
 
   (define (sleep-ms t) (receive (after t 'ok)))
 

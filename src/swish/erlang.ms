@@ -73,18 +73,6 @@
                 (equal? expected-filename (join (split actual-filename #\\) "/")))]
            [,_ #f]))]))
 
-(define-syntax assert-syntax-error
-  (syntax-rules ()
-    [(_ e expected) ($assert-syntax-error 'e expected)]))
-
-(define ($assert-syntax-error e expected)
-  (guard
-   (x
-    [(and (syntax-violation? x) (string=? (condition-message x) expected))
-     'ok])
-   (eval e)
-   (errorf 'assert-syntax-error "failed to raise syntax error: ~s" e)))
-
 (define (pid? x)
   (and (exact? x) (integer? x) (positive? x)))
 

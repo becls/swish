@@ -33,18 +33,6 @@
 
 (define filename (path-combine (data-dir) "test-db.db3"))
 
-(define-syntax assert-syntax-error
-  (syntax-rules ()
-    [(_ e expected) ($assert-syntax-error 'e expected)]))
-
-(define ($assert-syntax-error e expected)
-  (guard
-   (x
-    [(and (syntax-violation? x) (string=? (condition-message x) expected))
-     'ok])
-   (eval e)
-   (errorf 'assert-syntax-error "failed to raise syntax error: ~s" e)))
-
 (define-syntax (echo-sql x)
   (syntax-case x ()
     [(k sql)
