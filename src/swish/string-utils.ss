@@ -31,6 +31,7 @@
    starts-with-ci?
    starts-with?
    symbol-append
+   trim-whitespace
    )
   (import
    (chezscheme))
@@ -119,4 +120,23 @@
       (if (>= (date-zone-offset d) 0) #\+ #\-)
       (quotient (abs (date-zone-offset d)) 3600)
       (remainder (quotient (abs (date-zone-offset d)) 60) 60)))
+
+  (define (trim-whitespace s)
+    (define (find-start s i len)
+      (cond
+       [(eqv? i len) ""]
+       [(char-whitespace? (string-ref s i)) (find-start s (fx+ i 1) len)]
+       [else (find-end s (fx- len 1) i len)]))
+    (define (find-end s i start len)
+      (cond
+       [(eqv? i start)
+        (if (eqv? len 1)
+            s
+            (string (string-ref s i)))]
+       [(char-whitespace? (string-ref s i)) (find-end s (fx- i 1) start len)]
+       [else
+        (if (and (eqv? start 0) (eqv? (fx- len 1) i))
+            s
+            (substring s start (fx+ i 1)))]))
+    (find-start s 0 (string-length s)))
   )

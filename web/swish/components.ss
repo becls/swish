@@ -87,9 +87,9 @@
     (section software-product-name
       (link "index" "Home")
       (link "charts" "Charts")
-      (link "errors?type=child" "Child Errors")
-      (link "errors?type=gen-server" "Gen-Server Errors")
-      (link "errors?type=supervisor" "Supervisor Errors")
+      (link "errors?type=child&sql=&limit=100&offset=0" "Child Errors")
+      (link "errors?type=gen-server&sql=&limit=100&offset=0" "Gen-Server Errors")
+      (link "errors?type=supervisor&sql=&limit=100&offset=0" "Supervisor Errors")
       (link "query-db" "Log DB")
       (link "debug" "Debug"))))
 

@@ -46,3 +46,38 @@ textarea.sql {
   height: 10em;
   width: 40em;
 }
+
+.dataTable {
+    word-wrap: break-word;
+    width: 99%
+}
+
+.dataTable th{
+    text-align: left;
+}
+
+.narrow{
+    max-width: 150px;
+    min-width: 0px;
+}
+
+.normal{
+    max-width: 200px;
+    min-width: 0px;
+}
+
+.wide{
+    max-width: 250px;
+    min-width: 0px;
+}
+
+.extra-wide{
+    max-width: 350px;
+    min-width: 0px;
+}
+
+
+.dataCont {
+    overflow-x: auto;
+    width: 100%;
+}
