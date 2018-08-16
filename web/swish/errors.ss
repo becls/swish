@@ -40,8 +40,8 @@
         `(td (@ (class ,c)) ,text)
         (let ([id (symbol->string (gensym))])
           `(td (@ (class ,(format "elide ~a" c)))
-            (input (@ (class "elide") (id ,id) (type "checkbox") (checked "yes")))
-            (label (@ (for ,id) (class "elide")) ,text))))))
+             (input (@ (class "elide") (id ,id) (type "checkbox") (checked "yes")))
+             (label (@ (for ,id) (class "elide")) ,text))))))
 
 (define (data->html-table border columns rows f)
   (let ([columns (vector->list columns)])
