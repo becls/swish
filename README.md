@@ -32,6 +32,9 @@ I/O.
 ## Mac
 
 - Chez Scheme 9.5.1 from June 14, 2018 or later
+- XCode must be installed and the command line tools must be set (Xcode->Preferences->Locations->command line tools)
+- pdflatex (can be installed through homebrew using `brew cask install mactex`)
+- dot (can be installed through homebrew using `brew install graphviz --with-app`)
 
 ## Windows
 
