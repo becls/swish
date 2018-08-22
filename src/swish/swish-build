@@ -22,6 +22,8 @@
 ;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 ;;; DEALINGS IN THE SOFTWARE.
 
+(define help-sections '(all details examples))
+
 (define cli
   (cli-specs
    ["output-file" -o (string "<output>") "write output to <output>"]
@@ -34,9 +36,8 @@
     "add compiled library to stand-alone boot file"]
    ["source-file" (string "<source>") "source filename"]
    ["verbose" -v bool "enable verbose build output"]
-   default-help
-   ["doc" --doc (string "<type>")
-    "show doc <type>={all|help|details|examples}"]))
+   ["help" -h --help (list "[<section>]" ...)
+    (format "display help, <section>={~{~a~^|~}}" help-sections)]))
 
 (define swish-lib?
   (let ([libs (filter (lambda (lib) (match lib [(swish . ,_) #t] [,_ #f])) (library-list))])
@@ -60,55 +61,93 @@
 
 (define (fail fmt . args) (apply errorf who fmt args))
 
-(define (usage doc-type ht)
-  (case doc-type
+(define (wrap indent . texts)
+  (wrap-text (current-output-port)
+    (- (help-wrap-width) indent) indent indent (join texts #\space)))
+
+(define-syntax example
+  (syntax-rules ()
+    [(_ (call ...) text ...)
+     (begin
+       (wrap 2 call ... "\n")
+       (wrap 4 text ... "\n"))]))
+
+(define-syntax any-sections
+  (syntax-rules ()
+    [(_ requested [(key ...) body ...] ...)
+     (let ([sections requested])
+       (define thunks
+         (remq #f
+           (list
+            (and (ormap (lambda (x) (memq x sections)) '(key ...))
+                 (lambda () body ...))
+            ...)))
+       (do ([ps thunks (cdr ps)] [sep "" "\n"]) ((null? ps))
+         (display sep)
+         ((car ps))))]))
+
+(define (list-item item . texts)
+  (printf "~4@a " item)
+  (wrap-text (current-output-port) (- (help-wrap-width) 6) 0 5 (join texts #\space))
+  (newline))
+
+(define (usage short? sections ht)
+  (define selected
+    (cond
+     [(pair? sections) sections]
+     [short? '(usage)]
+     [else '(usage help)]))
+  (any-sections selected
+    [(all usage)
+     (display-usage "Usage:" who cli)]
     [(all help)
-     (display-help who cli ht)
-     (newline)])
-  (case doc-type
+     (when ht (hashtable-delete! ht "help"))
+     (display-options cli)]
     [(all details)
-     (printf "~a can make a stand-alone application or a linked application.\n" who)
-     (newline)
-     (printf "If -b is specified, ~a creates a stand-alone application\n" who)
-     (printf "by copying the ~a executable to <out-file> and creating a boot\n" software-internal-name)
-     (printf "file <out-file>.boot containing each -b boot-file in order, along\n")
-     (printf "with the libraries required by source-fn and the application code\n")
-     (printf "from source-fn, and the run-time libraries included via --rtlib.\n")
-     (newline)
-     (printf "A stand-alone application executes by:\n")
-     (printf "  1. loading the application boot file, then\n")
-     (printf "  2. invoking the value of the swish-start parameter\n")
-     (printf "     with the command-line arguments.\n")
-     (printf "The application boot file should customize the swish-start parameter.\n")
-     (newline)
-     (printf "If -b is omitted, ~a creates a linked application.\n" who)
-     (printf "To run a linked application, ~a must be installed on the system.\n" software-internal-name)
-     (printf "A linked application executes by:\n")
-     (printf "  1. loading the standard ~a boot file, then\n" software-internal-name)
-     (printf "  2. invoking the default swish-start handler, which\n")
-     (printf "  3. calls the linked application with the command-line arguments.\n")
-     (newline)])
-  (case doc-type
+     (wrap 0
+       who "can make a stand-alone application or a linked application.\n"
+       "\n"
+       "If -b is specified," who "creates a stand-alone application"
+       "by copying the" software-internal-name "executable to <out-file>"
+       "and creating a boot file <out-file>.boot containing each"
+       (format "-b~aboot-file" #\240)
+       "in order, along with the libraries required by source-fn and the"
+       "application code from source-fn, and the run-time libraries included"
+       "via --rtlib.\n"
+       "\n"
+       "A stand-alone application executes by:\n")
+     (list-item "1." "loading the application boot file, then")
+     (list-item "2."
+       "invoking the value of the swish-start parameter"
+       "with the command-line arguments.")
+     (wrap 0
+       "The application boot file should customize the swish-start parameter.\n"
+       "\n"
+       "If -b is omitted," who "creates a linked application.\n"
+       "To run a linked application," software-internal-name "must be installed on the system.\n\n"
+       "A linked application executes by:\n")
+     (list-item "1." "loading the standard" software-internal-name "boot file, then")
+     (list-item "2." "invoking the default swish-start handler, which")
+     (list-item "3." "calls the linked application with the command-line arguments.")]
     [(all examples)
      (printf "Examples:\n")
      (newline)
-     (printf "  ~a -o foo -b petite foo.ss\n" who)
-     (printf "     builds a stand-alone \"foo\" executable from \"foo.ss\"\n")
-     (printf "     using the same petite.boot that swish uses\n")
-     (newline)
-     (printf "  ~a -o foo -b petite -b scheme foo.ss\n" who)
-     (printf "     builds a stand-alone \"foo\" executable from \"foo.ss\"\n")
-     (printf "     using the same petite.boot and scheme.boot that swish uses\n")
-     (printf "     (if we specified only -b scheme, the resulting foo.boot would\n")
-     (printf "     not be truly stand-alone, since scheme.boot requires petite.boot)\n")
-     (newline)
-     (printf "  ~a -o foo -b petite -b scheme --rtlib swish foo.ss\n" who)
-     (printf "     builds a stand-alone \"foo\" executable from \"foo.ss\"\n")
-     (printf "     using the same petite.boot and scheme.boot that swish uses\n")
-     (printf "     and makes the standard swish libraries available at run time, so\n")
-     (printf "     that \"foo\" can compile code that uses those libraries.\n")]
-    [(help) (void)]
-    [else (fail "unrecognized --doc ~a" doc-type)])
+     (example (who "-o foo -b petite foo.ss")
+       "builds a stand-alone \"foo\" executable from \"foo.ss\""
+       "using the same petite.boot that swish uses.\n")
+     (example (who "-o foo -b petite -b scheme foo.ss")
+       "builds a stand-alone \"foo\" executable from \"foo.ss\" using"
+       "the same petite.boot and scheme.boot that swish uses."
+       "If we specified only -b scheme, the resulting foo.boot would"
+       "not be truly stand-alone, since scheme.boot requires petite.boot.\n")
+     (example (who "-o foo -b petite -b scheme --rtlib swish foo.ss")
+       "builds a stand-alone \"foo\" executable from \"foo.ss\" using the"
+       "same petite.boot and scheme.boot that swish uses and makes the"
+       "standard swish libraries available at run time, so that \"foo\""
+       "can compile code that uses those libraries.")])
+  (let ([invalid (fold-right remq sections help-sections)])
+    (unless (null? invalid)
+      (fail "unrecognized help section~p:~{ ~a~}" (length invalid) invalid)))
   (exit 0))
 
 (define (parse-library lib)
@@ -205,10 +244,10 @@
 
 (let ([opt (parse-command-line-arguments cli)])
   (cond
-   [(opt "doc") =>
-    (lambda (doc-type) (usage (string->symbol doc-type) (opt)))]
-   [(opt "help")
-    (usage 'help (opt))])
+   [(zero? (hashtable-size (opt))) (usage #t '() #f)]
+   [(opt "help") =>
+    (lambda (sections)
+      (usage #f (map string->symbol sections) (opt)))])
   (let ([source-fn (opt "source-file")]
         [output-fn (opt "output-file")]
         [boot-files (or (opt "boot-files") '())]
