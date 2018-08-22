@@ -37,6 +37,7 @@
    (swish application)
    (swish cli)
    (swish erlang)
+   (swish errors)
    (swish event-mgr)
    (swish gatekeeper)
    (swish http)
@@ -136,8 +137,12 @@
             (call/cc
              (lambda (return)
                (exit-handler return)
-               (load script-file)
-               ((exit-handler)))))])))
+               ;; use exit handler installed by the script, if any
+               (match (catch (load script-file))
+                 [#(EXIT ,reason)
+                  (fprintf (console-error-port) "~a\n" (exit-reason->english reason))
+                  ((exit-handler) 1)]
+                 [,_ ((exit-handler))]))))])))
     (define (int32? x) (and (or (fixnum? x) (bignum? x)) (<= #x-7FFFFFFF x #x7FFFFFFF)))
     (eval '(import (swish imports)))
     (call-with-values run

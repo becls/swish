@@ -34,6 +34,7 @@
   (import
    (scheme)
    (swish imports)
+   (swish profile)
    (swish testing)
    )
 
@@ -82,6 +83,41 @@
      (match-regexps patterns stdout)]))
 
 (define (script-test script-file args patterns)
-  (test-os-process swish-exe `(,script-file ,@args) "" patterns))
+  (cond
+   [(whereis 'profiler)
+    (let ([tmp-file (string-append (profile:filename) ".sub-process")])
+      (on-exit
+       (when (file-exists? tmp-file)
+         (profile:merge tmp-file)
+         (delete-file tmp-file))
+       (test-os-process swish-exe '("-q" "--")
+         (format "~{~s\n~}"
+           `((load ,(path-combine (prereq-path) "lib" "swish" "profile.so"))
+             (import (swish profile))
+             (profile:prepare)
+             (profile:start #f ,tmp-file #t)
+             ;; when profiling, mat-prereq still builds .so files but in a different directory
+             (library-extensions (append (library-extensions) '((".ss" . ".so"))))
+             (let ()
+               (define (return code)
+                 (profile:save)
+                 (exit code))
+               (define (run-script)
+                 (call/cc
+                  (lambda (fail)
+                    ;; Provide command-line arguments and intercept script's
+                    ;; calls to (exit) so we can save profile data.
+                    (parameterize ([exit-handler fail]
+                                   [reset-handler (lambda () (fail 1))]
+                                   [command-line-arguments ',args]
+                                   [command-line '(,script-file ,@args)])
+                       (load ,script-file)))))
+               ,'(match (catch (run-script))
+                   [#(EXIT ,reason)
+                    (fprintf (console-error-port) "~a\n" (exit-reason->english reason))
+                    (return 1)]
+                   [,exit-code (return exit-code)]))))
+         patterns)))]
+   [else (test-os-process swish-exe `(,script-file ,@args) "" patterns)]))
 
 )

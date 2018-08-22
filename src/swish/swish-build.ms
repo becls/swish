@@ -58,6 +58,13 @@
 (define (run-thin basename args patterns)
   (test-os-process swish-exe `(,(output-file basename) ,@args) "" patterns))
 
+(isolate-mat installation ()
+  ;; We use the relative path to make the coverage report tidier.
+  ;; This test makes sure we're still testing what we installed.
+  (equal?
+   (read-file (path-combine (prereq-path) "swish-build"))
+   (read-file swish-build-src)))
+
 (isolate-mat help ()
   (swish-build-test '("--help")
     '("Usage:"
@@ -111,7 +118,7 @@
          (printf "abc: ~a\n" abc)))))
   (match (catch (build-example "nolib-fat" `("-b" "petite")))
     [#(EXIT `(<os-process-failed>
-              [stderr ("Exception: library (lib-does-not-exist) not found")]))
+              [stderr ("Exception: library (lib-does-not-exist) not found.")]))
      'ok]))
 
 (isolate-mat import-nonexistent-lib-thin ()
@@ -124,7 +131,7 @@
       (printf "abc: ~a\n" abc)))
   (match (catch (build-example "nolib-thin" `()))
     [#(EXIT `(<os-process-failed>
-              [stderr ("Exception: library (lib-does-not-exist) not found")]))
+              [stderr ("Exception: library (lib-does-not-exist) not found.")]))
      'ok]))
 
 (isolate-mat libdir-fat ()
@@ -236,7 +243,7 @@
   (match (catch (run-thin "libsvisbad-thin" '() '()))
     [#(EXIT `(<os-process-failed>
               [stdout ()]
-              [stderr ("Exception: library (lib-abc) not found")]))
+              [stderr ("Exception: library (lib-abc) not found.")]))
      'ok]))
 
 (isolate-mat libs-visible-fat ()
