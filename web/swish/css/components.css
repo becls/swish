@@ -26,7 +26,6 @@ body {
   position:relative;
   background-color:#283A4E;
   min-width:1200px;
-  background-position: 0 -30;
   background-repeat:no-repeat;
   font-family:segoe ui;
   color:#000;
@@ -187,7 +186,7 @@ div.row table { display:inline-table; margin-top:7px; width:300px;}
 .column.collapsed, .collapsed { display:none; }
 * html div.collapsed {display:none;}
 .complete { background-color: white; }
-.failed { background-color: FFA0AF; }
+.failed { background-color: #FFA0AF; }
 
 .figure { margin:10px; margin:10px auto; border:1px solid #999; height:200px; width:700px; }
 .caption { display:block; margin:0px auto 10px; width:700px; }
