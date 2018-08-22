@@ -1,2 +1,11 @@
 #!/bin/sh
-echo "(go)" | ./go -q -- dump-profile.ss
+cd "$(git rev-parse --show-toplevel)"
+PATH=./build/mat-prereq/lib/swish.x.y.z/arch:"${PATH}"
+swish -q -- <<EOF
+(library-directories
+ (cons (path-combine "build" "mat-prereq" "lib" "swish.x.y.z" "arch" "lib")
+   (library-directories)))
+(cd "src")
+(import (swish profile))
+(profile:dump-html (path-combine (data-dir) "server.profile") "server-profile.html" '() '())
+EOF

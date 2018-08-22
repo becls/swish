@@ -31,8 +31,9 @@
  )
 
 (define (run-suite basename)
+  (define server-profile (path-combine (data-dir) "server.profile"))
   (define (start-profiler)
-    (match (profile:start)
+    (match (profile:start (and (regular-file? server-profile) server-profile) server-profile #t)
       [#(ok ,_) #t]
       [ignore #f]
       [#(error ,reason) (raise 'profile-failed-to-start)]))
