@@ -375,7 +375,7 @@ ptr osi_get_statement_expanded_sql(uptr statement) {
   if (NULL == sql)
     return make_error_pair("osi_get_statement_expanded_sql", UV_ENOMEM);
   ptr r = Sstring_utf8(sql, -1);
-  free(sql);
+  sqlite3_free(sql);
   return r;
 }
 
