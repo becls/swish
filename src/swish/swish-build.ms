@@ -20,27 +20,13 @@
 ;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 ;;; DEALINGS IN THE SOFTWARE.
 
+(include "swish/script-testing.ss")
 (import
  (chezscheme)
+ (swish script-testing)
  (swish testing)
  )
 
-(define (prereq-path)
-  (path-combine (base-dir) "build" "mat-prereq" "lib" "swish.x.y.z" "arch"))
-
-(define (output-dir)
-  (path-combine (tmp-dir) "mat-output"))
-
-(define exe-suffix
-  (if (file-exists? (path-combine (prereq-path) "swish.exe"))
-      ".exe"
-      ""))
-
-(define (fix-exe name)
-  (format "~a~a" name exe-suffix))
-
-(define swish-exe
-  (get-real-path (path-combine (prereq-path) (fix-exe "swish"))))
 (define swish-build
   (get-real-path (path-combine (prereq-path) "swish-build")))
 
@@ -50,33 +36,14 @@
 (define (output-file basename)
   (path-combine (output-dir) (fix-exe basename)))
 
-(define-tuple <os-process-failed> command args stdout stderr exit-status)
-
-(define (test-os-process command args for-stdin patterns)
-  (define (write-stdin op)
-    (display for-stdin op)
-    (newline op)
-    (flush-output-port op))
-  (match (run-os-process command args write-stdin 10000 '())
-    [`(<os-result> ,stdout ,stderr ,exit-status)
-     (unless (eqv? exit-status 0)
-       (raise
-        (<os-process-failed> make
-          [command command]
-          [args args]
-          [stdout stdout]
-          [stderr stderr]
-          [exit-status exit-status])))
-     (match-regexps patterns stdout)]))
+(define swish-build-src (path-combine "src" "swish" "swish-build"))
 
 (define (swish-build-test args patterns)
-  (test-os-process swish-exe `(,swish-build ,@args) "" patterns))
+  (script-test swish-build-src args patterns))
 
 (define (write-example basename exprs)
-  (let ([op (open-file-to-replace
-             (make-directory-path (input-file basename)))])
-    (on-exit (close-port op)
-      (for-each (lambda (expr) (write expr op)) exprs))))
+  (write-test-file (string-append basename ".ss")
+    (lambda () (for-each write exprs))))
 
 (define (build-example basename args)
   (swish-build-test
