@@ -304,4 +304,22 @@
         ["nothing here" 'ok])))
   (remove-file fn))
 
+(isolate-mat get-source-offset ()
+  (define (gso expected-offset string)
+    (match-let*
+     ([,p (open-bytevector-input-port (string->utf8 string))]
+      [,initial-offset 0]
+      [,@initial-offset (file-position p)]
+      [,@expected-offset (get-source-offset p)]
+      [,@expected-offset (file-position p)])
+     'ok))
+  (gso 0 "")
+  (gso 0 "no newline")
+  (gso 6 "#! foo")
+  (gso 7 (string-append "#! foo" "\n" "more"))
+  (gso 19 (string-append "#!/usr/bin/env foo" "\n" "more"))
+  (gso 0 "#/nope")
+  (gso 0 "#!r6rs")
+  (gso 0 "!bang"))
+
 (hook-console-input)

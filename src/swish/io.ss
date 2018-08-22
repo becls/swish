@@ -31,8 +31,10 @@
    connect-tcp
    directory?
    force-close-output-port
+   get-datum/annotations-all
    get-file-size
    get-real-path
+   get-source-offset
    get-stat
    hook-console-input
    io-error
@@ -72,6 +74,7 @@
    stat-regular-file?
    tcp-listener-count
    watch-path
+   with-sfd-source-offset
    write-osi-port
    )
   (import
@@ -198,15 +201,39 @@
   (define (open-utf8-bytevector bv)
     (binary->utf8 (open-bytevector-input-port bv)))
 
+  (define (with-sfd-source-offset filename handler)
+    (let* ([raw-ip (open-file filename O_RDONLY 0 'binary-input)]
+           [sfd (make-source-file-descriptor filename raw-ip #t)]
+           [source-offset (get-source-offset raw-ip)]
+           [ip (binary->utf8 raw-ip)])
+      (on-exit (close-port ip)
+        (handler ip sfd source-offset))))
+
+  (define (get-datum/annotations-all ip sfd bfp)
+    (let f ([bfp bfp])
+      (let-values ([(x bfp) (get-datum/annotations ip sfd bfp)])
+        (if (eof-object? x)
+            '()
+            (cons x (f bfp))))))
+
   (define (read-bytevector name contents)
     (let* ([ip (open-bytevector-input-port contents)]
            [sfd (make-source-file-descriptor name ip #t)]
            [ip (transcoded-port ip (make-utf8-transcoder))])
-      (let f ([offset 0])
-        (let-values ([(x offset) (get-datum/annotations ip sfd offset)])
-          (if (eof-object? x)
-              '()
-              (cons x (f offset)))))))
+      (get-datum/annotations-all ip sfd 0)))
+
+  ;; Explicitly skip a #! line at the beginning of the file.
+  (define (get-source-offset ip)
+    (let ([start (port-position ip)])
+      (or (and (eqv? (get-u8 ip) (char->integer #\#))
+               (eqv? (get-u8 ip) (char->integer #\!))
+               (let ([b (get-u8 ip)])
+                 (or (eqv? b (char->integer #\space)) (eqv? b (char->integer #\/))))
+               (let lp ()
+                 (let ([b (get-u8 ip)])
+                   (or (eof-object? b) (eqv? b (char->integer #\newline)) (lp)))))
+          (set-port-position! ip start)))
+    (port-position ip))
 
   (define osi-port-guardian (make-guardian))
   (define osi-port-table (make-weak-eq-hashtable))

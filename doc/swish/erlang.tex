@@ -1442,6 +1442,47 @@ inserting the \verb|\| character between each pair of paths when the
 first path of the pair does not end with it.
 
 % ----------------------------------------------------------------------------
+\defineentry{get-source-offset}
+\begin{procedure}
+  \code{(get-source-offset \var{ip})}
+\end{procedure}
+\returns{} an exact nonnegative integer
+
+The \code{get-source-offset} procedure takes a binary input port \var{ip} that
+supports \code{port-position}, skips over the
+\code{\#!\var{interpreter-directive}} line, if any, and returns the resulting
+\code{port-position}.
+
+% ----------------------------------------------------------------------------
+\defineentry{get-datum/annotations-all}
+\begin{procedure}
+  \code{(get-datum/annotations-all \var{ip} \var{sfd} \var{bfp})}
+\end{procedure}
+\returns{} a list of annotated objects
+
+The \code{get-datum/annotations-all} procedure takes a textual input port
+\var{ip}, a source-file descriptor \var{sfd}, and an exact nonnegative integer
+\var{bfp} representing the character position of the next character to be read
+from \var{ip}. The procedure returns a list of the annotated objects, in order,
+obtained by repeatedly calling \code{get-datum/annotations} with the advancing
+\var{bfp}, until \var{ip} reaches the end of file.
+
+% ----------------------------------------------------------------------------
+\defineentry{with-sfd-source-offset}
+\begin{procedure}
+  \code{(with-sfd-source-offset \var{name} \var{handler})}
+\end{procedure}
+\returns{} see below
+
+The \code{with-sfd-source-offset} procedure takes a filename \var{name} and
+returns the result of calling the procedure \var{handler} with three arguments:
+\var{ip}, a textual port transcoded with the UTF-8 transcoder described in
+\code{binary->utf8}, \var{sfd}, a source-file descriptor that refers to
+\var{name}, and \var{source-offset}, the value returned by
+\code{get-source-offset}.
+Before returning, \code{with-sfd-source-offset} closes the textual port.
+
+% ----------------------------------------------------------------------------
 \defineentry{read-bytevector}
 \begin{procedure}
   \code{(read-bytevector \var{name} \var{contents})}
