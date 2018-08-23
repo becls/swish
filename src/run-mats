@@ -14,6 +14,12 @@ fail() {
   exit 1
 }
 
+case $# in
+  0) TESTARGS="src"; PROGRESS="suite";;
+  1) TESTARGS="$1"; PROGRESS="test";;
+  *) fail;;
+esac
+
 if [ ! -d "${LIBDIR}" ]; then
   echo "${this} expected to find $LIBDIR"
   echo ""
@@ -25,38 +31,16 @@ if [ "$PWD" != "$(git rev-parse --show-toplevel)" ]; then
   fail
 fi
 
-launch="build/mat-prereq/lib/swish.x.y.z/arch/swish --"
-
-if [ "$PROFILE_MATS" = "yes" ]; then
-  rm -f "${PROFILE}"
-fi
-
 rm -f data/TestLog.db3
 mkdir -p data
 
-# Swish
-for suite in $( find src/swish -name '*.ms' | sed 's/\.ms//' | sort ); do
-  echo "testing $suite"
-$launch > /dev/null <<EOF
-(source-directories '("." "src"))
-(library-directories "build/mat-prereq/lib/swish.x.y.z/arch/lib")
-(load "src/run-mats.ss")
-(run-suite "$suite")
-EOF
-done
-
-# finish up
-$launch <<EOF
-(source-directories '("." "src"))
-(library-directories "build/mat-prereq/lib/swish.x.y.z/arch/lib")
-(load "src/run-mats.ss")
-(html-report "." "mat-report.html")
-(console-summary ".")
-EOF
-echo "see file://${PWD}/mat-report.html"
+# Windows can't handle symbolic links, so point to LIBDIR
+PATH="${LIBDIR}:${PATH}"
 
 if [ "$PROFILE_MATS" = "yes" ]; then
-  cd src
-  ./dump-profile
-  echo "see file://${PWD}/server-profile.html"
+  # shellcheck disable=SC2086
+  "${LIBDIR}"/swish-test -s src --report "${REPORT}" --progress "${PROGRESS}" --coverage "${COVERAGE}" --save-profile "${PROFILE}" --exclude '**mat-output**' ${TESTARGS}
+else
+  # shellcheck disable=SC2086
+  "${LIBDIR}"/swish-test -s src --report "${REPORT}" --progress "${PROGRESS}" ${TESTARGS}
 fi

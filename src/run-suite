@@ -1,30 +1,21 @@
 #!/bin/sh -e
-if [ -z ${SCHEME+x} ]; then SCHEME=scheme; fi
-launch="${LAUNCH:-./go -q -- run-mats.ss}"
 
 if [ $# != 1 ]; then
   echo "Usage: $0 suite"
   exit
 fi
 
-find . -name "*.mo" -delete
-if [ "$PROFILE_MATS" = "yes" ]; then
-  find . -name "*.html" -and -not -iwholename "*/web-mats/*" -delete
+cd "$(git rev-parse --show-toplevel)"
+
+SUITE="src/$1"
+if [ ! -f "${SUITE}" ]; then
+  SUITE="${SUITE}.ms"
 fi
-rm -f ../data/server.profile
-rm -f ../data/TestLog.db3
-make -s -C swish
 
-$launch <<EOF
-(run-suite "$1")
-EOF
-
-# finish up
-$launch <<EOF
-(html-report "." "suite-report.html")
-(console-summary ".")
-EOF
-
-if [ "$PROFILE_MATS" = "yes" ]; then
-  ./dump-profile
+if [ ! -f "${SUITE}" ]; then
+  echo "cannot find suite $1"
+  exit 1
 fi
+
+make --no-print-directory -C src/swish mat-prereq
+src/run-mats "${SUITE}"

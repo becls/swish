@@ -1,0 +1,451 @@
+#! /usr/bin/env swish
+
+;;; Copyright 2018 Beckman Coulter, Inc.
+;;;
+;;; Permission is hereby granted, free of charge, to any person
+;;; obtaining a copy of this software and associated documentation
+;;; files (the "Software"), to deal in the Software without
+;;; restriction, including without limitation the rights to use, copy,
+;;; modify, merge, publish, distribute, sublicense, and/or sell copies
+;;; of the Software, and to permit persons to whom the Software is
+;;; furnished to do so, subject to the following conditions:
+;;;
+;;; The above copyright notice and this permission notice shall be
+;;; included in all copies or substantial portions of the Software.
+;;;
+;;; THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+;;; EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+;;; MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+;;; NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+;;; HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+;;; WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+;;; DEALINGS IN THE SOFTWARE.
+
+(define who (path-last (car (command-line))))
+(define (fail fmt . args) (apply errorf who fmt args))
+
+(define help-sections '(all details examples))
+
+(define shared-cli
+  (cli-specs
+   ["libdirs" -L (list "<libdir>") "add <libdir> to library-directories"]
+   ["srcdirs" -s (list "<srcdir>") "add <srcdir> to source-directories"]
+   ["help" -h --help (list "[<section>]" ...)
+    (format "display help, <section>={~{~a~^|~}}" help-sections)
+    (usage hide)]))
+
+(define misc-cli
+  (cli-specs
+   ["incl-tags" --tag (list "<tag>") "run only the tests with this tag"]
+   ["excl-tags" --not (list "<tag>") "exclude tests with this tag"]
+   ["load-prof" --load-profile (list "<file>" "<file>" ...)
+    "load the specified profile(s)"]
+   ["save-prof" --save-profile (string "<file>")
+    "save profile data to specified file"]
+   ["progress" --progress (string "<mode>") "<mode>={test|suite|none}"]
+   ["report" --report (string "<file>") "write HTML report to <file>"]
+   ["coverage" --coverage (string "<file>") "write coverage report to <file>"]
+   ["exclude" --exclude (list "<glob>")
+    "exclude these files from coverage report"]
+   ["include" --include (list "<glob>") "override exclude for coverage report"]))
+
+(define testing-cli
+  (append misc-cli
+    (cli-specs
+     ["specs" (list . "<spec>") "directory | suite [{test | -t test} ...]"])))
+
+(define repl-cli
+  (cli-specs
+   ["repl" --repl bool "start a repl" (usage show req)]
+   ["files" (list "<file>" ...) "load remaining arguments"]))
+
+(define any-cli (append shared-cli testing-cli repl-cli))
+
+(define swish (osi_get_executable_path))
+(define swish-libdir (path-parent swish))
+(library-directories
+ (cons (path-combine swish-libdir "lib")
+   (library-directories)))
+
+(define (wrap indent . texts)
+  (wrap-text (current-output-port)
+    (- (help-wrap-width) indent) indent indent (join texts #\space)))
+
+(define-syntax example
+  (syntax-rules ()
+    [(_ (call ...) text ...)
+     (begin
+       (wrap 2 call ... "\n")
+       (wrap 4 text ... "\n"))]))
+
+(define-syntax any-sections
+  (syntax-rules ()
+    [(_ requested [(key ...) body ...] ...)
+     (let ([sections requested])
+       (define thunks
+         (remq #f
+           (list
+            (and (ormap (lambda (x) (memq x sections)) '(key ...))
+                 (lambda () body ...))
+            ...)))
+       (do ([ps thunks (cdr ps)] [sep "" "\n"]) ((null? ps))
+         (display sep)
+         ((car ps))))]))
+
+(define (usage short? sections ht)
+  (define selected
+    (cond
+     [(pair? sections) sections]
+     [short? '(usage)]
+     [else '(usage help)]))
+  (any-sections selected
+    [(all usage)
+     (display-usage "Usage:" who (append shared-cli testing-cli))
+     (display-usage "   or:" who (append shared-cli repl-cli))]
+    [(all help)
+     (when ht (hashtable-delete! ht "help"))
+     (display-options shared-cli ht)
+     (printf "\n  Testing options:\n")
+     (display-options testing-cli ht)
+     (printf "\n  REPL options:\n")
+     (display-options repl-cli ht)]
+    [(all details)
+     (wrap 0
+       "By default, " who " runs all tests found by searching for *.ms files"
+       "in the current directory and its subdirectories. To run a limited set"
+       "of tests, specify a suite or a suite and test or use --tag or --not to"
+       "filter tests based on tags.\n"
+       "\n"
+       "If --report <file> is specified, " who " writes an HTML report to that file."
+       "If --coverage <file> is specified, " who " writes an HTML coverage report"
+       "to that file."
+       "The glob arguments to --include and --exclude should be quoted to prevent"
+       "expansion by the shell. Within a glob pattern, ** and * differ in that the"
+       "former will match path-separator characters while the latter will not."
+       "\n")]
+    [(all examples)
+     (printf "Examples:\n")
+     (newline)
+     (example (who "--progress suite --report result.html .")
+       "Run all tests found in the current directory and its subdirectories."
+       "Echo suite-level progress output to the console and write detailed results"
+       "to result.html.\n")
+     (example (who "--save-profile prof.dat src")
+       "Save profile data to prof.dat while running all tests found"
+       "under the src directory, overwriting prof.dat if it exists.\n")
+     (example (who "--load-profile p1.dat p2.dat --save-profile both.prof")
+       "Load profile data from p1.dat and p2.dat and save to both.prof.\n")
+     (example (who "-s src --load-profile p1 p2 --coverage ./cov/summary.html")
+       "Load profile data from p1 and p2 and generate a coverage report"
+       "in ./cov/summary.html,adding \"src\" to the set of directories"
+       "searched for source files referenced in the profile.\n")
+     (example (who "src/foo.ms")
+       "run all tests in ./src/foo.ms\n")
+     (example (who "src/foo.ms t1 t2 t3 src/bar.ms")
+       "run tests t1, t2, and t3 from ./src/foo.ms and all tests from src/bar.ms\n")
+     (example (who " --tag fast --not regression src web")
+       "run only the tests under src and web whose mat tags include fast,"
+       "but not regression.")])
+  (let ([invalid (fold-right remq sections help-sections)])
+    (unless (null? invalid)
+      (fail "unrecognized help section~p:~{ ~a~}" (length invalid) invalid)))
+  (exit 0))
+
+(define (parse-library lib)
+  (parameterize ([library-directories lib])
+    (library-directories)))
+
+(define (find-files path . extensions)
+  (define (combine path fn) (if (equal? "." path) fn (path-combine path fn)))
+  (let search ([path path] [hits '()])
+    (match (catch (list-directory path))
+      [#(EXIT ,reason) hits]
+      [,found
+       (fold-left
+        (lambda (hits entry)
+          (match entry
+            [(,fn . ,@DIRENT_DIR) (search (combine path fn) hits)]
+            [(,fn . ,@DIRENT_FILE)
+             (if (member (path-extension fn) extensions)
+                 (cons (combine path fn) hits)
+                 hits)]
+            [,_ hits])) ;; not following symlinks
+        hits
+        found)])))
+
+(import
+ (swish mat)
+ (swish profile)
+ (swish testing)
+ )
+
+(define (html-report filename report-files)
+  (define (stringify x)
+    (if (string? x)
+        x
+        (format "~s" x)))
+  (define (make-row c1 c2 c3)
+    (let ([result (or c3 `(span (@ (style "color:#007F00;")) "PASS"))])
+      `(tr (td ,c1) (td ,(stringify c2)) (td ,result))))
+  (define (make-result r)
+    (let ([name (mat-result-test r)])
+      (match (mat-result-type r)
+        [pass (make-row "" name #f)]
+        [skip (void)]
+        [fail (make-row "" name (mat-result-message r))])))
+  (define (results< x y)
+    (define (get-name r) (symbol->string (mat-result-test r)))
+      (string-ci<? (get-name x) (get-name y)))
+  (let ([op (open-file-to-replace filename)])
+    (on-exit (close-port op)
+      (html->string op
+        `(html5
+          (head (meta (@ (charset "UTF-8"))))
+          (style
+            "table { table-layout: fixed; border-collapse: collapse; }"
+            "thead tr td:nth-child(1) { min-width: 15vw; }"
+            "thead tr td:nth-child(2) { min-width: 15vw; }"
+            "tr td:nth-child(3) { padding-left: 1ex; }")
+          (body (@ (style "font-family:monospace;"))
+            (h1 ,(let-values ([(pass fail skip) (summarize report-files)])
+                   (if (eq? fail 0)
+                       (if (eq? skip 0)
+                           (format "PASSED all ~a tests." pass)
+                           (format "passed ~a tests (skipped ~a)" pass skip))
+                       (format "Failed ~a of ~a tests~a." fail (+ fail pass)
+                         (if (eq? skip 0) "" (format " (skipped ~a)" skip))))))
+            (table
+             (thead ,(make-row "Suite" "Name" "Message"))
+             (tbody
+              ,@(map
+                 (lambda (in-file)
+                   (let-values ([(pass fail skip) (summarize (list in-file))])
+                     (unless (and (> skip 0) (= pass fail 0))
+                       (match (sort results< (load-results in-file))
+                         [() (make-row (path-root in-file) "" "<no results>")]
+                         [,sorted
+                         `(begin
+                            ,(make-row (mat-result-test-file (car sorted)) "" "")
+                            ,@(map make-result sorted))]))))
+                 report-files)))))))))
+
+(define (console-summary report-files)
+  (let-values ([(pass fail skip) (summarize report-files)])
+    (printf "Tests run: ~s   Pass: ~s   Fail: ~s   Skip: ~s\n\n"
+      (+ pass fail) pass fail skip)))
+
+(define (if-exists fn) (and (regular-file? fn) fn))
+
+(define (get-test-files x)
+  (and (directory? x) (find-files x "ms" "ss")))
+
+(define (get-test-suite x)
+  (or (if-exists x) (if-exists (string-append x ".ms"))))
+
+(define (path->file-uri path)
+  (define (sanitize path)
+    (join (map http:percent-encode (pregexp-split "[\\\\/]" path)) "/"))
+  (match (pregexp-match "^([a-zA-Z]:)[\\\\/](.*)" path)
+    [(,_ ,anchor ,rest) (string-append "file://" anchor "/" (sanitize rest))]
+    [#f (string-append "file://" (sanitize path))]))
+
+(define (->report-filename filename)
+  (string-append filename ".mo"))
+
+(define-syntax foreach
+  (syntax-rules ()
+    [(_ ([var ls] ...) body0 body1 ...)
+     (for-each (lambda (var ...) body0 body1 ...) ls ...)]))
+
+(define (extract-suites specs)
+  (let ([ht (make-hashtable string-hash string=?)])
+    (define (add-suite suite)
+      (hashtable-update! ht suite
+        (lambda (old)
+          (or old (make-hashtable string-hash string=?)))
+        #f))
+    (let lp ([specs specs])
+      (cond
+       [(null? specs)
+        (let-values ([(keys vals) (hashtable-entries ht)])
+          (vector->list
+           (vector-map
+            (lambda (suite test-set)
+              (cons suite
+                (map string->symbol (vector->list (hashtable-keys test-set)))))
+            keys vals)))]
+       [(get-test-files (car specs)) =>
+        (lambda (files)
+          (for-each add-suite files)
+          (lp (cdr specs)))]
+       [(get-test-suite (car specs)) =>
+        (lambda (suite)
+          (add-suite suite)
+          (let ([tt (hashtable-ref ht suite #f)])
+            (define (add-test test)
+              (hashtable-set! tt test #t))
+            (let lp2 ([ls (cdr specs)])
+              (match ls
+                [() (lp ls)]
+                [("-t") (fail "option expects value: -t")]
+                [("-t" ,test . ,rest)
+                 (add-test test)
+                 (lp2 rest)]
+                [(,test . ,rest)
+                 (guard (not (or (directory? test) (get-test-suite test))))
+                 (add-test test)
+                 (lp2 rest)]
+                [,rest
+                 (lp rest)]))))]
+       [else
+        (fail "expected directory or suite: ~s" (car specs))]))))
+
+(define (option-named name)
+  (format-spec
+   (or (find (lambda (x) (equal? name (<arg-spec> name x))) any-cli)
+       (fail "[internal] no option named ~s" name))
+   '(or long short)))
+
+(define (try-parse)
+  (define problem #f)
+  (define repl-opt
+    (parse-command-line-arguments
+     (append shared-cli misc-cli repl-cli)
+     (command-line-arguments)
+     (lambda x (unless problem (set! problem x)))))
+  (if (repl-opt "repl")
+      (if problem
+          (apply fail problem)
+          repl-opt)
+      (parse-command-line-arguments (append shared-cli testing-cli))))
+
+(define opt (try-parse))
+
+(cond
+ [(opt "srcdirs") =>
+  (lambda (srcdirs)
+    (source-directories (append srcdirs (source-directories))))])
+
+(library-directories
+ (fold-right
+  (lambda (x acc)
+    (append (parse-library x) acc))
+  (library-directories)
+  (or (opt "libdirs") '())))
+
+(cond
+ [(zero? (hashtable-size (opt))) (usage #t '() #f)]
+ [(opt "help") =>
+  (lambda (sections)
+    (usage #f (map string->symbol sections) (opt)))]
+ [(hashtable-ref (opt) "repl" #f)
+  (let ([ignored
+         (remq #f
+           (map (lambda (x)
+                  (and (opt (<arg-spec> name x))
+                       (format-spec x '(or long short))))
+             misc-cli))])
+    (when (pair? ignored)
+      (printf "~@[Ignoring ~{~a~^, ~} in ~a mode\n~]" ignored
+        (option-named "repl"))))
+  (apply (scheme-start) (cons "--" (or (opt "files") '())))]
+ [else
+  (let ([incl-tags (map string->symbol (or (opt "incl-tags") '()))]
+        [excl-tags (map string->symbol (or (opt "excl-tags") '()))]
+        [exclude (or (opt "exclude") '())]
+        [include (or (opt "include") '())]
+        [save-prof (opt "save-prof")]
+        [load-prof (opt "load-prof")]
+        [progress (string->symbol (or (opt "progress") "test"))]
+        [report (opt "report")]
+        [coverage (opt "coverage")]
+        [suites (sort (lambda (s1 s2) (string<? (car s1) (car s2)))
+                  (extract-suites (or (opt "specs") '())))])
+    (cond
+     [(and load-prof (not (or save-prof coverage)))
+      (fail "~a requires ~a or ~a"
+        (option-named "load-prof")
+        (option-named "save-prof")
+        (option-named "coverage"))]
+     [(and coverage (not (or load-prof save-prof)))
+      (fail "~a requires ~a or ~a"
+        (option-named "coverage")
+        (option-named "load-prof")
+        (option-named "save-prof"))])
+    (let ([test-files (map car suites)])
+      (define to-file (and (or report coverage) #t))
+      (define report-files (map ->report-filename test-files))
+      (define status 0)
+      (define no-tests '())
+      (define full-load-filenames
+        (map
+         (lambda (load-fn)
+           (match (catch (get-real-path load-fn))
+             [#(EXIT ,reason)
+              (fail "~a ~a: file not found" (option-named "load-prof") load-fn)]
+             [,full-load-fn full-load-fn]))
+         (or load-prof '())))
+      (define (truncate-profile)
+        (match (catch (open-file-to-replace save-prof))
+          [#(EXIT ,reason)
+           (fail "~a ~a failed (~a)" (option-named "save-prof") save-prof
+             (exit-reason->english reason))]
+          [,op (close-port op)]))
+      (cond
+       [(and load-prof save-prof)
+        (let ([add-to-profile
+               (match (catch (get-real-path save-prof))
+                 [#(EXIT ,reason) #f]
+                 [,full-save-fn
+                  (and (member full-save-fn full-load-filenames) full-save-fn)])])
+          (unless add-to-profile (truncate-profile))
+          ;; mute the console-event-handler
+          (parameterize ([console-output-port (open-output-string)])
+            (match-let* ([#(ok ,pid) (profile:start add-to-profile save-prof #t)])
+              (foreach ([to-load (map cons full-load-filenames load-prof)])
+                (match-let* ([(,full-name . ,user-supplied-name) to-load])
+                  (unless (equal? full-name add-to-profile)
+                    (match (catch (profile:merge full-name))
+                      [ok (void)]
+                      [#(EXIT ,reason)
+                       (fail "cannot load profile data from ~a" user-supplied-name)]))))
+              (profile:stop))))]
+       [save-prof (truncate-profile)])
+      (when to-file
+        (foreach ([file report-files])
+          (catch (remove-file file))))
+      (foreach ([suite/test suites] [report-file report-files])
+        (let ([suite (car suite/test)]
+              [tests (cdr suite/test)])
+          (match (run-test-spec swish
+                   (<test-spec> make
+                     [test-file suite]
+                     [report-file (and to-file report-file)]
+                     [tests (and (pair? tests) tests)]
+                     [incl-tags incl-tags]
+                     [excl-tags excl-tags]
+                     [profile save-prof]
+                     [progress progress]
+                     [lib-dirs (library-directories)]
+                     [src-dirs (source-directories)]))
+            [#f (void)]
+            [fail (set! status 1)]
+            [skip (set! status 1)]
+            [no-tests (set! no-tests (cons suite no-tests))])))
+      (let ([report-files (filter file-exists? report-files)])
+        (when report
+          (html-report report report-files)
+          (printf "see ~a\n" (path->file-uri (get-real-path report))))
+        (when coverage
+          (if (profile:dump-html (or save-prof load-prof) coverage include exclude)
+              (printf "see ~a\n" (path->file-uri (get-real-path coverage)))
+              (printf "no profile to dump\n")))
+        (when (or report coverage)
+          (console-summary report-files))
+        (match (filter (lambda (fn) (string=? "ms" (path-extension fn))) no-tests)
+          [() (exit status)]
+          [,expected-tests
+           (unless (eq? progress 'none)
+             (printf "No tests found in~{\n ~a~}\n" expected-tests))
+           (exit (if (> status 0) status 3))]))))])

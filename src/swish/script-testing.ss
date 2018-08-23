@@ -82,7 +82,7 @@
           [exit-status exit-status])))
      (match-regexps patterns stdout)]))
 
-(define (script-test script-file args patterns)
+(define (script-test script-file args for-stdin patterns)
   (cond
    [(whereis 'profiler)
     (let ([tmp-file (string-append (profile:filename) ".sub-process")])
@@ -91,7 +91,7 @@
          (profile:merge tmp-file)
          (delete-file tmp-file))
        (test-os-process swish-exe '("-q" "--")
-         (format "~{~s\n~}"
+         (format "~{~s\n~}~a"
            `((load ,(path-combine (prereq-path) "lib" "swish" "profile.so"))
              (import (swish profile))
              (profile:prepare)
@@ -102,8 +102,9 @@
              (on-exit (profile:save)
                ;; call the (scheme-start) installed by app.ss to
                ;; mimic initial application startup
-               (apply (scheme-start) ',script-file ',args))))
+               (apply (scheme-start) ',script-file ',args)))
+           for-stdin)
          patterns)))]
-   [else (test-os-process swish-exe `(,script-file ,@args) "" patterns)]))
+   [else (test-os-process swish-exe `(,script-file ,@args) for-stdin patterns)]))
 
 )

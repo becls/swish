@@ -22,6 +22,7 @@
 
 (library (swish mat)
   (export
+   $run-mats
    add-mat
    for-each-mat
    load-results
@@ -43,10 +44,13 @@
   (import (chezscheme))
 
   (define mats (make-parameter '()))
-  (define (make-mat name tags test) (list* name tags test))
-  (define mat-name car)
-  (define mat-tags cadr)
-  (define mat-test cddr)
+
+  (define-record-type (%mat make-mat mat?)
+    (nongenerative)
+    (fields
+     (immutable name)
+     (immutable tags)
+     (immutable test)))
 
   (define-record-type mat-result
     (nongenerative)
@@ -63,38 +67,56 @@
       [(_ name (tag ...) e1 e2 ...)
        (add-mat 'name '(tag ...) (lambda () e1 e2 ...))]))
 
+  (define (all-mats) (reverse (mats)))
+
+  (define (find-mat name)
+    (find (lambda (m) (eq? name (%mat-name m))) (mats)))
+
   (define (add-mat name tags test)
-    (if (assq name (mats))
+    (if (find-mat name)
         (errorf 'add-mat "mat ~a is already defined." name)
         (mats (cons (make-mat name tags test) (mats)))))
 
-  (define (run-mat name reporter)
-    (cond
-     [(assq name (mats)) => (lambda (mat) (do-run-mat mat reporter))]
-     [else
-      (errorf 'run-mat "mat ~a is not defined." name)]))
+  (define run-mat
+    (case-lambda
+     [(mat/name reporter) (run-mat mat/name reporter '() '())]
+     [(mat/name reporter incl-tags excl-tags)
+      (cond
+       [(mat? mat/name) (do-run-mat mat/name reporter incl-tags excl-tags)]
+       [(find-mat mat/name) => (lambda (mat) (do-run-mat mat reporter incl-tags excl-tags))]
+       [else (errorf 'run-mat "mat ~a is not defined." mat/name)])]))
 
-  (define (do-run-mat mat reporter)
+  (define (skip? mat incl-tags excl-tags)
+    (or (and (pair? incl-tags) (not (present (%mat-tags mat) incl-tags)))
+        (and (pair? excl-tags) (present (%mat-tags mat) excl-tags))))
+
+  (define (do-run-mat mat reporter incl-tags excl-tags)
     (let* ([before (statistics)]
            [result
-            (guard (e [else (cons 'fail e)])
-              ((mat-test mat))
-              'pass)])
-      (reporter (mat-name mat) (mat-tags mat) result
+            (if (skip? mat incl-tags excl-tags)
+                'skip
+                (guard (e [else (cons 'fail e)])
+                  ((%mat-test mat))
+                  'pass))])
+      (reporter (%mat-name mat) (%mat-tags mat) result
         (sstats-difference (statistics) before))))
 
+  (define (present tags tag-list)
+    (ormap (lambda (tag) (memq tag tag-list)) tags))
+
   (define (for-each-mat procedure)
-    (for-each (lambda (mat) (procedure (mat-name mat) (mat-tags mat)))
-      (reverse (mats))))
+    (for-each (lambda (mat) (procedure (%mat-name mat) (%mat-tags mat)))
+      (all-mats)))
 
   (define-syntax run-mats
     (syntax-rules ()
-      [(_) ($run-mats (map mat-name (reverse (mats))))]
+      [(_) ($run-mats #f)]
       [(_ name1 name2 ...) ($run-mats '(name1 name2 ...))]))
 
   (define (result-type x)
     (cond
      [(eq? x 'pass) 'pass]
+     [(eq? x 'skip) 'skip]
      [(and (pair? x) (eq? (car x) 'fail)) 'fail]
      [else #f]))
 
@@ -105,35 +127,78 @@
           (get))
         (format "~s" x)))
 
-  (define ($run-mats mat-names)
-    (define (print-col col1 col2 col3)
-      (printf " ~8a ~14a ~a\n" col1 col2 col3))
-    (display "\n*********************************************************\n")
-    (print-col "Result" "Test name" "Message")
-    (display "=========================================================\n")
-    (flush-output-port)
-    (let lp ([mat-names mat-names] [passed 0] [failed 0])
-      (cond
-       [(null? mat-names)
-        (display "*********************************************************\n\n")
-        (printf "Tests run: ~s   Pass: ~s   Fail: ~s\n\n"
-          (+ passed failed) passed failed)
-        (flush-output-port)]
-       [else
-        (run-mat (car mat-names)
-          (lambda (name tags result sstats)
-            (let ([rest (cdr mat-names)])
-              (case (result-type result)
-                [pass
-                 (print-col "pass" name "")
-                 (flush-output-port)
-                 (lp rest (+ passed 1) failed)]
-                [fail
-                 (print-col "FAIL" name (extract (cdr result)))
-                 (flush-output-port)
-                 (lp rest passed (+ failed 1))]
-                [else
-                 (errorf '$run-mats "unknown result ~s" result)]))))])))
+  (define (print-col col1 col2 col3)
+    (printf " ~8a ~14a ~a\n" col1 col2 col3))
+
+  (define $run-mats
+    (case-lambda
+     [(mat/names) ($run-mats mat/names #f '() '() #f 'test) (void)]
+     [(mat/names test-file incl-tags excl-tags mo-op progress)
+      (let-values ([(update-tally! get-tally) (make-tally-reporter)])
+        (define progress-reporter (if (eq? progress 'test) (make-progress-reporter progress) NOP))
+        (define write-summary (if mo-op (make-write-summary test-file mo-op) NOP))
+        (define (reporter name tags result sstats)
+          (define r
+            (case (result-type result)
+              [(pass skip) (make-mat-result test-file name tags result "" sstats)]
+              [(fail) (make-mat-result test-file name tags 'fail (extract (cdr result)) sstats)]
+              [else (errorf '$run-mats "unknown result ~s" result)]))
+          (update-tally! r)
+          (progress-reporter r)
+          (write-summary r))
+        (define (sep) (display "-------------------------------------------------------------------------\n"))
+        (case progress
+          [none (void)]
+          [suite (printf "~40a" test-file)]
+          [test
+           (when test-file (printf "~a\n" test-file))
+           (sep)
+           (print-col "Result" "Test name" "Message")
+           (sep)])
+        (flush-output-port)
+        (for-each
+         (lambda (mat/name)
+           (run-mat mat/name reporter incl-tags excl-tags))
+         (or mat/names (all-mats)))
+        (let-values ([(pass fail skip) (get-tally)])
+          (case progress
+            [none (void)]
+            [suite
+             (cond
+              [(= pass fail skip 0) (printf "no tests\n")]
+              [(> fail 0) (printf "fail\n")]
+              [(> pass 0) (printf "pass~[~:;     (skipped ~s)~]\n" skip skip)]
+              [else (printf "skipped\n")])]
+            [test
+             (sep)
+             (printf "Tests run: ~s   Pass: ~s   Fail: ~s   Skip: ~s\n\n"
+               (+ pass fail) pass fail skip)])
+          (flush-output-port)
+          `((pass ,pass) (fail ,fail) (skip ,skip))))]))
+
+  (define (NOP r) (void))
+
+  (define (make-tally-reporter)
+    (define pass 0)
+    (define fail 0)
+    (define skip 0)
+    (values
+     (lambda (r)
+       (case (mat-result-type r)
+         [pass (set! pass (+ pass 1))]
+         [fail (set! fail (+ fail 1))]
+         [skip (set! skip (+ skip 1))]
+         [else (errorf 'tally-reporter "unknown result type in ~s" r)]))
+     (lambda () (values pass fail skip))))
+
+  (define (make-progress-reporter progress)
+    (lambda (r)
+      (case (mat-result-type r)
+        [pass (print-col "pass" (mat-result-test r) "")]
+        [fail (print-col "FAIL" (mat-result-test r) (mat-result-message r))]
+        [skip (print-col "SKIP" (mat-result-test r) "")]
+        [else (errorf 'test-progress-reporter "unknown result ~s" r)])
+      (flush-output-port)))
 
   (define sstats (statistics))
   (define sstats-rtd (record-rtd sstats))
@@ -151,21 +216,24 @@
   (define mat-result-rtd (record-type-descriptor mat-result))
   (define mat-result-reader (make-record-reader mat-result-rtd))
 
+  (define (make-write-summary test-file op)
+    (lambda (r)
+      ;; sstats already uses default-record-writer
+      (parameterize ([print-gensym #f] [time-writer default-record-writer])
+        (fprintf op "~s\n" r))))
+
   (define (run-mats-to-file filename)
-    ;; sstats already uses default-record-writer
-    (parameterize ([print-gensym #f] [time-writer default-record-writer])
-      (call-with-output-file filename
-        (lambda (op)
-          (for-each-mat
-           (lambda (name tags)
-             (run-mat name
-               (lambda (name tags result sstats)
-                 (fprintf op "~s\n"
-                   (case (result-type result)
-                     [pass (make-mat-result filename name tags 'pass "" sstats)]
-                     [fail (make-mat-result filename name tags 'fail (extract (cdr result)) sstats)]
-                     [else (errorf 'run-mats-to-file "unknown result ~s" result)])))))))
-        'replace)))
+    ($run-mats-to-file filename (all-mats) '() '()))
+
+  (define ($run-mats-to-file filename mat/names incl-tags excl-tags)
+    (call-with-output-file filename
+      (lambda (op)
+        (define reporter (make-write-summary filename op))
+        (for-each
+         (lambda (mat/name)
+           (run-mat mat/name reporter incl-tags excl-tags))
+         (or mat/names (all-mats))))
+      'replace))
 
   (define (load-results filename)
     (parameterize ([mat-result-reader mat-result-rtd]
@@ -180,7 +248,7 @@
                   (cons x (lp)))))))))
 
   (define (summarize files)
-    (let ([pass 0] [fail 0])
+    (let ([pass 0] [fail 0] [skip 0])
       (for-each
        (lambda (in-file)
          (for-each
@@ -190,12 +258,13 @@
               (case (mat-result-type r)
                 [pass (set! pass (+ pass 1))]
                 [fail (set! fail (+ fail 1))]
+                [skip (set! skip (+ skip 1))]
                 [else
                  (errorf 'summarize "unknown result ~s in file ~a" (mat-result-type r) in-file)])]
              [else
               (errorf 'summarize "unknown entry ~s in file ~a" r in-file)]))
           (load-results in-file)))
        files)
-      (values pass fail)))
+      (values pass fail skip)))
 
   )

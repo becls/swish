@@ -39,7 +39,7 @@
 (define swish-build-src (path-combine "src" "swish" "swish-build"))
 
 (define (swish-build-test args patterns)
-  (script-test swish-build-src args patterns))
+  (script-test swish-build-src args "" patterns))
 
 (define (write-example basename exprs)
   (write-test-file (string-append basename ".ss")
