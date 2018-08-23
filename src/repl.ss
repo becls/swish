@@ -2,11 +2,9 @@
 
 (let-syntax ([_ (begin ;; run this code at expand time
                   (compile-imported-libraries #t)
-                  (library-directories '(("." . "../lib")))
-                  (when (equal? (getenv "PROFILE_MATS") "yes")
-                    (library-extensions '((".ss" . ".sop")))
-                    (compile-profile #t)
-                    (cp0-effort-limit 0))
+                  (if (equal? (getenv "PROFILE_MATS") "yes")
+                      (library-directories '(("." . "../build/profile/lib")))
+                      (library-directories '(("." . "../build/release/lib"))))
                   void)])
   (void))
 

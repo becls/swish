@@ -13,13 +13,13 @@ src/swish/Makefile:
 	@echo "Run ./configure to create $@"
 	@exit 1
 
-test: swish
-	$(MAKE) -C src/swish mat-prereq
-	cd src; ./run-mats "${PWD}/bin"
+test:
+	@$(MAKE) -C src/swish mat-prereq
+	@./src/run-mats
 
 coverage:
-	$(MAKE) -C src/swish mat-prereq
-	cd src; PROFILE_MATS=yes ./run-mats
+	@PROFILE_MATS=yes $(MAKE) -C src/swish mat-prereq
+	@PROFILE_MATS=yes ./src/run-mats
 
 install: all
 	$(MAKE) -C src/swish install

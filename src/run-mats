@@ -1,49 +1,60 @@
 #!/bin/sh -e
-# Usage: ./run-mats
-#     or ./run-mats bin-path
-#
-# If bin-path is absent or is ../bin, clean and run tests against code
-# in this repository.  Otherwise run the code installed at bin-path
-# against the tests in this repository.
 
-if [ -z ${SCHEME+x} ]; then SCHEME=scheme; fi
+LIBDIR=./build/mat-prereq/lib/swish.x.y.z/arch
+REPORT=data/mat-report.html
+COVERAGE=data/coverage.html
+PROFILE=data/server.profile
+this=$(basename "$0")
+
+fail() {
+  echo "${this} is intended for use only by run-suite, run-suitep, and the"
+  echo "top-level Makefile."
+  echo ""
+  echo "To run a specific suite or test, use run-mat in the src directory instead."
+  exit 1
+}
+
+if [ ! -d "${LIBDIR}" ]; then
+  echo "${this} expected to find $LIBDIR"
+  echo ""
+  fail
+fi
+
+if [ "$PWD" != "$(git rev-parse --show-toplevel)" ]; then
+  echo "${this} expected to be run from the repository root"
+  fail
+fi
+
+launch="build/mat-prereq/lib/swish.x.y.z/arch/swish --"
 
 if [ "$PROFILE_MATS" = "yes" ]; then
-  rm -f ../data/server.profile
+  rm -f "${PROFILE}"
 fi
 
-rm -f ../data/TestLog.db3
-
-if [ ${1+x} ]; then
-  if [ ! -d "${1}" ]; then
-    echo "$1 is not a directory"
-    exit 1
-  elif [ "$1" = "../bin" ]; then
-    make -C swish clean all
-  fi
-  PATH="${1}:${PATH}"
-  launch="../bin/swish-mat"
-else
-  make -C swish clean ready
-  launch="./go -q -- run-mats.ss"
-fi
+rm -f data/TestLog.db3
+mkdir -p data
 
 # Swish
-for suite in $( find swish -name '*.ms' | sed 's/\.ms//' | sort ); do
+for suite in $( find src/swish -name '*.ms' | sed 's/\.ms//' | sort ); do
   echo "testing $suite"
 $launch > /dev/null <<EOF
+(library-directories "build/mat-prereq/lib/swish.x.y.z/arch/lib")
+(load "src/run-mats.ss")
 (run-suite "$suite")
 EOF
 done
 
 # finish up
 $launch <<EOF
+(library-directories "build/mat-prereq/lib/swish.x.y.z/arch/lib")
+(load "src/run-mats.ss")
 (html-report "." "mat-report.html")
 (console-summary ".")
 EOF
 echo "see file://${PWD}/mat-report.html"
 
 if [ "$PROFILE_MATS" = "yes" ]; then
+  cd src
   ./dump-profile
   echo "see file://${PWD}/server-profile.html"
 fi

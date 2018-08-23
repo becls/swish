@@ -26,9 +26,7 @@
  )
 
 (define (prereq-path)
-  (path-combine (tmp-dir) "mat-prereq" "lib"
-    (string-append software-internal-name software-version)
-    (symbol->string (machine-type))))
+  (path-combine "build" "mat-prereq" "lib" "swish.x.y.z" "arch"))
 
 (define (output-dir)
   (path-combine (tmp-dir) "mat-output"))

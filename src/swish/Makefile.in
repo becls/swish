@@ -1,9 +1,13 @@
-.PHONY: all clean platform-clean ready reminders
+.PHONY: all build-dirs clean platform-clean ready reminders
 
-ready: io-constants.ss clibs git.revision
+CORE := ../../${BUILD}/bin/swish${EXESUFFIX} ../../${BUILD}/bin/swish.boot ../../${BUILD}/bin/swish.library
+AUXLIB := ../../${BUILD}/lib/swish/mat.so ../../${BUILD}/lib/swish/profile.so ../../${BUILD}/lib/swish/testing.so
 
-CORE := ../../bin/swish${EXESUFFIX} ../../bin/swish.boot ../../bin/swish.library
-AUXLIB := ../../lib/swish/mat.so ../../lib/swish/profile.so ../../lib/swish/testing.so
+ready: build-dirs io-constants.ss clibs git.revision
+
+build-dirs:
+	@mkdir -p ../../${BUILD}/bin
+	@mkdir -p ../../${BUILD}/lib
 
 all: ready ${CORE} ${AUXLIB} ${REMINDERS}
 
@@ -24,32 +28,28 @@ io-constants.ss: io-constants${EXESUFFIX}
 	git submodule update --init ../../libuv
 	git clone https://chromium.googlesource.com/external/gyp ../../libuv/build/gyp
 
-../../bin/swish.boot: boot.ss ../../bin/swish.library
+../../${BUILD}/bin/swish.boot: boot.ss ../../${BUILD}/bin/swish.library
 	@echo \
-	'(reset-handler abort)' \
-	'(make-boot-file "$@" (quote ("scheme" "petite")) "../../bin/swish.library" "boot.ss")' \
-	| "${SCHEME}" -q ../../bin/swish.library
+	'(library-directories (quote ()))' \
+	'(make-boot-file "../${BUILD}/bin/swish.boot" (quote ("scheme" "petite")) "../${BUILD}/bin/swish.library" "swish/boot.ss")' \
+	| "${SCHEME}" -q ../../${BUILD}/bin/swish.library compile.ss
 
-../../bin/swish.library: *.ss
-	find ../../lib -name '*.so' -delete
+../../${BUILD}/bin/swish.library: *.ss
+	find ../../${BUILD}/lib -name '*.so' -delete
 	@echo \
-	'(reset-handler abort)' \
+	'(library-directories (quote (("." . "../${BUILD}/lib"))))' \
 	'(generate-wpo-files #t)' \
-	'(compile-imported-libraries #t)' \
-	'(cd "..")'\
 	'(import (swish imports))' \
-	'(compile-whole-library "../lib/swish/imports.wpo" "../bin/swish.library")' \
-	| "${SCHEME}" -q --libdirs "${LIBDIRS}"
+	'(printf "compiling swish.library~%")' \
+	'(compile-whole-library "../'${BUILD}'/lib/swish/imports.wpo" "../${BUILD}/bin/swish.library")' \
+	| "${SCHEME}" -q compile.ss
 
-../../lib/swish/%.so: %.ss ../../bin/swish${EXESUFFIX} ../../bin/swish.library
+../../${BUILD}/lib/swish/%.so: %.ss ../../${BUILD}/bin/swish${EXESUFFIX} ../../${BUILD}/bin/swish.library
 	@echo \
-	'(reset-handler abort)' \
+	'(library-directories (quote (("." . "../${BUILD}/lib"))))' \
 	'(generate-wpo-files #t)' \
-	'(compile-imported-libraries #t)' \
-	'(cd "..")'\
-	'(library-directories "${LIBDIRS}")' \
 	'(import (swish $(<:.ss=)))' \
-	| ../../bin/swish${EXESUFFIX} -q
+	| ../../${BUILD}/bin/swish${EXESUFFIX} -q -- compile.ss
 
 clean: platform-clean
 	rm -f git.revision
@@ -77,23 +77,26 @@ install-doc: install-check
 
 install-bin: install-check all
 	install --directory ${INSTLIBDIR}
-	install ../../bin/swish${EXESUFFIX} ${INSTLIBDIR}
+	install ../../${BUILD}/bin/swish${EXESUFFIX} ${INSTLIBDIR}
 	install swish-build ${INSTLIBDIR}
-	install ../../bin/swish.boot ${INSTLIBDIR}
-	install ../../bin/swish.library ${INSTLIBDIR}
+	install ../../${BUILD}/bin/swish.boot ${INSTLIBDIR}
+	install ../../${BUILD}/bin/swish.library ${INSTLIBDIR}
 	install ${SwishLibs} ${INSTLIBDIR}
 	install --directory ${INSTALLROOT}/bin
 	ln -sf ${INSTLIBDIR}/swish${EXESUFFIX} ${INSTALLROOT}/bin/swish
 	ln -sf ${INSTLIBDIR}/swish-build ${INSTALLROOT}/bin/swish-build
 	install --directory ${INSTLIBDIR}/lib
-	cd ../../lib ; find . -type f -name '*.wpo' -exec install -D -T {} ${INSTLIBDIR}/wpo/{} \;
-	cd ../../lib ; find . -type f -name '*.so' -exec install -D -T {} ${INSTLIBDIR}/lib/{} \;
-	install ../../lib/swish/mat.so ${INSTLIBDIR}/lib/swish
-	install ../../lib/swish/profile.so ${INSTLIBDIR}/lib/swish
-	install ../../lib/swish/testing.so ${INSTLIBDIR}/lib/swish
+	cd ../../${BUILD}/lib ; find . -type f -name '*.wpo' -exec install -D -T {} ${INSTLIBDIR}/wpo/{} \;
+	cd ../../${BUILD}/lib ; find . -type f -name '*.so' -exec install -D -T {} ${INSTLIBDIR}/lib/{} \;
+	install ../../${BUILD}/lib/swish/mat.so ${INSTLIBDIR}/lib/swish
+	install ../../${BUILD}/lib/swish/profile.so ${INSTLIBDIR}/lib/swish
+	install ../../${BUILD}/lib/swish/testing.so ${INSTLIBDIR}/lib/swish
 	install --directory ${INSTWEBDIR}
 	cd ../../web ; find . -type f -exec install -D -T {} ${INSTWEBDIR}/{} \;
 
 .PHONY: mat-prereq
 mat-prereq:
-	make install-bin INSTALLROOT="$$(${NORMALIZE_PATH} ../../data/tmp/mat-prereq)"
+	@printf "making mat-prereq ... "
+	@rm -rf ../../build/mat-prereq
+	@make install-bin INSTALLROOT="$$(${NORMALIZE_PATH} ../../build/mat-prereq)" SWISH_VERSION=".x.y.z" MACHINE_TYPE="arch" > /dev/null
+	@printf "done.\n"

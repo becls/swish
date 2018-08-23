@@ -4,17 +4,17 @@ C=../vs32 cl /nologo /Ox /MD /W3
 LD=../vs32 link /nologo /ltcg /nodefaultlib:libcmt
 OsiObj=osi.obj sqlite.obj sqlite3.obj
 SystemLibs=rpcrt4.lib ole32.lib advapi32.lib User32.lib
-SwishLibs := ../../bin/osi.dll ../../lib/swish_kernel.obj
+SwishLibs := ../../${BUILD}/bin/osi.dll ../../${BUILD}/lib/swish_kernel.obj
 
 clibs: ${SwishLibs}
 
-../../bin/swish.exe: main.obj ../../lib/swish_kernel.obj
+../../${BUILD}/bin/swish.exe: main.obj ../../${BUILD}/lib/swish_kernel.obj
 	${LD} /out:$@ /subsystem:console $^ ${SystemLibs}
 
-../../bin/osi.dll: ${OsiObj} ${UvLib}
-	${LD} /dll /out:../../bin/osi.dll ${OsiObj} "${SchemeLib}" "${UvLib}"
+../../${BUILD}/bin/osi.dll: ${OsiObj} ${UvLib}
+	${LD} /dll /out:../../${BUILD}/bin/osi.dll ${OsiObj} "${SchemeLib}" "${UvLib}"
 
-../../lib/swish_kernel.obj: ${UvLib} run.obj ${OsiObj}
+../../${BUILD}/lib/swish_kernel.obj: ${UvLib} run.obj ${OsiObj}
 	../vs32 lib /nologo /ltcg /out:$@ run.obj ${OsiObj} "${SchemeLib}" "${UvLib}"
 
 %.obj: %.c osi.h ${UvInclude}
@@ -30,11 +30,17 @@ ${UvLib}: ${UvInclude}
 	  -cd ../../libuv; PYTHON="${PYTHON}" cmd /c vcbuild.bat release vs2017 x86 static
 
 platform-clean:
-	rm -f ../../bin/osi.{dll,exp,lib} osi.obj sqlite.obj io-constants.{exe,obj}
-	rm -f ../../bin/swish.{exe,boot,library,lib,exp,wpo}
+	rm -f ../../${BUILD}bin/osi.{dll,exp,lib} osi.obj sqlite.obj io-constants.{exe,obj}
+	rm -f ../../${BUILD}/bin/swish.exe
+	rm -f ../../${BUILD}/bin/swish.boot
+	rm -f ../../${BUILD}/bin/swish.library
+	rm -f ../../${BUILD}/bin/swish.lib
+	rm -f ../../${BUILD}/bin/swish.exp
+	rm -f ../../${BUILD}/bin/swish.wpo
+	rm -f ../../${BUILD}/lib/swish/*.so
+	rm -f ../../${BUILD}/lib/swish/*.wpo
 	rm -f swish.exe main.obj run.obj swish.boot
 	rm -f ${SwishLibs}
-	rm -f ../../lib/swish/*.{so,sop,wpo}
 
 pristine: clean
 	rm -rf sqlite3.obj ../../libuv/Release

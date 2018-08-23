@@ -45,10 +45,8 @@ esac
 
 if [ "${Windows}" = "yes" ]; then
   EXESUFFIX=.exe
-  LIBDIRS=".;;../lib"
 else
   EXESUFFIX=
-  LIBDIRS=".::../lib"
 fi
 
 quote () { printf %s\\n "$1" | sed "s/'/'\\\\''/g;1s/^/'/;\$s/\$/'/" ; }
@@ -332,7 +330,6 @@ add ""
 add "BASE_MACHINE_TYPE:=${BASE_MACHINE_TYPE}"
 add "EXESUFFIX:=${EXESUFFIX}"
 add "INSTALLROOT:=${PREFIX}"
-add "LIBDIRS:=${LIBDIRS}"
 add "MACHINE_TYPE:=${MACHINE_TYPE}"
 add "PYTHON:=${PYTHON}"
 add "SCHEME:=${SCHEME}"
@@ -366,6 +363,12 @@ if [ ! -z "${CUSTOMPATH}${CUSTOMHEAPDIRS}" ]; then
   fi
   add -t "@echo \"----------------------------------------------------\""
 fi
+add ""
+add "ifeq (yes,\${PROFILE_MATS})"
+add "BUILD:=build/profile"
+add "else"
+add "BUILD:=build/release"
+add "endif"
 add ""
 add "include Mf-${BASE_MACHINE_TYPE}"
 add ""

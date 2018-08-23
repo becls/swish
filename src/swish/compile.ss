@@ -1,0 +1,8 @@
+(reset-handler abort)
+(compile-imported-libraries #t)
+(when (equal? (getenv "PROFILE_MATS") "yes")
+  (compile-profile #t)
+  (compile-interpret-simple #f)
+  (cp0-effort-limit 0)
+  (run-cp0 (lambda (f x) x)))
+(cd "..")

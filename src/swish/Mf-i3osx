@@ -3,17 +3,17 @@ UvLib=../../libuv/build/Release
 C = gcc -m32 -fPIC -Wall -Wextra -Werror -O2
 OsiObj=osi.o sqlite.o sqlite3.o
 SystemLibs=-liconv -lm -lncurses
-SwishLibs := ../../bin/libosi.dylib ../../lib/swish_kernel.o
+SwishLibs := ../../${BUILD}/bin/libosi.dylib ../../${BUILD}/lib/swish_kernel.o
 
 clibs: ${SwishLibs}
 
-../../bin/swish: main.o ../../lib/swish_kernel.o
+../../${BUILD}/bin/swish: main.o ../../${BUILD}/lib/swish_kernel.o
 	$C -o $@ $^ ${SystemLibs}
 
-../../bin/libosi.dylib: ${OsiObj} ${UvLib}/libuv.a
-	$C -dynamiclib -undefined dynamic_lookup -L${UvLib} -o ../../bin/libosi.dylib ${OsiObj} -luv
+../../${BUILD}/bin/libosi.dylib: ${OsiObj} ${UvLib}/libuv.a
+	$C -dynamiclib -undefined dynamic_lookup -L${UvLib} -o ../../${BUILD}/bin/libosi.dylib ${OsiObj} -luv
 
-../../lib/swish_kernel.o: ${UvLib}/libuv.a run.o ${OsiObj}
+../../${BUILD}/lib/swish_kernel.o: ${UvLib}/libuv.a run.o ${OsiObj}
 	ld -r -o $@ run.o ${OsiObj} "${SchemeInclude}"/kernel.o ${UvLib}/libuv.a
 
 %.o: %.c osi.h ${UvInclude}
@@ -33,13 +33,12 @@ platform-clean:
 	rm -f osi.o sqlite.o io-constants io-constants.ss
 	rm -f swish main.o run.o swish.boot
 	rm -f ${SwishLibs}
-	rm -f ../../bin/swish
-	rm -f ../../bin/swish.boot
-	rm -f ../../bin/swish.library
-	rm -f ../../bin/swish.wpo
-	rm -f ../../lib/swish/*.so
-	rm -f ../../lib/swish/*.sop
-	rm -f ../../lib/swish/*.wpo
+	rm -f ../../${BUILD}/bin/swish
+	rm -f ../../${BUILD}/bin/swish.boot
+	rm -f ../../${BUILD}/bin/swish.library
+	rm -f ../../${BUILD}/bin/swish.wpo
+	rm -f ../../${BUILD}/lib/swish/*.so
+	rm -f ../../${BUILD}/lib/swish/*.wpo
 
 pristine: clean
 	rm -rf sqlite3.o ../../libuv/build/Release
