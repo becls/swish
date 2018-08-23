@@ -98,25 +98,11 @@
              (profile:start #f ,tmp-file #t)
              ;; when profiling, mat-prereq still builds .so files but in a different directory
              (library-extensions (append (library-extensions) '((".ss" . ".so"))))
-             (let ()
-               (define (return code)
-                 (profile:save)
-                 (exit code))
-               (define (run-script)
-                 (call/cc
-                  (lambda (fail)
-                    ;; Provide command-line arguments and intercept script's
-                    ;; calls to (exit) so we can save profile data.
-                    (parameterize ([exit-handler fail]
-                                   [reset-handler (lambda () (fail 1))]
-                                   [command-line-arguments ',args]
-                                   [command-line '(,script-file ,@args)])
-                       (load ,script-file)))))
-               ,'(match (catch (run-script))
-                   [#(EXIT ,reason)
-                    (fprintf (console-error-port) "~a\n" (exit-reason->english reason))
-                    (return 1)]
-                   [,exit-code (return exit-code)]))))
+             (reset-handler (lambda () (exit 1)))
+             (on-exit (profile:save)
+               ;; call the (scheme-start) installed by app.ss to
+               ;; mimic initial application startup
+               (apply (scheme-start) ',script-file ',args))))
          patterns)))]
    [else (test-os-process swish-exe `(,script-file ,@args) "" patterns)]))
 

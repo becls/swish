@@ -28,7 +28,7 @@ I/O.
 
 ## Linux
 
-- Chez Scheme 9.5.1 from June 14, 2018 or later
+- Chez Scheme 9.5.1 from July 18, 2018 or later (commit a0adfa1, which adds load-compiled-from-port)
 - GCC, the GNU Compiler Collection
 - GNU C++ compilter for libuv
 - GNU make
@@ -37,7 +37,7 @@ I/O.
 
 ## Mac
 
-- Chez Scheme 9.5.1 from June 14, 2018 or later
+- Chez Scheme 9.5.1 from July 18, 2018 or later (commit a0adfa1, which adds load-compiled-from-port)
 - XCode must be installed and the command line tools must be set (Xcode->Preferences->Locations->command line tools)
 - pdflatex (can be installed through homebrew using `brew cask install mactex`)
 - dot (can be installed through homebrew using `brew install graphviz --with-app`)
@@ -45,7 +45,7 @@ I/O.
 
 ## Windows
 
-- Chez Scheme 9.5.1 from June 14, 2018 or later
+- Chez Scheme 9.5.1 from July 18, 2018 or later (commit a0adfa1, which adds load-compiled-from-port)
 - Cygwin with bash, git, graphviz, grep, perl, texlive, GNU make, etc.
 - Microsoft Visual Studio 2017 or 2015 with Visual C++
 - Python 2.7 for Windows in C:\Python27 (see below for other options)

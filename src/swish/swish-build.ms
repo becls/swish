@@ -52,6 +52,9 @@
      ,(path-combine (output-dir) (format "~a.ss" basename)))
    '()))
 
+(define (run-script filename args patterns)
+  (test-os-process swish-exe `(,filename ,@args) "" patterns))
+
 (define (run-fat basename args patterns)
   (test-os-process (output-file basename) args "" patterns))
 
@@ -69,15 +72,19 @@
   (swish-build-test '("--help")
     '("Usage:"
       "write output"
-      "source filename")))
+      "source filename"))
+  (swish-build-test '("-h" "details")
+    '("To compile a library"
+      "To create a stand-alone application"))
+  (swish-build-test '("-h" "examples")
+    '("Examples:"
+      "swish-build -o foo -b petite foo.ss")))
 
 (define hello-fat
   `((import
      (scheme)
      (swish imports))
-    (swish-start
-     (lambda (cmd-line)
-       (printf "Hello, World!\n")))))
+     (printf "Hello, World!\n")))
 
 (isolate-mat fat1 ()
   ;; fat with petite only
@@ -106,6 +113,39 @@
   (build-example "thin" '())
   (run-thin "thin" '() '("Hello, World!")))
 
+(isolate-mat command-line-arguments ()
+  ;; command-line thin and fat
+  (write-example "cl"
+    '((import
+       (scheme)
+       (swish imports))
+      (match (command-line)
+        [(,argv0 . ,args)
+         (printf "~{~a~^ ~}\n"
+           (cons (path-root (path-last argv0)) args))])))
+  (build-example "cl" '())
+  (run-thin "cl" '() '("^cl$"))
+  (run-thin "cl" '("p" "q") '("^cl p q$"))
+  (run-thin "cl" '("--verbose" "-q") '("^cl --verbose -q$"))
+  (build-example "cl" '("-b" "petite"))
+  (run-fat "cl" '() '("^cl$"))
+  (run-fat "cl" '("--version") '("^cl --version$"))
+  (run-fat "cl" '("--help" "-h") '("^cl --help -h$"))
+  ;; command-line-arguments thin and fat
+  (write-example "cla"
+    '((import
+       (scheme)
+       (swish imports))
+       (printf "~a~{ ~a~}\n" (app:name) (command-line-arguments))))
+  (build-example "cla" '())
+  (run-thin "cla" '() '("^cla$"))
+  (run-thin "cla" '("a" "b" "c") '("^cla a b c$"))
+  (run-thin "cla" '("--" "help") '("^cla -- help$"))
+  (build-example "cla" '("-b" "petite"))
+  (run-fat "cla" '() '("^cla$"))
+  (run-fat "cla" '("3" "x" "y" "z") '("^cla 3 x y z$"))
+  (run-fat "cla" '("-h" "--help") '("^cla -h --help$")))
+
 (isolate-mat import-nonexistent-lib-fat ()
   ;; Error case
   (write-example "nolib-fat"
@@ -113,12 +153,10 @@
        (lib-does-not-exist)
        (scheme)
        (swish imports))
-      (swish-start
-       (lambda (cmd-line)
-         (printf "abc: ~a\n" abc)))))
+       (printf "abc: ~a\n" abc)))
   (match (catch (build-example "nolib-fat" `("-b" "petite")))
     [#(EXIT `(<os-process-failed>
-              [stderr ("Exception: library (lib-does-not-exist) not found.")]))
+              [stderr ("swish-build: library (lib-does-not-exist) not found.")]))
      'ok]))
 
 (isolate-mat import-nonexistent-lib-thin ()
@@ -131,7 +169,7 @@
       (printf "abc: ~a\n" abc)))
   (match (catch (build-example "nolib-thin" `()))
     [#(EXIT `(<os-process-failed>
-              [stderr ("Exception: library (lib-does-not-exist) not found.")]))
+              [stderr ("swish-build: library (lib-does-not-exist) not found.")]))
      'ok]))
 
 (isolate-mat libdir-fat ()
@@ -147,9 +185,7 @@
        (lib-abc)
        (scheme)
        (swish imports))
-      (swish-start
-       (lambda (cmd-line)
-         (printf "abc: ~a\n" abc)))))
+       (printf "abc: ~a\n" abc)))
   (build-example "libdir-fat"
     `("-b" "petite"
       "-L" ,(path-combine (output-dir) "libdir")))
@@ -197,10 +233,8 @@
        (lib-abc)
        (scheme)
        (swish imports))
-      (swish-start
-       (lambda (cmd-line)
-         (printf "abc: ~a\n"
-           (top-level-value 'abc (environment '(lib-abc))))))))
+       (printf "abc: ~a\n"
+         (top-level-value 'abc (environment '(lib-abc))))))
   (build-example "libsvisbad-fat"
     `("-b" "petite"
       "-L" ,(path-combine (output-dir) "libdir")
@@ -213,7 +247,7 @@
   (match (catch (run-fat "libsvisbad-fat" '() '()))
     [#(EXIT `(<os-process-failed>
               [stdout ()]
-              [stderr ("Exception: library (lib-abc) not found")]))
+              [stderr ("libsvisbad-fat: library (lib-abc) not found.")]))
      'ok]))
 
 (isolate-mat libs-visible-thin-bad ()
@@ -243,7 +277,7 @@
   (match (catch (run-thin "libsvisbad-thin" '() '()))
     [#(EXIT `(<os-process-failed>
               [stdout ()]
-              [stderr ("Exception: library (lib-abc) not found.")]))
+              [stderr ("libsvisbad-thin: library (lib-abc) not found.")]))
      'ok]))
 
 (isolate-mat libs-visible-fat ()
@@ -258,11 +292,9 @@
        (lib-abc)
        (scheme)
        (swish imports))
-      (swish-start
-       (lambda (cmd-line)
-         abc                            ; must reference the export
-         (printf "abc: ~a\n"
-           (top-level-value 'abc (environment '(lib-abc))))))))
+       abc                            ; must reference the export
+       (printf "abc: ~a\n"
+           (top-level-value 'abc (environment '(lib-abc))))))
   (build-example "libsvis-fat"
     `("-b" "petite"
       "-L" ,(path-combine (output-dir) "libdir")
@@ -313,10 +345,8 @@
        (lib-abc)
        (scheme)
        (swish imports))
-      (swish-start
-       (lambda (cmd-line)
-         (printf "abc: ~a\n"
-           (top-level-value 'abc (environment '(lib-abc))))))))
+      (printf "abc: ~a\n"
+        (top-level-value 'abc (environment '(lib-abc))))))
 
   (parameterize ([compile-file-message #f])
     (compile-file (path-combine (output-dir) "libdir/lib-abc")))
@@ -364,17 +394,15 @@
     `((import
        (scheme)
        (swish imports))
-      (swish-start
-       (lambda (cmd-line)
-         (printf "abc: ~a\n"
-           (top-level-value 'software-product-name (environment '(swish software-info))))))))
+       (printf "abc: ~a\n"
+         (top-level-value 'software-product-name (environment '(swish software-info))))))
 
   ;; Error case: swish library is not visible
   (build-example "rtlibs-swish-fat" `("-b" "petite"))
   (match (catch (run-fat "rtlibs-swish-fat" '()
                   (list (format "abc: ~a" software-product-name))))
     [#(EXIT `(<os-process-failed>
-              [stderr ("Exception in visit: library (swish software-info) is not visible")]))
+              [stderr ("rtlibs-swish-fat: library (swish software-info) is not visible.")]))
      'ok])
 
   ;; Success case
@@ -399,7 +427,7 @@
               [exit-status 1]
               [stdout ,stdout]
               [stderr ()]))
-     (match-regexps '("app:shutdown due to \\(exit foo\\)") stdout)]))
+     (match-regexps '("application shutdown due to \\(exit foo\\)") stdout)]))
 
 (isolate-mat compile-library ()
   (define scheme (or (getenv "SCHEME") "scheme"))
@@ -452,11 +480,6 @@
     (list (format "^~a$" (pregexp-quote "Added without whole-program optimization: (miss)"))))
   (run-thin "thin-ml" '() '("^got: PDQ Bach$"))
   ;; fat
-  (write-example "app"
-    `((import (lib) (scheme) (swish imports))
-      (swish-start
-       (lambda (cmdline)
-         (printf "got:~{ ~a~}\n" a)))))
   (swish-build-test `("-L" ,(output-dir) "-o" ,(output-file "fat-ml") ,(input-file "app") "-b" "petite")
     (list (format "^~a$" (pregexp-quote "Added without whole-program optimization: (miss)"))))
   (run-fat "fat-ml" '() '("^got: PDQ Bach$"))
@@ -481,3 +504,178 @@
   (test-os-process scheme `("-q" "--libdirs" ,(output-dir) ,lib-compiled)
     (format "~{~s\n~}" `((reset-handler exit) (console-error-port (console-output-port)) (import (lib))))
     (list "^Exception: library \\(miss\\) not found")))
+
+(isolate-mat claim-exceptions ()
+  ;; run one source example three different ways
+  (define broken-echo
+    (write-example "broken-echo"
+      `((printf "~{~a~^ ~}\n" (command-line-arguments))
+        (when (member "crash" (command-line-arguments))
+          (cdr 17)))))
+  ;; run as swish script
+  (run-script broken-echo '("1" "2" "345") '("^1 2 345$"))
+  (match (catch (run-script broken-echo '("make" "it" "crash") '()))
+    [#(EXIT `(<os-process-failed>
+              [stdout ("make it crash")]
+              [stderr ("broken-echo: 17 is not a pair.")]))
+     'ok])
+  ;; run as thin app
+  (build-example "broken-echo" '())
+  (run-thin "broken-echo" '("42" "27") '("^42 27$"))
+  (match (catch (run-thin "broken-echo" '("crash" "bang" "boom") '()))
+    [#(EXIT `(<os-process-failed>
+              [stdout ("crash bang boom")]
+              [stderr ("broken-echo: 17 is not a pair.")]))
+     'ok])
+  (assert (delete-file (output-file "broken-echo")))
+  ;; run as fat app
+  (build-example "broken-echo" '("-b" "petite"))
+  (run-fat "broken-echo" '("2" "4" "6") '("^2 4 6$"))
+  (match (catch (run-fat "broken-echo" '("crash" "bang" "boom") '()))
+    [#(EXIT `(<os-process-failed>
+              [stdout ("crash bang boom")]
+              [stderr ("broken-echo: 17 is not a pair.")]))
+     'ok])
+  )
+
+(isolate-mat hash-bang ()
+  ;; run one source example three different ways
+  (define howdy
+    (write-test-file "howdy.ss"
+      (lambda ()
+        (printf "#! /usr/bin/env swish\n")
+        (for-each pretty-print
+          ;; look ma, no import
+          '((display (join '("howdy" "folks") #\space))
+            (newline))))))
+  (set-file-mode howdy #o755)
+  ;; run as /usr/bin/env script
+  (test-os-process (fix-exe "bash") '()
+    (string-append
+     "PATH=$PATH:./build/mat-prereq/lib/swish.x.y.z/arch\n"
+     "./data/tmp/mat-output/howdy.ss\n"
+     "exit\n")
+    '("howdy folks"))
+  ;; run as swish script
+  (run-script howdy '() '("^howdy folks$"))
+  ;; run as thin app
+  (build-example "howdy" '())
+  (run-thin "howdy" '() '("^howdy folks$"))
+  (assert (delete-file (output-file "howdy")))
+  ;; run as fat app
+  (build-example "howdy" '("-b" "petite"))
+  (run-fat "howdy" '() '("^howdy folks$"))
+  )
+
+(isolate-mat crash-bang ()
+  ;; run one source example three different ways, with nonzero exit code
+  (define crash
+    (write-test-file "crash.ss"
+      (lambda ()
+        (printf "#! /usr/bin/env swish\n")
+        (pretty-print '(exit 3)))))
+  (set-file-mode crash #o755)
+  ;; run as /usr/bin/env script
+  (test-os-process (fix-exe "bash") '()
+    (string-append
+     "PATH=$PATH:./build/mat-prereq/lib/swish.x.y.z/arch\n"
+     "./data/tmp/mat-output/crash.ss\n"
+     "echo $?\n"
+     "exit\n")
+    '("3"))
+  ;; run as swish script
+  (match (catch (run-script crash '() '()))
+    [#(EXIT `(<os-process-failed> [exit-status 3]))
+     'ok])
+  ;; run as thin app
+  (build-example "crash" '())
+  (match (catch (run-thin "crash" '() '()))
+    [#(EXIT `(<os-process-failed> [exit-status 3]))
+     'ok])
+  (assert (delete-file (output-file "crash")))
+  ;; run as fat app
+  (build-example "crash" '("-b" "petite"))
+  (match (catch (run-fat "crash" '() '()))
+    [#(EXIT `(<os-process-failed> [exit-status 3]))
+     'ok])
+  )
+
+(isolate-mat scheme-start ()
+  ;; make sure we've restored swish's scheme-start, especially in fat app case
+  (define bounce
+    (write-test-file "bounce.ss"
+      (lambda ()
+        (printf "#! /usr/bin/env swish\n")
+        (for-each pretty-print
+          '((printf "Hello from ")
+            ((scheme-start) "--version"))))))
+  (define expected-output '("Hello from Swish Version"))
+  (set-file-mode bounce #o755)
+  ;; run as /usr/bin/env script
+  (test-os-process (fix-exe "bash") '()
+    (string-append
+     "PATH=$PATH:./build/mat-prereq/lib/swish.x.y.z/arch\n"
+     "./data/tmp/mat-output/bounce.ss\n"
+     "exit\n")
+    expected-output)
+  ;; run as swish script
+  (run-script bounce '() expected-output)
+  ;; run as thin app
+  (build-example "bounce" '())
+  (run-thin "bounce" '() expected-output)
+  (assert (delete-file (output-file "bounce")))
+  ;; run as fat app
+  (build-example "bounce" '("-b" "petite" "--rtlib" "swish"))
+  (run-fat "bounce" '() expected-output)
+  )
+
+(isolate-mat error-reporting ()
+  (define bad
+    (write-test-file "bad.ss"
+      (lambda ()
+        (pretty-print '(let x 3)))))
+  (define dubious
+    (write-test-file "dubious.ss"
+      (lambda ()
+        (for-each pretty-print
+          `((define (foo a b) b)
+            (foo 1 2 3 4 5))))))
+  (define incomplete
+    (write-test-file "incomplete.ss"
+      (lambda ()
+        (printf "(let ([x 3]"))))
+  (define bad-patterns
+    (list (format "swish-build: invalid syntax.*~a" (pregexp-quote bad))))
+  (define dubious-patterns
+    (list
+     (format "swish-build: possible incorrect argument count.*~a"
+       (pregexp-quote dubious))))
+  (define incomplete-patterns
+    (list
+     (format "swish-build: unexpected end-of-file reading list.*~a"
+       (pregexp-quote incomplete))))
+  ;; compile-time error thin
+  (match (catch (build-example "bad" '()))
+    [#(EXIT `(<os-process-failed> ,stderr))
+     (match-regexps bad-patterns stderr)])
+  ;; compile-time error thin
+  (match (catch (build-example "bad" '("-b" "petite")))
+    [#(EXIT `(<os-process-failed> ,stderr))
+     (match-regexps bad-patterns stderr)])
+  ;; compile-time warning thin
+  (match (catch (build-example "dubious" '()))
+    [#(EXIT `(<os-process-failed> ,stderr))
+     (match-regexps dubious-patterns stderr)])
+  ;; compile-time warning thin
+  (match (catch (build-example "dubious" '("-b" "petite")))
+    [#(EXIT `(<os-process-failed> ,stderr))
+     (match-regexps dubious-patterns stderr)])
+  ;; reader error thin
+  (match (catch (build-example "incomplete" '()))
+    [#(EXIT `(<os-process-failed> ,stderr))
+     (match-regexps incomplete-patterns stderr)])
+  ;; reader error thin
+  (match (catch (build-example "incomplete" '("-b" "petite")))
+    [#(EXIT `(<os-process-failed> ,stderr))
+     (match-regexps incomplete-patterns stderr)])
+  )

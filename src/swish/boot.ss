@@ -1,2 +1,2 @@
 (import (swish app))
-swish-start ;; reference export to force library initialization
+app:name ;; reference export to force library initialization
