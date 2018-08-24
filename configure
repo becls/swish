@@ -218,6 +218,10 @@ if [ "${Windows}" = "yes" ]; then
   DLLNAME="$(basename "${SchemeDLL}")"
   DLLFOUND="$(type -p "${DLLNAME}")"
   if [ "${DLLFOUND}" != "${SchemeDLL}" ]; then
+    # try_custom since we likely need to set SCHEMEHEAPDIRS
+    set +e
+    try_custom
+    set -e
     CUSTOMPATH="$(dirname "${SchemeDLL}")"
     export PATH
     PATH="${CUSTOMPATH}:${PATH}"
