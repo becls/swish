@@ -134,3 +134,24 @@
     ["Thu, 24 Dec 2015 07:00:00 +0000"
      (format-rfc2822 (make-date 0 0 0 7 24 12 2015 0))])
    'ok))
+
+(mat trim-whitespace ()
+  (define ws
+    (let ([os (open-output-string)])
+      (do ([i 0 (+ i 1)]) ((= i #xFFFF))
+        (unless (<= #xD800 i #xDFFF)
+          (let ([c (integer->char i)])
+            (when (char-whitespace? c)
+              (write-char c os)))))
+      (get-output-string os)))
+  (match-let*
+   (["" (trim-whitespace "")]
+    ["" (trim-whitespace ws)]
+    ["a b c" (trim-whitespace (string-append ws "a b c" ws))]
+    ["xyz" (trim-whitespace "xyz")]
+    ["x y z" (trim-whitespace "x y z")]
+    ["left" (trim-whitespace "    left")]
+    ["right" (trim-whitespace "right    ")]
+    ["A" (trim-whitespace " \n A \n ")]
+    ["Z" (trim-whitespace "Z")])
+   'ok))

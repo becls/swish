@@ -82,6 +82,25 @@
     (reported e4)
     'ok))
 
+(isolate-mat system-detail ()
+  (define-tuple <foo> bar timestamp)
+  (stop-event-mgr)
+  (start-event-mgr)
+  (silence-log-handler)
+  (event-mgr:flush-buffer)
+  (capture-events)
+  ;; explicit timestamp
+  (system-detail <foo> [bar 'bell] [timestamp 1234])
+  (receive (after 1000 (raise `#(event-timeout 1)))
+    [`(<foo> [bar bell] [timestamp 1234]) 'ok])
+  ;; add timestamp if not present
+  (let* ([before (erlang:now)]
+         [_ (system-detail <foo> [bar 'none])]
+         [after (erlang:now)])
+    (receive (after 1000 (raise `#(event-timeout 2)))
+      [`(<foo> [bar none] ,timestamp)
+       (assert (<= before timestamp after))])))
+
 (isolate-mat crash ()
   (process-trap-exit #t)
   (stop-event-mgr)
