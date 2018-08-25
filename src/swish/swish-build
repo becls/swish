@@ -291,6 +291,14 @@
           (apply append (vector->list vals))))
       (vector->list keys))))
 
+(define (show-files app-boot boot-files rt-libs other-libs source-fn)
+  (when (> (verbosity) 1)
+    (printf "making application~@[ boot file ~s~] from:" app-boot)
+    (printf "~@[~{\n-b      ~a~}~]" boot-files)
+    (printf "~{\n--rtlib ~a~}" rt-libs)
+    (printf "~{\n        ~a~}" other-libs)
+    (printf "\n        ~a\n" source-fn)))
+
 (define (try-parse)
   (define problem #f)
   (define lib-opt
@@ -412,12 +420,7 @@
                     (let ([ip (open-file output-fn O_RDONLY 0 'binary-input)])
                       (on-exit (close-port ip)
                         (get-bytevector-all ip)))])
-              (when (> (verbosity) 1)
-                (printf "making application boot file ~s from:\n" app-boot)
-                (printf "~{\n-b      ~a~}" boot-files)
-                (printf "~{\n--rtlib ~a~}" rt-libs)
-                (printf "~{\n        ~a~}" other-libs)
-                (printf "\n        ~a\n" source-fn))
+              (show-files app-boot boot-files rt-libs other-libs source-fn)
               ;; avoid using swish library code within the expression we compile
               (compile-to-file
                `((load-compiled-from-port (open-bytevector-input-port ',compiled-code)))
@@ -441,6 +444,7 @@
                    [ip (open-file output-fn O_RDONLY 0 'binary-input)]
                    [op (open-file tmp (+ O_WRONLY O_CREAT O_APPEND) #o777 'binary-output)])
               (on-exit (begin (close-port ip) (close-port op))
+                (show-files #f #f rt-libs other-libs source-fn)
                 (put-bytevector op (or hashbang (string->utf8 "#!/usr/bin/env swish\n")))
                 (for-each
                  (lambda (rt-lib)
