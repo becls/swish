@@ -264,8 +264,7 @@ links to all child processes.
 use a child specification. A child specification is defined as:
 
 \begin{grammar}
-\var{child-spec}
- & \code{\#(\var{name} \var{thunk} \var{restart-type} \var{shutdown} \var{type})}
+\prodrow{\var{child-spec}}{\code{\#(\var{name} \var{thunk} \var{restart-type} \var{shutdown} \var{type})}}
 \end{grammar}
 
 \var{name} is a symbol unique to the children within the supervisor.
@@ -309,9 +308,8 @@ but is otherwise unused. It may be useful in conjunction with
 supervision hierarchy.
 
 \begin{grammar}
-  \var{type}
-  & \code{supervisor}\\
-  & \code{worker}
+  \prodrow{\var{type}}{\code{supervisor}}
+  \altrow{\code{worker}}
 \end{grammar}
 
 Invalid child specifications will result in specific error reasons
@@ -343,24 +341,20 @@ The \code{supervisor:start\&link} procedure creates a new
 server, \code{\#f} may be specified.
 
 \begin{grammar}
-  \var{strategy}
-  & \code{one-for-one}\\
-  & \code{one-for-all}
+  \prodrow{\var{strategy}}{\code{one-for-one}}
+  \altrow{\code{one-for-all}}
 \end{grammar}
 
 \begin{grammar}
-  \var{intensity}
-  & a fixnum $>=$ 0
+  \prodrow{\var{intensity}}{a fixnum $>=$ 0}
 \end{grammar}
 
 \begin{grammar}
-  \var{period}
-  & a fixnum $>$ 0
+  \prodrow{\var{period}}{a fixnum $>$ 0}
 \end{grammar}
 
 \begin{grammar}
-  \var{start-specs}
-  & (\var{child-spec} \etc)
+  \prodrow{\var{start-specs}}{(\var{child-spec} \etc)}
 \end{grammar}
 
 \defineentry{supervisor:start-child}
@@ -443,10 +437,9 @@ A supervisor can notify the event manager of the same events as a
 gen-server, as well as the following events.
 
 \begin{grammar}
-  \var{event}
-  & \code{<supervisor-error>} \\
-  & \code{<child-start>} \\
-  & \code{<child-end>} \\
+  \prodrow{\var{event}}{\code{<supervisor-error>}}
+  \altrow{\code{<child-start>}}
+  \altrow{\code{<child-end>}}
 \end{grammar}
 
 \begin{pubevent}{<supervisor-error>}

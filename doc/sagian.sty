@@ -163,6 +163,9 @@
 \newcommand{\makeresults}[1]{\vspace{-\topsep}\vspace{-\parskip}\vspace{-\partopsep}\textbf{#1:}}
 \newcommand{\nt}[1]{\textrm{\upshape\mdseries\frenchspacing$<$#1$>$}}
 
-\newenvironment{grammar}{\begin{tabular}{@{}r@{\ $\rightarrow$\ }l}}{\end{tabular}}
 \newenvironment{argtbl}{\begin{tabular}{r@{\ }p{0.75\textwidth}}}{\end{tabular}}
 \newcommand{\argrow}[2]{\var{#1}: & #2\\}
+
+\newenvironment{grammar}{\begin{tabular}{r l}}{\end{tabular}}
+\newcommand{\prodrow}[2]{#1 $\rightarrow$ & #2\\}
+\newcommand{\altrow}[1]{$\vert$ & #1\\}
