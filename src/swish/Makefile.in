@@ -4,6 +4,10 @@ CORE := ../../${BUILD}/bin/swish${EXESUFFIX} ../../${BUILD}/bin/swish.boot ../..
 AUXLIB := ../../${BUILD}/lib/swish/mat.so ../../${BUILD}/lib/swish/profile.so ../../${BUILD}/lib/swish/testing.so
 
 ready: Makefile build-dirs io-constants.ss clibs git.revision
+	@if git submodule status --recursive | grep -q '^[^ ]'; then \
+	  echo "Please update git submodules (or stage submodule change)."; \
+	  exit 1; \
+	fi
 
 Makefile: Makefile.in ../../configure
 	$(error re-run configure to update Makefile)
