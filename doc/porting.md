@@ -67,4 +67,6 @@
   - added `stat-directory?`
   - added `stat-regular-file?`
   - added `watch-path`
+* `(swish meta)`
+  - removed redundant `make-id`; use `compound-id`
 * `(swish osi)` was completely revamped.

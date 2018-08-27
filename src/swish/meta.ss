@@ -30,7 +30,6 @@
    find-clause
    find-source
    get-clause
-   make-id
    profile-me
    scar
    scdr
@@ -57,18 +56,18 @@
   (define (scar x) (syntax-case x () [(x . _) #'x]))
   (define (scdr x) (syntax-case x () [(_ . y) #'y]))
 
-  (define (compound-id template-identifier . obj)
-    (datum->syntax template-identifier
-      (string->symbol
-       (apply string-append
-         (map (rec to-string
-                (lambda (x)
-                  (cond
-                   [(string? x) x]
-                   [(symbol? x) (symbol->string x)]
-                   [(identifier? x) (to-string (syntax->datum x))]
-                   [else (errorf 'compound-id "invalid element ~s" x)])))
-           obj)))))
+  (define (compound-id template-identifier . args)
+    (define (concat args)
+      (let-values ([(op get) (open-string-output-port)])
+        (define (to-string x)
+          (cond
+           [(string? x) x]
+           [(symbol? x) (symbol->string x)]
+           [(identifier? x) (to-string (syntax->datum x))]
+           [else (errorf 'compound-id "invalid element ~s" x)]))
+        (for-each (lambda (arg) (display (to-string arg) op)) args)
+        (get)))
+    (datum->syntax template-identifier (string->symbol (concat args))))
 
   (define (syntax-datum-eq? x y) (eq? (syntax->datum x) (syntax->datum y)))
 
@@ -109,10 +108,6 @@
         bindings
         #`((#,key #,value) #,@bindings)))
 
-  (define (make-id k . args)
-    (let-values ([(op get) (open-string-output-port)])
-      (for-each (lambda (arg) (display (syntax->datum arg) op)) args)
-      (datum->syntax k (string->symbol (get)))))
 
   (define-syntax with-annotated-syntax
     (syntax-rules ()
