@@ -76,7 +76,18 @@ suffix, e.g., \code{osi\_read\_port*}, that returns the error pair.
 
 \section {Programming Interface}\label{sec:osi-api}
 
+Unless otherwise noted, all C strings are encoded in UTF-8.
+
 \subsection {System Functions}
+
+\defineentry{osi\_get\_argv}
+\begin{function}
+  ptr \code{osi\_get\_argv}(void);
+\end{function}
+
+The \code{osi\_get\_argv} function returns a Scheme vector of strings
+constructed from the most recent arguments passed to
+\code{osi\_set\_argv}.
 
 \defineentry{osi\_get\_bytes\_used}
 \begin{function}
@@ -145,6 +156,16 @@ The \code{osi\_is\_tick\_over} function returns 1 if the current time
 from \code{uv\_hrtime} is greater than or equal to the threshold set
 by the most recent call to \code{osi\_set\_tick} and 0 otherwise.
 
+\defineentry{osi\_list\_uv\_handles}
+\begin{function}
+  ptr \code{osi\_list\_uv\_handles}(void);
+\end{function}
+
+The \code{osi\_list\_uv\_handles} function calls \code{uv\_walk} and
+returns a list of pairs \code{(\var{handle} . \var{type})}, where
+\var{handle} is the address of the \code{uv\_handle\_t} and \var{type}
+is the \code{uv\_handle\_type}.
+
 \defineentry{osi\_make\_uuid}
 \begin{function}
   ptr \code{osi\_make\_uuid}(void);
@@ -154,6 +175,19 @@ The \code{osi\_make\_uuid} function returns a new universally unique
 identifier (UUID) as a bytevector. On Windows, it calls the
 \code{UuidCreate} function in \texttt{rpcrt4.dll}. On all other
 systems, it calls the \code{uuid\_generate} function.
+
+\defineentry{string->uuid}
+\begin{procedure}
+  \code{(string->uuid \var{s})}
+\end{procedure}
+\returns{} a UUID bytevector
+
+The \code{string->uuid} procedure returns the bytevector \var{uuid}
+for string \var{s} such that \code{(uuid->string \var{uuid})} is
+equivalent to \var{s}, ignoring case. If \var{s} is not a string with
+uppercase or lowercase hexadecimal digits and hyphens as shown in
+\code{uuid->string}, exception \code{\#(bad-arg string->uuid \var{s})}
+is raised.
 
 \defineentry{uuid->string}
 \begin{procedure}
@@ -169,28 +203,14 @@ representation of the octet at index $i$ of bytevector \var{uuid}.  If
 \var{uuid} is not a bytevector of length 16, exception
 \code{\#(bad-arg uuid->string \var{uuid})} is raised.
 
-\defineentry{string->uuid}
-\begin{procedure}
-  \code{(string->uuid \var{s})}
-\end{procedure}
-\returns{} a UUID bytevector
-
-The \code{string->uuid} procedure returns the bytevector \var{uuid}
-for string \var{s} such that \code{(uuid->string \var{uuid})} is
-equivalent to \var{s}, ignoring case. If \var{s} is not a string with
-uppercase or lowercase hexadecimal digits and hyphens as shown in
-\code{uuid->string}, exception \code{\#(bad-arg string->uuid \var{s})}
-is raised.
-
-\defineentry{osi\_list\_uv\_handles}
+\defineentry{osi\_set\_argv}
 \begin{function}
-  ptr \code{osi\_list\_uv\_handles}(void);
+  void \code{osi\_set\_argv}(int argc, const char *argv[]);
 \end{function}
 
-The \code{osi\_list\_uv\_handles} function calls \code{uv\_walk} and
-returns a list of pairs \code{(\var{handle} . \var{type})}, where
-\var{handle} is the address of the \code{uv\_handle\_t} and \var{type}
-is the \code{uv\_handle\_type}.
+The \code{osi\_set\_argv} function stores the \var{argv} pointer to a
+C vector of \var{argc} strings for use in the \code{osi\_get\_argv}
+function.
 
 \defineentry{osi\_set\_tick}
 \begin{function}

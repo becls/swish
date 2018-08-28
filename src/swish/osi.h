@@ -64,7 +64,7 @@ EXPORT void osi_init(void);
 EXPORT int osi_is_tick_over(void);
 EXPORT ptr osi_list_uv_handles(void);
 EXPORT ptr osi_make_uuid(void);
-void osi_set_argv(int argc, const char *argv[]);
+EXPORT void osi_set_argv(int argc, const char *argv[]);
 EXPORT void osi_set_tick(uint64_t nanoseconds);
 
 // Ports
