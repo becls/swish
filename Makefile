@@ -14,7 +14,7 @@ src/swish/Makefile:
 	@exit 1
 
 test: swish
-	cd src; ./run-mats ${PWD}/bin
+	cd src; ./run-mats "${PWD}/bin"
 
 coverage:
 	cd src; PROFILE_MATS=yes ./run-mats

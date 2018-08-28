@@ -1,23 +1,21 @@
-#!/bin/bash
+#!/bin/sh
 
-set -euo pipefail
+set -eu
 
-declare -a ERRORS
-ERRORS=()
+ERRORS=
 
 # accumulate errors if we haven't yet processed --help
 err() {
-  ERRORS+=("! $*")
+  ERRORS=$(printf "%s\\n! %s\\n" "${ERRORS}" "$*")
 }
 
 no_errors() {
-  test ${#ERRORS[@]} -eq 0
+  test ${#ERRORS} -eq 0
 }
 
 checkerrs() {
   if no_errors; then return; fi
-  echo ""
-  for error in "${ERRORS[@]}"; do echo "${error}"; done
+  printf "%s\\n" "${ERRORS}"
   exit 1
 }
 
@@ -53,17 +51,18 @@ else
   LIBDIRS=".::../lib"
 fi
 
+quote () { printf %s\\n "$1" | sed "s/'/'\\\\''/g;1s/^/'/;\$s/\$/'/" ; }
+
 setoption() {
-  local var opt val
-  var="$1"
-  opt="$2"
-  val="${3#${opt}}"
-  if [ -z "${val}" ]; then
-    err "Option requires value: ${opt}"
-  elif [ ! -z "${!var}" ]; then
-    err "Repeated option ${opt}=${val}"
+  _var="$1"
+  _opt="$2"
+  _val="${3#${_opt}}"
+  if [ -z "${_val}" ]; then
+    err "Option requires value: ${_opt}"
+  elif [ ! -z "$(eval "\$${_var}")" ]; then
+    err "Repeated option ${_opt}=${_val}"
   else
-    declare -g "${var}"="${val}"
+    eval "${_var}=$(quote "${_val}")"
   fi
 }
 
@@ -87,22 +86,24 @@ while [ $# != 0 ]; do
   shift
 done
 
+deref() { eval printf '%s' "$(printf '"%s"' "\$$1")"; }
+weak_tilde_expansion() { printf %s\\n "$1" | sed "s_^~/_${HOME}/_" ; }
+
 resolve() {
-  local var opt val default resolved
-  var="$1"
-  opt="$2"
-  default="$3"
-  # dereference $var and take default if empty
-  val="${!var}"
-  val="${val:-${default}}"
+  _var="$1"
+  _opt="$2"
+  _default="$3"
+  # dereference $_var and take default if empty
+  _val="$(deref "${_var}")"
+  _val="${_val:-${_default}}"
   # search PATH after limited tilde expansion
   set +e
-  resolved=$(type -p "${val/#~\//$HOME/}" 2> /dev/null)
+  _resolved="$(command -v "$(weak_tilde_expansion "${_val}")")"
   set -e
-  if [ -z "${resolved}" ]; then
-    err "Unable to resolve ${opt}${val} (no executable found)"
+  if [ -z "${_resolved}" ]; then
+    err "Unable to resolve ${_opt}${_val} (no executable found)"
   fi
-  declare -g "${var}=${resolved}"
+  eval "${_var}=$(quote "${_resolved}")"
 }
 
 resolve "PYTHON" "--python=" "python2.7"
@@ -132,14 +133,13 @@ fi
 if [ ! -z "${PREFIX}" ]; then
   # use absolute path, after limited tilde expansion, since "make install"
   # runs in src/swish where a relative path would cause confusion
-  PREFIX="$(realpath -m "${PREFIX/#~\//$HOME/}")"
+  PREFIX="$(realpath -m "$(weak_tilde_expansion "${PREFIX}")")"
 fi
 
 notilde() {
-  local val
-  val="${!1}"
-  if [ "${val}" != "${val/\~/}" ]; then
-    err "Unable to resolve ~ in $1=${val}"
+  _val="$(deref "$1")"
+  if [ "${_val}" != "$(printf %s "${_val}" | sed "s/~//")" ]; then
+    err "Unable to resolve ~ in $1=${_val}"
   fi
 }
 
@@ -169,21 +169,20 @@ set_machine_type() {
 }
 
 try_custom() {
-  local bindir
   if [ -z "${SCHEMEHEAPDIRS:-}" ]; then
     # help the specified Scheme find its boot files
     export SCHEMEHEAPDIRS
-    bindir="$(dirname "${SCHEME}")"
+    _bindir="$(dirname "${SCHEME}")"
     if [ "${Windows}" = "yes" ]; then
       # The %x escape would work while using Scheme to build swish.library,
       # e.g., SCHEMEHEAPDIRS="%x;%x\\..\\boot\\%m;", but this would not work
       # when we use swish itself to compile mat.so and friends, since %x would
       # be ./bin/swish.exe, so insert absolute Windows path to the directory
       # containing scheme.exe in place of %x.
-      bindir="$(cygpath -w "${bindir}")"
-      SCHEMEHEAPDIRS="${bindir};${bindir}\\..\\boot\\%m;"
+      _bindir="$(cygpath -w "${_bindir}")"
+      SCHEMEHEAPDIRS="${_bindir};${_bindir}\\..\\boot\\%m;"
     else
-      SCHEMEHEAPDIRS="$(realpath "${bindir}/../boot")/%m:"
+      SCHEMEHEAPDIRS="$(realpath "${_bindir}/../boot")/%m:"
     fi
     CUSTOMHEAPDIRS="${SCHEMEHEAPDIRS}"
   fi
@@ -216,7 +215,7 @@ if [ "${Windows}" = "yes" ]; then
   fi
   set +e
   DLLNAME="$(basename "${SchemeDLL}")"
-  DLLFOUND="$(type -p "${DLLNAME}")"
+  DLLFOUND="$(command -v "${DLLNAME}")"
   if [ "${DLLFOUND}" != "${SchemeDLL}" ]; then
     # try_custom since we likely need to set SCHEMEHEAPDIRS
     set +e
@@ -254,18 +253,10 @@ if [ ! -f "src/swish/Mf-${BASE_MACHINE_TYPE}" ]; then
 fi
 
 path_first() {
-  local tmp rest
-  tmp="$1"
-  rest="${1#/*/*}"
-  if [ "${tmp}" = "${rest}" ]; then
-    echo "${tmp}"
-  else
-    echo "${tmp:0:${#tmp}-${#rest}}"
-  fi
+  printf %s\\n "$1" | sed 's_^\(/[^/]*\).*_\1_'
 }
 
 find_boot_file() {
-  local bootfile binprefix bootprefix
   PETITE_BOOT="$(echo |
                 "${SCHEME}" -q --verbose -b petite.boot 2>&1 |
                 tr -d '\r' |
@@ -273,14 +264,14 @@ find_boot_file() {
                 sed 's/^trying \(.*\)\.\.\.opened$/\1/')"
   # now check to see if the boot file we found makes sense
   if [ "${Windows}" = "yes" ]; then
-    bootfile="$(cygpath -u "${PETITE_BOOT}")"
+    _bootfile="$(cygpath -u "${PETITE_BOOT}")"
   else
-    bootfile="${PETITE_BOOT}"
+    _bootfile="${PETITE_BOOT}"
   fi
-  binprefix="$(path_first "${SCHEME}")"
-  bootprefix="$(path_first "${bootfile}")"
-  if [ "${binprefix}" != "${bootprefix}" ]; then
-    echo "* Scheme is under ${binprefix:-???}, but petite.boot is under ${bootprefix:-???}."
+  _binprefix="$(path_first "${SCHEME}")"
+  _bootprefix="$(path_first "${_bootfile}")"
+  if [ "${_binprefix}" != "${_bootprefix}" ]; then
+    echo "* Scheme is under ${_binprefix:-???}, but petite.boot is under ${_bootprefix:-???}."
     echo "  Perhaps you have installed Scheme but are now trying to build swish"
     echo "  using a Scheme that was compiled from source."
     echo ""
@@ -325,8 +316,14 @@ fi
 
 SWISH_VERSION=$(cd src; "${SCHEME}" --script get-software-info software-version)
 
+escape_backslash() { printf "%s" "$1" | sed 's_\\_\\\\_g' ; }
 add() {
-  echo -E "$@" >> src/swish/Makefile
+  if [ "$1" = '-t' ]; then
+    shift;
+    printf "\\t%s\\n" "$@" >> src/swish/Makefile
+  else
+    printf %s\\n "$@" >> src/swish/Makefile
+  fi
 }
 rm -f src/swish/Makefile
 add "# DO NOT EDIT this file"
@@ -352,22 +349,22 @@ if [ ! -z "${SCHEMEHEAPDIRS:-}" ]; then
    add "export SCHEMEHEAPDIRS = ${SCHEMEHEAPDIRS}"
 fi
 if [ ! -z "${CUSTOMPATH}${CUSTOMHEAPDIRS}" ]; then
-  echo "* $(basename "$0") set the following environment variables in src/swish/Makefile:"
+  echo "* $(basename "$0") set these environment variables in src/swish/Makefile:"
   add ""
   add ".PHONY: reminders"
   add "REMINDERS:=reminders"
   add "reminders:"
-  add -e "\\t@echo \"----------------------------------------------------\""
-  add -e "\\t@echo \"You may need to set the following environment variables:\""
+  add -t "@echo \"----------------------------------------------------\""
+  add -t "@echo \"You may need to set the following environment variables:\""
   if [ ! -z "${CUSTOMPATH}" ]; then
     echo "  PATH=\"${CUSTOMPATH}:\${PATH}\""
-    add -e "\\t@echo ' export PATH=\"${CUSTOMPATH//\\/\\\\}:\$\${PATH}\"'"
+    add -t "@echo ' export PATH=\"$(escape_backslash "${CUSTOMPATH}"):\$\${PATH}\"'"
   fi
   if [ ! -z "${CUSTOMHEAPDIRS}" ]; then
     echo "  SCHEMEHEAPDIRS=\"${SCHEMEHEAPDIRS}\""
-    add -e "\\t@echo \" export SCHEMEHEAPDIRS=\\\"${CUSTOMHEAPDIRS//\\/\\\\}\\\"\""
+    add -t "@echo \" export SCHEMEHEAPDIRS=\\\"$(escape_backslash "${CUSTOMHEAPDIRS}")\\\"\""
   fi
-  add -e "\\t@echo \"----------------------------------------------------\""
+  add -t "@echo \"----------------------------------------------------\""
 fi
 add ""
 add "include Mf-${BASE_MACHINE_TYPE}"
