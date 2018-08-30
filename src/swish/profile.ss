@@ -304,27 +304,55 @@
   (define (profile:merge . paths)
     (unwrap (gen-server:call 'profiler `(merge ,@paths) 'infinity)))
 
+  (define sfd-sig
+    (let ([ht (make-eq-hashtable)])
+      (lambda (sfd)
+        (or (eq-hashtable-ref ht sfd #f)
+            (let ([x (cons (source-file-descriptor-checksum sfd)
+                       (sfd-source-path sfd get-real-path))])
+              (eq-hashtable-set! ht sfd x)
+              x)))))
+
+  (define (sfd-sig-hash sfd) (equal-hash (sfd-sig sfd)))
+  (define (sfd-sig=? x y)
+    (or (eq? x y)
+        (equal? (sfd-sig x) (sfd-sig y))))
+  (define (sfd-source-path sfd convert)
+    (let ([ip (open-source-file sfd)])
+      (if ip
+          (on-exit (close-port ip)
+            (convert (port-name ip)))
+          (source-file-descriptor-path sfd))))
+
   (define (profile:dump-html profile-in output-fn include-globs exclude-globs)
     (define inputs (if (list? profile-in) profile-in (list profile-in)))
     (define (list-of-strings? x) (and (list? x) (andmap string? x)))
-    (unless (list-of-strings? inputs) (bad-arg 'profile:dump-html profile-in))
-    (unless (string? output-fn) (bad-arg 'profile:dump-html output-fn))
-    (unless (list-of-strings? include-globs) (bad-arg 'profile:dump-html include-globs))
-    (unless (list-of-strings? exclude-globs) (bad-arg 'profile:dump-html exclude-globs))
-    (let ([table (make-skiplist sfd<?)]
-          [op (open-file-to-replace (make-directory-path output-fn))])
+    (define (load-profiles)
+      (define table (make-hashtable sfd-sig-hash sfd-sig=?))
       (fluid-let ([profile-included-regexp (globs->regexp include-globs)]
                   [profile-excluded-regexp (globs->regexp exclude-globs)])
         (for-each
          (lambda (profile-fn)
            (match (catch ($profile-load profile-fn (make-insert-filedata table)))
              [#(EXIT ,reason)
+              (let () (import (swish errors)) (printf "REASON: ~a\n" (exit-reason->english reason)))
               (errorf 'profile:dump-html "cannot load profile data from ~a" profile-fn)]
              [,_ (void)]))
          inputs))
+      (let-values ([(keys vals) (hashtable-entries table)])
+        (vector->list
+         (vector-sort (lambda (a b) (string<? (car a) (car b)))
+           (vector-map (lambda (k v) (cons (sfd-source-path k values) v))
+            keys vals)))))
+    (unless (list-of-strings? inputs) (bad-arg 'profile:dump-html profile-in))
+    (unless (string? output-fn) (bad-arg 'profile:dump-html output-fn))
+    (unless (list-of-strings? include-globs) (bad-arg 'profile:dump-html include-globs))
+    (unless (list-of-strings? exclude-globs) (bad-arg 'profile:dump-html exclude-globs))
+    (let ([results (load-profiles)]
+          [op (open-file-to-replace (make-directory-path output-fn))])
       (fprintf op "<html>\n")
       (fprintf op "<body style='font-family:monospace;'>\n")
-      (let-values ([(hits sites percentage) (summarize-coverage (table))])
+      (let-values ([(hits sites percentage) (summarize-coverage results)])
         (fprintf op
           "<h2>Overall ~a% coverage with ~a of ~a sites covered.\n</h2>"
           percentage hits sites))
@@ -336,19 +364,18 @@
            (lambda (entry)
              ;; entry = (sfd . skiplist | #f)
              (match entry
-               [(,sfd . ,sl)
+               [(,name . ,sl)
                 (match (and sl (sl))
                   [,data
                    (guard (pair? data))
                    ;; non-blocking i/o OK: profile:dump-html runs from dedicated OS process, not interested in concurrency
-                   (let* ([ip (assert (open-source-file sfd))]
-                          [name (port-name ip)]
+                   (let* ([ip (open-input-file name)]
                           [file-op (open-file-to-replace (make-directory-path (path-combine root (string-append name ".html"))))])
                      (on-exit (close-port file-op)
                        (annotate (pregexp-replace* "\\\\" name "/") ip data op file-op)))]
                   [,_ (void)])]
                [#f (void)]))
-           (table))))
+           results)))
       (fprintf op "</table>\n")
       (fprintf op "</body></html>\n")
       (close-output-port op)
@@ -515,11 +542,10 @@ SPAN
                       (insert count))))
               sl)
             (unless (profile-excluded? (source-file-descriptor-path sfd) (source-object-bfp source))
-              (table sfd
-                (lambda (x y insert update)
+              (hashtable-update! table sfd
+                (lambda (sl)
                   (cond
-                   [(sfd=? x y)
-                    (update (lambda (sl false) (and sl (add-it sl))) #f)]
+                   [sl (add-it sl)]
                    [(invalid-sfd? sfd) =>
                     (lambda (reason)
                       (unless (hashtable-contains? okay sfd)
@@ -527,9 +553,10 @@ SPAN
                         (printf "Skipping ~a: ~a\n"
                           (source-file-descriptor-path sfd)
                           reason))
-                      (insert #f))]
+                      #f)]
                    [else
-                    (insert (add-it (make-skiplist source-bfp<?)))]))))))]))
+                    (add-it (make-skiplist source-bfp<?))]))
+                #f))))]))
     (lambda (items)
       (parameterize ([source-directories (current-source-dirs)])
         (for-each insert-filedata items))))
@@ -539,14 +566,6 @@ SPAN
 
   (define (source-bfp=? x y)
     (and (source-object? x) (source-object? y) (= (source-object-bfp x) (source-object-bfp y))))
-
-  (define (sfd<? x y)
-    (let ([x-name (source-file-descriptor-path x)]
-          [y-name (source-file-descriptor-path y)])
-      (or (string<? x-name y-name)
-          (and (string=? x-name y-name)
-               (< (source-file-descriptor-checksum x)
-                  (source-file-descriptor-checksum y))))))
 
   (define make-skiplist
     (case-lambda
