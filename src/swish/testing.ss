@@ -199,8 +199,8 @@
              (osi_kill* os-pid 15)
              (raise
               `#(os-process-timeout
-                 #(stdout ,(receive (after 10 '()) [#(stdout ,@os-pid ,lines) lines]))
-                 #(stderr ,(receive (after 10 '()) [#(stderr ,@os-pid ,lines) lines])))))
+                 #(stdout ,(receive (after 100 '()) [#(stdout ,@os-pid ,lines) lines]))
+                 #(stderr ,(receive (after 100 '()) [#(stderr ,@os-pid ,lines) lines])))))
            [#(<process-terminated> ,@os-pid ,exit-status ,_)
             (<os-result> make
               [stdout (receive [#(stdout ,@os-pid ,lines) lines])]
