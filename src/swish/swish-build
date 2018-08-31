@@ -216,8 +216,6 @@
 (define (do-compile source-fn output-fn libs-visible? swish-wpo? as-library?)
   (let ([tmp (tmp-filename source-fn)])
     (on-exit (rm-f tmp)
-      (compile-imported-libraries #t)
-      (generate-wpo-files #t)
       (when (> (verbosity) 0) (printf "compiling ~a\n" (opt "source-file")))
       (if as-library?
           (compile-library source-fn tmp)
@@ -324,6 +322,27 @@
                   (or (opt "libdirs") '()))])
     (verbosity (or (opt "verbose") 0))
     (import-notify (> (verbosity) 2))
+    ;; We add ".wpo" variants to the front of library-extensions so that the
+    ;; expander forces library compilation if a ".wpo" file exists and is
+    ;; older than the source file, while still falling back on the usual
+    ;; object file if the ".wpo" file is not wanted, e.g., for the --rtlib
+    ;; case.  When the expander calls compile-library-handler, we restore the
+    ;; ".so" extension so that compile-library can build both the ".so" file
+    ;; and its ".wpo" by-product without conflict.
+    (generate-wpo-files #t)
+    (compile-imported-libraries #t)
+    (compile-file-message #f)
+    (compile-library-handler
+     (lambda (source dest)
+       (when (> (verbosity) 0) (printf "compiling ~a\n" source))
+       (compile-library source (change-extension dest ".so"))))
+    (library-extensions
+     (append
+      (map (lambda (x)
+             (match-let* ([(,src . ,obj) x])
+               (cons src (change-extension obj ".wpo"))))
+        (library-extensions))
+      (library-extensions)))
     (cond
      [(not source-fn) (fail "requires source filename")]
      [(not output-fn) (fail "requires output filename")]
