@@ -156,7 +156,7 @@
     (let ([lines (split (get) #\newline)])
       (define (assert-prefix! pattern)
         (match lines
-          [() (exit `#(pattern-not-found ,pattern))]
+          [() (raise `#(pattern-not-found ,pattern))]
           [(,line . ,rest)
            (set! lines rest)
            (unless (starts-with? line pattern)

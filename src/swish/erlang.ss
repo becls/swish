@@ -34,7 +34,6 @@
    demonitor&flush
    dump-stack
    erlang:now
-   exit
    get-registered
    kill
    link

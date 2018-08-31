@@ -54,6 +54,6 @@
            (tmp-dir (path-combine (data-dir) "tmp"))
            (web-dir (path-combine base "web"))
            base]
-          [#(EXIT ,reason) (exit reason)]
+          [#(EXIT ,reason) (raise reason)]
           [#f (errorf 'base-dir "no directory ~s" base)]))))
   )
