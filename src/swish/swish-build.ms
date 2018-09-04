@@ -679,3 +679,24 @@
     [#(EXIT `(<os-process-failed> ,stderr))
      (match-regexps incomplete-patterns stderr)])
   )
+
+(isolate-mat source-directories ()
+  (define file1
+    (write-test-file "nested/under/here.ss"
+      (lambda ()
+        (pretty-print '(define x 123)))))
+  (define file2
+    (write-test-file "test-sd.ss"
+      (lambda ()
+        (for-each pretty-print
+          `((include "here.ss")
+            (pretty-print x))))))
+  ;; fails to build if source directories not specified
+  (match (catch (build-example "test-sd" '()))
+    [#(EXIT
+       `(<os-process-failed>
+         [stderr
+          ("swish-build: failed for here.ss: no such file or directory.")]))
+     'ok])
+  (build-example "test-sd" `("-s" ,(path-parent file1)))
+  (run-thin "test-sd" '() '("123")))

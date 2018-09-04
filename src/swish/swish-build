@@ -31,6 +31,7 @@
    ["verbose" -v count "show more compiler messages"]
    ["output-file" -o (string "<output>") "write output to <output>"]
    ["libdirs" -L (list "<libdir>") "add <libdir> to library-directories"]
+   ["srcdirs" -s (list "<srcdir>") "add <srcdir> to source-directories"]
    ["source-file" (string "<source>") "source filename"]
    ["help" -h --help (list "[<section>]" ...)
     (format "display help, <section>={~{~a~^|~}}" help-sections)]))
@@ -318,6 +319,10 @@
 ;; and the corresponding profile counts, before saving profile data, i.e., when
 ;; we run "make coverage".
 (define (main)
+  (cond
+   [(opt "srcdirs") =>
+    (lambda (srcdirs)
+      (source-directories (append srcdirs (source-directories))))])
   (cond
    [(zero? (hashtable-size (opt))) (usage #t '() #f)]
    [(opt "help") =>
