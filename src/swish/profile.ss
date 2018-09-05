@@ -220,6 +220,7 @@
 
   (define (profile-update state)
     (<profile-state> open state [context filename ht])
+    (collect (collect-maximum-generation))
     (add-filedata ht
       (with-interrupts-disabled
        (let ([data (profile-dump)])
