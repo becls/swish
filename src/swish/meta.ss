@@ -31,11 +31,11 @@
    find-source
    get-clause
    profile-me
+   replace-source
    scar
    scdr
    snull?
    syntax-datum-eq?
-   with-annotated-syntax
    )
   (import (chezscheme))
 
@@ -108,17 +108,49 @@
         bindings
         #`((#,key #,value) #,@bindings)))
 
+  (module (replace-source)
+    ;; TODO implement replace-source upstream where we don't have to
+    ;;      jump through hoops to get syntax-object-expression, etc.
+    ;;      (we use syntax-object-expression instead of syntax->datum
+    ;;       since the latter would go too far, stripping nested annotations)
+    (define so-rtd (record-rtd #'_))
+    (define syntax-object? (record-predicate so-rtd))
+    (define make-syntax-object (record-constructor so-rtd))
+    (define flds (record-type-field-names so-rtd))
+    (define (make-accessor fld-name)
+      (let ([i (ormap (lambda (f i) (and (eq? f fld-name) i))
+                 (vector->list flds)
+                 (iota (vector-length flds)))])
+        (record-accessor so-rtd i)))
+    (define syntax-object-expression (make-accessor 'expression))
+    (define syntax-object-wrap (make-accessor 'wrap))
+    (define empty-wrap '(()))
 
-  (define-syntax with-annotated-syntax
-    (syntax-rules ()
-      [(_ ([pat src-obj output] ...) body0 body1 ...)
-       (andmap identifier? #'(pat ...))
-       (with-syntax ([pat
-                      (let ([anno (syntax->annotation src-obj)])
-                        (if anno
-                            (make-annotation #'output (annotation-source anno) (datum output))
-                            #'output))]
-                     ...)
-         body0 body1 ...)]))
+    (define (strip-annotation x)
+      (cond
+       [(syntax->annotation x) => annotation-expression]
+       [(syntax-object? x) (syntax-object-expression x)]
+       [else x]))
+
+    (define (rebuild x new)
+      (cond
+       [(identifier? x) (datum->syntax x new)]
+       [(syntax-object? x) (make-syntax-object new (syntax-object-wrap x))]
+       [else (make-syntax-object new empty-wrap)]))
+
+    (define (replace-source src-expr x)
+      (cond
+       [(syntax->annotation src-expr) =>
+        (lambda (ae)
+          (rebuild x
+            (make-annotation
+             (strip-annotation x)
+             (annotation-source ae)
+             (syntax->datum x))))]
+       [(syntax->annotation x) =>
+        ;; no source from src-expr, so remove source from x
+        (lambda (ae)
+          (rebuild x (annotation-expression ae)))]
+       [else x])))
 
   )

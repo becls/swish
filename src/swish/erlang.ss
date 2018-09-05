@@ -1154,7 +1154,7 @@
                          (eq? (#3%vector-ref x 0) 'name)))]
                [(name fn e)
                 (syntax-datum-eq? #'fn #'field)
-                (with-annotated-syntax ([getter x (name fn)])
+                (with-syntax ([getter (replace-source x #'(name fn))])
                   #`(getter e))]
                ...
                [(name fn)
