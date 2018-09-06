@@ -30,7 +30,7 @@ I/O.
 
 - Chez Scheme 9.5.1 from July 18, 2018 or later (commit a0adfa1, which adds load-compiled-from-port)
 - GCC, the GNU Compiler Collection
-- GNU C++ compilter for libuv
+- GNU C++ compiler for libuv
 - GNU make
 - Python 2.7 for libuv
 - uuid-dev package
@@ -38,10 +38,10 @@ I/O.
 ## Mac
 
 - Chez Scheme 9.5.1 from July 18, 2018 or later (commit a0adfa1, which adds load-compiled-from-port)
-- XCode must be installed and the command line tools must be set (Xcode->Preferences->Locations->command line tools)
-- pdflatex (can be installed through homebrew using `brew cask install mactex`)
 - dot (can be installed through homebrew using `brew install graphviz --with-app`)
-- GNU make
+- pdflatex (can be installed through homebrew using `brew cask install mactex`)
+- realpath (can be installed through homebrew using `brew install coreutils`)
+- XCode and the command-line tools must be set (Xcode->Preferences->Locations->command line tools)
 
 ## Windows
 
