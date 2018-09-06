@@ -104,7 +104,12 @@ resolve() {
   eval "${_var}=$(quote "${_resolved}")"
 }
 
-resolve "PYTHON" "--python=" "python2.7"
+
+if [ "${Windows}" = "yes" ]; then
+  resolve "PYTHON" "--python=" "/cygdrive/c/Python27/python.exe"
+else
+  resolve "PYTHON" "--python=" "python2.7"
+fi
 resolve "SCHEME" "--scheme=" "scheme"
 
 if no_errors; then
