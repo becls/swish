@@ -40,7 +40,7 @@ I/O.
 - Chez Scheme 9.5.1 from July 18, 2018 or later (commit a0adfa1, which adds load-compiled-from-port)
 - dot (can be installed through homebrew using `brew install graphviz --with-app`)
 - pdflatex (can be installed through homebrew using `brew cask install mactex`)
-- realpath (can be installed through homebrew using `brew install coreutils`)
+- ginstall and realpath (can be installed through homebrew using `brew install coreutils`)
 - XCode and the command-line tools must be set (Xcode->Preferences->Locations->command line tools)
 
 ## Windows

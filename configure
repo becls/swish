@@ -341,6 +341,11 @@ add "SCHEME:=${SCHEME}"
 add "SWISH_VERSION:=${SWISH_VERSION}"
 add "SchemeInclude:=${SchemeInclude}"
 add "NORMALIZE_PATH:=${NORMALIZE_PATH}"
+if [ "${CONFIG_UNAME}" = "Darwin" ]; then
+  add "GNU_INSTALL:=ginstall"
+else
+  add "GNU_INSTALL:=install"
+fi
 if [ "${Windows}" = "yes" ]; then
   add "SchemeLib:=$(cygpath -w "${SchemeLib:-}")"
   if [ ! -z "${CUSTOMPATH}" ]; then
