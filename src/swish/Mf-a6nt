@@ -1,6 +1,6 @@
 UvInclude=../../libuv/include
 UvLib=../../libuv/Release/lib/libuv.lib
-C=../vs64 cl /nologo /Ox /MD /W3
+C=../vs64 cl /nologo /Ox /MD /W3 /Zi
 LD=../vs64 link /nologo /ltcg /nodefaultlib:libcmt
 OsiObj=osi.obj sqlite.obj sqlite3.obj
 SystemLibs=rpcrt4.lib ole32.lib advapi32.lib User32.lib
@@ -9,16 +9,16 @@ SwishLibs := ../../${BUILD}/bin/osi.dll ../../${BUILD}/lib/swish_kernel.obj
 clibs: ${SwishLibs}
 
 ../../${BUILD}/bin/swish.exe: main.obj ../../${BUILD}/lib/swish_kernel.obj
-	${LD} /out:$@ /subsystem:console $^ ${SystemLibs}
+	${LD} /debug:full /out:$@ /subsystem:console $^ ${SystemLibs}
 
 ../../${BUILD}/bin/osi.dll: ${OsiObj} ${UvLib}
-	${LD} /dll /out:../../${BUILD}/bin/osi.dll ${OsiObj} "${SchemeLib}" "${UvLib}"
+	${LD} /debug:full /dll /out:$@ ${OsiObj} "${SchemeLib}" "${UvLib}"
 
 ../../${BUILD}/lib/swish_kernel.obj: ${UvLib} run.obj ${OsiObj}
 	../vs64 lib /nologo /ltcg /out:$@ run.obj ${OsiObj} "${SchemeLib}" "${UvLib}"
 
 %.obj: %.c osi.h ${UvInclude}
-	$C /I"${SchemeInclude}" /I"${UvInclude}" -c $<
+	$C /I"${SchemeInclude}" /I"${UvInclude}" /c $<
 
 sqlite3.obj: sqlite3.h sqlite3.c
 	$C /DSQLITE_ENABLE_JSON1 /DSQLITE_THREADSAFE=2 /c sqlite3.c
@@ -30,16 +30,16 @@ ${UvLib}: ${UvInclude}
 	  -cd ../../libuv; PYTHON="${PYTHON}" cmd /c vcbuild.bat release vs2017 x64 static
 
 platform-clean:
-	rm -f ../../${BUILD}bin/osi.{dll,exp,lib} osi.obj sqlite.obj io-constants.{exe,obj}
-	rm -f ../../${BUILD}/bin/swish.exe
+	rm -f ../../${BUILD}/bin/osi.{dll,exp,lib,pdb} osi.obj sqlite.obj io-constants.{exe,obj}
+	rm -f ../../${BUILD}/bin/swish.{exe,exp,lib,pdb}
 	rm -f ../../${BUILD}/bin/swish.boot
 	rm -f ../../${BUILD}/bin/swish.library
-	rm -f ../../${BUILD}/bin/swish.lib
-	rm -f ../../${BUILD}/bin/swish.exp
 	rm -f ../../${BUILD}/bin/swish.wpo
 	rm -f ../../${BUILD}/lib/swish/*.so
 	rm -f ../../${BUILD}/lib/swish/*.wpo
-	rm -f swish.exe main.obj run.obj swish.boot
+	rm -f io-constants.{exe,ilk,obj,pdb}
+	rm -f {main,osi,run,sqlite,sqlite3}.obj
+	rm -f vc140.pdb
 	rm -f ${SwishLibs}
 
 pristine: clean
