@@ -156,7 +156,7 @@ static void open_cb(uv_work_t* req, int status) {
     uv_mutex_destroy(&(d->mutex));
     sqlite3_close(db);
     uv_close((uv_handle_t*)&(d->async), close_free_cb);
-    add_callback1(callback, make_error_pair("uv_thread_init", rc));
+    add_callback1(callback, make_error_pair("uv_thread_create", rc));
     return;
   }
   add_callback1(callback, Sunsigned((uptr)d));
