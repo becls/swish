@@ -563,7 +563,7 @@ static void list_uv_cb(uv_handle_t* handle, void* arg) {
   *pls = Scons(Scons(Sunsigned((uptr)handle), Sinteger32(handle->type)), *pls);
 }
 
-static iptr g_argc = 0;
+static int g_argc = 0;
 static const char **g_argv;
 void osi_set_argv(int argc, const char *argv[]) {
   g_argc = argc;

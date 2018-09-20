@@ -117,6 +117,7 @@ static void open_cb(uv_work_t* req, int status) {
   sqlite3_extended_result_codes(db, 1);
   database_t* d = malloc_container(database_t);
   if (!d) {
+    sqlite3_close(db);
     add_callback1(callback, make_error_pair("osi_open_database", UV_ENOMEM));
     return;
   }
@@ -470,13 +471,13 @@ void osi_interrupt_database(uptr database) {
 }
 
 ptr osi_get_sqlite_status(int operation, int resetp) {
-  int current;
-  int highwater;
-  int sqlite_rc = sqlite3_status(operation, &current, &highwater, resetp);
+  sqlite3_int64 current;
+  sqlite3_int64 highwater;
+  int sqlite_rc = sqlite3_status64(operation, &current, &highwater, resetp);
   if (SQLITE_OK != sqlite_rc)
     return make_error_pair("sqlite3_status", TRANSLATE_SQLITE_ERRNO(sqlite_rc));
   ptr v = Smake_vector(2, Sfixnum(0));
-  Svector_set(v, 0, Sinteger(current));
-  Svector_set(v, 1, Sinteger(highwater));
+  Svector_set(v, 0, Sinteger64(current));
+  Svector_set(v, 1, Sinteger64(highwater));
   return v;
 }

@@ -180,8 +180,8 @@ asynchronous I/O operations so that the scheduler can execute other
 processes while the system is performing I/O.  The timer interrupt
 handler runs every 1000 procedure calls.\footnote{1000 was chosen
   because Chez Scheme performs its internal interrupt checks every
-  1000 ticks.} The scheduler uses \code{osi::SetTick} and
-\code{osi::IsTickOver} to determine when the time quantum for a
+  1000 ticks.} The scheduler uses \code{osi\_set\_tick} and
+\code{osi\_is\_tick\_over} to determine when the time quantum for a
 process has elapsed.
 
 When process \var{p} exits with reason \var{r}, the message
@@ -201,17 +201,16 @@ There are two system processes: the
 \emph{event-loop}\index{event-loop} and the
 \emph{finalizer}\index{finalizer}.
 
-The event-loop process calls \code{osi::GetCompletionPacket} to
-retrieve completion packets from the operating system interface.  It
-executes each callback with interrupts disabled.  Event-loop callbacks
-are designed to execute quickly without failing or causing new
-completion packets to be enqueued. Typical callbacks register objects
-that wrap operating system interface handles with a guardian and send
-messages to a process. If the event-loop process exits with reason
-$r$, the system logs the event
-\code{\#(event-loop-process-terminated $r$)} with
-\code{console-event-handler} and calls \code{osi::ExitProcess}
-with exit code 80.
+The event-loop process calls \code{osi\_get\_callbacks} to retrieve
+callback lists from the operating system interface.  It executes each
+callback with interrupts disabled.  Event-loop callbacks are designed
+to execute quickly without failing or causing new completion packets
+to be enqueued. Typical callbacks register objects that wrap operating
+system interface handles with a guardian and send messages to a
+process. If the event-loop process exits with reason $r$, the system
+logs the event \code{\#(event-loop-process-terminated $r$)} with
+\code{console-event-handler} and calls \code{osi\_exit} with exit code
+80.
 
 The scheduler maintains the \emph{run queue}\index{run queue}, a queue
 of ready-to-run processes, and the \emph{sleep queue}\index{sleep
@@ -222,10 +221,10 @@ has precedence 0 in order to implement round-robin scheduling. For the
 sleep queue, each process uses its wake time as the precedence.
 
 When the run queue is empty, the event-loop process calls
-\code{osi::GetCompletionPacket} with a non-zero timeout based on the
-first entry in the sleep queue to avoid busy waiting. When the
-event-loop process finishes processing all completion packets, it
-places itself at the end of the run queue.
+\code{osi\_get\_callbacks} with a non-zero timeout based on the first
+entry in the sleep queue to avoid busy waiting. When the event-loop
+process finishes processing all completion packets, it places itself
+at the end of the run queue.
 
 \concern{Some process may starve another process.}  \mitigation The
 run queue is managed with round-robin scheduling to prevent
@@ -236,14 +235,13 @@ packets to be enqueued.
 The finalizer process runs the finalizers registered via
 \code{add-finalizer}. These finalizers typically close operating
 system interface handles to objects that are no longer
-accessible. \concern{Ill-behaved finalizers may cause memory and handle
-  leaks.}  \mitigation Finalizers are designed to execute quickly
-without failing. Typical finalizers guard against errors when closing
-handles. If the finalizer process exits with reason $r$, the
-system logs the event
-\code{\#(finalizer-process-terminated $r$)} with
-\code{console-event-handler} and calls \code{osi::ExitProcess}
-with exit code 80.
+accessible. \concern{Ill-behaved finalizers may cause memory and
+  handle leaks.}  \mitigation Finalizers are designed to execute
+quickly without failing. Typical finalizers guard against errors when
+closing handles. If the finalizer process exits with reason $r$, the
+system logs the event \code{\#(finalizer-process-terminated $r$)} with
+\code{console-event-handler} and calls \code{osi\_exit} with exit code
+80.
 
 Once the finalizer process runs all the finalizers, it waits until
 another garbage collection has occurred before running again. The
@@ -261,10 +259,10 @@ interface as the system I/O procedures. The system I/O procedures are
 not used because they perform synchronous I/O.  The custom port buffer
 size is set to 1024\footnote{1024 was chosen because Chez Scheme uses
   1024 for the buffer size of buffered transcoded ports.} with
-\code{custom-port-buffer-size}.  The custom binary port read and
-write procedures call \code{osi::ReadPort} and
-\code{osi::WritePort} with callbacks that send a message to the
-calling process, which waits until it receives the message.
+\code{custom-port-buffer-size}.  The custom binary port read and write
+procedures call \code{osi\_read\_port} and \code{osi\_write\_port}
+with callbacks that send a message to the calling process, which waits
+until it receives the message.
 
 \concern{Using a port from more than one process at the same time may
   cause errors including buffer corruption.}  \mitigation The code is
@@ -286,7 +284,7 @@ is closed when the output port is closed.
   that is no longer used causes resource leaks.}  \mitigation An
 \emph{osi-port guardian}\index{osi-port guardian} and associated
 finalizer are used to identify and close inaccessible osi-ports using
-\code{osi::ClosePort}. A \emph{directory-watcher
+\code{osi\_close\_port}. A \emph{directory-watcher
   guardian}\index{directory-watcher guardian} and associated finalizer
 are used to identify and close inaccessible directory
 watchers\index{directory watcher}.  A \emph{listener

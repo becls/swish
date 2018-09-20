@@ -101,7 +101,7 @@ it calls the \code{\_heapwalk} function.
 
 \defineentry{osi\_get\_callbacks}
 \begin{function}
-  ptr \code{osi\_get\_callbacks}(uint64\_t timeout);
+  ptr \code{osi\_get\_callbacks}(uint64\_t \var{timeout});
 \end{function}
 
 The \code{osi\_get\_callbacks} function returns a list of callback
@@ -113,7 +113,7 @@ asynchronous function that returned one or more \var{result}s.
 
 \defineentry{osi\_get\_error\_text}
 \begin{function}
-  const char* \code{osi\_get\_error\_text}(int err);
+  const char* \code{osi\_get\_error\_text}(int \var{err});
 \end{function}
 
 The \code{osi\_get\_error\_text} function returns the English string
@@ -205,19 +205,655 @@ representation of the octet at index $i$ of bytevector \var{uuid}.  If
 
 \defineentry{osi\_set\_argv}
 \begin{function}
-  void \code{osi\_set\_argv}(int argc, const char *argv[]);
+  void \code{osi\_set\_argv}(int \var{argc}, const char *\var{argv}[]);
 \end{function}
 
 The \code{osi\_set\_argv} function stores the \var{argv} pointer to a
 C vector of \var{argc} strings for use in the \code{osi\_get\_argv}
-function.
+function. It does not copy the strings, so the caller must not
+deallocate the memory for the arguments.
 
 \defineentry{osi\_set\_tick}
 \begin{function}
-  void \code{osi\_set\_tick}(uint64\_t nanoseconds);
+  void \code{osi\_set\_tick}(uint64\_t \var{nanoseconds});
 \end{function}
 
 The \code{osi\_set\_tick} function sets the threshold for
 \code{osi\_is\_tick\_over} to be the current time from
 \code{uv\_hrtime} plus the given number of \var{nanoseconds}.
 
+\subsection {Port Functions}
+
+The port functions in this section provide generic read, write, and
+close operations for port objects. The specific implementation depends
+on the type of port object.
+
+\defineentry{osi\_read\_port}
+\begin{function}\begin{tabular}[t]{@{}l@{}l}
+  ptr \code{osi\_read\_port}(& uptr \var{port}, ptr \var{buffer}, size\_t \var{start\_index}, uint32\_t \var{size},\\
+  & int64\_t \var{offset}, ptr \var{callback});
+\end{tabular}\end{function}
+
+The \code{osi\_read\_port} function issues a read on the given
+\var{port} of \var{size} bytes into the bytevector \var{buffer} at the
+zero-based \var{start\_index}. For file ports, \var{offset} specifies
+the starting file position or $-1$ for the current position; for all
+other port types, \var{offset} must be $-1$.  The function returns
+\code{\#t} when the read operation is issued and an error pair
+otherwise. When the read operation finishes, it enqueues the callback
+list \code{(\var{callback} \var{result})}, where \var{result} is the
+nonnegative number of bytes read when successful and a negative error
+code otherwise.
+
+\defineentry{osi\_write\_port}
+\begin{function}\begin{tabular}[t]{@{}l@{}l}
+  ptr \code{osi\_write\_port}(& uptr \var{port}, ptr \var{buffer}, size\_t \var{start\_index}, uint32\_t \var{size},\\
+  & int64\_t \var{offset}, ptr \var{callback});
+\end{tabular}\end{function}
+
+The \code{osi\_write\_port} function issues a write on the given
+\var{port} of \var{size} bytes from the bytevector \var{buffer} at the
+zero-based \var{start\_index}. For file ports, \var{offset} specifies
+the starting file position or $-1$ for the current position; for all
+other port types, \var{offset} must be $-1$.  The function returns
+\code{\#t} when the write operation is issued and an error pair
+otherwise. When the write operation finishes, it enqueues the callback
+list \code{(\var{callback} \var{result})}, where \var{result} is the
+nonnegative number of bytes written when successful and a negative
+error code otherwise.
+
+\defineentry{osi\_close\_port}
+\begin{function}
+  ptr \code{osi\_close\_port}(uptr \var{port}, ptr \var{callback});
+\end{function}
+
+The \code{osi\_close\_port} function issues a close on the given
+\var{port}. It returns \code{\#t} when the close operation is issued
+and an error pair otherwise. When the close operation finishes, it
+deallocates the port object and enqueues the callback list
+\code{(\var{callback} \var{errno})}, where \var{errno} is 0 when
+successful and a negative error code otherwise.
+
+\subsection {Process Functions}
+
+\defineentry{osi\_exit}
+\begin{function}
+  void \code{osi\_exit}(int \var{status});
+\end{function}
+
+The \code{osi\_exit} function calls \code{\_exit} to exit the current
+process with the given exit \var{status}. It does not return.
+
+\defineentry{osi\_spawn}
+\begin{function}
+  ptr \code{osi\_spawn}(const char* \var{path}, ptr \var{args}, ptr \var{callback});
+\end{function}
+
+The \code{osi\_spawn} function uses the \code{uv\_spawn} function to
+create a process with the list of string-valued \var{args} whose
+standard input, output and error are connected to pipes.  It returns
+\code{\#(\var{to-stdin} \var{from-stdout} \var{from-stderr}
+  \var{pid})} when the process has been successfully created and an
+error pair otherwise.  \var{to-stdin} is a port handle for writing
+bytes to standard input, \var{from-stdout} is a port handle for
+reading bytes from standard output, \var{from-stderr} is a port handle
+for reading bytes from standard error, and \var{pid} is an integer
+identifying the process.
+
+When the process exits, the callback list \code{(\var{callback}
+  \var{pid} \var{exit-status} \var{term-signal})} is enqueued, where
+\var{pid} is the integer process identifier, \var{exit-status} is the
+integer exit status, and \var{term-signal} is the integer termination
+signal or 0 if the process did not terminate because of a signal.
+
+\defineentry{osi\_kill}
+\begin{function}
+  ptr \code{osi\_kill}(int \var{pid}, int \var{signum});
+\end{function}
+
+The \code{osi\_kill} function uses the \code{uv\_kill} function to
+send termination signal \var{signum} to the process identified by
+\var{pid}. It returns \code{\#t} when successful and an error pair
+otherwise.
+
+\subsection {File System Functions}
+
+\defineentry{osi\_open\_file}
+\begin{function}
+  ptr \code{osi\_open\_file}(const char* \var{path}, int \var{flags}, int \var{mode}, ptr \var{callback});
+\end{function}
+
+The \code{osi\_open\_file} function issues an open using the
+\code{uv\_fs\_open} function and the given \var{path}, \var{flags},
+and \var{mode}. It returns \code{\#t} when the open operation is
+issued and an error pair otherwise. When the open operation finishes,
+it enqueues the callback list \code{(\var{callback} \var{result})},
+where \var{result} is the nonnegative port handle when successful and
+a negative error code otherwise.
+
+The following constants are defined for \var{flags}:
+
+\begin{tabular}{llllll}
+  \code{O\_APPEND}&
+  \code{O\_CREAT}&
+  \code{O\_DIRECT}&
+  \code{O\_DIRECTORY}&
+  \code{O\_DSYNC}&
+  \code{O\_EXCL}\\
+  \code{O\_EXLOCK}&
+  \code{O\_NOATIME}&
+  \code{O\_NOCTTY}&
+  \code{O\_NOFOLLOW}&
+  \code{O\_NONBLOCK}&
+  \code{O\_RANDOM}\\
+  \code{O\_RDONLY}&
+  \code{O\_RDWR}&
+  \code{O\_SEQUENTIAL}&
+  \code{O\_SHORT\_LIVED}&
+  \code{O\_SYMLINK}&
+  \code{O\_SYNC}\\
+  \code{O\_TEMPORARY}&
+  \code{O\_TRUNC}&
+  \code{O\_WRONLY}\\
+\end{tabular}
+
+The following constants are defined for \var{mode}:
+
+\begin{tabular}{llllllll}
+  \code{S\_IFMT}&
+  \code{S\_IFIFO}&
+  \code{S\_IFCHR}&
+  \code{S\_IFDIR}&
+  \code{S\_IFBLK}&
+  \code{S\_IFREG}&
+  \code{S\_IFLNK}&
+  \code{S\_IFSOCK}\\
+\end{tabular}
+
+\defineentry{osi\_get\_executable\_path}
+\begin{function}
+  ptr \code{osi\_get\_executable\_path}(void);
+\end{function}
+
+The \code{osi\_get\_executable\_path} function uses the
+\code{uv\_exepath} function to return the full path string of the
+executable file of the current process when successful and an error
+pair otherwise.
+
+\defineentry{osi\_get\_file\_size}
+\begin{function}
+  ptr \code{osi\_get\_file\_size}(uptr \var{port}, ptr \var{callback});
+\end{function}
+
+The \code{osi\_get\_file\_size} function uses the \code{uv\_fs\_fstat}
+function to issue a status operation on the file associated with the
+given file \var{port}. It returns \code{\#t} when the status operation
+is issued and an error pair otherwise. When the status operation
+finishes, it enqueues the callback list \code{(\var{callback}
+  \var{result})}, where \var{result} is the nonnegative file size when
+successful and a negative error code otherwise.
+
+\defineentry{osi\_get\_real\_path}
+\begin{function}
+  ptr \code{osi\_get\_real\_path}(const char* \var{path}, ptr \var{callback});
+\end{function}
+
+The \code{osi\_get\_real\_path} function uses the
+\code{uv\_fs\_realpath} function to issue a realpath operation on the
+file associated with the given file \var{port}. It returns \code{\#t}
+when the realpath operation is issued and an error pair
+otherwise. When the realpath operation finishes, it enqueues the
+callback list \code{(\var{callback} \var{result})}, where \var{result}
+is the string path when successful and a negative error code otherwise.
+
+\defineentry{osi\_get\_stdin}
+\begin{function}
+  uptr \code{osi\_get\_stdin}(void);
+\end{function}
+
+The \code{osi\_get\_stdin} function returns a handle to a static port
+that reads from the standard input of the current process. This port
+cannot be closed.
+
+\defineentry{osi\_get\_temp\_directory}
+\begin{function}
+  ptr \code{osi\_get\_temp\_directory}(void);
+\end{function}
+
+The \code{osi\_get\_temp\_directory} function uses the
+\code{uv\_os\_tmpdir} function to return the string path of the
+temporary directory and an error pair otherwise.
+
+\defineentry{osi\_chmod}
+\begin{function}
+  ptr \code{osi\_chmod}(const char* \var{path}, int \var{mode}, ptr \var{callback});
+\end{function}
+
+The \code{osi\_chmod} function issues a chmod operation using the
+\code{uv\_fs\_chmod} function and the given \var{path} and
+\var{mode}. It returns \code{\#t} when the chmod operation is issued
+and an error pair otherwise. When the chmod operation finishes, it
+enqueues the callback list \code{(\var{callback} \var{errno})}, where
+\var{errno} is 0 when successful and a negative error code otherwise.
+
+\defineentry{osi\_make\_directory}
+\begin{function}
+  ptr \code{osi\_make\_directory}(const char* \var{path}, int \var{mode}, ptr \var{callback});
+\end{function}
+
+The \code{osi\_make\_directory} function issues a mkdir operation
+using the \code{uv\_fs\_mkdir} function with the given \var{path} and
+\var{mode}. It returns \code{\#t} when the mkdir operation is issued
+and an error pair otherwise. When the mkdir operation finishes, it
+enqueues the callback list \code{(\var{callback} \var{errno})}, where
+\var{errno} is 0 when successful and a negative error code otherwise.
+
+\defineentry{osi\_list\_directory}
+\begin{function}
+  ptr \code{osi\_list\_directory}(const char* \var{path}, ptr \var{callback});
+\end{function}
+
+The \code{osi\_list\_directory} function issues a scandir operation
+using the \code{uv\_fs\_scandir} function with the given
+\var{path}. It returns \code{\#t} when the scandir operation is issued
+and an error pair otherwise. When the scandir operation finishes, it
+enqueues the callback list \code{(\var{callback} \var{result})}, where
+\var{result} is \code{((\var{name} . \var{type}) \etc)} when successful and
+a negative error code otherwise.
+
+\var{name} is the string name of the directory entry, and \var{type}
+is one of the following constants:
+
+\begin{tabular}{lllll}
+\code{DIRENT\_UNKNOWN}&
+\code{DIRENT\_FILE}&
+\code{DIRENT\_DIR}&
+\code{DIRENT\_LINK}&
+\code{DIRENT\_FIFO}\\
+\code{DIRENT\_SOCKET}&
+\code{DIRENT\_CHAR}&
+\code{DIRENT\_BLOCK}
+\end{tabular}
+
+\defineentry{osi\_remove\_directory}
+\begin{function}
+  ptr \code{osi\_remove\_directory}(const char* \var{path}, ptr \var{callback});
+\end{function}
+
+The \code{osi\_remove\_directory} function issues a rmdir operation
+using the \code{uv\_fs\_rmdir} function with the given \var{path}. It
+returns \code{\#t} when the rmdir operation is issued and an error
+pair otherwise. When the rmdir operation finishes, it enqueues the
+callback list \code{(\var{callback} \var{errno})}, where \var{errno}
+is 0 when successful and a negative error code otherwise.
+
+\defineentry{osi\_rename}
+\begin{function}
+  ptr \code{osi\_rename}(const char* \var{path}, const char* \var{new\_path}, ptr \var{callback});
+\end{function}
+
+The \code{osi\_rename} function issues a rename operation using the
+\code{uv\_fs\_rename} function of \var{path} to \var{new\_path}. It
+returns \code{\#t} when the rename operation is issued and an error
+pair otherwise. When the rename operation finishes, it enqueues the
+callback list \code{(\var{callback} \var{errno})}, where \var{errno}
+is 0 when successful and a negative error code otherwise.
+
+\defineentry{osi\_get\_stat}
+\begin{function}
+  ptr \code{osi\_get\_stat}(const char* \var{path}, int \var{follow}, ptr \var{callback});
+\end{function}
+
+The \code{osi\_get\_stat} function issues a status operation on the
+given \var{path}. When \var{follow} is non-zero, it uses the
+\code{uv\_fs\_stat} function to follow a symbolic link; otherwise, it
+uses the \code{uv\_fs\_lstat} function. It returns \code{\#t} when the
+status operation is issued and an error pair otherwise. When the
+status operation finishes, it enqueues the callback list
+\code{(\var{callback} \var{result})}, where \var{result} is a
+\code{<stat>} tuple when successful and a negative error code
+otherwise.
+
+\defineentry{\code{<stat>}}
+\begin{tuple}\code{<stat>}\end{tuple}\antipar
+\begin{argtbl}
+  \argrow{dev}{device ID of the device containing the file}
+  \argrow{mode}{mode of the file}
+  \argrow{nlink}{number of hard links to the file}
+  \argrow{uid}{user ID of the file}
+  \argrow{gid}{group ID of the file}
+  \argrow{rdev}{device ID if file is character or block special}
+  \argrow{ino}{file serial number}
+  \argrow{size}{For regular files, the file size in bytes. For
+    symbolic links, the length in bytes of the path in the link.}
+  \argrow{blksize}{optimal block size for I/O}
+  \argrow{blocks}{number of blocks allocated for the file}
+  \argrow{flags}{user-defined flags for the file}
+  \argrow{gen}{file generation number}
+  \argrow{atime}{time of last access}
+  \argrow{mtime}{time of last data modification}
+  \argrow{ctime}{time of last status change}
+  \argrow{birthtime}{time of file creation}
+\end{argtbl}
+
+The time entries contain \code{(\var{sec} . \var{nsec})}, where
+\var{sec} is the number of seconds in UTC since the UNIX epoch January
+1, 1970, and \var{nsec} is the number of nanoseconds after \var{sec}.
+
+\defineentry{osi\_unlink}
+\begin{function}
+  ptr \code{osi\_unlink}(const char* \var{path}, ptr \var{callback});
+\end{function}
+
+The \code{osi\_unlink} function issues an unlink operation using the
+\code{uv\_fs\_unlink} function with the given \var{path}. It returns
+\code{\#t} when the unlink operation is issued and an error pair
+otherwise. When the unlink operation finishes, it enqueues the
+callback list \code{(\var{callback} \var{errno})}, where \var{errno}
+is 0 when successful and a negative error code otherwise.
+
+\defineentry{osi\_watch\_path}
+\begin{function}
+  ptr \code{osi\_watch\_path}(const char* \var{path}, ptr \var{callback});
+\end{function}
+
+The \code{osi\_watch\_path} function uses the
+\code{uv\_fs\_event\_start} function to track changes to
+\var{path}. When \var{path} is a directory, its subdirectories are not
+tracked. Every time a change is detected, a callback list
+\code{(\var{callback} \var{filename} \var{events})} is enqueued, where
+\var{events} is 1 for rename, 2 for change, and 3 for rename and
+change.  If the watcher encounters an error, the callback list
+\code{(\var{callback} \var{errno})} is enqueued.
+
+The \code{osi\_watch\_path} function returns a path watcher handle
+when successful and an error pair otherwise.
+
+\defineentry{osi\_close\_path\_watcher}
+\begin{function}
+  void \code{osi\_close\_path\_watcher}(uptr \var{watcher});
+\end{function}
+
+The \code{osi\_close\_path\_watcher} function stops and closes the
+path \var{watcher} from \code{osi\_watch\_path}.
+
+\subsection {TCP/IP Functions}
+
+\defineentry{osi\_connect\_tcp}
+\begin{function}
+  ptr \code{osi\_connect\_tcp}(const char* \var{node}, const char* \var{service}, ptr \var{callback});
+\end{function}
+
+The \code{osi\_connect\_tcp} function initiates a TCP/IP connection to
+host \var{node} on port \var{service}. It returns \code{\#t} when the
+operation starts and an error pair otherwise. The \var{node} string
+may be a host name or numeric host address string, and the
+\var{service} string may be a service name or port number represented
+as a string. The \code{uv\_getaddrinfo} function is used to retrieve a
+list of addresses. For the first address for which a connection
+succeeds using the \code{uv\_tcp\_connect} function, the completion
+list \code{(\var{callback} \var{port})} is enqueued, where \var{port}
+is a handle to a port that reads from and writes to this
+connection. When the operation fails, the callback list
+\code{(\var{callback} \var{error-pair})} is enqueued.
+
+\defineentry{osi\_listen\_tcp}
+\begin{function}
+  ptr \code{osi\_listen\_tcp}(const char* \var{address}, uint16\_t \var{port}, ptr \var{callback});
+\end{function}
+
+The \code{osi\_listen\_tcp} function starts a TCP/IP listener on the
+given \var{port} of the IPv4 or IPv6 interface specified by
+\var{address} using the \code{uv\_listen} function. It returns a
+TCP/IP listener handle when successful and an error pair otherwise.
+
+Specify an IPv4 interface \var{address} using dot-decimal notation,
+e.g. \code{127.0.0.1}. Use \code{0.0.0.0} to specify all IPv4
+interfaces.
+
+Specify an IPv6 interface \var{address} using colon-hexadecimal
+notation, e.g. \code{::1}. Use \code{::} to specify all IPv6
+interfaces.
+
+Specify \var{port} 0 to have the operating system choose an available
+port number, which can be queried using
+\code{osi\_get\_tcp\_listener\_port}.
+
+When a connection is accepted, the callback list
+\code{(\var{callback} \var{port})} is enqueued, where \var{port} is a
+handle to a port that reads from and writes to this connection. When a
+connection fails, the callback list \code{(\var{callback}
+  \var{error-pair})} is enqueued.
+
+\defineentry{osi\_close\_tcp\_listener}
+\begin{function}
+  void \code{osi\_close\_tcp\_listener}(uptr \var{listener});
+\end{function}
+
+The \code{osi\_close\_tcp\_listener} function closes the given TCP/IP
+\var{listener} opened by \code{osi\_listen\_tcp}. It returns
+\code{\#t} when successful and an error pair otherwise.
+
+\defineentry{osi\_get\_tcp\_listener\_port}
+\begin{function}
+  ptr \code{osi\_get\_tcp\_listener\_port}(uptr \var{listener});
+\end{function}
+
+The \code{osi\_get\_tcp\_listener\_port} function returns the port
+number of the given TCP/IP \var{listener} opened by
+\code{osi\_listen\_tcp} when successful and an error pair otherwise.
+
+\defineentry{osi\_get\_ip\_address}
+\begin{function}
+  ptr \code{osi\_get\_ip\_address}(uptr \var{port});
+\end{function}
+
+The \code{osi\_get\_ip\_address} function uses the
+\code{uv\_tcp\_getpeername} function to return a string representation
+of the address of the peer of a TCP/IP \var{port} opened by
+\code{osi\_connect\_tcp} or \code{osi\_listen\_tcp} when successful
+and an error pair otherwise.
+
+An IPv4 address is shown in dot-decimal notation followed by a colon
+and the port number, e.g. \code{127.0.0.1:80}.
+
+An IPv6 address is shown in bracketed colon-hexadecimal notation
+followed by a colon and the port number, e.g. \code{[::1]:80}.
+
+\subsection {SQLite Functions}
+
+For each open SQLite database, a worker thread performs the operations
+so that the main thread is not blocked. SQLite is compiled in
+multi-thread mode. The documentation states: ``In this mode, SQLite
+can be safely used by multiple threads provided that no single
+database connection is used simultaneously in two or more threads.''
+\concern{Two threads simultaneously access a SQLite database
+  connection.} \mitigation The operating system interface maintains a
+busy bit for each database handle. Functions attempting to access a
+busy database return the error pair \code{(\var{function-name}
+  . \textrm{UV\_EBUSY})}.
+
+SQLite has five data types, which are mapped as follows to Scheme data
+types:
+
+\begin{center}
+\begin{tabular}{|l|l|}
+  \multicolumn{1}{l}{\emph{SQLite}} & \multicolumn{1}{l}{\emph{Scheme}} \\
+  \hline
+  NULL & \code{\#f} \\
+  INTEGER & exact integer \\
+  REAL & flonum \\
+  TEXT & string \\
+  BLOB & bytevector \\
+  \hline
+\end{tabular}
+\end{center}
+
+SQLite extended result codes are enabled. Because the error codes
+overlap system error codes, the operating system interface maps them
+to system error codes by negating the sum of the result code and
+6,000,000. The \code{osi\_get\_error\_text} function supports these
+mapped error codes.
+
+\defineentry{osi\_open\_database}
+\begin{function}
+  ptr \code{osi\_open\_database}(const char* \var{filename}, int \var{flags}, ptr \var{callback});
+\end{function}
+
+The \code{osi\_open\_database} function starts a worker thread that
+uses the \code{sqlite3\_open\_v2} function to open the database
+specified by the \var{filename} string and \var{flags}. The
+\var{flags} specify, for example, whether the database should be
+opened in read-only mode or whether it should be created when the file
+does not exist. The function returns \code{\#t} when the thread is
+created and an error pair otherwise.
+
+When the open operation finishes, it enqueues the callback list
+\code{(\var{callback} \var{result})}, where \var{result} is the
+database handle when successful and an error pair otherwise.
+
+\defineentry{osi\_close\_database}
+\begin{function}
+  ptr \code{osi\_close\_database}(uptr \var{database}, ptr \var{callback});
+\end{function}
+
+The \code{osi\_close\_database} function starts a close operation in
+the given \var{database} worker thread. It returns \code{\#t} when the
+operation is started and an error pair otherwise.
+
+After the worker thread finalizes all prepared statements, it uses the
+\code{sqlite3\_close} function to close the \var{database}. When
+finished, it enqueues the callback list \code{(\var{callback}
+  \var{result})}, where \var{result} is \code{\#t} when successful and
+an error pair otherwise.
+
+\defineentry{osi\_prepare\_statement}
+\begin{function}
+  ptr \code{osi\_prepare\_statement}(uptr \var{database}, ptr \var{sql}, ptr \var{callback});
+\end{function}
+
+The \code{osi\_prepare\_statement} function starts a prepare operation
+on the given \var{database} worker thread. It returns \code{\#t} when
+the operation is started and an error pair otherwise.
+
+The worker thread uses the \code{sqlite3\_prepare\_v2} function to
+prepare the given \var{sql} statement. It enqueues the callback list
+\code{(\var{callback} \var{result})}, where \var{result} is the
+statement handle when successful and an error pair otherwise.
+
+\defineentry{osi\_finalize\_statement}
+\begin{function}
+  ptr \code{osi\_finalize\_statement}(uptr \var{statement});
+\end{function}
+
+The \code{osi\_finalize\_statement} function uses the
+\code{sqlite3\_finalize} function to finalize the \var{statement}.  It
+returns \code{\#t} when successful and an error pair otherwise. The
+return code from \code{sqlite3\_finalize} is not checked because the
+statement is finalized regardless of the return value.
+
+\defineentry{osi\_bind\_statement}
+\begin{function}
+  ptr \code{osi\_bind\_statement}(uptr \var{statement}, int \var{index}, ptr \var{datum});
+\end{function}
+
+The \code{osi\_bind\_statement} function maps the Scheme \var{datum}
+to SQLite and binds it to the \var{statement} at the zero-based SQL
+parameter \var{index}.  It returns \code{\#t} when successful and an
+error pair otherwise. The error pair \code{(osi\_bind\_statement
+  . \textrm{UV\_EINVAL})} is returned when \code{datum} cannot be
+mapped to SQLite.
+
+\defineentry{osi\_clear\_statement\_bindings}
+\begin{function}
+  ptr \code{osi\_clear\_statement\_bindings}(uptr \var{statement});
+\end{function}
+
+The \code{osi\_clear\_statement\_bindings} function uses the
+\code{sqlite3\_clear\_bindings} function to clear the bindings for the
+\var{statement}. It returns \code{\#t} when successful and an error
+pair otherwise.
+
+\defineentry{osi\_get\_last\_insert\_rowid}
+\begin{function}
+  ptr \code{osi\_get\_last\_insert\_rowid}(uptr \var{database});
+\end{function}
+
+The \code{osi\_get\_last\_insert\_rowid} function uses the
+\code{sqlite3\_last\_insert\_rowid} function to return the last insert
+rowid of the \var{database} when successful and an error pair
+otherwise.
+
+\defineentry{osi\_get\_statement\_columns}
+\begin{function}
+  ptr \code{osi\_get\_statement\_columns}(uptr \var{statement});
+\end{function}
+
+The \code{osi\_get\_statement\_columns} function uses the
+\code{sqlite3\_column\_count} and \code{sqlite3\_column\_name}
+functions to return a vector of column name strings for the
+\var{statement} when successful and an error pair otherwise.
+
+\defineentry{osi\_get\_statement\_expanded\_sql}
+\begin{function}
+  ptr \code{osi\_get\_statement\_expanded\_sql}(uptr \var{statement});
+\end{function}
+
+The \code{osi\_get\_statement\_expanded\_sql} function uses the
+\code{sqlite3\_expanded\_sql} function to return the expanded SQL
+string associated with the \var{statement} when successful and an
+error pair otherwise.
+
+\defineentry{osi\_get\_statement\_sql}
+\begin{function}
+  ptr \code{osi\_get\_statement\_sql}(uptr \var{statement});
+\end{function}
+
+The \code{osi\_get\_statement\_sql} function uses the
+\code{sqlite3\_sql} function to return the \var{sql} string associated
+with the \var{statement} when successful and an error pair otherwise.
+
+\defineentry{osi\_reset\_statement}
+\begin{function}
+  ptr \code{osi\_reset\_statement}(uptr \var{statement});
+\end{function}
+
+The \code{osi\_reset\_statement} function uses the
+\code{sqlite3\_reset} function to reset the \var{statement}. It
+returns \code{\#t} when successful and an error pair otherwise.
+
+\defineentry{osi\_step\_statement}
+\begin{function}
+  ptr \code{osi\_step\_statement}(uptr \var{statement}, ptr \var{callback});
+\end{function}
+
+The \code{osi\_step\_statement} function issues a step operation on
+the database worker thread associated with \var{statement}. It returns
+\code{\#t} when the operation is started and an error pair otherwise.
+
+The worker thread uses the \code{sqlite3\_step} function to execute
+the \var{statement}. If it returns SQLITE\_DONE, the callback list
+\code{(\var{callback} \#f)} is enqueued. If it returns SQLITE\_ROW,
+the callback list \code{(\var{callback} \#(\var{value} \etc))} is
+enqueued with the vector of column values mapped from SQLite to
+Scheme. Otherwise, the callback list \code{(\var{callback}
+  \var{error-pair})} is enqueued.
+
+\defineentry{osi\_interrupt\_database}
+\begin{function}
+  void \code{osi\_interrupt\_database}(uptr \var{database});
+\end{function}
+
+The \code{osi\_interrupt\_database} function calls the
+\code{sqlite3\_interrupt} function to interrupt the current operation
+of the \var{database}.
+
+\defineentry{osi\_get\_sqlite\_status}
+\begin{function}
+  ptr \code{osi\_get\_sqlite\_status}(int \var{operation}, int \var{resetp});
+\end{function}
+
+The \code{osi\_get\_sqlite\_status} function uses the
+\code{sqlite3\_status64} function with the given \var{operation} and
+\var{reset} flag to return \code{\#(\var{current} \var{highwater})}
+when successful and an error pair otherwise.
