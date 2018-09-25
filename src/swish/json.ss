@@ -30,6 +30,7 @@
    json:string->object
    json:write
    json:write-object
+   json:write-structural-char
    )
   (import
    (chezscheme)
@@ -265,11 +266,56 @@
           (unread-char x ip)
           (rd ip)]))]))
 
+  (define (do-indent indent op)
+    (do ([i 0 (+ i 1)]) ((= i indent))
+      (write-char #\space op)))
+
+  (define (json:write-structural-char x indent op)
+    (if (not indent)
+        (begin
+          (write-char x op)
+          #f)
+        (match x
+          [#\[
+           (let ([indent (+ indent 2)])
+             (write-char #\[ op)
+             (newline op)
+             (do-indent indent op)
+             indent)]
+          [#\]
+           (let ([indent (- indent 2)])
+             (newline op)
+             (do-indent indent op)
+             (write-char #\] op)
+             indent)]
+          [#\{
+           (let ([indent (+ indent 2)])
+             (write-char #\{ op)
+             (newline op)
+             (do-indent indent op)
+             indent)]
+          [#\}
+           (let ([indent (- indent 2)])
+             (newline op)
+             (do-indent indent op)
+             (write-char #\} op)
+             indent)]
+          [#\:
+           (write-char #\: op)
+           (write-char #\space op)
+           indent]
+          [#\,
+           (write-char #\, op)
+           (newline op)
+           (do-indent indent op)
+           indent])))
+
   (define json:write
     (case-lambda
-     [(op x) (json:write op x no-custom-write)]
-     [(op x custom-write)
-      (define (wr op x)
+     [(op x) (json:write op x #f)]
+     [(op x indent) (json:write op x indent no-custom-write)]
+     [(op x indent custom-write)
+      (define (wr op x indent)
         (cond
          [(eq? x #t) (display-string "true" op)]
          [(eq? x #f) (display-string "false" op)]
@@ -277,39 +323,46 @@
          [(string? x) (write-string x op)]
          [(or (fixnum? x) (bignum? x) (and (flonum? x) (finite? x)))
           (display-string (number->string x) op)]
-         [(custom-write op x wr)]
+         [(custom-write op x indent wr)]
          [(null? x) (display-string "[]" op)]
          [(pair? x)
-          (write-char #\[ op)
-          (wr op (car x))
-          (for-each
-           (lambda (x)
-             (write-char #\, op)
-             (wr op x))
-           (cdr x))
-          (write-char #\] op)]
+          (let ([indent (json:write-structural-char #\[ indent op)])
+            (wr op (car x) indent)
+            (for-each
+             (lambda (x)
+               (json:write-structural-char #\, indent op)
+               (wr op x indent))
+             (cdr x))
+            (json:write-structural-char #\] indent op))]
          [(hashtable? x)
-          (write-char #\{ op)
-          (let-values ([(keys vals) (hashtable-entries x)])
-            (let ([v (vector-map cons keys vals)])
-              (vector-sort! (lambda (x y) (string<? (car x) (car y))) v)
-              (do ([i 0 (fx+ i 1)]) ((fx= i (vector-length v)))
-                (when (fx> i 0)
-                  (write-char #\, op))
-                (let ([p (vector-ref v i)])
-                  (write-string (car p) op)
-                  (write-char #\: op)
-                  (wr op (cdr p))))))
-          (write-char #\} op)]
+          (if (zero? (hashtable-size x))
+              (display-string "{}" op)
+              (let ([indent (json:write-structural-char #\{ indent op)])
+                (let-values ([(keys vals) (hashtable-entries x)])
+                  (let ([v (vector-map cons keys vals)])
+                    (vector-sort! (lambda (x y) (string<? (car x) (car y))) v)
+                    (do ([i 0 (fx+ i 1)]) ((fx= i (vector-length v)))
+                      (when (fx> i 0)
+                        (json:write-structural-char #\, indent op))
+                      (let ([p (vector-ref v i)])
+                        (write-string (car p) op)
+                        (json:write-structural-char #\: indent op)
+                        (wr op (cdr p) indent)))))
+                (json:write-structural-char #\} indent op)))]
          [else (raise `#(invalid-datum ,x))]))
-      (wr op x)]))
+      (when (and indent (or (not (fixnum? indent)) (negative? indent)))
+        (bad-arg 'json:write indent))
+      (wr op x indent)
+      (when (eqv? indent 0)
+        (newline op))]))
 
   (define json:object->string
     (case-lambda
-     [(x) (json:object->string x no-custom-write)]
-     [(x custom-write)
+     [(x) (json:object->string x #f)]
+     [(x indent) (json:object->string x indent no-custom-write)]
+     [(x indent custom-write)
       (let-values ([(op get) (open-string-output-port)])
-        (json:write op x custom-write)
+        (json:write op x indent custom-write)
         (get))]))
 
   (define json:string->object
@@ -326,15 +379,29 @@
 
   (define json:object->bytevector
     (case-lambda
-     [(x) (json:object->bytevector x no-custom-write)]
-     [(x custom-write)
+     [(x) (json:object->bytevector x #f)]
+     [(x indent) (json:object->bytevector x indent no-custom-write)]
+     [(x indent custom-write)
       (call-with-bytevector-output-port
-       (lambda (op) (json:write op x custom-write))
+       (lambda (op) (json:write op x indent custom-write))
        (make-utf8-transcoder))]))
 
   (define (no-custom-inflate x) x)
 
-  (define (no-custom-write op x wr) #f)
+  (define (no-custom-write op x indent wr) #f)
+
+  (define (write-key indent pre key whole op)
+    ;; pre is a token
+    ;; key is a pre-rendered string
+    ;; whole is a pre-rendered string with prefix and trailer included.
+    (cond
+     [indent
+      (let ([indent (json:write-structural-char pre indent op)])
+        (display key op)
+        (json:write-structural-char #\: indent op))]
+     [else
+      (display whole op)
+      #f]))
 
   (define-syntax json-write-kv
     (let ()
@@ -345,18 +412,27 @@
           (write-string k op)
           (write-char #\: op)
           (get)))
+      (define (get-key k)
+        (let-values ([(op get) (open-string-output-port)])
+          (write-string k op)
+          (get)))
       (lambda (x)
         (syntax-case x ()
-          [(_ op wr prefix k v #f)
-           (with-syntax ([str (get-preamble (datum prefix) (datum k))])
-             #'(begin (display str op) (wr op v)))]
-          [(_ op wr prefix k v-expr cw-expr)
-           (with-syntax ([str (get-preamble (datum prefix) (datum k))])
-             #`(let ([custom-writer cw-expr] [v v-expr])
-                 (display str op)
+          [(_ op indent wr prefix k v #f)
+           (with-syntax ([whole (get-preamble (datum prefix) (datum k))]
+                         [key (get-key (datum k))])
+             #'(let ([indent (write-key indent prefix key whole op)])
+                 (wr op v indent)
+                 indent))]
+          [(_ op indent wr prefix k v-expr cw-expr)
+           (with-syntax ([whole (get-preamble (datum prefix) (datum k))]
+                         [key (get-key (datum k))])
+             #'(let* ([custom-writer cw-expr] [v v-expr]
+                      [indent (write-key indent prefix key whole op)])
                  (if custom-writer
-                     (custom-writer op v wr)
-                     (wr op v))))]))))
+                     (custom-writer op v indent wr)
+                     (wr op v indent))
+                 indent))]))))
 
   (define-syntax (json:write-object x)
     (define (get-key x)
@@ -375,17 +451,18 @@
         [(key field custom-write) c]
         [_ (syntax-error c)]))
     (syntax-case x ()
-      [(_ op-expr wr-expr [key . spec] ...)
+      [(_ op-expr indent-expr wr-expr [key . spec] ...)
        (valid? (datum (key ...)))
        (with-syntax ([([k0 f0 cw0] [k1 f1 cw1] ...)
                       (sort
                        (lambda (x y)
                          (string<? (get-key x) (get-key y)))
                        (map parse-clause #'([key . spec] ...)))])
-         #'(let ([op op-expr] [wr wr-expr])
-             (json-write-kv op wr #\{ k0 f0 cw0)
-             (json-write-kv op wr #\, k1 f1 cw1)
-             ...
-             (write-char #\} op)))]))
+         #'(let ([op op-expr] [indent indent-expr] [wr wr-expr])
+             (let ([indent (json-write-kv op indent wr #\{ k0 f0 cw0)])
+               (json-write-kv op indent wr #\, k1 f1 cw1)
+               ...
+               (json:write-structural-char #\} indent op)
+               #t)))]))
 
   )

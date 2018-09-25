@@ -44,11 +44,11 @@
    [(x custom-write custom-inflate)
     (define (->string x)
       (if custom-write
-          (json:object->string x custom-write)
+          (json:object->string x #f custom-write)
           (json:object->string x)))
     (define (->bytevector x)
       (if custom-write
-          (json:object->bytevector x custom-write)
+          (json:object->bytevector x #f custom-write)
           (json:object->bytevector x)))
     (define (string-> x)
       (if custom-inflate
@@ -150,22 +150,74 @@
          (get))]
       [,@by-write
        (let ()
-         (json:write-object op json:write
+         (json:write-object op #f json:write
            ["bar" "rel"]
            ["foo" "tstep"]
            ["ace" "rbic"])
          (get))]
       [,custom-write
-       (lambda (op v wr)
+       (lambda (op v indent wr)
          (if (vector? v)
              (fprintf op "[~{\"~r\"~^,~}]" (vector->list v))
              (wr op v)))]
       ["{\"abc\":[\"four\",\"five\",\"six\"],\"def\":[7,8,9],\"ghi\":3}"
        (begin
-         (json:write-object op json:write
+         (json:write-object op #f json:write
            ["ghi" 3]
            ["abc" '#(4 5 6) custom-write]
            ["def" '(7 8 9) custom-write])
+         (get))])
+     'ok)))
+
+(mat pretty ()
+  (let-values ([(op get) (open-string-output-port)])
+    (match-let*
+     (["{\n  \"abc\": [\n    \"four\",\n    \"five\",\n    \"six\"\n  ],\n  \"def\": [\n    7,\n    8,\n    9\n  ],\n  \"ghi\": 3\n}\n"
+       (begin
+         (json:write op
+           (json:make-object
+            ["ghi" 3]
+            ["abc" '#(4 5 6)]
+            ["def" '(7 8 9)])
+           0
+           (lambda (op x indent wr)
+             (cond
+              [(vector? x)
+               (wr op (map (lambda (x) (format "~r" x)) (vector->list x)) indent)
+               #t]
+              [else #f])))
+         (get))]
+      ["{\n  \"abc\": [\"four\",\"five\",\"six\"],\n  \"def\": [\n    7,\n    8,\n    9\n  ],\n  \"ghi\": 3\n}\n"
+       (begin
+         (json:write op
+           (json:make-object
+            ["ghi" 3]
+            ["abc" '#(4 5 6)]
+            ["def" '(7 8 9)])
+           0
+           (lambda (op x indent wr)
+             (cond
+              [(vector? x)
+               ;; Explicitly bypasses pretty mechanisms.
+               (fprintf op "[~{\"~r\"~^,~}]" (vector->list x))
+               #t]
+              [else #f])))
+         (get))]
+      [,goodbye (lambda (op x indent wr) (wr op "goodbye" indent))]
+      ["{\n  \"list\": [\n    1,\n    2,\n    {\n      \"tiki\": \"torch\",\n      \"wiki\": \"goodbye\"\n    }\n  ]\n}\n"
+       (begin
+         (json:write op
+           (json:make-object
+            ["list" (list 1 2 'flubber)])
+           0
+           (lambda (op x indent wr)
+             (match x
+               [flubber
+                (json:write-object op indent wr
+                  ["tiki" "torch"]
+                  ["wiki" "hello" goodbye])
+                #t]
+               [,_ #f])))
          (get))])
      'ok)))
 
@@ -187,17 +239,17 @@
       ["symbol"
        (string->symbol (must-ref x "name"))]
       [,_ x]))
-  (define (custom-write op x wr)
+  (define (custom-write op x indent wr)
     (match x
       [`(<obj> ,a ,b ,c)
-       (json:write-object op wr
+       (json:write-object op #f wr
          ["_type_" "<obj>"]
          ["a" a]
          ["b" b]
          ["c" c])]
       [,x
        (guard (symbol? x))
-       (json:write-object op wr
+       (json:write-object op #f wr
          ["_type_" "symbol"]
          ["name" (symbol->string x)])]
       [,_ #f]))
@@ -221,7 +273,7 @@
            (compare (hashtable->alist x) (hashtable->alist y)))]
      [else #f]))
   (define (nop-custom-inflate x) x)
-  (define (nop-custom-write op x wr) #f)
+  (define (nop-custom-write op x indent wr) #f)
   ;; test inert custom-write / custom-inflate
   (for-each
    (lambda (obj)
@@ -242,15 +294,17 @@
                 [a 'typical]
                 [b 'fore]
                 [c (json:make-object ["take" "cake"])]))])]
-    [,string (json:object->string x custom-write)]
+    [,string (json:object->string x #f custom-write)]
     [ok (compare x (json:string->object string custom-inflate))]
-    [,bv (json:object->bytevector x custom-write)]
+    [,bv (json:object->bytevector x #f custom-write)]
     [ok (compare x (json:string->object (utf8->string bv) custom-inflate))])
    'ok))
 
 (mat errors ()
   (match-let*
-   ([#(EXIT #(invalid-datum 1/2)) (catch (json:object->string 1/2))]
+   ([#(EXIT #(bad-arg json:write -1))
+     (catch (json:write (open-output-string) 12 -1))]
+    [#(EXIT #(invalid-datum 1/2)) (catch (json:object->string 1/2))]
     [#(EXIT #(invalid-datum +inf.0)) (catch (json:object->string +inf.0))]
     [#(EXIT #(invalid-datum -inf.0)) (catch (json:object->string -inf.0))]
     [#(EXIT #(invalid-datum +nan.0)) (catch (json:object->string +nan.0))]

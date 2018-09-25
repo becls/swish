@@ -513,7 +513,7 @@ The following exceptions may be raised:
 
 \defineentry{json:write}
 \begin{procedure}
-  \code{(json:write \var{op} \var{x} \opt{\var{custom-write}})}
+  \code{(json:write \var{op} \var{x} \opt{\var{indent}} \opt{\var{custom-write}})}
 \end{procedure}
 \returns{} unspecified
 
@@ -522,80 +522,70 @@ textual output port \var{op} in JSON format. JSON objects are sorted
 by key using \code{string<?} to provide stable output. Scheme fixnums,
 bignums, and finite flonums may be used as numbers.
 
+When \var{indent} is a non-negative fixnum, the output is more readable
+by a human. List items and key / value pairs are indented on
+individual lines by the specified number of spaces. When \var{indent}
+is 0, a newline is added to the end of the output. The default indent
+of \code{\#f} produces compact output.
+
 The optional \var{custom-write} procedure may intervene to handle
 lists and hashtables differently or to handle objects that have no
-direct JSON counterpart.
-If \var{custom-write} does not handle a given object, it should
-return false to let \code{json:write} proceed normally.
-The \var{custom-write} procedure is called with three arguments:
-the textual output port \var{op}, the Scheme object \var{x}, and
-a writer procedure \var{wr} that should be used to write the values
-of arbitrary Scheme objects.
-The \var{wr} procedure is equivalent to
-\code{(lambda (\var{op} \var{x}) (json:write \var{op} \var{x} \var{custom-write}))}.
+direct JSON counterpart.  If \var{custom-write} does not handle a
+given object, it should return false to let \code{json:write} proceed
+normally.  The \var{custom-write} procedure is called with four
+arguments: the textual output port \var{op}, the Scheme object
+\var{x}, the current \var{indent} level, and a writer procedure
+\var{wr} that should be used to write the values of arbitrary Scheme
+objects.  The \var{wr} procedure is equivalent to
+\code{(lambda (\var{op} \var{x} \var{indent}) (json:write \var{op} \var{x} \var{indent} \var{custom-write}))}.
 
 If an object cannot be formatted, \code{\#(invalid-datum \var{x})}
 is raised.
 
 \defineentry{json:write-object}
 \begin{syntax}
-  \code{(json:write-object \var{op} \var{wr} [\var{key} \var{value}] \etc)}
+  \code{(json:write-object \var{op} \var{indent} \var{wr} [\var{key} \var{value}] \etc)}
 \end{syntax}
+\returns{} \code{\#t}
 
-Given a textual output port \var{op} and a writer procedure \var{wr},
-the \code{json:write-object} construct writes a JSON object with the given
-\var{key} / \var{value} pairs to \var{op}, sorted by key using
-\code{string<?}.
-Each \var{key} must be a distinct string literal.
-The \var{wr} procedure takes \var{op} and an object \var{x}, just like
-the \var{wr} procedure that is passed to \code{json:write}'s
-\var{custom-write} procedure.
+Given a textual output port \var{op}, an \var{indent} level, and a
+writer procedure \var{wr}, the \code{json:write-object} construct
+writes a JSON object with the given \var{key} / \var{value} pairs to
+\var{op}, sorted by key using \code{string<?}.  Each \var{key} must be
+a distinct string literal.  The \var{wr} procedure takes \var{op}, an
+object \var{x}, and an \var{indent} level just like the \var{wr}
+procedure that is passed to \code{json:write}'s \var{custom-write}
+procedure.
 
 The following are equivalent, provided the keys are string literals.
 
 \antipar\begin{alltt}
-(json:write \var{op} (json:make-object [\var{key} \var{value}] \etc))
-(json:write-object \var{op} json:write [\var{key} \var{value}] \etc)\end{alltt}\antipar
+(begin (json:write \var{op} (json:make-object [\var{key} \var{value}] \etc) \var{indent}) \#t)
+(json:write-object \var{op} \var{indent} json:write [\var{key} \var{value}] \etc)\end{alltt}\antipar
 
 The latter trades code size and compile time for run-time efficiency.
-At compile time,
-\code{json:write-object} sorts the keys and
+At compile time, \code{json:write-object} sorts the keys and
 preformats the strings that will separate values.
-For example:
-
-\code{(json:write-object op wr ["bar" e0] ["foo" e1] ["ace" e2])}
-
-expands to:
-
-\begin{alltt}\antipar
-(let ([op op] [wr wr])
-  (display "\{\textbackslash"ace\textbackslash":" op)
-  (wr op e2)
-  (display ",\textbackslash"bar\textbackslash":" op)
-  (wr op e0)
-  (display ",\textbackslash"foo\textbackslash":" op)
-  (wr op e1)
-  (write-char \#\textbackslash\} op))\end{alltt}\antipar
 
 \defineentry{json:object->bytevector}
 \begin{procedure}
-  \code{(json:object->bytevector \var{x} \opt{\var{custom-write}})}
+  \code{(json:object->bytevector \var{x} \opt{\var{indent}} \opt{\var{custom-write}})}
 \end{procedure}
 \returns{} a bytevector
 
-The \code{json:object->bytevector} procedure calls
-\code{json:write} on \var{x} with the optional \var{custom-write},
-if any, using a bytevector output port transcoded using
+The \code{json:object->bytevector} procedure calls \code{json:write}
+on \var{x} with the optional \var{indent} and \var{custom-write}, if
+any, using a bytevector output port transcoded using
 \code{(make-utf8-transcoder)} and returns the resulting bytevector.
 
 \defineentry{json:object->string}
 \begin{procedure}
-  \code{(json:object->string \var{x} \opt{\var{custom-write}})}
+  \code{(json:object->string \var{x} \opt{\var{indent}} \opt{\var{custom-write}})}
 \end{procedure}
 \returns{} a JSON formatted string
 
-The \code{json:object->string} procedure creates a string output
-port, calls \code{json:write} on \var{x} with the optional
+The \code{json:object->string} procedure creates a string output port,
+calls \code{json:write} on \var{x} with the optional \var{indent} and
 \var{custom-write}, if any, and returns the resulting string.
 
 \defineentry{json:string->object}
@@ -608,6 +598,20 @@ The \code{json:string->object} procedure creates a string input port
 on \var{x}, calls \code{json:read} with the optional \var{custom-inflate},
 if any, and returns the resulting Scheme object after making sure the rest
 of the string is only whitespace.
+
+\defineentry{json:write-structural-char}
+\begin{procedure}
+  \code{(json:write-structural-char \var{x} \var{indent} \var{op})}
+\end{procedure}
+\returns{} the new indent level
+
+The \code{json:write-structural-char} procedure writes the character
+\var{x} at an appropriate \var{indent} level to the textual output
+port \var{op}. The character should be one of the following JSON
+structural characters: \code{[ ] \{ \} : ,}
+
+This procedure is intended for use within custom writers passed in to
+\code{json:write} and, for performance, it does not check its input arguments.
 
 \section {Published Events}
 
