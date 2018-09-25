@@ -54,8 +54,6 @@ static void swish_init(void) {
   add_foreign(osi_get_stat);
   add_foreign(osi_get_statement_columns);
   add_foreign(osi_get_statement_expanded_sql);
-  add_foreign(osi_get_statement_sql);
-  add_foreign(osi_get_statement_sql);
   add_foreign(osi_get_stdin);
   add_foreign(osi_get_tcp_listener_port);
   add_foreign(osi_get_temp_directory);

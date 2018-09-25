@@ -83,6 +83,7 @@
     sqlite-memory
     sqlite-memory-highwater
     databases
+    statements
     listeners
     ports
     watchers

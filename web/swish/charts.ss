@@ -97,6 +97,7 @@
     ("bytes_allocated" "bytes_allocated")
     ("osi_bytes_used" "osi_bytes_used")
     ("databases" "databases")
+    ("statements" "statements")
     ("listeners" "listeners")
     ("ports" "ports")
     ("watchers" "watchers")

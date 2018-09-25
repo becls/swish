@@ -39,6 +39,7 @@
    lazy-execute
    parse-sql
    print-databases
+   print-statements
    sqlite:bind
    sqlite:close
    sqlite:columns
@@ -49,6 +50,7 @@
    sqlite:prepare
    sqlite:sql
    sqlite:step
+   statement-count
    transaction
    with-db
    )
@@ -372,11 +374,51 @@
      (immutable create-time)
      (mutable handle)))
 
+  (define statement-guardian (make-guardian))
+  (define statement-table (make-weak-eq-hashtable))
+
+  (define (statement-count) (hashtable-size statement-table))
+
+  (define print-statements
+    (case-lambda
+     [() (print-statements (current-output-port))]
+     [(op)
+      (let ([v (with-interrupts-disabled (hashtable-keys statement-table))])
+        (vector-sort!
+         (lambda (s1 s2)
+           (let ([t1 (statement-create-time s1)] [t2 (statement-create-time s2)])
+             (cond
+              [(< t1 t2) #t]
+              [(> t1 t2) #f]
+              [else (< (statement-handle s1) (statement-handle s2))])))
+         v)
+        (vector-for-each
+         (lambda (s)
+           (fprintf op "  ~d: ~d ~a prepared ~d\n"
+             (statement-handle s)
+             (database-handle (statement-database s))
+             (statement-sql s)
+             (statement-create-time s)))
+         v))]))
+
+  (define (@register-statement s)
+    (statement-guardian s)
+    (eq-hashtable-set! statement-table s 0)
+    s)
+
+  (define (close-dead-statements)
+    (let ([s (statement-guardian)])
+      (when s
+        (catch (sqlite:finalize s))
+        (close-dead-statements))))
+
   (define-record-type statement
     (nongenerative)
     (fields
-     (mutable handle)
-     (immutable database)))
+     (immutable database)
+     (immutable sql)
+     (immutable create-time)
+     (mutable handle)))
 
   (define (db-error who error detail)
     (raise `#(db-error ,who ,error ,detail)))
@@ -435,21 +477,27 @@
               (let ([p self])
                 (lambda (r)
                   (#%$keep-live db)
-                  (set! result r)
+                  (if (pair? r)
+                      (set! result r)
+                      (set! result (@register-statement
+                                    (make-statement db sql (erlang:now) r))))
                   (complete-io p))))
        [#t
         (wait-for-io (database-filename db))
-        (if (not (pair? result))
-            (make-statement result db)
-            (db-error 'prepare result sql))]
+        (if (pair? result)
+            (db-error 'prepare result sql)
+            result)]
        [,error (db-error 'prepare result sql)])))
 
   (define (sqlite:finalize stmt)
-    (let ([handle (statement-handle stmt)])
-      (when handle
-        (match (osi_finalize_statement* handle)
-          [#t (statement-handle-set! stmt #f)]
-          [,error (db-error 'finalize error stmt)]))))
+    (with-interrupts-disabled
+     (let ([handle (statement-handle stmt)])
+       (when handle
+         (match (osi_finalize_statement* handle)
+           [#t
+            (statement-handle-set! stmt #f)
+            (eq-hashtable-delete! statement-table stmt)]
+           [,error (db-error 'finalize error stmt)])))))
 
   (define (sqlite:bind stmt bindings)
     (osi_reset_statement* (statement-handle stmt))
@@ -468,7 +516,7 @@
            (complete-io p))))
      (wait-for-io (database-filename (statement-database stmt)))
      (when (pair? result)
-       (db-error 'step result (osi_get_statement_sql (statement-handle stmt))))
+       (db-error 'step result (statement-sql stmt)))
      result))
 
   (define (sqlite:execute stmt bindings)
@@ -489,7 +537,7 @@
     (osi_get_statement_columns (statement-handle stmt)))
 
   (define (sqlite:sql stmt)
-    (osi_get_statement_sql (statement-handle stmt)))
+    (statement-sql stmt))
 
   (define (sqlite:expanded-sql stmt)
     (osi_get_statement_expanded_sql (statement-handle stmt)))
@@ -571,4 +619,5 @@
 
   (define SQLITE_STATUS_MEMORY_USED 0)
 
-  (add-finalizer close-dead-databases))
+  (add-finalizer close-dead-databases)
+  (add-finalizer close-dead-statements))

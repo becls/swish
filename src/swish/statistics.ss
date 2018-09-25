@@ -95,6 +95,7 @@
          [sqlite-memory sqlite-memory]
          [sqlite-memory-highwater sqlite-memory-highwater]
          [databases (database-count)]
+         [statements (statement-count)]
          [listeners (tcp-listener-count)]
          [ports (osi-port-count)]
          [watchers (path-watcher-count)]

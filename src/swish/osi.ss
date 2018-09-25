@@ -64,8 +64,6 @@
    osi_get_statement_columns*
    osi_get_statement_expanded_sql
    osi_get_statement_expanded_sql*
-   osi_get_statement_sql
-   osi_get_statement_sql*
    osi_get_stdin
    osi_get_tcp_listener_port
    osi_get_tcp_listener_port*
@@ -256,7 +254,6 @@
   (define-osi osi_get_last_insert_rowid (database uptr))
   (define-osi osi_get_statement_columns (statement uptr))
   (define-osi osi_get_statement_expanded_sql (statement uptr))
-  (define-osi osi_get_statement_sql (statement uptr))
   (define-osi osi_reset_statement (statement uptr))
   (define-osi osi_step_statement (statement uptr) (callback ptr))
   (fdefine osi_interrupt_database (database uptr) void)

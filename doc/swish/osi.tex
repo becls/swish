@@ -804,15 +804,6 @@ The \code{osi\_get\_statement\_expanded\_sql} function uses the
 string associated with the \var{statement} when successful and an
 error pair otherwise.
 
-\defineentry{osi\_get\_statement\_sql}
-\begin{function}
-  ptr \code{osi\_get\_statement\_sql}(uptr \var{statement});
-\end{function}
-
-The \code{osi\_get\_statement\_sql} function uses the
-\code{sqlite3\_sql} function to return the \var{sql} string associated
-with the \var{statement} when successful and an error pair otherwise.
-
 \defineentry{osi\_reset\_statement}
 \begin{function}
   ptr \code{osi\_reset\_statement}(uptr \var{statement});

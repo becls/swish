@@ -82,8 +82,9 @@ with the total duration with a \code{<transaction-retry>} event.
 \end{pubevent}
 
 The \code{db} gen-server uses the operating system interface to
-interact with SQLite. To prevent memory leaks, raw database handles
-are wrapped in a Scheme record and registered with a guardian.
+interact with SQLite. To prevent memory leaks, each raw database and
+statement handle is wrapped in a Scheme record and registered with a
+guardian.
 
 \paragraph* {state}\index{db!state}
 \code{(define-state-tuple <db-state> filename db cache queue worker)}
