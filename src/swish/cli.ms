@@ -434,6 +434,22 @@
   (check (parse-command-line-arguments cli '("--two" "one" "two"))
     (make-ht ["two" (list "one" "two")])))
 
+(mat named-list/pattern-rest ()
+  (define simple
+    (cli-specs
+     ["simple-value" -s (string "<val>") "simple value only allowed once"]
+     ["cmd" -c (list "a" "b" . "x") "all the rest"]))
+  (check-error (catch (parse-command-line-arguments simple '("-c" "one")))
+    "Exception: option expects value: -c a b x ....")
+  (check (parse-command-line-arguments simple '("-s" "thing1" "-c" "one" "two"))
+    (make-ht
+     ["simple-value" "thing1"]
+     ["cmd" (list "one" "two")]))
+  (check (parse-command-line-arguments simple '("-s" "abc" "-c" "1" "2" "3" "4"))
+    (make-ht
+     ["simple-value" "abc"]
+     ["cmd" (list "1" "2" "3" "4")])))
+
 (mat positional-list/pattern ()
   (define cli
     (cli-specs
@@ -463,6 +479,22 @@
     (make-ht ["simple-value" "thing1"] ["rest" (list "thing2")]))
   (check (parse-command-line-arguments simple '("thing2" "-s" "thing1"))
     (make-ht ["rest" (list "thing2" "-s" "thing1")])))
+
+(mat positional-list/pattern-rest ()
+  (define simple
+    (cli-specs
+     ["simple-value" -s (string "<val>") "simple value only allowed once"]
+     ["cmd" (list "a" "b" . "x") "all the rest"]))
+  (check-error (catch (parse-command-line-arguments simple '("one")))
+    "Exception: option expects value: a b x ....")
+  (check (parse-command-line-arguments simple '("-s" "thing1" "one" "two"))
+    (make-ht
+     ["simple-value" "thing1"]
+     ["cmd" (list "one" "two")]))
+  (check (parse-command-line-arguments simple '("-s" "abc" "1" "2" "3" "4"))
+    (make-ht
+     ["simple-value" "abc"]
+     ["cmd" (list "1" "2" "3" "4")])))
 
 (mat dashdash ()
   (define cli

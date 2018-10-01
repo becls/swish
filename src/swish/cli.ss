@@ -329,7 +329,7 @@
                    (take-opt ls pos-specs)]
                   [,p                   ; rest
                    (guard (string? p))
-                   (update-list ht name ls)
+                   (update-list ht name (append (reverse acc) ls))
                    (take-opt '() pos-specs)]
                   [(,p ...)             ; many
                    (if (and (pair? ls) (not (maybe-option? (car ls))))
@@ -377,7 +377,7 @@
                 (take-opt ls pos-specs)]
                [,p                      ; rest
                 (guard (string? p))
-                (update-list ht name ls)
+                (update-list ht name (append (reverse acc) ls))
                 (take-opt '() pos-specs)]
                [(,p ...)                ; many
                 (if (and (pair? ls) (not (maybe-option? (car ls))))
