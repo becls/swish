@@ -1005,7 +1005,7 @@
        (after 1000
          (osi_kill* os-pid 15)
          (raise 'timeout))
-       [#(<process-terminated> ,@os-pid ,_ ,_) 'ok]))))
+       [#(process-terminated ,@os-pid ,_ ,_) 'ok]))))
 
 ;; on slower systems it may be helpful to limit the available virtual memory
 ;; e.g., via ulimit, so that this test does not time out while paging

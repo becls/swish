@@ -201,7 +201,7 @@
               `#(os-process-timeout
                  #(stdout ,(receive (after 100 '()) [#(stdout ,@os-pid ,lines) lines]))
                  #(stderr ,(receive (after 100 '()) [#(stderr ,@os-pid ,lines) lines])))))
-           [#(<process-terminated> ,@os-pid ,exit-status ,_)
+           [#(process-terminated ,@os-pid ,exit-status ,_)
             (<os-result> make
               [stdout (receive [#(stdout ,@os-pid ,lines) lines])]
               [stderr (receive [#(stderr ,@os-pid ,lines) lines])]

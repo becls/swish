@@ -340,7 +340,7 @@
                [(errno)
                 (send process
                   `#(path-watcher-failed ,path ,errno))]))
-       [(,who . ,errno) (raise `#(watch-path-failed ,path ,who ,errno))]
+       [(,who . ,errno) (io-error path who errno)]
        [,handle
         (let ([w (make-path-watcher path (erlang:now) handle)])
           (path-watcher-guardian w)
@@ -634,7 +634,7 @@
      (match (osi_spawn* path args
               (lambda (os-pid exit-status term-signal)
                 (send process
-                  `#(<process-terminated> ,os-pid ,exit-status ,term-signal))))
+                  `#(process-terminated ,os-pid ,exit-status ,term-signal))))
        [#(,to-stdin ,from-stdout ,from-stderr ,os-pid)
         (values
          (let ([name (format "process ~d stdin" os-pid)])
