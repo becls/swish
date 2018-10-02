@@ -58,27 +58,28 @@
       (raise "Query must start with select, with, or explain."))
     (with-db [db (log-file) SQLITE_OPEN_READONLY]
       (let ([stmt (sqlite:prepare db query)])
-        (put-string op "{\"instance\":\"")
-        (put-string op (log-db:get-instance-id))
-        (put-string op "\",\"columns\":")
-        (write-row (sqlite:columns stmt) op)
-        (put-string op ",\"rows\":[")
-        (let lp ([i 0])
-          (cond
-           [(sqlite:step stmt) =>
-            (lambda (row)
-              (write-comma i op)
-              (write-row row op)
-              (cond
-               [(< (port-position op) 10000000) (lp (+ i 1))]
-               [else
-                (put-string op "],\"limit\":")
-                (json:write op (+ i 1))
-                (write-char #\} op)
-                'ok]))]
-           [else
-            (put-string op "]}")
-            'ok]))))))
+        (on-exit (sqlite:finalize stmt)
+          (put-string op "{\"instance\":\"")
+          (put-string op (log-db:get-instance-id))
+          (put-string op "\",\"columns\":")
+          (write-row (sqlite:columns stmt) op)
+          (put-string op ",\"rows\":[")
+          (let lp ([i 0])
+            (cond
+             [(sqlite:step stmt) =>
+              (lambda (row)
+                (write-comma i op)
+                (write-row row op)
+                (cond
+                 [(< (port-position op) 10000000) (lp (+ i 1))]
+                 [else
+                  (put-string op "],\"limit\":")
+                  (json:write op (+ i 1))
+                  (write-char #\} op)
+                  'ok]))]
+             [else
+              (put-string op "]}")
+              'ok])))))))
 
 (http:respond op 200 '(("Access-Control-Allow-Origin" . "*")
                        ("Access-Control-Max-Age" . "86400")

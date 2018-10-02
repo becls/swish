@@ -86,9 +86,10 @@
 (define (memory-chart db chart-columns limit)
   (let* ([sql (format "SELECT CAST(timestamp AS INTEGER) as timestamp,reason,~a FROM statistics WHERE (timestamp/1000) > CAST(strftime('%s','now',?) AS INTEGER) ORDER BY timestamp DESC" (join chart-columns #\,))]
          [stmt (sqlite:prepare db sql)])
-    (make-annotated-time-line "memory_chart"
-      (vector->list (sqlite:columns stmt))
-      (fill-gaps (sqlite:execute stmt (list limit))))))
+    (on-exit (sqlite:finalize stmt)
+      (make-annotated-time-line "memory_chart"
+        (vector->list (sqlite:columns stmt))
+        (fill-gaps (sqlite:execute stmt (list limit)))))))
 
 (define valid-charts
   '(("memory" "bytes_allocated" "osi_bytes_used")
