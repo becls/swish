@@ -140,6 +140,9 @@
 
   (define (terminate reason state)
     (catch (flush state))
+    (vector-for-each (lambda (e) (sqlite:finalize (entry-stmt e)))
+      (hashtable-values (cache-ht ($state cache))))
+    (finalize-lazy-statements ($state cache))
     (sqlite:close ($state db))
     'ok)
 
