@@ -347,17 +347,21 @@
 
 (isolate-mat panic-run-queue-empty ()
   (repl-test 80
-   '(osi_list_directory "." (lambda (x) (receive (after 1000 'ok))))
+    '(begin
+       (osi_list_directory "." (lambda (x) (receive)))
+       (receive))
    "Event: run-queue-empty"))
 
 (isolate-mat panic-event-loop-process-terminated ()
   (repl-test 80
    '(begin
       (osi_list_directory "." (lambda (x) (raise 'kaboom)))
-      (receive (after 10 (osi_exit 10))))
+      (receive))
    "Event: #\\(event-loop-process-terminated kaboom\\)")
   (repl-test 80
-   '(osi_list_directory "." (lambda (x) (kill self 'kill)))
+    '(begin
+       (osi_list_directory "." (lambda (x) (kill self 'kill)))
+       (receive))
    "Event: #\\(event-loop-process-terminated killed\\)"))
 
 (isolate-mat panic-finalizer-process-terminated ()
@@ -373,13 +377,13 @@
    '(begin
       (add-finalizer (lambda () (raise 'kaboom)))
       (collect)
-      (receive (after 10 (osi_exit 10))))
+      (receive))
    "Event: #\\(finalizer-process-terminated kaboom\\)")
   (repl-test 80
    '(begin
       (add-finalizer (lambda () (kill self 'kill)))
       (collect)
-      (receive (after 1000 (osi_exit 1))))
+      (receive))
    "Event: #\\(finalizer-process-terminated killed\\)"))
 
 (isolate-mat chain-reaction ()
