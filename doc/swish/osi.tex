@@ -281,8 +281,10 @@ successful and a negative error code otherwise.
   void \code{osi\_exit}(int \var{status});
 \end{function}
 
-The \code{osi\_exit} function calls \code{\_exit} to exit the current
-process with the given exit \var{status}. It does not return.
+The \code{osi\_exit} function calls the \code{\_exit} function to
+terminate the current process with the given exit \var{status}. It
+does not return. The \code{exit} function is not used because on Unix
+systems it blocks if there is an outstanding read on stdin.
 
 \defineentry{osi\_spawn}
 \begin{function}
