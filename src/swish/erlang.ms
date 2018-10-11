@@ -940,49 +940,55 @@
              (define-syntax (foo x)
                (receive [continue #'0]))
              (foo))))
-  (define (continue p1 p2 p3)
-    (receive (after 10 (void)))
-    (send p1 'continue)
-    (send p2 'continue)
-    (send p3 'continue))
   (define (exit-reason p)
-    (receive (after 1000 (raise 'timeout)) [#(EXIT ,@p ,r) r]))
+    (receive (after 10000 (raise 'timeout)) [#(EXIT ,@p ,r) r]))
 
   (process-trap-exit #t)
   (gatekeeper:start&link)
-  (let* ([p1 (spawn&link
+  (let* ([sup self]
+         [p1 (spawn&link
               (lambda ()
                 (eval-test)
-                (with-gatekeeper-mutex A 1000
+                (with-gatekeeper-mutex A 10000
+                  (send sup 'p1-ready)
                   (receive [continue 'ok])
-                  (with-gatekeeper-mutex B 1000
+                  (with-gatekeeper-mutex B 10000
                     'ok))))]
          [p2 (spawn&link
               (lambda ()
                 (eval-test)
-                (with-gatekeeper-mutex B 1000
+                (with-gatekeeper-mutex B 10000
+                  (send sup 'p2-ready)
                   (receive [continue 'ok])
-                  (with-gatekeeper-mutex C 1000
+                  (with-gatekeeper-mutex C 10000
                     (receive)))))]
          [p3 (spawn&link
               (lambda ()
                 (eval-test)
-                (with-gatekeeper-mutex C 1000
+                (with-gatekeeper-mutex C 10000
+                  (send sup 'p3-ready)
                   (receive [continue 'ok])
-                  (with-gatekeeper-mutex A 1000
+                  (with-gatekeeper-mutex A 10000
                     'ok))))]
          [p4 (spawn&link
               (lambda ()
                 (receive [continue 'ok])
                 (with-gatekeeper-mutex A 10 'ok)))])
-    (continue p1 p2 p3)
-    (continue p1 p2 p3)
+    (send p1 'continue)
+    (send p2 'continue)
+    (send p3 'continue)
+    (receive [p1-ready 'ok])
+    (receive [p2-ready 'ok])
+    (receive [p3-ready 'ok])
+    (send p1 'continue)
+    (send p2 'continue)
+    (send p3 'continue)
     (match-let*
      ([#(timeout #(gen-server call ,_))
        (begin (sleep-ms 10) (send p4 'continue) (exit-reason p4))]
       [#(EXIT #(unowned-resource A)) (catch (gatekeeper:leave 'A))]
       [#(EXIT #(unowned-resource D)) (catch (gatekeeper:leave 'D))]
-      [#(deadlock A) (begin (continue p1 p2 p3) (exit-reason p3))]
+      [#(deadlock A) (exit-reason p3)]
       [stop (begin (sleep-ms 10) (kill p2 'stop) (exit-reason p2))]
       [normal (exit-reason p1)]
       [shutdown (let ([pid (whereis 'gatekeeper)])
