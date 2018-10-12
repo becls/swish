@@ -350,19 +350,19 @@
     '(begin
        (osi_list_directory "." (lambda (x) (receive)))
        (receive))
-   "Event: run-queue-empty"))
+    "Event: run-queue-empty"))
 
 (isolate-mat panic-event-loop-process-terminated ()
   (repl-test 80
-   '(begin
-      (osi_list_directory "." (lambda (x) (raise 'kaboom)))
-      (receive))
-   "Event: #\\(event-loop-process-terminated kaboom\\)")
+    '(begin
+       (osi_list_directory "." (lambda (x) (raise 'kaboom)))
+       (receive))
+    "Event: #\\(event-loop-process-terminated kaboom\\)")
   (repl-test 80
     '(begin
        (osi_list_directory "." (lambda (x) (kill self 'kill)))
        (receive))
-   "Event: #\\(event-loop-process-terminated killed\\)"))
+    "Event: #\\(event-loop-process-terminated killed\\)"))
 
 (isolate-mat panic-finalizer-process-terminated ()
   (add-finalizer
@@ -374,17 +374,17 @@
          (set! go? #f)))))
   (collect)
   (repl-test 80
-   '(begin
-      (add-finalizer (lambda () (raise 'kaboom)))
-      (collect)
-      (receive))
-   "Event: #\\(finalizer-process-terminated kaboom\\)")
+    '(begin
+       (add-finalizer (lambda () (raise 'kaboom)))
+       (collect)
+       (receive))
+    "Event: #\\(finalizer-process-terminated kaboom\\)")
   (repl-test 80
-   '(begin
-      (add-finalizer (lambda () (kill self 'kill)))
-      (collect)
-      (receive))
-   "Event: #\\(finalizer-process-terminated killed\\)"))
+    '(begin
+       (add-finalizer (lambda () (kill self 'kill)))
+       (collect)
+       (receive))
+    "Event: #\\(finalizer-process-terminated killed\\)"))
 
 (isolate-mat chain-reaction ()
   ;; A, B, C are linked. C dies for different reasons
@@ -998,8 +998,8 @@
 
 (isolate-mat application-start-failure ()
   (repl-test 1
-   '(application:start (lambda () '#(error kaboom!)))
-   "Event: #\\(application-start-failed kaboom!\\)"))
+    '(application:start (lambda () '#(error kaboom!)))
+    "Event: #\\(application-start-failed kaboom!\\)"))
 
 (isolate-mat create-watched-process-io ()
   (let-values
@@ -1015,14 +1015,26 @@
        (after 1000
          (osi_kill* os-pid 15)
          (raise 'timeout))
-       [#(process-terminated ,@os-pid ,_ ,_) 'ok]))))
+       [#(process-terminated ,@os-pid ,_ ,_) 'ok])))
+  (let-values
+      ([(to-stdin from-stdout from-stderr os-pid)
+        (spawn-os-process "sort" '() self)])
+    (on-exit
+     (begin
+       (close-output-port to-stdin)
+       (close-input-port from-stdout)
+       (close-input-port from-stderr))
+     (osi_kill os-pid 15)
+     (receive
+      [#(process-terminated ,@os-pid ,_ ,_) 'ok]))
+    (match-let* ([(uv_kill . ,_) (osi_kill* os-pid 15)]) 'ok)))
 
 ;; on slower systems it may be helpful to limit the available virtual memory
 ;; e.g., via ulimit, so that this test does not time out while paging
 (isolate-mat out-of-memory ()
   (repl-test 1
-   '(make-vector (most-positive-fixnum))
-   "out of memory"))
+    '(make-vector (most-positive-fixnum))
+    "out of memory"))
 
 (isolate-mat exit-handler ()
   (define-syntax run-spawned
@@ -1037,21 +1049,21 @@
     [#(EXIT 123) (run-spawned (catch (exit 123)))])
    'ok)
   (repl-test 1
-   '(begin
-      (printf "attempting to app:start\n")
-      (app-sup-spec
-       `(#(event-mgr ,event-mgr:start&link permanent 1000 worker)))
-      (app:start)
-      (exit-handler
-       (let ([orig (exit-handler)])
-         (lambda args
-           (printf "exited properly~{ ~s~}\n" args)
-           (apply orig args))))
-      (exit 1 2 3))
-   "exited properly 1 2 3"
-   "Date: "
-   "Timestamp: "
-   "Event: "))
+    '(begin
+       (printf "attempting to app:start\n")
+       (app-sup-spec
+        `(#(event-mgr ,event-mgr:start&link permanent 1000 worker)))
+       (app:start)
+       (exit-handler
+        (let ([orig (exit-handler)])
+          (lambda args
+            (printf "exited properly~{ ~s~}\n" args)
+            (apply orig args))))
+       (exit 1 2 3))
+    "exited properly 1 2 3"
+    "Date: "
+    "Timestamp: "
+    "Event: "))
 
 (mat dump-stack ()
   (define (assert-depth s n)

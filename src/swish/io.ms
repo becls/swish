@@ -101,19 +101,24 @@
 
 (isolate-mat tcp ()
   (define pid self)
-  (define (run hostname)
-    (let* ([listener (listen-tcp "::" 0 self)]
+  (define (run address hostname)
+    (let* ([listener (listen-tcp address 0 self)]
            [test-port (listener-port-number listener)])
       (on-exit (close-tcp-listener listener)
         (let-values ([(cip cop) (connect-tcp hostname test-port)])
-          (receive (after 5000 (raise 'timeout-connecting-tcp))
-            [#(accept-tcp ,@listener ,sip ,sop)
-             (on-exit (force-close-output-port sop)
-               (check-loopback sip cop)
-               (check-loopback cip sop))]
-            [,(msg <= #(accept-tcp-failed ,_ ,_ ,_)) (raise msg)])))))
-  (run "127.0.0.1")
-  (run "::1")
+          (on-exit
+           (begin (close-input-port cip) (force-close-output-port cop))
+           (receive (after 5000 (raise 'timeout-connecting-tcp))
+             [#(accept-tcp ,@listener ,sip ,sop)
+              (on-exit (force-close-output-port sop)
+                (check-loopback sip cop)
+                (check-loopback cip sop))]
+             [,(msg <= #(accept-tcp-failed ,_ ,_ ,_)) (raise msg)]))))))
+  (run "0.0.0.0" "127.0.0.1")
+  (run "127.0.0.1" "127.0.0.1")
+  (run "::1" "::1")
+  (run "::" "127.0.0.1")
+  (run "::" "::1")
   ;; Test the listener guardian
   (let ([g (make-guardian)])
     (g (listen-tcp "::" 0 self))
@@ -126,6 +131,10 @@
     (match-let*
      ([#(EXIT #(bad-arg listen-tcp #f)) (catch (listen-tcp #f 0 self))]
       [#(EXIT #(bad-arg listen-tcp #f)) (catch (listen-tcp "::" #f self))]
+      [#(EXIT #(listen-tcp-failed ,_ 0 uv_ip4_addr ,_))
+       (catch (listen-tcp "0.0" 0 self))]
+      [#(EXIT #(listen-tcp-failed ,_ 0 uv_ip6_addr ,_))
+       (catch (listen-tcp ":1:2" 0 self))]
       [#(EXIT #(bad-arg close-tcp-listener #f)) (catch (close-tcp-listener #f))]
       [#(EXIT #(bad-arg connect-tcp #f)) (catch (connect-tcp #f 0))]
       [#(EXIT #(bad-arg connect-tcp #f)) (catch (connect-tcp "" #f))]
@@ -134,6 +143,11 @@
     (let* ([listener (listen-tcp "::" 0 self)]
            [test-port (listener-port-number listener)])
       (on-exit (close-tcp-listener listener)
+        (let ([op (open-output-string)]
+              [l2 (listen-tcp "::" 0 self)])
+          (on-exit (close-tcp-listener l2)
+            (match-let* ([2 (tcp-listener-count)])
+              (print-tcp-listeners op))))
         (match (catch (listen-tcp "::" test-port self))
           [#(EXIT #(listen-tcp-failed "::" ,@test-port uv_listen ,_)) 'ok])
         (receive (after 10 (close-tcp-listener listener)))
@@ -146,7 +160,11 @@
 (isolate-mat process-bad ()
   (match-let*
    ([#(EXIT #(io-error "*!*" uv_spawn ,_))
-     (catch (spawn-os-process "*!*" '() self))])
+     (catch (spawn-os-process "*!*" '() self))]
+    [(osi_spawn . ,_)
+     (osi_spawn* "*" '(0) (lambda (os-pid exit-status term-signal) 'ok))]
+    [(osi_spawn . ,_)
+     (osi_spawn* "*" '("x" . 0) (lambda (os-pid exit-status term-signal) 'ok))])
    'ok))
 
 (isolate-mat files ()
@@ -192,7 +210,31 @@
    ([#(EXIT #(bad-arg open-file bad-type))
      (catch (open-file "foo.bar" 0 0 'bad-type))]
     [#(EXIT #(bad-arg close-path-watcher #f))
-     (catch (close-path-watcher #f))])
+     (catch (close-path-watcher #f))]
+    [#(EXIT #(io-error "*" uv_fs_realpath ,_))
+     (catch (get-real-path "*"))]
+    [#(EXIT #(io-error "*" osi_list_directory ,_))
+     (catch (list-directory "*"))]
+    [#(EXIT #(io-error "*" uv_fs_event_start ,_))
+     (catch (watch-path "*" self))]
+    [#(EXIT #(io-error "*" osi_unlink ,_))
+     (catch (remove-file "*"))]
+    [#(EXIT #(io-error "*" osi_remove_directory ,_))
+     (catch (remove-directory "*"))]
+    [#(EXIT #(io-error "*" osi_chmod ,_))
+     (catch (set-file-mode "*" #o777))]
+    [,x (guard (and (integer? x) (< x 0))) (get-stat "*" #f)]
+    [,uv-handles
+     (guard (for-all
+             (lambda (x)
+               (and (pair? x) (integer? (car x)) (integer? (cdr x))))
+             uv-handles))
+     (osi_list_uv_handles)]
+    [,t (guard (integer? t)) (osi_get_hrtime)]
+    ["end of file" (osi_get_error_text UV_EOF)]
+    ["SQLITE_ERROR" (osi_get_error_text -6000001)]
+    ["Error code 0" (osi_get_error_text 0)]
+    [#t (directory? (osi_get_temp_directory))])
    'ok)
   (delete-tree test-dir)
   (make-directory-path test-dir)
@@ -209,6 +251,11 @@
             (file-position op 0)
             (assert (= (file-position op) 0))
             (put-bytevector op (build-buffer 4096 (make-byte-stream 7))))))
+      (let ([op (open-output-string)]
+            [w2 (watch-path test-dir (spawn void))])
+        (on-exit (close-path-watcher w2)
+          (match-let* ([2 (path-watcher-count)])
+            (print-path-watchers op))))
       (write-file fn)
       (watch-callbacks '("basic") '("basic"))
       (rename-path fn fn2)
@@ -243,6 +290,13 @@
              (let ([new (get-bytevector-all ip)])
                (assert (equal? new data))))))
        buffers filenames)
+      (let ([op (open-output-string)]
+            [ports (map (lambda (fn)
+                          (open-file (path-combine test-dir fn)
+                            O_RDONLY 0 'binary-input)) filenames)])
+        (on-exit (for-each close-input-port ports)
+          (assert (>= (osi-port-count) (length filenames)))
+          (print-osi-ports op)))
       ;; Look for files on disk, if they are one of ours, delete
       ;; it. This will clear out the directory for cleanup.
       (assert
