@@ -25,13 +25,13 @@
 ;;HTTP/HTML responses
 (define (get-page-name)
   (match (get-param "type")
-            ["child" "Child Errors"]
-            ["gen-server" "Gen-server errors"]
-            ["supervisor" "Supervisor errors"]
-            [,_ (raise "invalid-type")]))
+    ["child" "Child Errors"]
+    ["gen-server" "Gen-server errors"]
+    ["supervisor" "Supervisor errors"]
+    [,_ (raise "invalid-type")]))
 
 (define (home-link last-sql)
-    (void))
+  (void))
 
 (define (nice-duration x)
   (let* ([milliseconds (remainder x 1000)]

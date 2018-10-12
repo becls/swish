@@ -84,7 +84,7 @@
   `((import
      (scheme)
      (swish imports))
-     (printf "Hello, World!\n")))
+    (printf "Hello, World!\n")))
 
 (isolate-mat fat1 ()
   ;; fat with petite only
@@ -136,7 +136,7 @@
     '((import
        (scheme)
        (swish imports))
-       (printf "~a~{ ~a~}\n" (app:name) (command-line-arguments))))
+      (printf "~a~{ ~a~}\n" (app:name) (command-line-arguments))))
   (build-example "cla" '())
   (run-thin "cla" '() '("^cla$"))
   (run-thin "cla" '("a" "b" "c") '("^cla a b c$"))
@@ -153,7 +153,7 @@
        (lib-does-not-exist)
        (scheme)
        (swish imports))
-       (printf "abc: ~a\n" abc)))
+      (printf "abc: ~a\n" abc)))
   (match (catch (build-example "nolib-fat" `("-b" "petite")))
     [#(EXIT `(<os-process-failed>
               [stderr ("swish-build: library (lib-does-not-exist) not found.")]))
@@ -185,7 +185,7 @@
        (lib-abc)
        (scheme)
        (swish imports))
-       (printf "abc: ~a\n" abc)))
+      (printf "abc: ~a\n" abc)))
   (build-example "libdir-fat"
     `("-b" "petite"
       "-L" ,(path-combine (output-dir) "libdir")))
@@ -233,8 +233,8 @@
        (lib-abc)
        (scheme)
        (swish imports))
-       (printf "abc: ~a\n"
-         (top-level-value 'abc (environment '(lib-abc))))))
+      (printf "abc: ~a\n"
+        (top-level-value 'abc (environment '(lib-abc))))))
   (build-example "libsvisbad-fat"
     `("-b" "petite"
       "-L" ,(path-combine (output-dir) "libdir")
@@ -292,9 +292,9 @@
        (lib-abc)
        (scheme)
        (swish imports))
-       abc                            ; must reference the export
-       (printf "abc: ~a\n"
-           (top-level-value 'abc (environment '(lib-abc))))))
+      abc                            ; must reference the export
+      (printf "abc: ~a\n"
+        (top-level-value 'abc (environment '(lib-abc))))))
   (build-example "libsvis-fat"
     `("-b" "petite"
       "-L" ,(path-combine (output-dir) "libdir")
@@ -394,8 +394,8 @@
     `((import
        (scheme)
        (swish imports))
-       (printf "abc: ~a\n"
-         (top-level-value 'software-product-name (environment '(swish software-info))))))
+      (printf "abc: ~a\n"
+        (top-level-value 'software-product-name (environment '(swish software-info))))))
 
   ;; Error case: swish library is not visible
   (build-example "rtlibs-swish-fat" `("-b" "petite"))
@@ -486,7 +486,7 @@
   ;; library
   (swish-build-test
    `("-L" ,(output-dir) "--library" "-o" ,lib-compiled ,(input-file "lib"))
-    (list (format "^~a$" (pregexp-quote "These libraries must be provided at run time: (miss)"))))
+   (list (format "^~a$" (pregexp-quote "These libraries must be provided at run time: (miss)"))))
   ;; delete lib.ss, but leave miss.so so we can check that the
   ;; compiled library works so long as (miss) can be found
   (assert (delete-file (input-file "lib")))

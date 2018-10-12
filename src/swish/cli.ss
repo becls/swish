@@ -143,24 +143,24 @@
        [short (values 'fit 'opt)]
        [long (values 'fit 'opt)]
        [else (values 'show 'req)]))
-   (define (populate-defaults short long usage)
-     (define base-how `(and (or short long) args))
-     (define (either x y) (if (pair? x) x (list y)))
-     (let-values ([(vis rest) (extract-usage usage)]
-                  [(def-vis def-req) (get-default-usage short long)])
-       (append
-        (either vis def-vis)
-        (match rest
-          [(,x . ,rest)
-           (guard (memq x '(opt req)))
-           (cons `(,x ,base-how) rest)]
-          [(,x . ,rest)
-           (guard (memq x '(long short)))
-           (cons `(,def-req (and ,x args)) rest)]
-          [(,x . ,_)
-           (guard (valid-usage-how? x))
-           rest]
-          [,_ (append rest (list `(,def-req ,base-how)))]))))
+    (define (populate-defaults short long usage)
+      (define base-how `(and (or short long) args))
+      (define (either x y) (if (pair? x) x (list y)))
+      (let-values ([(vis rest) (extract-usage usage)]
+                   [(def-vis def-req) (get-default-usage short long)])
+        (append
+         (either vis def-vis)
+         (match rest
+           [(,x . ,rest)
+            (guard (memq x '(opt req)))
+            (cons `(,x ,base-how) rest)]
+           [(,x . ,rest)
+            (guard (memq x '(long short)))
+            (cons `(,def-req (and ,x args)) rest)]
+           [(,x . ,_)
+            (guard (valid-usage-how? x))
+            rest]
+           [,_ (append rest (list `(,def-req ,base-how)))]))))
 
     (define (spec-maker spec name short long type help optionals)
       (let ([type (syntax->datum type)])
@@ -628,7 +628,7 @@
                                  (- opt-width (string-length minimal))
                                  (if min-flags 0 flag-oh))])
                     x))))))
-      (fprintf op "~a~a~a\n" leader named-args pos-args))
+    (fprintf op "~a~a~a\n" leader named-args pos-args))
 
   (define (valid-width? n) (or (not n) (and (fixnum? n) (fx>= n 0))))
 
@@ -684,4 +684,4 @@
           (newline op)
           (display-options-internal opt pos args op)))]))
 
-)
+  )

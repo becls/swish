@@ -91,7 +91,7 @@
     (lambda ()
       (display "#!chezscheme\n")
       (for-each pretty-print
-       '((define a 1)
+        '((define a 1)
           (define-syntax b (identifier-syntax 2))))
       (display "#!eof mats\n")
       (for-each pretty-print

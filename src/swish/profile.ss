@@ -344,7 +344,7 @@
         (vector->list
          (vector-sort (lambda (a b) (string<? (car a) (car b)))
            (vector-map (lambda (k v) (cons (sfd-source-path k values) v))
-            keys vals)))))
+             keys vals)))))
     (unless (list-of-strings? inputs) (bad-arg 'profile:dump-html profile-in))
     (unless (string? output-fn) (bad-arg 'profile:dump-html output-fn))
     (unless (list-of-strings? include-globs) (bad-arg 'profile:dump-html include-globs))
@@ -713,4 +713,3 @@ SPAN
     [hit (check "gz")])
    'ok)
   )
-

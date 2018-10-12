@@ -675,9 +675,9 @@
   ;; multi-line help
   (test "multi"
     (cli-specs ["multi" -m --multi bool
-               '("line one\n"
-                 "line two\n"
-                 "line three")])
+                '("line one\n"
+                  "line two\n"
+                  "line three")])
     #f
     '("^  -m, --multi       line one$"
       "^\\s{20}line two$"
@@ -686,9 +686,9 @@
   ;; multi-line help with arg
   (test "multi"
     (cli-specs ["multi" -m --multi bool
-               '("line one\n"
-                 "line two\n"
-                 "line three")])
+                '("line one\n"
+                  "line two\n"
+                  "line three")])
     (make-ht ["multi" "input"])
     '("^  -m, --multi       line one$"
       "^\\s{20}line two$"
@@ -697,8 +697,8 @@
   ;; custom formatting: multiple specified newlines
   (test "multi"
     (cli-specs ["multi" -m --multi bool
-               '("line one\n\n"
-                 "line three")])
+                '("line one\n\n"
+                  "line three")])
     #f
     '("^  -m, --multi       line one$"
       "^$"
@@ -707,8 +707,8 @@
   ;; custom formatting: whitespace followed by explicit newline
   (test "multi"
     (cli-specs ["multi" -m --multi bool
-               '("line one \n"
-                 "line two")])
+                '("line one \n"
+                  "line two")])
     #f
     '("^  -m, --multi       line one$"
       "^\\s{20}line two$")))
@@ -791,13 +791,13 @@
            (do ([i 0 (+ i 1)]
                 [ls '() (cons (make-short i #\a) ls)])
                ((= i 26) (reverse ls))))])
-  (usage "[options]" specs 0)
-  (usage "[options]" specs 26)
-  (usage "[-a] [options]" specs 27)
-  (usage "[-ab] [options]" specs 28)
-  (usage "[-abc] [options]" specs 29)
-  (usage "[-abcdefghijklmnopqrstuvwxyz]" specs #f)
-  (usage "[-abcdefghijklmnopqrstuvwxyz]" specs 42)
-  (usage "[-abcdefghijklmno] [options]" specs 41)
-  (usage "[-abcdefghijklmn] [options]" specs 40)
-  (usage "[-abcdefghijklm] [options]" specs 39)))
+    (usage "[options]" specs 0)
+    (usage "[options]" specs 26)
+    (usage "[-a] [options]" specs 27)
+    (usage "[-ab] [options]" specs 28)
+    (usage "[-abc] [options]" specs 29)
+    (usage "[-abcdefghijklmnopqrstuvwxyz]" specs #f)
+    (usage "[-abcdefghijklmnopqrstuvwxyz]" specs 42)
+    (usage "[-abcdefghijklmno] [options]" specs 41)
+    (usage "[-abcdefghijklmn] [options]" specs 40)
+    (usage "[-abcdefghijklm] [options]" specs 39)))

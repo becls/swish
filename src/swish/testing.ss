@@ -318,7 +318,7 @@
             (do-eof-mats (port-position ip) deferred)))
         (define (do-eof-mats fp deferred)
           (call-with-values
-            (lambda () (catch (get-datum/annotations ip sfd fp)))
+              (lambda () (catch (get-datum/annotations ip sfd fp)))
             (case-lambda
              [(err) 'none]
              [(obj fp)

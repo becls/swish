@@ -152,20 +152,20 @@
              ((exit-handler) 1)]
             [,_ ((exit-handler))]))])))
 
-    (define (int32? x) (and (or (fixnum? x) (bignum? x)) (<= #x-7FFFFFFF x #x7FFFFFFF)))
-    (define (->exit-status exit-code)
-      (cond
-       [(int32? exit-code) exit-code]
-       [(eq? exit-code (void)) 0]
-       [else
-        (console-event-handler (format "application shutdown due to (exit ~s)" exit-code))
-        1]))
-    (define quit
-      (case-lambda
-       [() (quit 0)]
-       [(exit-code . _)
-        (app:shutdown (->exit-status exit-code))
-        (receive)]))
+  (define (int32? x) (and (or (fixnum? x) (bignum? x)) (<= #x-7FFFFFFF x #x7FFFFFFF)))
+  (define (->exit-status exit-code)
+    (cond
+     [(int32? exit-code) exit-code]
+     [(eq? exit-code (void)) 0]
+     [else
+      (console-event-handler (format "application shutdown due to (exit ~s)" exit-code))
+      1]))
+  (define quit
+    (case-lambda
+     [() (quit 0)]
+     [(exit-code . _)
+      (app:shutdown (->exit-status exit-code))
+      (receive)]))
 
   (define (claim-exception who c)
     (define stderr (console-error-port))
@@ -191,14 +191,14 @@
      [else (default-exception-handler c)]))
 
   (define swish-start
-   (lambda args
-     (let* ([argv (osi_get_argv)]
-            [who (if (= 0 (vector-length argv)) "scheme" (vector-ref argv 0))])
-       (command-line (cons who args))
-       (command-line-arguments args)
-       (with-exception-handler app-exception-handler
-         (lambda ()
-           (call-with-values run quit))))))
+    (lambda args
+      (let* ([argv (osi_get_argv)]
+             [who (if (= 0 (vector-length argv)) "scheme" (vector-ref argv 0))])
+        (command-line (cons who args))
+        (command-line-arguments args)
+        (with-exception-handler app-exception-handler
+          (lambda ()
+            (call-with-values run quit))))))
 
   (suppress-greeting #t)
 

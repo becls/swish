@@ -77,8 +77,8 @@
 
   (define (remove-limit-offset str)
     (stringify (match (pregexp-match "^(.*?) limit \\d+ offset \\d+$" str)
-      [(,full ,match) match]
-      [(,no-limit) no-limit])))
+                 [(,full ,match) match]
+                 [(,no-limit) no-limit])))
 
   (let ([stmt (sqlite:prepare db (format "~a limit ? offset ?" sql))])
     (on-exit (sqlite:finalize stmt)
@@ -155,4 +155,3 @@
           (td ,type))]))
   `(div (@ (class "schema"))
      ,@(map db-table->tr db-tables)))
-

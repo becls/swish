@@ -233,22 +233,22 @@
                          [else (unexpected-input c ip)])))])))]
            [(eqv? c #\{)
             (custom-inflate
-              (let lp ([obj (json:make-object)])
-                (let ([c (next-non-ws ip)])
-                  (case c
-                    [(#\")
-                     (let ([key (read-string ip)])
-                       (let ([c (next-non-ws ip)])
-                         (unless (eqv? c #\:)
-                           (unexpected-input c ip)))
-                       (hashtable-set! obj key (rd ip)))
-                     (let ([c (next-non-ws ip)])
-                       (case c
-                         [(#\,) (lp obj)]
-                         [(#\}) obj]
-                         [else (unexpected-input c ip)]))]
-                    [(#\}) obj]
-                    [else (unexpected-input c ip)]))))]
+             (let lp ([obj (json:make-object)])
+               (let ([c (next-non-ws ip)])
+                 (case c
+                   [(#\")
+                    (let ([key (read-string ip)])
+                      (let ([c (next-non-ws ip)])
+                        (unless (eqv? c #\:)
+                          (unexpected-input c ip)))
+                      (hashtable-set! obj key (rd ip)))
+                    (let ([c (next-non-ws ip)])
+                      (case c
+                        [(#\,) (lp obj)]
+                        [(#\}) obj]
+                        [else (unexpected-input c ip)]))]
+                   [(#\}) obj]
+                   [else (unexpected-input c ip)]))))]
            [(eqv? c #\-) (- (read-unsigned ip))]
            [else (unread-char c ip) (read-unsigned ip)])))
       (rd ip)]))
