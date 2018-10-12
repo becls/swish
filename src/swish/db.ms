@@ -223,8 +223,65 @@
   (match-let*
    ([#(EXIT #(invalid-context lazy-execute)) (catch (lazy-execute "SELECT 1"))]
     [#(EXIT #(invalid-context execute)) (catch (execute "SELECT 1"))]
-    [#(EXIT #(invalid-context columns)) (catch (columns "SELECT 1"))])
+    [#(EXIT #(invalid-context columns)) (catch (columns "SELECT 1"))]
+    [#(EXIT #(db-error open ,_ "*"))
+     (catch (sqlite:open "*" SQLITE_OPEN_READWRITE))])
    'ok))
+
+(mat statements ()
+  (let ([db (sqlite:open ":memory:" SQLITE_OPEN_READWRITE)])
+    (on-exit (sqlite:close db)
+      (execute-sql db "create table foo(x, y)")
+      (let ([s (sqlite:prepare db "select * from foo where x=? or y=?")])
+        (on-exit (sqlite:finalize s)
+          (for-each
+           (lambda (x)
+             (for-each
+              (lambda (y)
+                (execute-sql db "insert into foo(x, y) values(?, ?)" x y))
+              '(0 1)))
+           '(0 1))
+          (match-let*
+           ([4 (catch (sqlite:last-insert-rowid db))]
+            ["select * from foo where x=? or y=?" (sqlite:sql s)]
+            [(2 2)
+             (catch (let ([op (open-output-string)]
+                          [db2 (sqlite:open ":memory:" SQLITE_OPEN_READWRITE)])
+                      (on-exit (sqlite:close db2)
+                        (let ([s2 (sqlite:prepare db2 "create table foo(x)")])
+                          (on-exit (sqlite:finalize s2)
+                            (print-databases op)
+                            (print-statements op)
+                            (list (database-count) (statement-count)))))))]
+            [#("x" "y") (catch (sqlite:columns s))]
+            ["select * from foo where x=NULL or y=NULL"
+             (catch (sqlite:expanded-sql s))]
+            ["select * from foo where x=0 or y=1"
+             (catch (sqlite:bind s '(0 1)) (sqlite:expanded-sql s))]
+            [#(0 0) (catch (sqlite:step s))]
+            [#(0 1) (catch (sqlite:step s))]
+            [#(1 1) (catch (sqlite:step s))]
+            [#f (catch (sqlite:step s))]
+            ["select * from foo where x=NULL or y=NULL"
+             (catch (sqlite:clear-bindings s) (sqlite:expanded-sql s))]
+            [#(0 1) (catch (sqlite:bind s '(1 1)) (sqlite:step s))]
+            [#(EXIT #(db-error step (sqlite3_step -6000009 . "interrupted") ,_))
+             (catch (sqlite:interrupt db) (sqlite:step s))]
+            [#(EXIT #(db-error prepare ,_ ,_))
+             (catch (sqlite:prepare db "insert"))]
+            ;; Close the database
+            [ok (catch (sqlite:close db) 'ok)]
+            [#(EXIT #(osi-error osi_bind_statement osi_bind_statement ,_))
+             (catch (sqlite:bind s '(0 1)))]
+            [#(EXIT #(osi-error osi_clear_statement_bindings osi_clear_statement_bindings ,_))
+             (catch (sqlite:clear-bindings s))]
+            [#(EXIT #(osi-error osi_get_statement_columns osi_get_statement_columns ,_))
+             (catch (sqlite:columns s))]
+            [#(EXIT #(osi-error osi_get_statement_expanded_sql osi_get_statement_expanded_sql ,_))
+             (catch (sqlite:expanded-sql s))]
+            [#(EXIT #(osi-error osi_step_statement osi_step_statement ,_))
+             (catch (sqlite:step s))])
+           'ok))))))
 
 (mat expand-sql ()
   (match-let*

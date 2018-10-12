@@ -452,6 +452,44 @@ By default, \var{symbol->sql} is the identity function.
 
 \end{itemize}
 
+\defineentry{database-count}
+\begin{procedure}
+  \code{(database-count)}
+\end{procedure}
+\returns{} the number of open databases
+
+The \code{database-count} procedure returns the number of open
+databases.
+
+\defineentry{print-databases}
+\begin{procedure}
+  \code{(print-databases \opt{\var{op}})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{print-databases} procedure prints information about all open
+databases to textual output port \var{op}, which defaults to the
+current output port.
+
+\defineentry{statement-count}
+\begin{procedure}
+  \code{(statement-count)}
+\end{procedure}
+\returns{} the number of unfinalized statements
+
+The \code{statement-count} procedure returns the number of unfinalized
+statements.
+
+\defineentry{print-statements}
+\begin{procedure}
+  \code{(print-statements \opt{\var{op}})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{print-statements} procedure prints information about all
+unfinalized statements to textual output port \var{op}, which defaults
+to the current output port.
+
 \defineentry{sqlite:bind}
 \begin{procedure}
   \code{(sqlite:bind \var{stmt} \var{bindings})}
@@ -461,6 +499,15 @@ By default, \var{symbol->sql} is the identity function.
 The \code{sqlite:bind} procedure binds the variables in statement
 record instance \var{stmt} with the list of \var{bindings}. It resets
 the statement before binding the variables.
+
+\defineentry{sqlite:clear-bindings}
+\begin{procedure}
+  \code{(sqlite:clear-bindings \var{stmt})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{sqlite:clear-bindings} procedure clears the variable
+bindings in statement record instance \var{stmt}.
 
 \defineentry{sqlite:close}
 \begin{procedure}
@@ -510,6 +557,27 @@ expanded with the binding values for the statement record instance
 
 The \code{sqlite:finalize} procedure finalizes the statement record
 instance \var{stmt}.
+
+\defineentry{sqlite:interrupt}
+\begin{procedure}
+  \code{(sqlite:interrupt \var{db})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{sqlite:interrupt} procedure interrupts any pending
+operations on the database associated with database record instance
+\var{db}.
+
+\defineentry{sqlite:last-insert-rowid}
+\begin{procedure}
+  \code{(sqlite:last-insert-rowid \var{db})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{sqlite:last-insert-rowid} procedure returns the rowid of the
+most recent successful insert into a rowid table or virtual table on
+the database associated with database record instance \var{db}. It
+returns 0 if no such insert has occurred.
 
 \defineentry{sqlite:open}
 \begin{procedure}

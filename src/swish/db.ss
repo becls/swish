@@ -41,11 +41,14 @@
    print-databases
    print-statements
    sqlite:bind
+   sqlite:clear-bindings
    sqlite:close
    sqlite:columns
    sqlite:execute
    sqlite:expanded-sql
    sqlite:finalize
+   sqlite:interrupt
+   sqlite:last-insert-rowid
    sqlite:open
    sqlite:prepare
    sqlite:sql
@@ -469,6 +472,8 @@
             (eq-hashtable-delete! database-table db)
             (wait-for-io (database-filename db))
             (when (pair? result)
+              (database-handle-set! db handle)
+              (eq-hashtable-set! database-table db 0)
               (db-error 'close result db))]
            [,error
             (db-error 'close error db)])))))
@@ -507,6 +512,15 @@
     (do ([i 1 (+ i 1)] [ls bindings (cdr ls)])
         ((null? ls))
       (osi_bind_statement (statement-handle stmt) i (car ls))))
+
+  (define (sqlite:clear-bindings stmt)
+    (osi_clear_statement_bindings (statement-handle stmt)))
+
+  (define (sqlite:interrupt db)
+    (osi_interrupt_database (database-handle db)))
+
+  (define (sqlite:last-insert-rowid db)
+    (osi_get_last_insert_rowid (database-handle db)))
 
   (define (sqlite:step stmt)
     (define result)
