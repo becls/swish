@@ -1007,7 +1007,7 @@
         (spawn-os-process "sort" '() self)])
     (close-input-port from-stderr)
     (on-exit (close-input-port from-stdout)
-      (on-exit (close-output-port to-stdin)
+      (on-exit (force-close-output-port to-stdin)
         (put-bytevector to-stdin (string->utf8 "berry\r\ncherry\r\napple\r\n")))
       (assert (string=? "apple\r\nberry\r\ncherry\r\n"
                 (utf8->string (get-bytevector-all from-stdout))))
@@ -1021,13 +1021,19 @@
         (spawn-os-process "sort" '() self)])
     (on-exit
      (begin
-       (close-output-port to-stdin)
+       (force-close-output-port to-stdin)
        (close-input-port from-stdout)
        (close-input-port from-stderr))
      (osi_kill os-pid 15)
      (receive
-      [#(process-terminated ,@os-pid ,_ ,_) 'ok]))
-    (match-let* ([(uv_kill . ,_) (osi_kill* os-pid 15)]) 'ok)))
+      [#(process-terminated ,@os-pid ,_ ,_) 'ok])
+     (match-let*
+      ([#(EXIT #(io-error ,_ ,_ ,@UV_EPIPE))
+        (catch
+         (put-u8 to-stdin 10)
+         (flush-output-port to-stdin))]
+       [(uv_kill . ,_) (osi_kill* os-pid 15)])
+      'ok))))
 
 ;; on slower systems it may be helpful to limit the available virtual memory
 ;; e.g., via ulimit, so that this test does not time out while paging

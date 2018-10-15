@@ -161,7 +161,7 @@
   (define (force-close-output-port op)
     (unless (port-closed? op)
       (match (catch (close-output-port op))
-        [#(EXIT #(io-error ,_ osi_write_port ,_))
+        [#(EXIT #(io-error ,_ ,_ ,_))
          (clear-output-port op)
          (close-output-port op)]
         [#(EXIT ,reason) (raise reason)]
