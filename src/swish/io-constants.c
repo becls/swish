@@ -26,6 +26,7 @@
 #define XX(name,flag) printf("(define-export "name" %d)\n", flag)
 #define XUV(id) XX(#id,UV_##id)
 #define XFS(id) XX(#id,UV_FS_##id)
+#define XERRNO(name,_) XX("UV_"#name, UV_##name);
 #ifdef _WIN32
 #define XFM(id) XX(#id,_##id)
 #define _S_IFBLK 0
@@ -79,7 +80,7 @@ int main(int argc, char** argv) {
   XFM(S_IFLNK);
   XFM(S_IFSOCK);
 
-  printf("(define-export UV_EOF %d)\n", UV_EOF);
+  UV_ERRNO_MAP(XERRNO)
 
   return 0;
 }
