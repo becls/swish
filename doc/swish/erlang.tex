@@ -1172,9 +1172,9 @@ output port, even if it has unflushed output that would otherwise
 cause it to fail to close.  If \var{op} is not already closed,
 \code{force-close-output-port} tries to close it with
 \code{(close-output-port \var{op})}. If it fails with exception
-\code{\#(io-error \_ osi\_write\_port \_)}, the output buffer is
-cleared with \code{(clear-output-port \var{op})}, and
-\code{(close-output-port \var{op})} is called again.
+\code{\#(io-error \_ \_ \_)}, the output buffer is cleared with
+\code{(clear-output-port \var{op})}, and \code{(close-output-port
+  \var{op})} is called again.
 
 % ----------------------------------------------------------------------------
 \defineentry{get-datum/annotations-all}
