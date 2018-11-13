@@ -26,13 +26,17 @@
 
 (define help-sections '(all details examples))
 
+(define escape-hatch
+  (cli-specs
+   ["explicit-source" -- (list . "<source>") "source filename"]))
+
 (define shared-cli
   (cli-specs
    ["verbose" -v count "show more compiler messages"]
    ["output-file" -o (string "<output>") "write output to <output>"]
    ["libdirs" -L (list "<libdir>") "add <libdir> to library-directories"]
    ["srcdirs" -s (list "<srcdir>") "add <srcdir> to source-directories"]
-   ["source-file" (string "<source>") "source filename"]
+   ["source-file" (string "<source>") "source filename (or -- <source>)"]
    ["help" -h --help (list "[<section>]" ...)
     (format "display help, <section>={~{~a~^|~}}" help-sections)]))
 
@@ -50,8 +54,8 @@
     "make stand-alone application including <boot-file>"]
    ["libs-visible" --libs-visible bool
     "make imported libraries visible to eval"]
-   ["rt-libs" --rtlib (list "<lib>")
-    "add compiled library to stand-alone boot file"]))
+   ["rt-libs" --rtlib (list "<lib>" ...)
+    "add compiled libraries <lib> ... to stand-alone boot file"]))
 
 (define swish-lib?
   (let ([libs (filter (lambda (lib) (match lib [(swish . ,_) #t] [,_ #f])) (library-list))])
@@ -251,7 +255,7 @@
 (define (do-compile source-fn output-fn libs-visible? swish-wpo? as-library?)
   (let ([tmp (tmp-filename source-fn)])
     (on-exit (rm-f tmp)
-      (when (> (verbosity) 0) (printf "compiling ~a\n" (opt "source-file")))
+      (when (> (verbosity) 0) (printf "compiling ~a\n" (source-file)))
       (generate-inspector-information #f)
       (generate-procedure-source-information #t)
       (generate-wpo-files #t)
@@ -403,16 +407,23 @@
   (define problem #f)
   (define lib-opt
     (parse-command-line-arguments
-     (append shared-cli library-cli)
+     (append escape-hatch shared-cli library-cli)
      (command-line-arguments)
      (lambda x (unless problem (set! problem x)))))
   (if (lib-opt "as-library")
       (if problem
           (apply fail problem)
           lib-opt)
-      (parse-command-line-arguments (append shared-cli app-cli))))
+      (parse-command-line-arguments (append escape-hatch shared-cli app-cli))))
 
 (define opt (try-parse))
+
+(define (source-file)
+  (match (opt "explicit-source")
+    [#f (opt "source-file")]
+    [() (opt "source-file")]
+    [(,source-fn) (and (not (opt "source-file")) source-fn)]
+    [,_ #f]))
 
 (cond
  [(opt "srcdirs") =>
@@ -425,17 +436,21 @@
   (lambda (sections)
     (usage #f (map string->symbol sections) (opt)))]
  [else
-  (let ([source-fn (opt "source-file")]
-        [output-fn (opt "output-file")]
-        [as-library? (hashtable-ref (opt) "as-library" #f)]
-        [libdirs (fold-right
-                  (lambda (x acc)
-                    (append (parse-library x) acc))
-                  (library-directories)
-                  (or (opt "libdirs") '()))]
-        [rt-libs
-         (map (lambda (x) (get-real-path (resolve-rt-lib x)))
-           (or (opt "rt-libs") '()))])
+  (let* ([source-fn
+          (or (source-file)
+              (fail "requires a single source filename"))]
+         [output-fn
+          (or (opt "output-file")
+              (fail "requires output filename"))]
+         [as-library? (hashtable-ref (opt) "as-library" #f)]
+         [libdirs (fold-right
+                   (lambda (x acc)
+                     (append (parse-library x) acc))
+                   (library-directories)
+                   (or (opt "libdirs") '()))]
+         [rt-libs
+          (map (lambda (x) (get-real-path (resolve-rt-lib x)))
+            (or (opt "rt-libs") '()))])
     (verbosity (or (opt "verbose") 0))
     (import-notify (> (verbosity) 2))
     (cond
@@ -493,7 +508,7 @@
                     ;; - not a problem because compile-to-file will compress us later
                     (parameterize ([compile-compressed #f])
                       (resolve-missing-libs #f rt-libs
-                       (do-compile tmp-src output-fn libs-visible? swish-wpo? as-library?)))]
+                        (do-compile tmp-src output-fn libs-visible? swish-wpo? as-library?)))]
                    [app-boot (change-extension output-fn ".boot")]
                    [compiled-code
                     (let ([ip (open-file output-fn O_RDONLY 0 'binary-input)])

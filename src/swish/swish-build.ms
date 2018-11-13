@@ -90,6 +90,9 @@
     (read-file swish-build-src))))
 
 (isolate-mat help ()
+  (swish-build-test '()
+    '("Usage: swish-build .*"
+      "   or: swish-build .*"))
   (swish-build-test '("--help")
     '("Usage:"
       seek
@@ -106,6 +109,17 @@
       "Examples:"
       seek
       "swish-build -o foo -b petite foo.ss")))
+
+(isolate-mat required-arguments ()
+  (define testfile
+    (write-example "triv"
+      '((import (scheme)) (printf "okay\n"))))
+  (match (catch (swish-build-test `("-o" "gee") '()))
+    [#(EXIT `(<os-process-failed> [stderr ("swish-build: requires a single source filename.")]))
+     'ok])
+  (match (catch (swish-build-test `(,testfile) '()))
+    [#(EXIT `(<os-process-failed> [stderr ("swish-build: requires output filename.")]))
+     'ok]))
 
 (define hello-fat
   `((import
@@ -379,8 +393,8 @@
     (compile-file (path-combine (output-dir) "libdir/lib-abc")))
   (build-example "rtlibs-fat"
     `("-b" "petite"
-      "-L" ,(path-combine (output-dir) "libdir")
-      "--rtlib" ,(path-combine (output-dir) "libdir" "lib-abc.so")))
+      "--rtlib" ,(path-combine (output-dir) "libdir" "lib-abc.so")
+      "-L" ,(path-combine (output-dir) "libdir")))
 
   ;; Ensure source file and object file are not around after
   ;; compile-time.
@@ -407,8 +421,8 @@
   (parameterize ([compile-file-message #f])
     (compile-file (path-combine (output-dir) "libdir/lib-abc")))
   (build-example "rtlibs-thin"
-    `("-L" ,(path-combine (output-dir) "libdir")
-      "--rtlib" ,(path-combine (output-dir) "libdir" "lib-abc.so")))
+    `("--rtlib" ,(path-combine (output-dir) "libdir" "lib-abc.so")
+      "-L" ,(path-combine (output-dir) "libdir")))
 
   ;; Ensure source file and object file are not around after
   ;; compile-time.
@@ -434,8 +448,8 @@
 
   ;; Success case
   (build-example "rtlibs-swish-fat"
-    `("-b" "petite"
-      "--rtlib" "swish"))
+    `("--rtlib" "swish"
+      "-b" "petite"))
   (run-fat "rtlibs-swish-fat" '()
     (list (format "abc: ~a" software-product-name))))
 
@@ -654,7 +668,7 @@
   (run-thin "bounce" '() expected-output)
   (assert (delete-file (output-file "bounce")))
   ;; run as fat app
-  (build-example "bounce" '("-b" "petite" "--rtlib" "swish"))
+  (build-example "bounce" '("--rtlib" "swish" "-b" "petite"))
   (run-fat "bounce" '() expected-output)
   )
 
@@ -729,3 +743,64 @@
      'ok])
   (build-example "test-sd" `("-s" ,(path-parent file1)))
   (run-thin "test-sd" '() '("123")))
+
+(isolate-mat source-file-switch ()
+  (define lib1
+    (write-test-file "lib1.ss"
+      (lambda ()
+        (pretty-print
+         '(library (lib1)
+            (export what)
+            (import (scheme))
+            (define what 'day))))))
+  (define lib2
+    (write-test-file "lib2.ss"
+      (lambda ()
+        (pretty-print
+         '(library (lib2)
+            (export now)
+            (import (scheme))
+            (define now 'joy))))))
+  (define file1
+    (write-test-file "file1.ss"
+      (lambda ()
+        (for-each pretty-print
+          '((import (lib1) (lib2) (scheme))
+            (printf "happy ~s\n" what)
+            (printf "great ~s\n" now))))))
+  (define lib1.out (string-append lib1 ".out"))
+  (define lib2.out (string-append lib2 ".out"))
+  (define test (output-file "test"))
+  (swish-build-test `("-o" ,lib1.out "--library" ,lib1) '())
+  (swish-build-test `("-o" ,lib2.out "--library" ,lib2) '())
+  ;; confirm that lib1 is not available via the default
+  ;; library-directories we'll be using in this test
+  (match-let*
+   ([#(EXIT ,reason) (catch (begin (eval '(import (lib1))) "expected import to fail"))]
+    [,os (open-output-string)]
+    [,_ (display-condition reason os)]
+    ["Exception: library (lib1) not found" (get-output-string os)])
+   'ok)
+  (assert (not (regular-file? "lib2.ss")))
+  ;; oops, user meant file1 to be source, but --rtlib consumes all args (up to next option)
+  (match (catch (swish-build-test `("-o" ,test "--rtlib" ,lib1.out ,lib2.out ,file1) '()))
+    [#(EXIT `(<os-process-failed> [stderr ("swish-build: requires a single source filename.")]))
+     'ok])
+  ;; we can use -- to prevent --rtlib from grabbing too many arguments
+  (swish-build-test `("-v" "-o" ,test "--rtlib" ,lib1.out ,lib2.out "--" ,file1)
+    `(,(format "^compiling ~a" (pregexp-quote file1))))
+  (run-thin "test" '() '("happy day" "great joy"))
+  (delete-file test)
+  ;; we still allow just one filename: multiple files after --
+  (match (catch (swish-build-test `("-o" ,test "--rtlib" ,lib1.out ,lib2.out "--" ,file1 ,lib1) '()))
+    [#(EXIT `(<os-process-failed> [stderr ("swish-build: requires a single source filename.")]))
+     'ok])
+  ;; we still allow just one filename: both explicit-source and source-file specified
+  (match (catch (swish-build-test `("-o" ,test ,lib1 "--rtlib" ,lib1.out ,lib2.out "--" ,file1) '()))
+    [#(EXIT `(<os-process-failed> [stderr ("swish-build: requires a single source filename.")]))
+     'ok])
+  ;; okay if -- is empty
+  (swish-build-test `(,file1 "-o" ,test "--rtlib" ,lib1.out ,lib2.out "--") '())
+  (run-thin "test" '() '("happy day" "great joy"))
+  (delete-file test)
+  )
