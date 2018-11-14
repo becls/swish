@@ -93,14 +93,14 @@ static char* get_boot_fn() {
     exit(1);
   }
 
-  const char *suffix = ".boot";
+  const char* suffix = ".boot";
   size_t suffixlen = strlen(suffix);
   size_t pathlast = strlen(execfn);
-  char *bootfn = (char*)malloc(sizeof(char) * (pathlast + suffixlen + 1));
+  char* bootfn = (char*)malloc(sizeof(char) * (pathlast + suffixlen + 1));
   if (NULL == bootfn) { fprintf(stderr, "malloc failed\n"); exit(1); }
 #ifdef _WIN32
-  const char *end = strrchr(execfn, '.');
-  const char *exe = ".exe";
+  const char* end = strrchr(execfn, '.');
+  const char* exe = ".exe";
   if (NULL != end && strcmp(end, exe) == 0) {
     pathlast -=  strlen(exe);
   }
@@ -115,10 +115,10 @@ static int allow_verbose_flag(const char* bootfn) {
   size_t len = strlen(bootfn);
 #if _WIN32
   const char* suffix =  "\\swish.boot";
-  #define COMPARE _strnicmp
+#define COMPARE _strnicmp
 #else
   const char* suffix =  "/swish.boot";
-  #define COMPARE strncmp
+#define COMPARE strncmp
 #endif
   size_t suffixlen = strlen(suffix);
   return len >= suffixlen && !COMPARE(bootfn + len - suffixlen, suffix, suffixlen);
@@ -126,8 +126,8 @@ static int allow_verbose_flag(const char* bootfn) {
 
 // custom_init may be NULL or a pointer to a function that performs application-specific
 // initialization during Sbuild_heap.
-int swish_run(int argc, const char *argv[], void (*custom_init)(void)) {
-  char *bootfn = get_boot_fn();
+int swish_run(int argc, const char* argv[], void (*custom_init)(void)) {
+  char* bootfn = get_boot_fn();
   Sscheme_init(NULL);
   // Don't interfere with swish scripts or stand-alone swish applications that
   // want to support a --verbose option.

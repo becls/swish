@@ -1,0 +1,8 @@
+align-pointer=type
+align-reference=name
+convert-tabs
+indent=spaces=2
+keep-one-line-blocks
+pad-comma
+pad-header
+style=google

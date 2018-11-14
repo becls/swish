@@ -20,7 +20,7 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-int swish_run(int argc, const char *argv[], void (*custom_init)(void));
+int swish_run(int argc, const char* argv[], void (*custom_init)(void));
 
 #ifdef _WIN32
 #include <wchar.h>
@@ -46,7 +46,7 @@ int wmain(int argc, wchar_t* argv[], wchar_t* envp[]) {
   return swish_run(argc, argv8, 0);
 }
 #else
-int main(int argc, const char *argv[]) {
+int main(int argc, const char* argv[]) {
   return swish_run(argc, argv, 0);
 }
 #endif

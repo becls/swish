@@ -63,8 +63,7 @@ static void database_worker(void* arg) {
   uv_mutex_lock(&(d->mutex));
   for (;;) {
     uv_thread_cb work = d->work;
-    if (work)
-    {
+    if (work) {
       uv_mutex_unlock(&(d->mutex));
       (*work)(arg);
       uv_mutex_lock(&(d->mutex));

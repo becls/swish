@@ -1,0 +1,62 @@
+% Copyright 2018 Beckman Coulter, Inc.
+%
+% Permission is hereby granted, free of charge, to any person
+% obtaining a copy of this software and associated documentation files
+% (the "Software"), to deal in the Software without restriction,
+% including without limitation the rights to use, copy, modify, merge,
+% publish, distribute, sublicense, and/or sell copies of the Software,
+% and to permit persons to whom the Software is furnished to do so,
+% subject to the following conditions:
+%
+% The above copyright notice and this permission notice shall be
+% included in all copies or substantial portions of the Software.
+%
+% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+% EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+% MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+% NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+% BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+% ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+% CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+% SOFTWARE.
+
+\documentclass[letterpaper,11pt,twoside,final]{article}
+\usepackage{sagian}
+
+\begin{document}
+
+\title {C Coding Standard}
+\author {Bob Burger}
+\date {\copyright\ 2018 Beckman Coulter, Inc.
+  Licensed under the \href{https://opensource.org/licenses/MIT}{MIT License}.}
+\coverpage
+
+\section* {Identifiers}
+
+Use meaningful names---this can be very difficult. Identifiers should
+correspond directly to the names used in the design
+documents. Identifiers should use lower-case letters with an
+underscore separating compound words. Mixed-case identifiers may be
+used when they directly correspond to an external definition.
+
+\section* {Comments}
+
+Comments should be clear, concise, and written in U.S. English.
+
+Avoid using comments that say what the code says.
+
+\section* {Formatting}
+
+C code should be indented with Artistic
+Style\footnote{\url{http://astyle.sourceforge.net}} configured with a
+project-specific \code{.astylerc} file.
+
+Line length should be limited to 79 characters. Lines longer than 79
+characters may be tolerated.
+
+Lines should end in LF, not CRLF.
+
+Tab characters should not appear in C code. Their presence in a file
+makes the indentation depend on the software used to view the file.
+
+\end{document}

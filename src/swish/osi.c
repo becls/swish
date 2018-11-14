@@ -98,8 +98,7 @@ void add_callback3(ptr callback, ptr arg1, ptr arg2, ptr arg3) {
   g_callbacks = Scons(Scons(callback, Scons(arg1, Scons(arg2, Scons(arg3, Snil)))), g_callbacks);
 }
 
-ptr make_error_pair(const char* who, int error)
-{
+ptr make_error_pair(const char* who, int error) {
   return Scons(Sstring_to_symbol(who), Sinteger(error));
 }
 
@@ -175,8 +174,9 @@ static ptr read_fs_port(uptr port, ptr buffer, size_t start_index, uint32_t size
   req->buffer = buffer;
   req->callback = callback;
   uv_buf_t buf = {
-    .base = (char*)&Sbytevector_u8_ref(buffer, start_index),
-    .len = size};
+    .base = (char*) &Sbytevector_u8_ref(buffer, start_index),
+    .len = size
+  };
   int rc = uv_fs_read(g_loop, &req->fs, p->file, &buf, 1, offset, rw_fs_cb);
   if (rc < 0) {
     Sunlock_object(buffer);
@@ -197,8 +197,9 @@ static ptr write_fs_port(uptr port, ptr buffer, size_t start_index, uint32_t siz
   req->buffer = buffer;
   req->callback = callback;
   uv_buf_t buf = {
-    .base = (char*)&Sbytevector_u8_ref(buffer, start_index),
-    .len = size};
+    .base = (char*) &Sbytevector_u8_ref(buffer, start_index),
+    .len = size
+  };
   int rc = uv_fs_write(g_loop, &req->fs, p->file, &buf, 1, offset, rw_fs_cb);
   if (rc < 0) {
     Sunlock_object(buffer);
@@ -241,7 +242,8 @@ static ptr close_fs_port(uptr port, ptr callback) {
 static port_vtable_t file_vtable = {
   .close = close_fs_port,
   .read = read_fs_port,
-  .write = write_fs_port};
+  .write = write_fs_port
+};
 
 static void open_fs_cb(uv_fs_t* req) {
   ssize_t result = req->result;
@@ -400,8 +402,9 @@ static ptr write_stream_port(uptr port, ptr buffer, size_t start_index, uint32_t
   p->write_size = size;
   p->write_callback = callback;
   uv_buf_t buf = {
-    .base = (char*)&Sbytevector_u8_ref(p->write_buffer, start_index),
-    .len = size};
+    .base = (char*) &Sbytevector_u8_ref(p->write_buffer, start_index),
+    .len = size
+  };
   int rc = uv_write(&(p->write_req), &(p->h.stream), &buf, 1, write_stream_cb);
   if (rc < 0) {
     Sunlock_object(buffer);
@@ -435,12 +438,14 @@ static ptr close_stream_port(uptr port, ptr callback) {
 static port_vtable_t pipe_vtable = {
   .close = close_stream_port,
   .read = read_stream_port,
-  .write = write_stream_port};
+  .write = write_stream_port
+};
 
 static port_vtable_t tcp_vtable = {
   .close = close_stream_port,
   .read = read_stream_port,
-  .write = write_stream_port};
+  .write = write_stream_port
+};
 
 static void connect_tcp_cb(uv_connect_t* req, int status) {
   tcp_connect_t* p = container_of(req, tcp_connect_t, connect);
@@ -564,15 +569,15 @@ static void list_uv_cb(uv_handle_t* handle, void* arg) {
 }
 
 static int g_argc = 0;
-static const char **g_argv;
-void osi_set_argv(int argc, const char *argv[]) {
+static const char** g_argv;
+void osi_set_argv(int argc, const char* argv[]) {
   g_argc = argc;
   g_argv = argv;
 }
 
 ptr osi_get_argv() {
   ptr argv = Smake_vector(g_argc, Sfalse);
-  for(int i = 0; i < g_argc; i++) {
+  for (int i = 0; i < g_argc; i++) {
     Svector_set(argv, i, Sstring_utf8(g_argv[i], -1));
   }
   return argv;
@@ -792,7 +797,8 @@ ptr osi_spawn(const char* path, ptr args, ptr callback) {
     .stdio_count = 3,
     .stdio = stdio,
     .uid = 0,
-    .gid = 0 };
+    .gid = 0
+  };
   Slock_object(callback);
   p->data = callback;
   rc = uv_spawn(g_loop, p, &options);
@@ -1044,10 +1050,12 @@ uptr osi_get_stdin(void) {
   static port_vtable_t stdin_vtable = {
     .close = close_port_nosys,
     .read = read_fs_port,
-    .write = write_fs_port};
+    .write = write_fs_port
+  };
   static fs_port_t stdin_port = {
     .vtable = &stdin_vtable,
-    .file = 0};
+    .file = 0
+  };
   return (uptr)&stdin_port;
 }
 
@@ -1117,8 +1125,8 @@ ptr osi_get_stat(const char* path, int follow, ptr callback) {
   Slock_object(callback);
   req->data = callback;
   int rc = follow ?
-    uv_fs_stat(g_loop, req, path, stat_cb) :
-    uv_fs_lstat(g_loop, req, path, stat_cb);
+           uv_fs_stat(g_loop, req, path, stat_cb) :
+           uv_fs_lstat(g_loop, req, path, stat_cb);
   if (rc < 0) {
     Sunlock_object(callback);
     free(req);
