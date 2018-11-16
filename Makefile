@@ -1,13 +1,11 @@
 MAKEFLAGS += --no-print-directory
-.PHONY: all clean coverage doc install pristine swish test
-
-all: swish doc
-
-doc:
-	$(MAKE) -C doc
+.PHONY: clean coverage doc install pristine swish test
 
 swish: src/swish/Makefile
 	$(MAKE) -C src/swish all
+
+doc:
+	$(MAKE) -C doc
 
 src/swish/Makefile:
 	@echo "Run ./configure to create $@"
@@ -21,7 +19,7 @@ coverage:
 	@PROFILE_MATS=yes $(MAKE) -C src/swish mat-prereq
 	@PROFILE_MATS=yes ./src/run-mats
 
-install: all
+install: swish doc
 	$(MAKE) -C src/swish install
 
 clean: src/swish/Makefile
