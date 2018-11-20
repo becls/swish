@@ -23,6 +23,12 @@ I/O.
   have to modify the places where s/expeditor.ss calls `$ee-read-char`
   in blocking mode to use libuv's asynchronous read function instead
   of the one in c/expeditor.c.
+- If you get "symbol(s) not found" error, you may need use CPPFLAGS and LDFLAGS to
+  supply the header and library path. And if the C compiler refuse unused arguments, you may 
+  need `CFLAGS="-Qunused-arguments"`. e.g., 
+  ```
+  ./configure CPPFLAGS="-I/usr/local/opt/libiconv/include" CFLAGS="-Qunused-arguments" LDFLAGS="-L/usr/local/opt/libiconv/lib"
+  ```
 
 # Build System Requirements
 

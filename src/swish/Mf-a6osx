@@ -1,6 +1,6 @@
 UvInclude=../../libuv/include
 UvLib=../../libuv/build/Release
-C = gcc -m64 -fPIC -Wall -Wextra -Werror -O2
+C = ${CC} -m64 -fPIC -Wall -Wextra -Werror -O2 ${CPPFLAGS} ${CFLAGS} ${LDFLAGS}
 OsiObj=osi.o sqlite.o sqlite3.o
 SystemLibs=-liconv -lm -lncurses
 SwishLibs := ../../${BUILD}/bin/libosi.dylib ../../${BUILD}/lib/swish_kernel.o

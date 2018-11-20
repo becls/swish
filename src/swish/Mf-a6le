@@ -1,9 +1,9 @@
 UvInclude=../../libuv/include
 UvLib=../../libuv/out/Release/obj.target
-ifneq (,$(shell gcc --help=warning | grep implicit-fallthrough))
+ifneq (,$(shell ${CC} --help=warning | grep implicit-fallthrough))
   HUSH=-Wimplicit-fallthrough=0
 endif
-C = gcc -m64 -msse2 -fPIC -Wall -Wextra -Werror -O2
+C = ${CC} -m64 -msse2 -fPIC -Wall -Wextra -Werror -O2 ${CPPFLAGS} ${CFLAGS} ${LDFLAGS}
 OsiObj=osi.o sqlite.o sqlite3.o
 SystemLibs=-lm -ldl -lncurses -luuid -lpthread
 SwishLibs := ../../${BUILD}/bin/libosi.so ../../${BUILD}/lib/swish_kernel.o
