@@ -1,7 +1,10 @@
 UvInclude=../../libuv/include
 UvLib=../../libuv/out/Release/obj.target
-ifneq (,$(shell ${CC} --help=warning | grep implicit-fallthrough))
-  HUSH=-Wimplicit-fallthrough=0
+ifneq (,$(shell "${CC}" --help=warnings 2> /dev/null | grep implicit-fallthrough))
+  HUSH:=-Wimplicit-fallthrough=0
+endif
+ifneq (,$(shell "${CC}" --help=warnings 2> /dev/null | grep cast-function-type))
+  HUSH:=${HUSH} -Wno-cast-function-type
 endif
 C = ${CC} -m32 -msse2 -fPIC -Wall -Wextra -Werror -O2 ${CPPFLAGS} ${CFLAGS} ${LDFLAGS}
 OsiObj=osi.o sqlite.o sqlite3.o
