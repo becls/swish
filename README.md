@@ -23,12 +23,20 @@ I/O.
   have to modify the places where s/expeditor.ss calls `$ee-read-char`
   in blocking mode to use libuv's asynchronous read function instead
   of the one in c/expeditor.c.
+- If you get a "symbol(s) not found" error, you may need to use CPPFLAGS
+  and LDFLAGS to supply the header and library path. If the C compiler
+  refuses unused arguments, you may need
+  `CFLAGS="-Qunused-arguments"`. e.g.,
+  ```
+  ./configure CPPFLAGS="-I/usr/local/opt/libiconv/include" CFLAGS="-Qunused-arguments" LDFLAGS="-L/usr/local/opt/libiconv/lib"
+  ```
 
 # Build System Requirements
 
 ## Linux
 
-- Chez Scheme 9.5.1 from July 18, 2018 or later (commit a0adfa1, which adds load-compiled-from-port)
+- Chez Scheme 9.5.1 from July 18, 2018 or later (commit a0adfa1, which
+  adds load-compiled-from-port)
 - GCC, the GNU Compiler Collection
 - GNU C++ compiler for libuv
 - GNU make
