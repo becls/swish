@@ -1,5 +1,5 @@
 C = ${CC} -std=gnu99 -fPIC -Wall -Wextra -Werror -O2 ${CPPFLAGS} ${CFLAGS} ${LDFLAGS}
-OsiObj=osi.o sqlite.o sqlite3.o
+OsiObj=osi.o sha1.o sqlite.o sqlite3.o
 SystemLibs=-lm -ldl -lncurses -luuid -lpthread
 SwishLibs := ../../${BUILD}/bin/libosi.so ../../${BUILD}/lib/swish_kernel.o
 
@@ -30,7 +30,7 @@ ${SHLIBTEST}: shlibtest.c
 	$C -shared -o $@ $^ -I"${LIBUV_INCLUDE}" -I"${SCHEME_INCLUDE}" -I"${SWISH_INCLUDE}"
 
 platform-clean:
-	rm -f main.o osi.o run.o sqlite.o
+	rm -f main.o osi.o run.o sha1.o sqlite.o
 
 pristine: clean
 	rm -rf sqlite3.o ../../libuv/out/Release

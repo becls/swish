@@ -32,6 +32,7 @@
 #include <malloc.h>
 #endif
 #include <string.h>
+#include "sha.h"
 #include "sqlite3.h"
 
 typedef struct {
@@ -88,6 +89,12 @@ EXPORT ptr osi_listen_tcp(const char* address, uint16_t port, ptr callback);
 EXPORT void osi_close_tcp_listener(uptr listener);
 EXPORT ptr osi_get_tcp_listener_port(uptr listener);
 EXPORT ptr osi_get_ip_address(uptr port);
+
+// Message Digest
+EXPORT ptr osi_open_SHA1();
+EXPORT ptr osi_hash_data(SHA1Context* ctxt, ptr bv, size_t start_index, uint32_t size);
+EXPORT ptr osi_get_SHA1(SHA1Context* ctxt);
+EXPORT void osi_close_SHA1(SHA1Context* ctxt);
 
 // SQLite
 EXPORT ptr osi_open_database(const char* filename, int flags, ptr callback);

@@ -672,4 +672,24 @@ then \code{require-shared-object} determines the absolute path by
 treating the file name as a path relative to the parent directory
 containing the application configuration file name returned by \code{app:config-filename}.
 
+\defineentry{define-foreign}
+\begin{syntax}
+  \code{(define-foreign \var{name} (\var{arg-name} \var{arg-type}) ...)}
+\end{syntax}
+\expandsto{} \antipar\codebegin
+(begin
+  (define \var{name}* (foreign-procedure (symbol->string '\var{name}) (\var{arg-type} ...) ptr))
+  (define (\var{name} \var{arg-name} ...)
+    (match (\var{name}* \var{arg-name} ...)
+      [(,who . ,err)
+       (guard (symbol? who))
+       (io-error '\var{name} who err)]
+      [,x x])))
+\codeend
+
+The \code{define-foreign} macro defines two procedures: \code{\var{name}*}
+is a raw foreign procedure that expects the specified argument types and returns
+a \code{ptr} value, while \var{name} is a wrapper that calls \code{\var{name}*}
+and raises an \code{io-error} if it returns an error pair.
+
 \input{swish/testing.tex}

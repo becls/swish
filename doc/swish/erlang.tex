@@ -2441,3 +2441,207 @@ appending the symbols passed as arguments.
 If \var{regexp} is a literal string, the \code{re} macro expands to the
 result of evaluating \code{(pregexp\ \var{regexp})} at expand time.
 Otherwise it expands into a run-time call to \code{pregexp}.
+
+\subsection {Message Digests}
+
+% ----------------------------------------------------------------------------
+\defineentry{make-digest-provider}
+\begin{procedure}
+  \code{(make-digest-provider \var{name} \var{open} \var{hash!} \var{get-hash} \var{close})}
+\end{procedure}
+\returns{} a digest provider record
+
+The \code{make-digest-provider} procedure takes a symbol \var{name}
+and a set of procedures and returns a new digest provider that can
+be used as the value of \code{current-digest-provider} or as an
+argument to \code{open-digest}.
+
+The \var{open} procedure takes a string \var{alg} and an \var{hmac-key}
+that is either \code{\#f} or a bytevector to use for HMAC keyed hashing.
+If the digest provider does not support the specified message-digest algorithm
+\var{alg} or the \var{hmac-key}, it should return an error pair or one of
+the symbols \code{algorithm} or \code{hmac-key} to indicate which argument
+is invalid.
+Otherwise it should return a message-digest context that can be
+passed to \var{hash!}, \var{get-hash}, and \var{close}.
+
+The \var{hash!} procedure has the same interface as \code{osi\_hash\_data} and
+performs the analogous function for the message-digest context initialized by
+\var{open}. It computes the message digest incrementally on the set of bytes
+specified and updates the message-digest context.
+
+The \var{get-hash} procedure has the same interface as \code{osi\_get\_SHA1} and
+performs the analogous function for the message-digest context initialized by
+\var{open} and updated by \var{hash!}.
+
+The \var{close} procedure frees a message-digest context initialized
+by \var{open}.
+
+% ----------------------------------------------------------------------------
+\defineentry{current-digest-provider}
+\begin{parameter}
+  \code{current-digest-provider}
+\end{parameter}
+\returns{} a digest provider record
+
+The \code{current-digest-provider} parameter specifies the digest provider
+used by \code{bytevector->hex-string} and by \code{open-digest} when the
+digest provider is not explicit.
+
+% ----------------------------------------------------------------------------
+\defineentry{default-digest-provider}
+\begin{binding}
+  \code{default-digest-provider}
+\end{binding}
+\returns{} the default digest provider record
+
+The default value of \code{current-digest-provider} is bound to
+\code{default-digest-provider}.
+The default digest provider supports only the SHA1 message-digest algorithm;
+it does not support HMAC keyed hashing.
+
+% ----------------------------------------------------------------------------
+\defineentry{digest-provider-name}
+\begin{procedure}
+  \code{(digest-provider-name \var{dp})}
+\end{procedure}
+\returns{} the name of the digest provider
+
+The \code{digest-provider-name} procedure returns the symbol
+that was supplied to \code{make-digest-provider} when \var{dp}
+was created.
+
+% ----------------------------------------------------------------------------
+\defineentry{open-digest}
+\begin{procedure}
+  \code{(open-digest \var{alg} \opt{\var{hmac-key} \opt{\var{dp}}})}
+\end{procedure}
+
+The \code{open-digest} procedure takes a string or symbol \var{alg}
+naming a message-digest function supported by the digest provider
+\var{dp}, which defaults to the value of \code{current-digest-provider}.
+If \var{alg} is a symbol, it is converted to an upper-case string
+before proceeding.
+The optional \var{hmac-key} may be \code{\#f} to disable HMAC keyed
+hashing; otherwise it must be a bytevector or a string.
+If \var{hmac-key} is a string, it is converted to a bytevector
+using \code{string->utf8}.
+
+The \code{open-digest} procedure disables interrupts while it calls the \var{open}
+procedure that was registered with \code{make-digest-provider}, passing it the
+algorithm name as a string and the \var{hmac-key} as either \code{\#f} or a
+bytevector.
+If successful, it wraps the message-digest context returned by \var{open}
+in a message-digest record \var{md}, registers \var{md}
+with a foreign-handle guardian using the type name \code{digests},
+and returns \var{md}.
+
+% ----------------------------------------------------------------------------
+\defineentry{hash!}
+\begin{procedure}
+  \code{(hash! \var{md} \var{bv} \opt{\var{start-index} \opt{\var{size}}})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{hash!} procedure disables interrupts while it calls the \var{hash!}
+procedure of the message-digest provider used in the \code{open-digest}
+call that returned \var{md}.
+The \var{hash!} procedure computes the message digest incrementally
+on the set of \var{size} bytes in the bytevector \var{bv} starting at
+the zero-based \var{start-index}.
+If omitted, \var{start-index} defaults to zero and \var{size} defaults
+to the size of \var{bv}.
+The \var{hash!} procedure updates the message-digest context within \var{md}.
+
+% ----------------------------------------------------------------------------
+\defineentry{get-hash}
+\begin{procedure}
+  \code{(get-hash \var{md})}
+\end{procedure}
+\returns{} a bytevector
+
+The \code{get-hash} procedure disables interrupts while it calls the \var{get-hash}
+procedure of the message-digest provider used in the \code{open-digest}
+call that returned \var{md}.
+It returns a bytevector containing the message digest accumulated in \var{md}
+by zero or more calls to \code{hash!}.
+
+% ----------------------------------------------------------------------------
+\defineentry{close-digest}
+\begin{procedure}
+  \code{(close-digest \var{md})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{close-digest} procedure disables interrupts, unregisters \var{md}
+with the foreign-handle guardian, calls the \var{close} procedure of the
+message-digest provider used in the \code{open-digest} call that returned
+\var{md}, then enables interrupts.
+
+% ----------------------------------------------------------------------------
+\defineentry{hash->hex-string}
+\begin{procedure}
+  \code{(hash->hex-string \var{bv})}
+\end{procedure}
+\returns{} a string of lower-case hexadecimal digits
+
+The \code{hash->hex-string} procedure takes a bytevector \var{bv} and returns
+the unsigned bytes in \var{bv} as a string of lower-case hexadecimal digits.
+
+% ----------------------------------------------------------------------------
+\defineentry{hex-string->hash}
+\begin{procedure}
+  \code{(hex-string->hash \var{s})}
+\end{procedure}
+\returns{} a bytevector
+
+The \code{hex-string->hash} procedure takes a string \var{s}
+containing an even number of hexadecimal digits and returns a
+bytevector half that size containing the unsigned bytes
+specified by adjacent pairs of hexadecimal digits.
+
+% ----------------------------------------------------------------------------
+\defineentry{bytevector->hex-string}
+\begin{procedure}
+  \code{(bytevector->hex-string \var{bv} \var{alg} \opt{\var{block-size}})}
+\end{procedure}
+\returns{} a string of lower-case hexadecimal digits
+
+The \code{bytevector->hex-string} procedure takes a bytevector \var{bv} and a
+string or symbol \var{alg} naming a message-digest function supported by the
+\code{current-digest-provider} and returns the message digest of \var{bv}
+using \var{alg} as a string of lower-case hexadecimal digits.
+To keep the event loop responsive, \code{bytevector->hex-string} computes
+the message digest of \var{bv} incrementally in chunks of \var{block-size},
+which defaults to 16384.
+When the size of \var{bv} is not more than \var{block-size}, this is
+functionally equivalent to the following:
+\codebegin
+(let ([md (open-digest \var{alg})])
+  (on-exit (close-digest md)
+    (hash! md \var{bv})
+    (hash->hex-string (get-hash md))))
+\codeend
+
+% ----------------------------------------------------------------------------
+\defineentry{print-digests}
+\begin{procedure}
+  \code{(print-digests \opt{\var{op}})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{print-digests} procedure prints information about all open
+message-digest contexts to textual output port \var{op}, which defaults to the
+current output port.
+This is the procedure returned by \code{(foreign-handle-print\ 'digests)}.
+
+% ----------------------------------------------------------------------------
+\defineentry{digest-count}
+\begin{procedure}
+  \code{(digest-count)}
+\end{procedure}
+\returns{} the number of open message-digest contexts
+
+The \code{digest-count} procedure returns the number of open
+message-digest contexts.
+This is the procedure returned by \code{(foreign-handle-count\ 'digests)}.

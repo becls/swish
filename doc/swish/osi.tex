@@ -962,3 +962,41 @@ The \code{osi\_get\_sqlite\_status} function uses the
 \code{sqlite3\_status64} function with the given \var{operation} and
 \var{reset} flag to return \code{\#(\var{current} \var{highwater})}
 when successful and an error pair otherwise.
+
+\subsection {Message-Digest Functions}
+
+\defineentry{osi\_open\_SHA1}
+\begin{function}
+  \code{ptr osi\_open\_SHA1();}
+\end{function}
+
+The \code{osi\_open\_SHA1} function returns an error pair
+or a context for computing the SHA1 message digest.
+
+\defineentry{osi\_hash\_data}
+\begin{function}
+  \code{ptr osi\_hash\_data(uptr \var{ctxt}, ptr \var{bv}, size\_t \var{start\_index}, uint32\_t \var{size});}
+\end{function}
+
+The \code{osi\_hash\_data} function computes the SHA1 message digest
+incrementally on the \var{size} bytes at the zero-based \var{start\_index}
+of bytevector \var{bv} updating the context \var{ctxt}.
+It returns \code{\#t} when successful and an error pair otherwise.
+
+\defineentry{osi\_get\_SHA1}
+\begin{function}
+  \code{ptr osi\_get\_SHA1(uptr \var{ctxt});}
+\end{function}
+
+The \code{osi\_get\_SHA1} function takes a \var{ctxt} that was created by
+\code{osi\_open\_SHA1} and updated by calling \code{osi\_hash\_data} on a set
+of buffers and returns as a bytevector the SHA1 message digest of the buffers.
+If unsuccessful, it returns an error pair.
+
+\defineentry{osi\_close\_SHA1}
+\begin{function}
+  \code{ptr osi\_close\_SHA1(uptr \var{ctxt});}
+\end{function}
+
+The \code{osi\_close\_SHA1} function frees a \var{ctxt}
+that was allocated by \code{osi\_open\_SHA1}.

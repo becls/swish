@@ -31,6 +31,7 @@
     (swish application)
     (swish cli)
     (swish db)
+    (swish digest)
     (swish erlang)
     (swish errors)
     (swish event-mgr)

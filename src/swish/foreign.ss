@@ -22,6 +22,7 @@
 
 (library (swish foreign)
   (export
+   define-foreign
    provide-shared-object
    require-shared-object)
   (import
@@ -29,7 +30,21 @@
    (swish app-io)
    (swish erlang)
    (swish io)
-   (swish json))
+   (swish json)
+   (swish meta))
+
+  (define-syntax (define-foreign x)
+    (syntax-case x ()
+      [(_ name (arg-name arg-type) ...)
+       (with-syntax ([name* (compound-id #'name #'name "*")])
+         #'(begin
+             (define name*
+               (foreign-procedure (symbol->string 'name) (arg-type ...) ptr))
+             (define (name arg-name ...)
+               (let ([x (name* arg-name ...)])
+                 (if (not (and (pair? x) (symbol? (car x))))
+                     x
+                     (io-error 'name (car x) (cdr x)))))))]))
 
   (define (so-path so-name . more)
     `(swish shared-object ,so-name ,(machine-type)

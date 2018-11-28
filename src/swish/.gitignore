@@ -15,6 +15,8 @@
 /run.o
 /run.obj
 /sh-config
+/sha1.o
+/sha1.obj
 /shlibtest.dll
 /shlibtest.exp
 /shlibtest.ilk

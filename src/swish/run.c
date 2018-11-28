@@ -32,6 +32,7 @@ static void swish_init(void) {
   add_foreign(osi_bind_statement);
   add_foreign(osi_chmod);
   add_foreign(osi_clear_statement_bindings);
+  add_foreign(osi_close_SHA1);
   add_foreign(osi_close_database);
   add_foreign(osi_close_path_watcher);
   add_foreign(osi_close_port);
@@ -39,6 +40,7 @@ static void swish_init(void) {
   add_foreign(osi_connect_tcp);
   add_foreign(osi_exit);
   add_foreign(osi_finalize_statement);
+  add_foreign(osi_get_SHA1);
   add_foreign(osi_get_argv);
   add_foreign(osi_get_bytes_used);
   add_foreign(osi_get_callbacks);
@@ -57,6 +59,7 @@ static void swish_init(void) {
   add_foreign(osi_get_tcp_listener_port);
   add_foreign(osi_get_temp_directory);
   add_foreign(osi_get_time);
+  add_foreign(osi_hash_data);
   add_foreign(osi_init);
   add_foreign(osi_interrupt_database);
   add_foreign(osi_is_quantum_over);
@@ -66,6 +69,7 @@ static void swish_init(void) {
   add_foreign(osi_listen_tcp);
   add_foreign(osi_make_directory);
   add_foreign(osi_make_uuid);
+  add_foreign(osi_open_SHA1);
   add_foreign(osi_open_database);
   add_foreign(osi_open_fd);
   add_foreign(osi_open_file);
