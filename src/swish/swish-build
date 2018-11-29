@@ -96,7 +96,7 @@
   (when (> (verbosity) 1)
     (printf "Library directories:\n~{ ~s\n~}" (library-directories))))
 
-(define who (path-last (car (command-line))))
+(define who (app:name))
 
 (define (fail fmt . args) (apply errorf who fmt args))
 
@@ -213,6 +213,18 @@
       (fail "unrecognized help section~p:~{ ~a~}" (length invalid) invalid)))
   (exit 0))
 
+(define-syntax target-case
+  (syntax-rules ()
+    [(_ expr [(k0 k1 ...) e0 e1 ...] ...)
+     ;; require all cases
+     (equal? '(library linked stand-alone)
+       (sort (lambda (a b) (string<? (symbol->string a) (symbol->string b)))
+         (apply append (datum ((k0 k1 ...) ...)))))
+     (let ([target expr])
+       (case expr
+         [(k0 k1 ...) e0 e1 ...] ...
+         [else (match target)]))]))
+
 (define (parse-library lib)
   (parameterize ([library-directories lib])
     (library-directories)))
@@ -252,7 +264,97 @@
 (define (rm-f filename)
   (catch (remove-file filename)))
 
-(define (do-compile source-fn output-fn libs-visible? swish-wpo? as-library?)
+;; generate wrapper that invokes content of source-fn appropriately depending on
+;; the type of program we're compiling: stand-alone or linked.
+(define (do-compile-program source-fn dest target-type)
+  (with-sfd-source-offset source-fn
+    (lambda (ip sfd source-offset)
+      (define annotated-source
+        (get-datum/annotations-all ip sfd source-offset))
+      (define dummy-source (make-source-object sfd source-offset source-offset))
+      (define body
+        (make-annotation
+         `(lambda () ,@annotated-source)
+         dummy-source
+         `(lambda () ,@(map annotation-stripped annotated-source))))
+      (define (setup args-expr index)
+        `(let ([who (vector-ref (osi_get_argv) ,index)]
+               [args ,args-expr])
+           (app:name who)
+           (command-line (cons who args))
+           (command-line-arguments args)))
+      (define program
+        ;; source-fn must not use top-level-program, since it is spliced in as body
+        `(top-level-program
+          (import (scheme) (swish imports))
+          (let ()
+            (define (invoke)
+              (with-exception-handler app-exception-handler ,body))
+            ,(match target-type
+               [stand-alone
+                `(scheme-start
+                  (let ([orig (scheme-start)])
+                    (lambda args
+                      (scheme-start orig)
+                      ,(setup 'args 0)
+                      (invoke))))]
+               [linked
+                `(let ([args (command-line-arguments)])
+                   ,(setup 'args 1)
+                   (invoke))]))))
+      (compile-to-file (list program) dest sfd))))
+
+(define (compile-help source-fn tmp-out target-type)
+  (define default-library-search (library-search-handler))
+  ;; We add ".wpo" variants to the front of library-extensions so that the
+  ;; expander forces library compilation if a ".wpo" file exists and is
+  ;; older than the source file, while still falling back on the usual
+  ;; object file if the ".wpo" file is not wanted, e.g., for the --rtlib
+  ;; case.  When the expander calls compile-library-handler, we restore the
+  ;; ".so" extension so that compile-library can build both the ".so" file
+  ;; and its ".wpo" by-product without conflict.
+  (parameterize ([library-extensions
+                  (append
+                   (map (lambda (x)
+                          (match-let* ([(,src . ,obj) x])
+                            (cons src (change-extension obj ".wpo"))))
+                     (library-extensions))
+                   (library-extensions))]
+                 [compile-library-handler
+                  (lambda (source dest)
+                    (when (> (verbosity) 0) (printf "compiling ~a\n" source))
+                    (compile-library source (change-extension dest ".so")))])
+    (target-case target-type
+      [(library)
+       (compile-library source-fn tmp-out)]
+      [(linked stand-alone)
+       (do-compile-program source-fn tmp-out target-type)])))
+
+(define (compile-wpo wpo-file output-fn target-type)
+  (define default-library-search (library-search-handler))
+  (parameterize ([library-search-handler
+                  (lambda (who path dir* all-ext*)
+                    (if (ormap (lambda (p) (match p [(,_ . ".wpo") #t] [,_ #f])) all-ext*)
+                        (if (hashtable-ref prevent-wpo path #f)
+                            (values #f #f #f)
+                            (default-library-search who path dir* all-ext*))
+                        (match (catch (library-object-filename path))
+                          [,obj-file
+                           (guard (string? obj-file))
+                           (values #f obj-file (file-exists? obj-file))]
+                          [,_
+                           (default-library-search who path dir* all-ext*)])))])
+    (target-case target-type
+      [(library)
+       (let ([missing (compile-whole-library wpo-file output-fn)])
+         (rename-path wpo-file (change-extension output-fn ".wpo"))
+         missing)]
+      [(linked stand-alone)
+       (let ([missing (compile-whole-program wpo-file output-fn (opt "libs-visible"))])
+         (rm-f wpo-file)
+         missing)])))
+
+(define (do-compile source-fn output-fn swish-wpo? target-type)
   (let ([tmp (tmp-filename source-fn)])
     (on-exit (rm-f tmp)
       (when (> (verbosity) 0) (printf "compiling ~a\n" (source-file)))
@@ -261,45 +363,9 @@
       (generate-wpo-files #t)
       (compile-imported-libraries #t)
       (compile-file-message #f)
-      ;; We add ".wpo" variants to the front of library-extensions so that the
-      ;; expander forces library compilation if a ".wpo" file exists and is
-      ;; older than the source file, while still falling back on the usual
-      ;; object file if the ".wpo" file is not wanted, e.g., for the --rtlib
-      ;; case.  When the expander calls compile-library-handler, we restore the
-      ;; ".so" extension so that compile-library can build both the ".so" file
-      ;; and its ".wpo" by-product without conflict.
-      (parameterize ([library-extensions
-                      (append
-                       (map (lambda (x)
-                              (match-let* ([(,src . ,obj) x])
-                                (cons src (change-extension obj ".wpo"))))
-                         (library-extensions))
-                       (library-extensions))]
-                     [compile-library-handler
-                      (lambda (source dest)
-                        (when (> (verbosity) 0) (printf "compiling ~a\n" source))
-                        (compile-library source (change-extension dest ".so")))])
-        (if as-library?
-            (compile-library source-fn tmp)
-            (compile-program source-fn tmp)))
+      (compile-help source-fn tmp target-type)
       (let* ([wpo-file (change-extension tmp ".wpo")]
-             [default-library-search (library-search-handler)]
-             [libs
-              (parameterize ([library-search-handler
-                              (lambda (who path dir* all-ext*)
-                                (if (ormap (lambda (p) (match p [(,_ . ".wpo") #t] [,_ #f])) all-ext*)
-                                    (if (hashtable-ref prevent-wpo path #f)
-                                        (values #f #f #f)
-                                        (default-library-search who path dir* all-ext*))
-                                    (match (catch (library-object-filename path))
-                                      [,obj-file
-                                       (guard (string? obj-file))
-                                       (values #f obj-file (file-exists? obj-file))]
-                                      [,_
-                                       (default-library-search who path dir* all-ext*)])))])
-                (if as-library?
-                    (compile-whole-library wpo-file output-fn)
-                    (compile-whole-program wpo-file output-fn libs-visible?)))]
+             [libs (compile-wpo wpo-file output-fn target-type)]
              [missing-libs
               ;; Stand-alone application should have found all required non-swish libraries.
               ;; If swish libraries are incorporated via whole-program optimization,
@@ -309,9 +375,6 @@
               (if swish-wpo?
                   libs
                   (remp swish-lib? libs))])
-        (if as-library?
-            (rename-path wpo-file (change-extension output-fn ".wpo"))
-            (rm-f wpo-file))
         missing-libs))))
 
 (define boot-file-map
@@ -349,7 +412,7 @@
    [(equal? rt-lib "swish") swish-library-filename]
    [else (fail "cannot resolve --rtlib ~s" rt-lib)]))
 
-(define (resolve-missing-libs as-library? rt-libs missing-libs)
+(define (resolve-missing-libs target-type rt-libs missing-libs)
   (define ht (make-hashtable string-hash string=?))
   (define no-file-key "")
   (define (add! key lib)
@@ -364,35 +427,40 @@
         (add! obj-file lib)]))
    missing-libs)
   ;; Prune --rtlib libraries from missing-libs, if needed.
-  (when (or (not as-library?) (= (verbosity) 0))
+  (when (target-case target-type
+          [(library) (= (verbosity) 0)]
+          [(linked stand-alone) #t])
     (for-each (lambda (rt-lib) (hashtable-delete! ht rt-lib))
       rt-libs))
   (let-values ([(keys vals) (hashtable-entries ht)])
     (let ([files (vector->list keys)]
           [libs (vector->list vals)])
-      (cond
-       [as-library?
-        (match (sort (lambda (a b) (string<? (car a) (car b)))
-                 (map cons files libs))
-          [() (void)]
-          [,to-provide
-           (printf "These libraries must be provided at run time:\n")
-           (for-each
-            (lambda (p)
-              (match p
-                [(,obj-file . ,libraries)
-                 (wrap-text (current-output-port) (help-wrap-width) 0 2
-                   (if (equal? no-file-key obj-file)
-                       (format "Cannot determine file that provides:~{ ~s~}" libraries)
-                       (format "~a~@[:~{ ~s~}~]" obj-file (and (>= (verbosity) 2) libraries))))
-                 (newline)]))
-            to-provide)])]
-       [(hashtable-ref ht no-file-key #f) =>
-        (lambda (missing)
-          (fail "cannot resolve missing librar~@p~{ ~s~}" (length missing) missing))]
-       [(pair? libs)
-        (pretty-print libs)
-        (printf "Added without whole-program optimization:~{~{ ~s~}~}\n" libs)])
+      (target-case target-type
+        [(library)
+         (match (sort (lambda (a b) (string<? (car a) (car b)))
+                  (map cons files libs))
+           [() (void)]
+           [,to-provide
+            (printf "These libraries must be provided at run time:\n")
+            (for-each
+             (lambda (p)
+               (match p
+                 [(,obj-file . ,libraries)
+                  (wrap-text (current-output-port) (help-wrap-width) 0 2
+                    (if (equal? no-file-key obj-file)
+                        (format "Cannot determine file that provides:~{ ~s~}" libraries)
+                        (format "~a~@[:~{ ~s~}~]" obj-file (and (>= (verbosity) 2) libraries))))
+                  (newline)]))
+             to-provide)])]
+        [(linked stand-alone)
+         (cond
+          [(hashtable-ref ht no-file-key #f) =>
+           (lambda (missing)
+             (fail "cannot resolve missing librar~@p~{ ~s~}" (length missing) missing))]
+          [(= (verbosity) 0)]
+          [(pair? libs)
+           (pretty-print libs)
+           (printf "Added without whole-program optimization:~{~{ ~s~}~}\n" libs)])])
       files)))
 
 (define (show-files app-boot boot-files rt-libs other-libs source-fn)
@@ -442,7 +510,11 @@
          [output-fn
           (or (opt "output-file")
               (fail "requires output filename"))]
-         [as-library? (hashtable-ref (opt) "as-library" #f)]
+         [target-type
+          (cond
+           [(hashtable-ref (opt) "as-library" #f) 'library]
+           [(opt "boot-files") 'stand-alone]
+           [else 'linked])]
          [libdirs (fold-right
                    (lambda (x acc)
                      (append (parse-library x) acc))
@@ -453,105 +525,72 @@
             (or (opt "rt-libs") '()))])
     (verbosity (or (opt "verbose") 0))
     (import-notify (> (verbosity) 2))
-    (cond
-     [as-library?
-      (library-setup #f libdirs rt-libs)
-      (resolve-missing-libs as-library? rt-libs
-        (do-compile source-fn output-fn #f #f as-library?))]
-     [else
-      (let ([tmp-src (tmp-filename source-fn)])
-        (define boot-files (or (opt "boot-files") '()))
-        (define stand-alone? (not (null? boot-files)))
-        (define libs-visible? (opt "libs-visible"))
-        ;; generate wrapper that invokes content of source-fn
-        (with-output-to-file tmp-src
-          (lambda ()
-            (for-each pretty-print
-              `((import (scheme) (swish imports))
-                (define-syntax (include-source x)
-                  (syntax-case x ()
-                    [(k fn)
-                     (datum->syntax #'k
-                       `(begin
-                          ,@(with-sfd-source-offset (datum fn) get-datum/annotations-all)))]))
-                (let ()
-                  (define (run args)
-                    (let ([who (vector-ref (osi_get_argv) ,(if stand-alone? 0 1))])
-                      (app:name who)
-                      (command-line (cons who args))
-                      (command-line-arguments args)
-                      (with-exception-handler app-exception-handler
-                        (lambda () (include-source ,source-fn)))))
-                  ,(if stand-alone?
-                       `(scheme-start
-                         (let ([orig (scheme-start)])
-                           (lambda args
-                             (scheme-start orig)
-                             (run args))))
-                       `(run (command-line-arguments))))))))
-        (on-exit (rm-f tmp-src)
-          (cond
-           [stand-alone?
-            ;; Add location of swish system .wpo files only if we're building a
-            ;; stand-alone application (boot-files non-empty).
-            (let* ([boot-files (map resolve-boot-file boot-files)]
-                   [swish-wpo?
-                    (or (null? rt-libs)
-                        ;; don't use wpo for swish library if we're including it as a
-                        ;; run-time library, else we could duplicate code
-                        (not (member swish-library-filename rt-libs)))]
-                   [_ (library-setup swish-wpo? libdirs rt-libs)]
-                   [other-libs
-                    ;; load-compiled-from-port fails if given compressed
-                    ;; - note that (port-file-compressed! ip) works only for file ports,
-                    ;;   and does not work for bytevector-input-ports
-                    ;; - not a problem because compile-to-file will compress us later
-                    (parameterize ([compile-compressed #f])
-                      (resolve-missing-libs #f rt-libs
-                        (do-compile tmp-src output-fn libs-visible? swish-wpo? as-library?)))]
-                   [app-boot (change-extension output-fn ".boot")]
-                   [compiled-code
-                    (let ([ip (open-file output-fn O_RDONLY 0 'binary-input)])
-                      (on-exit (close-port ip)
-                        (get-bytevector-all ip)))])
-              (show-files app-boot boot-files rt-libs other-libs source-fn)
-              ;; avoid using swish library code within the expression we compile
-              (compile-to-file
-               `((load-compiled-from-port (open-bytevector-input-port ',compiled-code)))
-               output-fn)
-              (apply make-boot-file app-boot '()
-                (append boot-files rt-libs other-libs (list output-fn)))
-              (copy-to output-fn (osi_get_executable_path)))]
-           [else
-            (library-setup #f libdirs rt-libs)
-            (let* ([missing (do-compile tmp-src output-fn libs-visible? #f as-library?)]
-                   [other-libs (resolve-missing-libs #f rt-libs missing)]
-                   [hashbang
-                    (let ([ip (open-file source-fn O_RDONLY 0 'binary-input)])
-                      (on-exit (close-port ip)
-                        (let ([end (get-source-offset ip)])
-                          (and (> end 0)
-                               (begin (file-position ip 0) #t)
-                               (get-bytevector-n ip end)))))]
-                   [tmp (tmp-filename output-fn)]
-                   [ip (open-file output-fn O_RDONLY 0 'binary-input)]
-                   [op (open-file tmp (+ O_WRONLY O_CREAT O_APPEND) #o777 'binary-output)])
-              (define (cleanup) (close-port ip) (close-port op))
-              (match (catch
-                      (show-files #f #f rt-libs other-libs source-fn)
-                      (put-bytevector op (or hashbang (string->utf8 "#!/usr/bin/env swish\n")))
-                      (for-each
-                       (lambda (rt-lib)
-                         (unless (equal? rt-lib swish-library-filename)
-                           (let ([ip (open-file rt-lib O_RDONLY 0 'binary-input)])
-                             (on-exit (close-port ip)
-                               (copy ip op)))))
-                       (append rt-libs other-libs))
-                      (copy ip op))
-                [#(EXIT ,reason)
-                 (cleanup)
-                 (rm-f tmp)
-                 (raise reason)]
-                [,_
-                 (cleanup)
-                 (rename-path tmp output-fn)]))])))]))])
+    (target-case target-type
+      [(library)
+       (library-setup #f libdirs rt-libs)
+       (resolve-missing-libs 'library rt-libs
+         (do-compile source-fn output-fn #f 'library))]
+      [(stand-alone)
+       ;; Add location of swish system .wpo files only if we're building a
+       ;; stand-alone application (boot-files non-empty).
+       (let* ([boot-files (map resolve-boot-file (opt "boot-files"))]
+              [swish-wpo?
+               (or (null? rt-libs)
+                   ;; don't use wpo for swish library if we're including it as a
+                   ;; run-time library, else we could duplicate code
+                   (not (member swish-library-filename rt-libs)))]
+              [_ (library-setup swish-wpo? libdirs rt-libs)]
+              [other-libs
+               ;; load-compiled-from-port fails if given compressed
+               ;; - note that (port-file-compressed! ip) works only for file ports,
+               ;;   and does not work for bytevector-input-ports
+               ;; - not a problem because compile-to-file will compress us later
+               (parameterize ([compile-compressed #f])
+                 (resolve-missing-libs 'stand-alone rt-libs
+                   (do-compile source-fn output-fn swish-wpo? target-type)))]
+              [app-boot (change-extension output-fn ".boot")]
+              [compiled-code
+               (let ([ip (open-file output-fn O_RDONLY 0 'binary-input)])
+                 (on-exit (close-port ip)
+                   (get-bytevector-all ip)))])
+         (show-files app-boot boot-files rt-libs other-libs source-fn)
+         ;; avoid using swish library code within the expression we compile
+         (compile-to-file
+          `((load-compiled-from-port (open-bytevector-input-port ',compiled-code)))
+          output-fn)
+         (apply make-boot-file app-boot '()
+           (append boot-files rt-libs other-libs (list output-fn)))
+         (copy-to output-fn (osi_get_executable_path)))]
+      [(linked)
+       (library-setup #f libdirs rt-libs)
+       (let* ([missing (do-compile source-fn output-fn #f target-type)]
+              [other-libs (resolve-missing-libs 'linked rt-libs missing)]
+              [hashbang
+               (let ([ip (open-file source-fn O_RDONLY 0 'binary-input)])
+                 (on-exit (close-port ip)
+                   (let ([end (get-source-offset ip)])
+                     (and (> end 0)
+                          (begin (file-position ip 0) #t)
+                          (get-bytevector-n ip end)))))]
+              [tmp (tmp-filename output-fn)]
+              [ip (open-file output-fn O_RDONLY 0 'binary-input)]
+              [op (open-file tmp (+ O_WRONLY O_CREAT O_APPEND) #o777 'binary-output)])
+         (define (cleanup) (close-port ip) (close-port op))
+         (match (catch
+                 (show-files #f #f rt-libs other-libs source-fn)
+                 (put-bytevector op (or hashbang (string->utf8 "#!/usr/bin/env swish\n")))
+                 (for-each
+                  (lambda (rt-lib)
+                    (unless (equal? rt-lib swish-library-filename)
+                      (let ([ip (open-file rt-lib O_RDONLY 0 'binary-input)])
+                        (on-exit (close-port ip)
+                          (copy ip op)))))
+                  (append rt-libs other-libs))
+                 (copy ip op))
+           [#(EXIT ,reason)
+            (cleanup)
+            (rm-f tmp)
+            (raise reason)]
+           [,_
+            (cleanup)
+            (rename-path tmp output-fn)]))]))])

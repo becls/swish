@@ -515,11 +515,11 @@
   (assert (delete-file source))
   (assert (delete-file wpo))
   ;; thin
-  (swish-build-test `("-L" ,(output-dir) "-o" ,(output-file "thin-ml") ,(input-file "app"))
+  (swish-build-test `("-v" "-L" ,(output-dir) "-o" ,(output-file "thin-ml") ,(input-file "app"))
     `(seek ,(format "^~a$" (pregexp-quote "Added without whole-program optimization: (miss)"))))
   (run-thin "thin-ml" '() '("^got: PDQ Bach$"))
   ;; fat
-  (swish-build-test `("-L" ,(output-dir) "-o" ,(output-file "fat-ml") ,(input-file "app") "-b" "petite")
+  (swish-build-test `("-v" "-L" ,(output-dir) "-o" ,(output-file "fat-ml") ,(input-file "app") "-b" "petite")
     `(seek ,(format "^~a$" (pregexp-quote "Added without whole-program optimization: (miss)"))))
   (run-fat "fat-ml" '() '("^got: PDQ Bach$"))
   ;; library
