@@ -73,6 +73,13 @@
           (next-non-ws ip)
           c)))
 
+  (define (seek-non-ws ip)
+    (let ([c (read-char ip)])
+      (cond
+       [(eof-object? c) c]
+       [(ws? c) (seek-non-ws ip)]
+       [else c])))
+
   (define (read-string ip)
     (let lp ([op (open-output-string)])
       (let ([c (next-char ip)])
@@ -251,7 +258,12 @@
                    [else (unexpected-input c ip)]))))]
            [(eqv? c #\-) (- (read-unsigned ip))]
            [else (unread-char c ip) (read-unsigned ip)])))
-      (rd ip)]))
+      (let ([x (seek-non-ws ip)])
+        (cond
+         [(eof-object? x) x]
+         [else
+          (unread-char x ip)
+          (rd ip)]))]))
 
   (define json:write
     (case-lambda
@@ -307,12 +319,10 @@
       (let* ([ip (open-string-input-port x)]
              [obj (json:read ip custom-inflate)])
         ;; Make sure there's nothing but whitespace left.
-        (let lp ()
-          (let ([x (read-char ip)])
-            (cond
-             [(eof-object? x) obj]
-             [(ws? x) (lp)]
-             [else (unexpected-input x ip)]))))]))
+        (let ([x (seek-non-ws ip)])
+          (if (eof-object? x)
+              obj
+              (unexpected-input x ip))))]))
 
   (define json:object->bytevector
     (case-lambda

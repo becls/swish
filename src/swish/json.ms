@@ -108,6 +108,16 @@
       "[-123,\"foo\",{\"bar\":[]},null]")
     ))
 
+(mat read ()
+  (assert (eof-object? (json:read (open-input-string ""))))
+  (assert (eof-object? (json:read (open-input-string "  \t  \n  "))))
+  (match-let*
+   ([,ip (open-input-string "1  \t  \n  2")]
+    [1 (json:read ip)]
+    [2 (json:read ip)]
+    [,x (guard (eof-object? x)) (json:read ip)])
+   'ok))
+
 (mat string->object ()
   (for-each
    (lambda (obj)
