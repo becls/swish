@@ -311,13 +311,14 @@
          [else (lp s (fx+ e 1) n)]))))
 
   (define (bv-next-non-lws bv i)
-    (and (fx< i (bytevector-length bv))
-         (let ([c (bytevector-u8-ref bv i)])
-           (cond
-            [(or (fx= c (char->integer #\space))
-                 (fx= c (char->integer #\tab)))
-             (bv-next-non-lws bv (fx+ i 1))]
-            [else i]))))
+    (or (and (fx< i (bytevector-length bv))
+             (let ([c (bytevector-u8-ref bv i)])
+               (cond
+                [(or (fx= c (char->integer #\space))
+                     (fx= c (char->integer #\tab)))
+                 (bv-next-non-lws bv (fx+ i 1))]
+                [else i])))
+        i))
 
   (define (bv-extract-string bv start end)
     (let* ([len (fx- end start)]

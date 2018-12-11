@@ -167,7 +167,20 @@
             "GET /mat?cmd=echo%20header HTTP/1.1\r\n"
             "Connection: close\r\n"
             "Host: \t localhost\r\n\r\n"))]
-
+    ["HTTP/1.1 200 \r\nContent-Length: 67\r\nCache-Control: no-cache\r\n\r\n((\"Connection\" . \"close\") (\"Host\" . \"localhost\") (\"No-Value\" . \"\"))"
+     (test
+      (string-append
+       "GET /mat?cmd=echo%20header HTTP/1.1\r\n"
+       "Connection: close\r\n"
+       "Host: localhost\r\n"
+       "No-Value:\r\n\r\n"))]
+    ["HTTP/1.1 200 \r\nContent-Length: 67\r\nCache-Control: no-cache\r\n\r\n((\"Connection\" . \"close\") (\"Host\" . \"localhost\") (\"No-Value\" . \"\"))"
+     (test
+      (string-append
+       "GET /mat?cmd=echo%20header HTTP/1.1\r\n"
+       "Connection: close\r\n"
+       "Host: localhost\r\n"
+       "No-Value: \r\n\r\n"))]
     ["HTTP/1.1 200 \r\nContent-Length: 3\r\nCache-Control: no-cache\r\nContent-Type: text/plain\r\n\r\nok\n"
      (test
       (string-append
