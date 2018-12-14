@@ -36,7 +36,8 @@ shared library that is statically linked against the libuv and SQLite
 libraries and dynamically linked against single-threaded Chez Scheme
 9.5.  Please refer to Chapter~4 of the \emph{Chez Scheme Version 9
   User's Guide}~\cite{chez-scheme-users-guide} for information on the
-foreign function interface.
+foreign function interface. C++ is not used because C++ destructors
+may interact badly with setjmp/longjmp, used by Chez Scheme.
 
 The single-threaded version of Chez Scheme is used because of its
 simplicity. All Scheme code runs in the main thread. In order to keep
