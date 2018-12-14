@@ -266,7 +266,8 @@
           (unread-char x ip)
           (rd ip)]))]))
 
-  (define (do-indent indent op)
+  (define (newline-and-indent indent op)
+    (newline op)
     (do ([i 0 (+ i 1)]) ((= i indent))
       (write-char #\space op)))
 
@@ -279,25 +280,21 @@
           [#\[
            (let ([indent (+ indent 2)])
              (write-char #\[ op)
-             (newline op)
-             (do-indent indent op)
+             (newline-and-indent indent op)
              indent)]
           [#\]
            (let ([indent (- indent 2)])
-             (newline op)
-             (do-indent indent op)
+             (newline-and-indent indent op)
              (write-char #\] op)
              indent)]
           [#\{
            (let ([indent (+ indent 2)])
              (write-char #\{ op)
-             (newline op)
-             (do-indent indent op)
+             (newline-and-indent indent op)
              indent)]
           [#\}
            (let ([indent (- indent 2)])
-             (newline op)
-             (do-indent indent op)
+             (newline-and-indent indent op)
              (write-char #\} op)
              indent)]
           [#\:
@@ -306,8 +303,7 @@
            indent]
           [#\,
            (write-char #\, op)
-           (newline op)
-           (do-indent indent op)
+           (newline-and-indent indent op)
            indent])))
 
   (define json:write
