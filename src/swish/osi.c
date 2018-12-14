@@ -83,26 +83,28 @@ typedef struct {
   uv_connect_t connect;
 } tcp_connect_t;
 
+uv_loop_t* osi_loop;
+
 static uint64_t g_tick;
 static ptr g_callbacks;
 
-void add_callback1(ptr callback, ptr arg) {
+void osi_add_callback1(ptr callback, ptr arg) {
   g_callbacks = Scons(Scons(callback, Scons(arg, Snil)), g_callbacks);
 }
 
-void add_callback2(ptr callback, ptr arg1, ptr arg2) {
+void osi_add_callback2(ptr callback, ptr arg1, ptr arg2) {
   g_callbacks = Scons(Scons(callback, Scons(arg1, Scons(arg2, Snil))), g_callbacks);
 }
 
-void add_callback3(ptr callback, ptr arg1, ptr arg2, ptr arg3) {
+void osi_add_callback3(ptr callback, ptr arg1, ptr arg2, ptr arg3) {
   g_callbacks = Scons(Scons(callback, Scons(arg1, Scons(arg2, Scons(arg3, Snil)))), g_callbacks);
 }
 
-ptr make_error_pair(const char* who, int error) {
+ptr osi_make_error_pair(const char* who, int error) {
   return Scons(Sstring_to_symbol(who), Sinteger(error));
 }
 
-char* string_to_utf8(ptr s, size_t* utf8_len) {
+char* osi_string_to_utf8(ptr s, size_t* utf8_len) {
   // utf8_len does not include the nul terminator character.
   size_t n = Sstring_length(s);
   size_t len = 0;
@@ -149,7 +151,7 @@ char* string_to_utf8(ptr s, size_t* utf8_len) {
 static ptr close_port_nosys(uptr port, ptr callback) {
   (void)port;
   (void)callback;
-  return make_error_pair("close_port", UV_ENOSYS);
+  return osi_make_error_pair("close_port", UV_ENOSYS);
 }
 
 static void rw_fs_cb(uv_fs_t* req) {
@@ -161,14 +163,14 @@ static void rw_fs_cb(uv_fs_t* req) {
   Sunlock_object(buffer);
   Sunlock_object(callback);
   free(fs_req);
-  add_callback1(callback, Sinteger(result));
+  osi_add_callback1(callback, Sinteger(result));
 }
 
 static ptr read_fs_port(uptr port, ptr buffer, size_t start_index, uint32_t size, int64_t offset, ptr callback) {
   fs_port_t* p = (fs_port_t*)port;
   rw_fs_req_t* req = malloc_container(rw_fs_req_t);
   if (!req)
-    return make_error_pair("osi_read_port", UV_ENOMEM);
+    return osi_make_error_pair("osi_read_port", UV_ENOMEM);
   Slock_object(buffer);
   Slock_object(callback);
   req->buffer = buffer;
@@ -177,12 +179,12 @@ static ptr read_fs_port(uptr port, ptr buffer, size_t start_index, uint32_t size
     .base = (char*) &Sbytevector_u8_ref(buffer, start_index),
     .len = size
   };
-  int rc = uv_fs_read(g_loop, &req->fs, p->file, &buf, 1, offset, rw_fs_cb);
+  int rc = uv_fs_read(osi_loop, &req->fs, p->file, &buf, 1, offset, rw_fs_cb);
   if (rc < 0) {
     Sunlock_object(buffer);
     Sunlock_object(callback);
     free(req);
-    return make_error_pair("uv_fs_read", rc);
+    return osi_make_error_pair("uv_fs_read", rc);
   }
   return Strue;
 }
@@ -191,7 +193,7 @@ static ptr write_fs_port(uptr port, ptr buffer, size_t start_index, uint32_t siz
   fs_port_t* p = (fs_port_t*)port;
   rw_fs_req_t* req = malloc_container(rw_fs_req_t);
   if (!req)
-    return make_error_pair("osi_write_port", UV_ENOMEM);
+    return osi_make_error_pair("osi_write_port", UV_ENOMEM);
   Slock_object(buffer);
   Slock_object(callback);
   req->buffer = buffer;
@@ -200,12 +202,12 @@ static ptr write_fs_port(uptr port, ptr buffer, size_t start_index, uint32_t siz
     .base = (char*) &Sbytevector_u8_ref(buffer, start_index),
     .len = size
   };
-  int rc = uv_fs_write(g_loop, &req->fs, p->file, &buf, 1, offset, rw_fs_cb);
+  int rc = uv_fs_write(osi_loop, &req->fs, p->file, &buf, 1, offset, rw_fs_cb);
   if (rc < 0) {
     Sunlock_object(buffer);
     Sunlock_object(callback);
     free(req);
-    return make_error_pair("uv_fs_write", rc);
+    return osi_make_error_pair("uv_fs_write", rc);
   }
   return Strue;
 }
@@ -219,22 +221,22 @@ static void close_fs_cb(uv_fs_t* req) {
   Sunlock_object(callback);
   free(port);
   free(req);
-  add_callback1(callback, Sinteger(result));
+  osi_add_callback1(callback, Sinteger(result));
 }
 
 static ptr close_fs_port(uptr port, ptr callback) {
   fs_port_t* p = (fs_port_t*)port;
   close_fs_req_t* req = malloc_container(close_fs_req_t);
   if (!req)
-    return make_error_pair("osi_close_port", UV_ENOMEM);
+    return osi_make_error_pair("osi_close_port", UV_ENOMEM);
   Slock_object(callback);
   req->port = p;
   req->callback = callback;
-  int rc = uv_fs_close(g_loop, &req->fs, p->file, close_fs_cb);
+  int rc = uv_fs_close(osi_loop, &req->fs, p->file, close_fs_cb);
   if (rc < 0) {
     Sunlock_object(callback);
     free(req);
-    return make_error_pair("uv_fs_close", rc);
+    return osi_make_error_pair("uv_fs_close", rc);
   }
   return Strue;
 }
@@ -252,21 +254,21 @@ static void open_fs_cb(uv_fs_t* req) {
   Sunlock_object(callback);
   free(req);
   if (result < 0)
-    add_callback1(callback, make_error_pair("uv_fs_open", (int)result));
+    osi_add_callback1(callback, osi_make_error_pair("uv_fs_open", (int)result));
   else {
     fs_port_t* port = malloc_container(fs_port_t);
     port->vtable = &file_vtable;
     port->file = (uv_file)result;
-    add_callback1(callback, Sunsigned((uptr)port));
+    osi_add_callback1(callback, Sunsigned((uptr)port));
   }
 }
 
 static void get_file_size_cb(uv_fs_t* req) {
   ptr callback = (ptr)req->data;
   if (req->result < 0)
-    add_callback1(callback, make_error_pair("uv_fs_fstat", (int)req->result));
+    osi_add_callback1(callback, osi_make_error_pair("uv_fs_fstat", (int)req->result));
   else
-    add_callback1(callback, Sunsigned64(req->statbuf.st_size));
+    osi_add_callback1(callback, Sunsigned64(req->statbuf.st_size));
   uv_fs_req_cleanup(req);
   Sunlock_object(callback);
   free(req);
@@ -275,9 +277,9 @@ static void get_file_size_cb(uv_fs_t* req) {
 static void get_real_path_cb(uv_fs_t* req) {
   ptr callback = (ptr)req->data;
   if (req->result < 0)
-    add_callback1(callback, make_error_pair("uv_fs_realpath", (int)req->result));
+    osi_add_callback1(callback, osi_make_error_pair("uv_fs_realpath", (int)req->result));
   else
-    add_callback1(callback, Sstring_utf8(req->ptr, -1));
+    osi_add_callback1(callback, Sstring_utf8(req->ptr, -1));
   uv_fs_req_cleanup(req);
   Sunlock_object(callback);
   free(req);
@@ -285,7 +287,7 @@ static void get_real_path_cb(uv_fs_t* req) {
 
 static void return_fs_result_cb(uv_fs_t* req) {
   ptr callback = (ptr)req->data;
-  add_callback1(callback, Sinteger(req->result));
+  osi_add_callback1(callback, Sinteger(req->result));
   uv_fs_req_cleanup(req);
   Sunlock_object(callback);
   free(req);
@@ -298,7 +300,7 @@ static ptr make_time(const uv_timespec_t* ts) {
 static void stat_cb(uv_fs_t* req) {
   ptr callback = (ptr)req->data;
   if (req->result < 0)
-    add_callback1(callback, Sinteger(req->result));
+    osi_add_callback1(callback, Sinteger(req->result));
   else {
     ptr r = Smake_vector(17, Sfixnum(0));
     Svector_set(r, 0, Sstring_to_symbol("<stat>"));
@@ -318,7 +320,7 @@ static void stat_cb(uv_fs_t* req) {
     Svector_set(r, 14, make_time(&(req->statbuf.st_mtim)));
     Svector_set(r, 15, make_time(&(req->statbuf.st_ctim)));
     Svector_set(r, 16, make_time(&(req->statbuf.st_birthtim)));
-    add_callback1(callback, r);
+    osi_add_callback1(callback, r);
   }
   uv_fs_req_cleanup(req);
   Sunlock_object(callback);
@@ -328,13 +330,13 @@ static void stat_cb(uv_fs_t* req) {
 static void list_directory_cb(uv_fs_t* req) {
   ptr callback = (ptr)req->data;
   if (req->result < 0)
-    add_callback1(callback, Sinteger(req->result));
+    osi_add_callback1(callback, Sinteger(req->result));
   else {
     ptr ls = Snil;
     uv_dirent_t ent;
     while (uv_fs_scandir_next(req, &ent) >= 0)
       ls = Scons(Scons(Sstring_utf8(ent.name, -1), Sinteger(ent.type)), ls);
-    add_callback1(callback, ls);
+    osi_add_callback1(callback, ls);
   }
   uv_fs_req_cleanup(req);
   Sunlock_object(callback);
@@ -356,15 +358,15 @@ static void read_stream_cb(uv_stream_t* stream, ssize_t nread, const uv_buf_t* b
   Sunlock_object(p->read_buffer);
   Sunlock_object(callback);
   p->read_callback = 0;
-  add_callback1(callback, Sinteger(nread));
+  osi_add_callback1(callback, Sinteger(nread));
 }
 
 static ptr read_stream_port(uptr port, ptr buffer, size_t start_index, uint32_t size, int64_t offset, ptr callback) {
   if (-1 != offset)
-    return make_error_pair("osi_read_port", UV_EINVAL);
+    return osi_make_error_pair("osi_read_port", UV_EINVAL);
   stream_port_t* p = (stream_port_t*)port;
   if (p->read_callback)
-    return make_error_pair("osi_read_port", UV_EBUSY);
+    return osi_make_error_pair("osi_read_port", UV_EBUSY);
   Slock_object(buffer);
   Slock_object(callback);
   p->read_buffer = buffer;
@@ -376,7 +378,7 @@ static ptr read_stream_port(uptr port, ptr buffer, size_t start_index, uint32_t 
     Sunlock_object(buffer);
     Sunlock_object(callback);
     p->read_callback = 0;
-    return make_error_pair("uv_read_start", rc);
+    return osi_make_error_pair("uv_read_start", rc);
   }
   return Strue;
 }
@@ -387,15 +389,15 @@ static void write_stream_cb(uv_write_t* req, int status) {
   Sunlock_object(p->write_buffer);
   Sunlock_object(callback);
   p->write_callback = 0;
-  add_callback1(callback, (status < 0) ? Sinteger32(status) : Sunsigned32(p->write_size));
+  osi_add_callback1(callback, (status < 0) ? Sinteger32(status) : Sunsigned32(p->write_size));
 }
 
 static ptr write_stream_port(uptr port, ptr buffer, size_t start_index, uint32_t size, int64_t offset, ptr callback) {
   if (-1 != offset)
-    return make_error_pair("osi_write_port", UV_EINVAL);
+    return osi_make_error_pair("osi_write_port", UV_EINVAL);
   stream_port_t* p = (stream_port_t*)port;
   if (p->write_callback)
-    return make_error_pair("osi_write_port", UV_EBUSY);
+    return osi_make_error_pair("osi_write_port", UV_EBUSY);
   Slock_object(buffer);
   Slock_object(callback);
   p->write_buffer = buffer;
@@ -410,7 +412,7 @@ static ptr write_stream_port(uptr port, ptr buffer, size_t start_index, uint32_t
     Sunlock_object(buffer);
     Sunlock_object(callback);
     p->write_callback = 0;
-    return make_error_pair("uv_write", rc);
+    return osi_make_error_pair("uv_write", rc);
   }
   return Strue;
 }
@@ -421,14 +423,14 @@ static void close_stream_cb(uv_handle_t* handle) {
   free(p);
   if (callback) {
     Sunlock_object(callback);
-    add_callback1(callback, Sfixnum(0));
+    osi_add_callback1(callback, Sfixnum(0));
   }
 }
 
 static ptr close_stream_port(uptr port, ptr callback) {
   stream_port_t* p = (stream_port_t*)port;
   if (p->close_callback)
-    return make_error_pair("osi_close_port", UV_EBUSY);
+    return osi_make_error_pair("osi_close_port", UV_EBUSY);
   Slock_object(callback);
   p->close_callback = callback;
   uv_close(&(p->h.handle), close_stream_cb);
@@ -458,7 +460,7 @@ static void connect_tcp_cb(uv_connect_t* req, int status) {
         uv_close(&(p->stream_port->h.handle), close_stream_cb);
         uv_freeaddrinfo(p->getaddrinfo.addrinfo);
         free(p);
-        add_callback1(callback, make_error_pair("uv_tcp_connect", status));
+        osi_add_callback1(callback, osi_make_error_pair("uv_tcp_connect", status));
         return;
       }
       p->ai = ai->ai_next;
@@ -471,7 +473,7 @@ static void connect_tcp_cb(uv_connect_t* req, int status) {
   Sunlock_object(callback);
   uv_freeaddrinfo(p->getaddrinfo.addrinfo);
   free(p);
-  add_callback1(callback, Sunsigned((uptr)port));
+  osi_add_callback1(callback, Sunsigned((uptr)port));
 }
 
 static void connect_tcp_addrinfo_cb(uv_getaddrinfo_t* req, int status, struct addrinfo* res) {
@@ -481,7 +483,7 @@ static void connect_tcp_addrinfo_cb(uv_getaddrinfo_t* req, int status, struct ad
     Sunlock_object(callback);
     uv_close(&(p->stream_port->h.handle), close_stream_cb);
     free(p);
-    add_callback1(callback, make_error_pair("uv_getaddrinfo", status));
+    osi_add_callback1(callback, osi_make_error_pair("uv_getaddrinfo", status));
     return;
   }
   p->ai = res->ai_next;
@@ -500,18 +502,18 @@ static void close_handle_data_cb(uv_handle_t* handle) {
 static void listen_tcp_cb(uv_stream_t* server, int status) {
   ptr callback = (ptr)server->data;
   if (status < 0) {
-    add_callback1(callback, make_error_pair("uv_listen", status));
+    osi_add_callback1(callback, osi_make_error_pair("uv_listen", status));
     return;
   }
   stream_port_t* port = malloc_container(stream_port_t);
   if (!port) {
-    add_callback1(callback, make_error_pair("uv_listen", UV_ENOMEM));
+    osi_add_callback1(callback, osi_make_error_pair("uv_listen", UV_ENOMEM));
     return;
   }
-  status = uv_tcp_init(g_loop, &(port->h.tcp));
+  status = uv_tcp_init(osi_loop, &(port->h.tcp));
   if (status < 0) {
     free(port);
-    add_callback1(callback, make_error_pair("uv_tcp_init", status));
+    osi_add_callback1(callback, osi_make_error_pair("uv_tcp_init", status));
     return;
   }
   port->vtable = &tcp_vtable;
@@ -521,19 +523,19 @@ static void listen_tcp_cb(uv_stream_t* server, int status) {
   status = uv_accept(server, &(port->h.stream));
   if (status < 0) {
     uv_close(&(port->h.handle), close_stream_cb);
-    add_callback1(callback, make_error_pair("uv_accept", status));
+    osi_add_callback1(callback, osi_make_error_pair("uv_accept", status));
     return;
   }
-  add_callback1(callback, Sunsigned((uptr)port));
+  osi_add_callback1(callback, Sunsigned((uptr)port));
 }
 
 static void watch_path_cb(uv_fs_event_t* handle, const char* filename, int events, int status) {
   ptr callback = (ptr)handle->data;
   if (status < 0) {
-    add_callback1(callback, Sinteger(status));
+    osi_add_callback1(callback, Sinteger(status));
     return;
   }
-  add_callback2(callback, Sstring_utf8(filename, -1), Sinteger(events));
+  osi_add_callback2(callback, Sstring_utf8(filename, -1), Sinteger(events));
 }
 
 static int string_list_length(ptr x) {
@@ -557,7 +559,7 @@ static void free_argv(char** argv) {
 
 static void process_exit_cb(uv_process_t* process, int64_t exit_status, int term_signal) {
   ptr callback = (ptr)process->data;
-  add_callback3(callback, Sinteger32(process->pid), Sinteger64(exit_status), Sinteger32(term_signal));
+  osi_add_callback3(callback, Sinteger32(process->pid), Sinteger64(exit_status), Sinteger32(term_signal));
   Sunlock_object(callback);
   process->data = 0;
   uv_close((uv_handle_t*)process, close_handle_data_cb);
@@ -606,14 +608,14 @@ size_t osi_get_bytes_used(void) {
 ptr osi_chmod(const char* path, int mode, ptr callback) {
   uv_fs_t* req = malloc_container(uv_fs_t);
   if (!req)
-    return make_error_pair("osi_chmod", UV_ENOMEM);
+    return osi_make_error_pair("osi_chmod", UV_ENOMEM);
   Slock_object(callback);
   req->data = callback;
-  int rc = uv_fs_chmod(g_loop, req, path, mode, return_fs_result_cb);
+  int rc = uv_fs_chmod(osi_loop, req, path, mode, return_fs_result_cb);
   if (rc < 0) {
     Sunlock_object(callback);
     free(req);
-    return make_error_pair("uv_fs_chmod", rc);
+    return osi_make_error_pair("uv_fs_chmod", rc);
   }
   return Strue;
 }
@@ -634,17 +636,17 @@ void osi_close_tcp_listener(uptr listener) {
 ptr osi_connect_tcp(const char* node, const char* service, ptr callback) {
   tcp_connect_t* p = malloc_container(tcp_connect_t);
   if (!p)
-    return make_error_pair("osi_connect_tcp", UV_ENOMEM);
+    return osi_make_error_pair("osi_connect_tcp", UV_ENOMEM);
   stream_port_t* port = p->stream_port = malloc_container(stream_port_t);
   if (!port) {
     free(p);
-    return make_error_pair("osi_connect_tcp", UV_ENOMEM);
+    return osi_make_error_pair("osi_connect_tcp", UV_ENOMEM);
   }
-  int rc = uv_tcp_init(g_loop, &(port->h.tcp));
+  int rc = uv_tcp_init(osi_loop, &(port->h.tcp));
   if (rc < 0) {
     free(port);
     free(p);
-    return make_error_pair("uv_tcp_init", rc);
+    return osi_make_error_pair("uv_tcp_init", rc);
   }
   port->vtable = &tcp_vtable;
   port->close_callback = 0;
@@ -657,12 +659,12 @@ ptr osi_connect_tcp(const char* node, const char* service, ptr callback) {
   hints.ai_family = AF_UNSPEC;
   hints.ai_protocol = IPPROTO_TCP;
   hints.ai_socktype = SOCK_STREAM;
-  rc = uv_getaddrinfo(g_loop, &(p->getaddrinfo), connect_tcp_addrinfo_cb, node, service, &hints);
+  rc = uv_getaddrinfo(osi_loop, &(p->getaddrinfo), connect_tcp_addrinfo_cb, node, service, &hints);
   if (rc < 0) {
     Sunlock_object(callback);
     uv_close(&(port->h.handle), close_stream_cb);
     free(p);
-    return make_error_pair("uv_getaddrinfo", rc);
+    return osi_make_error_pair("uv_getaddrinfo", rc);
   }
   return Strue;
 }
@@ -670,14 +672,14 @@ ptr osi_connect_tcp(const char* node, const char* service, ptr callback) {
 ptr osi_make_directory(const char* path, int mode, ptr callback) {
   uv_fs_t* req = malloc_container(uv_fs_t);
   if (!req)
-    return make_error_pair("osi_make_directory", UV_ENOMEM);
+    return osi_make_error_pair("osi_make_directory", UV_ENOMEM);
   Slock_object(callback);
   req->data = callback;
-  int rc = uv_fs_mkdir(g_loop, req, path, mode, return_fs_result_cb);
+  int rc = uv_fs_mkdir(osi_loop, req, path, mode, return_fs_result_cb);
   if (rc < 0) {
     Sunlock_object(callback);
     free(req);
-    return make_error_pair("uv_fs_mkdir", rc);
+    return osi_make_error_pair("uv_fs_mkdir", rc);
   }
   return Strue;
 }
@@ -687,7 +689,7 @@ ptr osi_make_uuid(void) {
   ptr r = Smake_bytevector(sizeof(UUID), 0);
   RPC_STATUS rc = UuidCreate((UUID*)Sbytevector_data(r));
   if (RPC_S_OK != rc)
-    return make_error_pair("UuidCreate", rc);
+    return osi_make_error_pair("UuidCreate", rc);
   return r;
 #else
   ptr r = Smake_bytevector(sizeof(uuid_t), 0);
@@ -703,53 +705,53 @@ void osi_exit(int status) {
 ptr osi_spawn(const char* path, ptr args, ptr callback) {
   int argc = string_list_length(args);
   if (argc < 0)
-    return make_error_pair("osi_spawn", UV_EINVAL);
+    return osi_make_error_pair("osi_spawn", UV_EINVAL);
   // Child stdin
   stream_port_t* in_port = malloc_container(stream_port_t);
   if (!in_port)
-    return make_error_pair("osi_spawn", UV_ENOMEM);
+    return osi_make_error_pair("osi_spawn", UV_ENOMEM);
   in_port->vtable = &pipe_vtable;
   in_port->close_callback = 0;
   in_port->read_callback = 0;
   in_port->write_callback = 0;
-  int rc = uv_pipe_init(g_loop, &(in_port->h.pipe), 0);
+  int rc = uv_pipe_init(osi_loop, &(in_port->h.pipe), 0);
   if (rc < 0) {
     free(in_port);
-    return make_error_pair("uv_pipe_init", rc);
+    return osi_make_error_pair("uv_pipe_init", rc);
   }
   // Child stdout
   stream_port_t* out_port = malloc_container(stream_port_t);
   if (!out_port) {
     uv_close(&(in_port->h.handle), close_stream_cb);
-    return make_error_pair("osi_spawn", UV_ENOMEM);
+    return osi_make_error_pair("osi_spawn", UV_ENOMEM);
   }
   out_port->vtable = &pipe_vtable;
   out_port->close_callback = 0;
   out_port->read_callback = 0;
   out_port->write_callback = 0;
-  rc = uv_pipe_init(g_loop, &(out_port->h.pipe), 0);
+  rc = uv_pipe_init(osi_loop, &(out_port->h.pipe), 0);
   if (rc < 0) {
     uv_close(&(in_port->h.handle), close_stream_cb);
     free(out_port);
-    return make_error_pair("uv_pipe_init", rc);
+    return osi_make_error_pair("uv_pipe_init", rc);
   }
   // Child stderr
   stream_port_t* err_port = malloc_container(stream_port_t);
   if (!err_port) {
     uv_close(&(in_port->h.handle), close_stream_cb);
     uv_close(&(out_port->h.handle), close_stream_cb);
-    return make_error_pair("osi_spawn", UV_ENOMEM);
+    return osi_make_error_pair("osi_spawn", UV_ENOMEM);
   }
   err_port->vtable = &pipe_vtable;
   err_port->close_callback = 0;
   err_port->read_callback = 0;
   err_port->write_callback = 0;
-  rc = uv_pipe_init(g_loop, &(err_port->h.pipe), 0);
+  rc = uv_pipe_init(osi_loop, &(err_port->h.pipe), 0);
   if (rc < 0) {
     uv_close(&(in_port->h.handle), close_stream_cb);
     uv_close(&(out_port->h.handle), close_stream_cb);
     free(err_port);
-    return make_error_pair("uv_pipe_init", rc);
+    return osi_make_error_pair("uv_pipe_init", rc);
   }
   // Build argument list
   char** argv = (char**)malloc((argc + 2) * sizeof(char*));
@@ -757,7 +759,7 @@ ptr osi_spawn(const char* path, ptr args, ptr callback) {
     uv_close(&(in_port->h.handle), close_stream_cb);
     uv_close(&(out_port->h.handle), close_stream_cb);
     uv_close(&(err_port->h.handle), close_stream_cb);
-    return make_error_pair("osi_spawn", UV_ENOMEM);
+    return osi_make_error_pair("osi_spawn", UV_ENOMEM);
   }
   {
     char** arg = argv;
@@ -765,7 +767,7 @@ ptr osi_spawn(const char* path, ptr args, ptr callback) {
     ptr x = args;
     while (Spairp(x)) {
       size_t l;
-      if (!(*arg++ = string_to_utf8(Scar(x), &l)))
+      if (!(*arg++ = osi_string_to_utf8(Scar(x), &l)))
         break;
       x = Scdr(x);
     }
@@ -778,7 +780,7 @@ ptr osi_spawn(const char* path, ptr args, ptr callback) {
     uv_close(&(out_port->h.handle), close_stream_cb);
     uv_close(&(err_port->h.handle), close_stream_cb);
     free_argv(argv);
-    return make_error_pair("osi_spawn", UV_ENOMEM);
+    return osi_make_error_pair("osi_spawn", UV_ENOMEM);
   }
   uv_stdio_container_t stdio[3];
   stdio[0].flags = UV_CREATE_PIPE | UV_READABLE_PIPE;
@@ -801,7 +803,7 @@ ptr osi_spawn(const char* path, ptr args, ptr callback) {
   };
   Slock_object(callback);
   p->data = callback;
-  rc = uv_spawn(g_loop, p, &options);
+  rc = uv_spawn(osi_loop, p, &options);
   free_argv(argv);
   if (rc < 0) {
     uv_close(&(in_port->h.handle), close_stream_cb);
@@ -809,7 +811,7 @@ ptr osi_spawn(const char* path, ptr args, ptr callback) {
     uv_close(&(err_port->h.handle), close_stream_cb);
     Sunlock_object(callback);
     free(p);
-    return make_error_pair("uv_spawn", rc);
+    return osi_make_error_pair("uv_spawn", rc);
   }
   ptr r = Smake_vector(4, 0);
   Svector_set(r, 0, Sunsigned((uptr)in_port));
@@ -822,24 +824,24 @@ ptr osi_spawn(const char* path, ptr args, ptr callback) {
 ptr osi_kill(int pid, int signum) {
   int rc = uv_kill(pid, signum);
   if (rc < 0)
-    return make_error_pair("uv_kill", rc);
+    return osi_make_error_pair("uv_kill", rc);
   return Strue;
 }
 
 ptr osi_get_file_size(uptr port, ptr callback) {
   fs_port_t* p = (fs_port_t*)port;
   if (p->vtable != &file_vtable)
-    return make_error_pair("osi_get_file_size", UV_EINVAL);
+    return osi_make_error_pair("osi_get_file_size", UV_EINVAL);
   uv_fs_t* req = malloc_container(uv_fs_t);
   if (!req)
-    return make_error_pair("osi_get_file_size", UV_ENOMEM);
+    return osi_make_error_pair("osi_get_file_size", UV_ENOMEM);
   Slock_object(callback);
   req->data = callback;
-  int rc = uv_fs_fstat(g_loop, req, p->file, get_file_size_cb);
+  int rc = uv_fs_fstat(osi_loop, req, p->file, get_file_size_cb);
   if (rc < 0) {
     Sunlock_object(callback);
     free(req);
-    return make_error_pair("uv_fs_fstat", rc);
+    return osi_make_error_pair("uv_fs_fstat", rc);
   }
   return Strue;
 }
@@ -849,21 +851,21 @@ ptr osi_get_executable_path(void) {
   size_t n = sizeof(buf);
   int rc = uv_exepath(buf, &n);
   if (rc < 0)
-    return make_error_pair("uv_exepath", rc);
+    return osi_make_error_pair("uv_exepath", rc);
   return Sstring_utf8(buf, n);
 }
 
 ptr osi_get_real_path(const char* path, ptr callback) {
   uv_fs_t* req = malloc_container(uv_fs_t);
   if (!req)
-    return make_error_pair("osi_get_real_path", UV_ENOMEM);
+    return osi_make_error_pair("osi_get_real_path", UV_ENOMEM);
   Slock_object(callback);
   req->data = callback;
-  int rc = uv_fs_realpath(g_loop, req, path, get_real_path_cb);
+  int rc = uv_fs_realpath(osi_loop, req, path, get_real_path_cb);
   if (rc < 0) {
     Sunlock_object(callback);
     free(req);
-    return make_error_pair("uv_fs_realpath", rc);
+    return osi_make_error_pair("uv_fs_realpath", rc);
   }
   return Strue;
 }
@@ -871,28 +873,28 @@ ptr osi_get_real_path(const char* path, ptr callback) {
 ptr osi_get_ip_address(uptr port) {
   stream_port_t* p = (stream_port_t*)port;
   if (p->vtable != &tcp_vtable)
-    return make_error_pair("osi_get_ip_address", UV_EINVAL);
+    return osi_make_error_pair("osi_get_ip_address", UV_EINVAL);
   struct sockaddr_storage addr;
   int addr_len = sizeof(addr);
   int rc = uv_tcp_getpeername(&(p->h.tcp), (struct sockaddr*)&addr, &addr_len);
   if (rc < 0)
-    return make_error_pair("uv_tcp_getpeername", rc);
+    return osi_make_error_pair("uv_tcp_getpeername", rc);
   char name[256];
   if (addr.ss_family == AF_INET) {
     rc = uv_ip4_name((struct sockaddr_in*)&addr, name, sizeof(name) - 6);
     if (rc < 0)
-      return make_error_pair("uv_ip4_name", rc);
+      return osi_make_error_pair("uv_ip4_name", rc);
     size_t len = strlen(name);
     snprintf(name + len, sizeof(name) - len, ":%d", ntohs(((struct sockaddr_in*)&addr)->sin_port));
   } else if (addr.ss_family == AF_INET6) {
     name[0] = '[';
     rc = uv_ip6_name((struct sockaddr_in6*)&addr, name + 1, sizeof(name) - 8);
     if (rc < 0)
-      return make_error_pair("uv_ip6_name", rc);
+      return osi_make_error_pair("uv_ip6_name", rc);
     size_t len = strlen(name);
     snprintf(name + len, sizeof(name) - len, "]:%d", ntohs(((struct sockaddr_in6*)&addr)->sin6_port));
   } else
-    return make_error_pair("osi_get_ip_address", UV_EAI_FAMILY);
+    return osi_make_error_pair("osi_get_ip_address", UV_EAI_FAMILY);
   return Sstring_utf8(name, -1);
 }
 
@@ -901,13 +903,13 @@ ptr osi_get_tcp_listener_port(uptr listener) {
   int addr_len = sizeof(addr);
   int rc = uv_tcp_getsockname((uv_tcp_t*)listener, (struct sockaddr*)&addr, &addr_len);
   if (rc < 0)
-    return make_error_pair("uv_tcp_getsockname", rc);
+    return osi_make_error_pair("uv_tcp_getsockname", rc);
   if (addr.ss_family == AF_INET)
     return Sfixnum(ntohs(((struct sockaddr_in*)&addr)->sin_port));
   if (addr.ss_family == AF_INET6)
     return Sfixnum(ntohs(((struct sockaddr_in6*)&addr)->sin6_port));
   else
-    return make_error_pair("osi_get_tcp_listener_port", UV_EAI_FAMILY);
+    return osi_make_error_pair("osi_get_tcp_listener_port", UV_EAI_FAMILY);
 }
 
 ptr osi_get_hostname(void) {
@@ -917,7 +919,7 @@ ptr osi_get_hostname(void) {
   if (0 == rc)
     return Sstring_utf8(buf, size);
   else
-    return make_error_pair("uv_os_gethostname", rc);
+    return osi_make_error_pair("uv_os_gethostname", rc);
 }
 
 uint64_t osi_get_hrtime(void) {
@@ -931,14 +933,14 @@ int osi_is_tick_over(void) {
 ptr osi_list_directory(const char* path, ptr callback) {
   uv_fs_t* req = malloc_container(uv_fs_t);
   if (!req)
-    return make_error_pair("osi_list_directory", UV_ENOMEM);
+    return osi_make_error_pair("osi_list_directory", UV_ENOMEM);
   Slock_object(callback);
   req->data = callback;
-  int rc = uv_fs_scandir(g_loop, req, path, 0, list_directory_cb);
+  int rc = uv_fs_scandir(osi_loop, req, path, 0, list_directory_cb);
   if (rc < 0) {
     Sunlock_object(callback);
     free(req);
-    return make_error_pair("uv_fs_scandir", rc);
+    return osi_make_error_pair("uv_fs_scandir", rc);
   }
   return Strue;
 }
@@ -955,27 +957,27 @@ ptr osi_listen_tcp(const char* address, uint16_t port, ptr callback) {
     rc = uv_ip6_addr(address, port, (struct sockaddr_in6*)&addr);
   }
   if (rc < 0)
-    return make_error_pair(who, rc);
+    return osi_make_error_pair(who, rc);
   uv_tcp_t* listener = malloc_container(uv_tcp_t);
   if (!listener)
-    return make_error_pair("osi_listen_tcp", UV_ENOMEM);
+    return osi_make_error_pair("osi_listen_tcp", UV_ENOMEM);
   listener->data = 0;
-  rc = uv_tcp_init(g_loop, listener);
+  rc = uv_tcp_init(osi_loop, listener);
   if (rc < 0) {
     free(listener);
-    return make_error_pair("uv_tcp_init", rc);
+    return osi_make_error_pair("uv_tcp_init", rc);
   }
   rc = uv_tcp_bind(listener, (struct sockaddr*)&addr, 0);
   if (rc < 0) {
     uv_close((uv_handle_t*)listener, close_handle_data_cb);
-    return make_error_pair("uv_tcp_bind", rc);
+    return osi_make_error_pair("uv_tcp_bind", rc);
   }
   Slock_object(callback);
   listener->data = callback;
   rc = uv_listen((uv_stream_t*)listener, SOMAXCONN, listen_tcp_cb);
   if (rc < 0) {
     uv_close((uv_handle_t*)listener, close_handle_data_cb);
-    return make_error_pair("uv_listen", rc);
+    return osi_make_error_pair("uv_listen", rc);
   }
   return Sunsigned((uptr)listener);
 }
@@ -997,21 +999,21 @@ uint64_t osi_get_time(void) {
 
 ptr osi_list_uv_handles(void) {
   ptr ls = Snil;
-  uv_walk(g_loop, list_uv_cb, &ls);
+  uv_walk(osi_loop, list_uv_cb, &ls);
   return ls;
 }
 
 ptr osi_open_file(const char* path, int flags, int mode, ptr callback) {
   uv_fs_t* req = malloc_container(uv_fs_t);
   if (!req)
-    return make_error_pair("osi_open_file", UV_ENOMEM);
+    return osi_make_error_pair("osi_open_file", UV_ENOMEM);
   Slock_object(callback);
   req->data = callback;
-  int rc = uv_fs_open(g_loop, req, path, flags, mode, open_fs_cb);
+  int rc = uv_fs_open(osi_loop, req, path, flags, mode, open_fs_cb);
   if (rc < 0) {
     Sunlock_object(callback);
     free(req);
-    return make_error_pair("uv_fs_close", rc);
+    return osi_make_error_pair("uv_fs_close", rc);
   }
   return Strue;
 }
@@ -1019,14 +1021,14 @@ ptr osi_open_file(const char* path, int flags, int mode, ptr callback) {
 ptr osi_remove_directory(const char* path, ptr callback) {
   uv_fs_t* req = malloc_container(uv_fs_t);
   if (!req)
-    return make_error_pair("osi_remove_directory", UV_ENOMEM);
+    return osi_make_error_pair("osi_remove_directory", UV_ENOMEM);
   Slock_object(callback);
   req->data = callback;
-  int rc = uv_fs_rmdir(g_loop, req, path, return_fs_result_cb);
+  int rc = uv_fs_rmdir(osi_loop, req, path, return_fs_result_cb);
   if (rc < 0) {
     Sunlock_object(callback);
     free(req);
-    return make_error_pair("uv_fs_rmdir", rc);
+    return osi_make_error_pair("uv_fs_rmdir", rc);
   }
   return Strue;
 }
@@ -1034,14 +1036,14 @@ ptr osi_remove_directory(const char* path, ptr callback) {
 ptr osi_rename(const char* path, const char* new_path, ptr callback) {
   uv_fs_t* req = malloc_container(uv_fs_t);
   if (!req)
-    return make_error_pair("osi_rename", UV_ENOMEM);
+    return osi_make_error_pair("osi_rename", UV_ENOMEM);
   Slock_object(callback);
   req->data = callback;
-  int rc = uv_fs_rename(g_loop, req, path, new_path, return_fs_result_cb);
+  int rc = uv_fs_rename(osi_loop, req, path, new_path, return_fs_result_cb);
   if (rc < 0) {
     Sunlock_object(callback);
     free(req);
-    return make_error_pair("uv_fs_rename", rc);
+    return osi_make_error_pair("uv_fs_rename", rc);
   }
   return Strue;
 }
@@ -1064,7 +1066,7 @@ ptr osi_get_temp_directory(void) {
   size_t len = sizeof(buffer);
   int rc = uv_os_tmpdir(buffer, &len);
   if (rc < 0)
-    return make_error_pair("uv_os_tmpdir", rc);
+    return osi_make_error_pair("uv_os_tmpdir", rc);
   return Sstring_utf8(buffer, len);
 }
 
@@ -1085,7 +1087,7 @@ ptr osi_read_port(uptr port, ptr buffer, size_t start_index, uint32_t size, int6
   if (!Sbytevectorp(buffer) ||
       (last <= start_index) || // size is 0 or start_index + size overflowed
       (last > (size_t)Sbytevector_length(buffer)))
-    return make_error_pair("osi_read_port", UV_EINVAL);
+    return osi_make_error_pair("osi_read_port", UV_EINVAL);
   return (*(port_vtable_t**)port)->read(port, buffer, start_index, size, offset, callback);
 }
 
@@ -1097,16 +1099,16 @@ static void get_callbacks_timer_cb(uv_timer_t* handle) {
 }
 
 ptr osi_get_callbacks(uint64_t timeout) {
-  uv_update_time(g_loop);
+  uv_update_time(osi_loop);
   if (0 == timeout) {
-    uv_run(g_loop, UV_RUN_NOWAIT);
+    uv_run(osi_loop, UV_RUN_NOWAIT);
   } else {
     g_timer.data = 0;
     uv_timer_start(&g_timer, get_callbacks_timer_cb, timeout, 0);
-    uv_run(g_loop, UV_RUN_ONCE);
+    uv_run(osi_loop, UV_RUN_ONCE);
     if (0 == g_timer.data) { // timer didn't fire
       uv_timer_stop(&g_timer);
-      uv_run(g_loop, UV_RUN_NOWAIT);
+      uv_run(osi_loop, UV_RUN_NOWAIT);
     }
   }
   ptr callbacks = g_callbacks;
@@ -1121,16 +1123,16 @@ void osi_set_tick(uint64_t nanoseconds) {
 ptr osi_get_stat(const char* path, int follow, ptr callback) {
   uv_fs_t* req = malloc_container(uv_fs_t);
   if (!req)
-    return make_error_pair("osi_get_stat", UV_ENOMEM);
+    return osi_make_error_pair("osi_get_stat", UV_ENOMEM);
   Slock_object(callback);
   req->data = callback;
   int rc = follow ?
-           uv_fs_stat(g_loop, req, path, stat_cb) :
-           uv_fs_lstat(g_loop, req, path, stat_cb);
+           uv_fs_stat(osi_loop, req, path, stat_cb) :
+           uv_fs_lstat(osi_loop, req, path, stat_cb);
   if (rc < 0) {
     Sunlock_object(callback);
     free(req);
-    return make_error_pair(follow ? "uv_fs_stat" : "uv_fs_lstat", rc);
+    return osi_make_error_pair(follow ? "uv_fs_stat" : "uv_fs_lstat", rc);
   }
   return Strue;
 }
@@ -1138,14 +1140,14 @@ ptr osi_get_stat(const char* path, int follow, ptr callback) {
 ptr osi_unlink(const char* path, ptr callback) {
   uv_fs_t* req = malloc_container(uv_fs_t);
   if (!req)
-    return make_error_pair("osi_unlink", UV_ENOMEM);
+    return osi_make_error_pair("osi_unlink", UV_ENOMEM);
   Slock_object(callback);
   req->data = callback;
-  int rc = uv_fs_unlink(g_loop, req, path, return_fs_result_cb);
+  int rc = uv_fs_unlink(osi_loop, req, path, return_fs_result_cb);
   if (rc < 0) {
     Sunlock_object(callback);
     free(req);
-    return make_error_pair("uv_fs_unlink", rc);
+    return osi_make_error_pair("uv_fs_unlink", rc);
   }
   return Strue;
 }
@@ -1153,19 +1155,19 @@ ptr osi_unlink(const char* path, ptr callback) {
 ptr osi_watch_path(const char* path, ptr callback) {
   uv_fs_event_t* watcher = malloc_container(uv_fs_event_t);
   if (!watcher)
-    return make_error_pair("osi_watch_path", UV_ENOMEM);
+    return osi_make_error_pair("osi_watch_path", UV_ENOMEM);
   watcher->data = 0;
-  int rc = uv_fs_event_init(g_loop, watcher);
+  int rc = uv_fs_event_init(osi_loop, watcher);
   if (rc < 0) {
     free(watcher);
-    return make_error_pair("uv_fs_event_init", rc);
+    return osi_make_error_pair("uv_fs_event_init", rc);
   }
   Slock_object(callback);
   watcher->data = callback;
   rc = uv_fs_event_start(watcher, watch_path_cb, path, 0);
   if (rc < 0) {
     uv_close((uv_handle_t*)watcher, close_handle_data_cb);
-    return make_error_pair("uv_fs_event_start", rc);
+    return osi_make_error_pair("uv_fs_event_start", rc);
   }
   return Sunsigned((uptr)watcher);
 }
@@ -1175,14 +1177,16 @@ ptr osi_write_port(uptr port, ptr buffer, size_t start_index, uint32_t size, int
   if (!Sbytevectorp(buffer) ||
       (last <= start_index) || // size is 0 or start_index + size overflowed
       (last > (size_t)Sbytevector_length(buffer)))
-    return make_error_pair("osi_write_port", UV_EINVAL);
+    return osi_make_error_pair("osi_write_port", UV_EINVAL);
   return (*(port_vtable_t**)port)->write(port, buffer, start_index, size, offset, callback);
 }
 
 void osi_init(void) {
   uv_disable_stdio_inheritance();
-  g_loop = uv_default_loop();
-  uv_timer_init(g_loop, &g_timer);
+  static uv_loop_t g_loop;
+  uv_loop_init(&g_loop);
+  osi_loop = &g_loop;
+  uv_timer_init(osi_loop, &g_timer);
   g_callbacks = Snil;
 #ifdef _WIN32
   timeBeginPeriod(1); // Set timer resolution to 1 ms.

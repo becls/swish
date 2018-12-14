@@ -107,17 +107,17 @@ static void open_cb(uv_work_t* req, int status) {
   free(r);
   if (SQLITE_OK != sqlite_rc) {
     if (db) {
-      add_callback1(callback, make_sqlite_error("sqlite3_open_v2", sqlite3_extended_errcode(db), db));
+      osi_add_callback1(callback, make_sqlite_error("sqlite3_open_v2", sqlite3_extended_errcode(db), db));
       sqlite3_close(db);
     } else
-      add_callback1(callback, make_error_pair("sqlite3_open_v2", TRANSLATE_SQLITE_ERRNO(sqlite_rc)));
+      osi_add_callback1(callback, osi_make_error_pair("sqlite3_open_v2", TRANSLATE_SQLITE_ERRNO(sqlite_rc)));
     return;
   }
   sqlite3_extended_result_codes(db, 1);
   database_t* d = malloc_container(database_t);
   if (!d) {
     sqlite3_close(db);
-    add_callback1(callback, make_error_pair("osi_open_database", UV_ENOMEM));
+    osi_add_callback1(callback, osi_make_error_pair("osi_open_database", UV_ENOMEM));
     return;
   }
   d->db = db;
@@ -128,18 +128,18 @@ static void open_cb(uv_work_t* req, int status) {
   d->sql = NULL;
   d->sql_len = 0;
   d->sqlite_rc = SQLITE_OK;
-  int rc = uv_async_init(g_loop, &(d->async), async_cb);
+  int rc = uv_async_init(osi_loop, &(d->async), async_cb);
   if (rc < 0) {
     sqlite3_close(db);
     free(d);
-    add_callback1(callback, make_error_pair("uv_async_init", rc));
+    osi_add_callback1(callback, osi_make_error_pair("uv_async_init", rc));
     return;
   }
   rc = uv_mutex_init(&(d->mutex));
   if (rc < 0) {
     sqlite3_close(db);
     uv_close((uv_handle_t*)&(d->async), close_free_cb);
-    add_callback1(callback, make_error_pair("uv_mutex_init", rc));
+    osi_add_callback1(callback, osi_make_error_pair("uv_mutex_init", rc));
     return;
   }
   rc = uv_cond_init(&(d->cond));
@@ -147,7 +147,7 @@ static void open_cb(uv_work_t* req, int status) {
     uv_mutex_destroy(&(d->mutex));
     sqlite3_close(db);
     uv_close((uv_handle_t*)&(d->async), close_free_cb);
-    add_callback1(callback, make_error_pair("uv_cond_init", rc));
+    osi_add_callback1(callback, osi_make_error_pair("uv_cond_init", rc));
     return;
   }
   rc = uv_thread_create(&(d->thread), database_worker, d);
@@ -156,26 +156,26 @@ static void open_cb(uv_work_t* req, int status) {
     uv_mutex_destroy(&(d->mutex));
     sqlite3_close(db);
     uv_close((uv_handle_t*)&(d->async), close_free_cb);
-    add_callback1(callback, make_error_pair("uv_thread_create", rc));
+    osi_add_callback1(callback, osi_make_error_pair("uv_thread_create", rc));
     return;
   }
-  add_callback1(callback, Sunsigned((uptr)d));
+  osi_add_callback1(callback, Sunsigned((uptr)d));
 }
 
 ptr osi_open_database(const char* filename, int flags, ptr callback) {
   open_req_t* req = malloc_container(open_req_t);
   if (!req)
-    return make_error_pair("osi_open_database", UV_ENOMEM);
+    return osi_make_error_pair("osi_open_database", UV_ENOMEM);
   req->filename = strdup(filename);
   req->flags = flags;
   Slock_object(callback);
   req->callback = callback;
-  int rc = uv_queue_work(g_loop, &(req->work), open_worker, open_cb);
+  int rc = uv_queue_work(osi_loop, &(req->work), open_worker, open_cb);
   if (rc < 0) {
     Sunlock_object(callback);
     free(req->filename);
     free(req);
-    return make_error_pair("uv_queue_work", rc);
+    return osi_make_error_pair("uv_queue_work", rc);
   }
   return Strue;
 }
@@ -207,15 +207,15 @@ static void close_cb(uv_async_t* handle) {
     uv_cond_destroy(&(d->cond));
     uv_mutex_destroy(&(d->mutex));
     uv_close((uv_handle_t*)handle, close_free_cb);
-    add_callback1(callback, Strue);
+    osi_add_callback1(callback, Strue);
   } else
-    add_callback1(callback, make_sqlite_error("sqlite3_close", rc, d->db));
+    osi_add_callback1(callback, make_sqlite_error("sqlite3_close", rc, d->db));
 }
 
 ptr osi_close_database(uptr database, ptr callback) {
   database_t* d = (database_t*)database;
   if (d->busy)
-    return make_error_pair("osi_close_database", UV_EBUSY);
+    return osi_make_error_pair("osi_close_database", UV_EBUSY);
   d->async.data = close_cb;
   Slock_object(callback);
   uv_mutex_lock(&(d->mutex));
@@ -259,24 +259,24 @@ static void prepare_cb(uv_async_t* handle) {
   Sunlock_object(callback);
   int rc = d->sqlite_rc;
   if (SQLITE_OK == rc) {
-    add_callback1(callback, Sunsigned((uptr)d->statement));
+    osi_add_callback1(callback, Sunsigned((uptr)d->statement));
   } else
-    add_callback1(callback, make_sqlite_error("sqlite3_prepare_v2", rc, d->db));
+    osi_add_callback1(callback, make_sqlite_error("sqlite3_prepare_v2", rc, d->db));
 }
 
 ptr osi_prepare_statement(uptr database, ptr sql, ptr callback) {
   database_t* d = (database_t*)database;
   if (d->busy)
-    return make_error_pair("osi_prepare_statement", UV_EBUSY);
+    return osi_make_error_pair("osi_prepare_statement", UV_EBUSY);
   if (!Sstringp(sql))
-    return make_error_pair("osi_prepare_statement", UV_EINVAL);
+    return osi_make_error_pair("osi_prepare_statement", UV_EINVAL);
   size_t len;
-  char* utf8 = string_to_utf8(sql, &len);
+  char* utf8 = osi_string_to_utf8(sql, &len);
   if (!utf8)
-    return make_error_pair("osi_prepare_statement", UV_ENOMEM);
+    return osi_make_error_pair("osi_prepare_statement", UV_ENOMEM);
   if (len > 0x7fffffff) {
     free(utf8);
-    return make_error_pair("sqlite3_prepare_v2", TRANSLATE_SQLITE_ERRNO(SQLITE_TOOBIG));
+    return osi_make_error_pair("sqlite3_prepare_v2", TRANSLATE_SQLITE_ERRNO(SQLITE_TOOBIG));
   }
   d->async.data = prepare_cb;
   Slock_object(callback);
@@ -299,7 +299,7 @@ ptr osi_finalize_statement(uptr statement) {
     return Strue;
   }
   if (s->database->busy)
-    return make_error_pair("osi_finalize_statement", UV_EBUSY);
+    return osi_make_error_pair("osi_finalize_statement", UV_EBUSY);
   sqlite3_finalize(s->stmt);
   if (s->prev)
     s->prev->next = s->next;
@@ -314,9 +314,9 @@ ptr osi_finalize_statement(uptr statement) {
 ptr osi_bind_statement(uptr statement, int index, ptr datum) {
   statement_t* s = (statement_t*)statement;
   if (!s->database)
-    return make_error_pair("osi_bind_statement", UV_EINVAL);
+    return osi_make_error_pair("osi_bind_statement", UV_EINVAL);
   if (s->database->busy)
-    return make_error_pair("osi_bind_statement", UV_EBUSY);
+    return osi_make_error_pair("osi_bind_statement", UV_EBUSY);
   int rc;
   const char* who;
   if (Sfalse == datum) {
@@ -330,16 +330,16 @@ ptr osi_bind_statement(uptr statement, int index, ptr datum) {
     rc = sqlite3_bind_double(s->stmt, index, Sflonum_value(datum));
   } else if (Sstringp(datum)) {
     size_t len;
-    char* utf8 = string_to_utf8(datum, &len);
+    char* utf8 = osi_string_to_utf8(datum, &len);
     if (!utf8)
-      return make_error_pair("osi_bind_statement", UV_ENOMEM);
+      return osi_make_error_pair("osi_bind_statement", UV_ENOMEM);
     who = "sqlite3_bind_text64";
     rc = sqlite3_bind_text64(s->stmt, index, utf8, len, free, SQLITE_UTF8);
   } else if (Sbytevectorp(datum)) {
     who = "sqlite3_bind_blob64";
     rc = sqlite3_bind_blob64(s->stmt, index, (const void*)Sbytevector_data(datum), Sbytevector_length(datum), SQLITE_TRANSIENT);
   } else
-    return make_error_pair("osi_bind_statement", UV_EINVAL);
+    return osi_make_error_pair("osi_bind_statement", UV_EINVAL);
   if (SQLITE_OK != rc)
     return make_sqlite_error(who, rc, s->database->db);
   return Strue;
@@ -348,9 +348,9 @@ ptr osi_bind_statement(uptr statement, int index, ptr datum) {
 ptr osi_clear_statement_bindings(uptr statement) {
   statement_t* s = (statement_t*)statement;
   if (!s->database)
-    return make_error_pair("osi_clear_statement_bindings", UV_EINVAL);
+    return osi_make_error_pair("osi_clear_statement_bindings", UV_EINVAL);
   if (s->database->busy)
-    return make_error_pair("osi_clear_statement_bindings", UV_EBUSY);
+    return osi_make_error_pair("osi_clear_statement_bindings", UV_EBUSY);
   int rc = sqlite3_clear_bindings(s->stmt);
   if (SQLITE_OK != rc)
     return make_sqlite_error("osi_clear_statement_bindings", rc, s->database->db);
@@ -360,16 +360,16 @@ ptr osi_clear_statement_bindings(uptr statement) {
 ptr osi_get_last_insert_rowid(uptr database) {
   database_t* d = (database_t*)database;
   if (d->busy)
-    return make_error_pair("osi_get_last_insert_rowid", UV_EBUSY);
+    return osi_make_error_pair("osi_get_last_insert_rowid", UV_EBUSY);
   return Sinteger64(sqlite3_last_insert_rowid(d->db));
 }
 
 ptr osi_get_statement_columns(uptr statement) {
   statement_t* s = (statement_t*)statement;
   if (!s->database)
-    return make_error_pair("osi_get_statement_columns", UV_EINVAL);
+    return osi_make_error_pair("osi_get_statement_columns", UV_EINVAL);
   if (s->database->busy)
-    return make_error_pair("osi_get_statement_columns", UV_EBUSY);
+    return osi_make_error_pair("osi_get_statement_columns", UV_EBUSY);
   int count = sqlite3_column_count(s->stmt);
   ptr v = Smake_vector(count, Sfixnum(0));
   for (int i=0; i < count; ++i) {
@@ -384,12 +384,12 @@ ptr osi_get_statement_columns(uptr statement) {
 ptr osi_get_statement_expanded_sql(uptr statement) {
   statement_t* s = (statement_t*)statement;
   if (!s->database)
-    return make_error_pair("osi_get_statement_expanded_sql", UV_EINVAL);
+    return osi_make_error_pair("osi_get_statement_expanded_sql", UV_EINVAL);
   if (s->database->busy)
-    return make_error_pair("osi_get_statement_expanded_sql", UV_EBUSY);
+    return osi_make_error_pair("osi_get_statement_expanded_sql", UV_EBUSY);
   char* sql = sqlite3_expanded_sql(s->stmt);
   if (!sql)
-    return make_error_pair("osi_get_statement_expanded_sql", UV_ENOMEM);
+    return osi_make_error_pair("osi_get_statement_expanded_sql", UV_ENOMEM);
   ptr r = Sstring_utf8(sql, -1);
   sqlite3_free(sql);
   return r;
@@ -398,9 +398,9 @@ ptr osi_get_statement_expanded_sql(uptr statement) {
 ptr osi_reset_statement(uptr statement) {
   statement_t* s = (statement_t*)statement;
   if (!s->database)
-    return make_error_pair("osi_reset_statement", UV_EINVAL);
+    return osi_make_error_pair("osi_reset_statement", UV_EINVAL);
   if (s->database->busy)
-    return make_error_pair("osi_reset_statement", UV_EBUSY);
+    return osi_make_error_pair("osi_reset_statement", UV_EBUSY);
   int rc = sqlite3_reset(s->stmt);
   if (SQLITE_OK != rc)
     return make_sqlite_error("sqlite3_reset", rc, s->database->db);
@@ -456,16 +456,16 @@ static void step_cb(uv_async_t* handle) {
   } else {
     arg = make_sqlite_error("sqlite3_step", rc, d->db);
   }
-  add_callback1(callback, arg);
+  osi_add_callback1(callback, arg);
 }
 
 ptr osi_step_statement(uptr statement, ptr callback) {
   statement_t* s = (statement_t*)statement;
   database_t* d = s->database;
   if (!d)
-    return make_error_pair("osi_step_statement", UV_EINVAL);
+    return osi_make_error_pair("osi_step_statement", UV_EINVAL);
   if (d->busy)
-    return make_error_pair("osi_step_statement", UV_EBUSY);
+    return osi_make_error_pair("osi_step_statement", UV_EBUSY);
   d->async.data = step_cb;
   Slock_object(callback);
   uv_mutex_lock(&(d->mutex));
@@ -487,7 +487,7 @@ ptr osi_get_sqlite_status(int operation, int resetp) {
   sqlite3_int64 highwater;
   int sqlite_rc = sqlite3_status64(operation, &current, &highwater, resetp);
   if (SQLITE_OK != sqlite_rc)
-    return make_error_pair("sqlite3_status", TRANSLATE_SQLITE_ERRNO(sqlite_rc));
+    return osi_make_error_pair("sqlite3_status", TRANSLATE_SQLITE_ERRNO(sqlite_rc));
   ptr v = Smake_vector(2, Sfixnum(0));
   Svector_set(v, 0, Sinteger64(current));
   Svector_set(v, 1, Sinteger64(highwater));

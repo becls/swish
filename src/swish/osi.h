@@ -44,13 +44,13 @@
 #include <string.h>
 #include "sqlite3.h"
 
-uv_loop_t* g_loop;
+EXPORT uv_loop_t* osi_loop;
 
-void add_callback1(ptr callback, ptr arg);
-void add_callback2(ptr callback, ptr arg1, ptr arg2);
-void add_callback3(ptr callback, ptr arg1, ptr arg2, ptr arg3);
-ptr make_error_pair(const char* who, int error);
-char* string_to_utf8(ptr s, size_t* utf8_len);
+EXPORT void osi_add_callback1(ptr callback, ptr arg);
+EXPORT void osi_add_callback2(ptr callback, ptr arg1, ptr arg2);
+EXPORT void osi_add_callback3(ptr callback, ptr arg1, ptr arg2, ptr arg3);
+EXPORT ptr osi_make_error_pair(const char* who, int error);
+EXPORT char* osi_string_to_utf8(ptr s, size_t* utf8_len);
 
 // System
 EXPORT ptr osi_get_argv(void);
