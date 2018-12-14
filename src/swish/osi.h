@@ -44,6 +44,12 @@
 #include <string.h>
 #include "sqlite3.h"
 
+typedef struct {
+  ptr (*close)(uptr port, ptr callback);
+  ptr (*read)(uptr port, ptr buffer, size_t start_index, uint32_t size, int64_t offset, ptr callback);
+  ptr (*write)(uptr port, ptr buffer, size_t start_index, uint32_t size, int64_t offset, ptr callback);
+} osi_port_vtable_t;
+
 EXPORT uv_loop_t* osi_loop;
 
 EXPORT void osi_add_callback1(ptr callback, ptr arg);

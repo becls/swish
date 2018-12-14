@@ -34,18 +34,12 @@
 #endif
 
 typedef struct {
-  ptr (*close)(uptr port, ptr callback);
-  ptr (*read)(uptr port, ptr buffer, size_t start_index, uint32_t size, int64_t offset, ptr callback);
-  ptr (*write)(uptr port, ptr buffer, size_t start_index, uint32_t size, int64_t offset, ptr callback);
-} port_vtable_t;
-
-typedef struct {
-  port_vtable_t* vtable;
+  osi_port_vtable_t* vtable;
   uv_file file;
 } fs_port_t;
 
 typedef struct {
-  port_vtable_t* vtable;
+  osi_port_vtable_t* vtable;
   ptr close_callback;
   ptr read_buffer;
   size_t read_start_index;
@@ -241,7 +235,7 @@ static ptr close_fs_port(uptr port, ptr callback) {
   return Strue;
 }
 
-static port_vtable_t file_vtable = {
+static osi_port_vtable_t file_vtable = {
   .close = close_fs_port,
   .read = read_fs_port,
   .write = write_fs_port
@@ -437,13 +431,13 @@ static ptr close_stream_port(uptr port, ptr callback) {
   return Strue;
 }
 
-static port_vtable_t pipe_vtable = {
+static osi_port_vtable_t pipe_vtable = {
   .close = close_stream_port,
   .read = read_stream_port,
   .write = write_stream_port
 };
 
-static port_vtable_t tcp_vtable = {
+static osi_port_vtable_t tcp_vtable = {
   .close = close_stream_port,
   .read = read_stream_port,
   .write = write_stream_port
@@ -626,7 +620,7 @@ void osi_close_path_watcher(uptr watcher) {
 }
 
 ptr osi_close_port(uptr port, ptr callback) {
-  return (*(port_vtable_t**)port)->close(port, callback);
+  return (*(osi_port_vtable_t**)port)->close(port, callback);
 }
 
 void osi_close_tcp_listener(uptr listener) {
@@ -1049,7 +1043,7 @@ ptr osi_rename(const char* path, const char* new_path, ptr callback) {
 }
 
 uptr osi_get_stdin(void) {
-  static port_vtable_t stdin_vtable = {
+  static osi_port_vtable_t stdin_vtable = {
     .close = close_port_nosys,
     .read = read_fs_port,
     .write = write_fs_port
@@ -1088,7 +1082,7 @@ ptr osi_read_port(uptr port, ptr buffer, size_t start_index, uint32_t size, int6
       (last <= start_index) || // size is 0 or start_index + size overflowed
       (last > (size_t)Sbytevector_length(buffer)))
     return osi_make_error_pair("osi_read_port", UV_EINVAL);
-  return (*(port_vtable_t**)port)->read(port, buffer, start_index, size, offset, callback);
+  return (*(osi_port_vtable_t**)port)->read(port, buffer, start_index, size, offset, callback);
 }
 
 static uv_timer_t g_timer;
@@ -1178,7 +1172,7 @@ ptr osi_write_port(uptr port, ptr buffer, size_t start_index, uint32_t size, int
       (last <= start_index) || // size is 0 or start_index + size overflowed
       (last > (size_t)Sbytevector_length(buffer)))
     return osi_make_error_pair("osi_write_port", UV_EINVAL);
-  return (*(port_vtable_t**)port)->write(port, buffer, start_index, size, offset, callback);
+  return (*(osi_port_vtable_t**)port)->write(port, buffer, start_index, size, offset, callback);
 }
 
 void osi_init(void) {
