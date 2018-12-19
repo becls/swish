@@ -574,7 +574,7 @@
 
   (define process-default-ticks 1000)
 
-  (define tick-nanoseconds 1000000) ;; 1 millisecond
+  (define quantum-nanoseconds 1000000) ;; 1 millisecond
 
   (define (insert-q x next)
     ;; No interrupts occur within this procedure because the record
@@ -657,7 +657,7 @@
     (pcb-cont-set! self #f)            ;; drop ref
     (pcb-winders-set! self '())        ;; drop ref
     (pcb-exception-state-set! self #f) ;; drop ref
-    (osi_set_tick tick-nanoseconds)
+    (osi_set_quantum quantum-nanoseconds)
     (set-timer process-default-ticks)
     (enable-interrupts))
 
@@ -679,7 +679,7 @@
                                 (current-exception-state
                                  (create-exception-state done))
                                 (pcb-cont-set! self #f) ;; drop ref
-                                (osi_set_tick tick-nanoseconds)
+                                (osi_set_quantum quantum-nanoseconds)
                                 (set-timer process-default-ticks)
                                 (enable-interrupts)
                                 (exit-handler
@@ -1215,7 +1215,7 @@
   (set! finalizer-process (spawn finalizer-loop))
   (timer-interrupt-handler
    (lambda ()
-     (if (osi_is_tick_over)
+     (if (osi_is_quantum_over)
          (yield run-queue 0)
          (set-timer process-default-ticks))))
   (redefine collect
@@ -1314,6 +1314,6 @@
           (bad-arg 'waiter-prompt-and-read x))
         x)))
 
-  (osi_set_tick tick-nanoseconds)
+  (osi_set_quantum quantum-nanoseconds)
   (set-timer process-default-ticks)
   (enable-interrupts))

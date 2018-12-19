@@ -60,7 +60,7 @@ static void swish_init(void) {
   add_foreign(osi_get_time);
   add_foreign(osi_init);
   add_foreign(osi_interrupt_database);
-  add_foreign(osi_is_tick_over);
+  add_foreign(osi_is_quantum_over);
   add_foreign(osi_kill);
   add_foreign(osi_list_directory);
   add_foreign(osi_list_uv_handles);
@@ -74,7 +74,7 @@ static void swish_init(void) {
   add_foreign(osi_remove_directory);
   add_foreign(osi_rename);
   add_foreign(osi_reset_statement);
-  add_foreign(osi_set_tick);
+  add_foreign(osi_set_quantum);
   add_foreign(osi_spawn);
   add_foreign(osi_step_statement);
   add_foreign(osi_unlink);

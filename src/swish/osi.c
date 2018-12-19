@@ -79,7 +79,7 @@ typedef struct {
 
 uv_loop_t* osi_loop;
 
-static uint64_t g_tick;
+static uint64_t g_threshold;
 static ptr g_callbacks;
 
 void osi_add_callback1(ptr callback, ptr arg) {
@@ -681,15 +681,12 @@ ptr osi_make_directory(const char* path, int mode, ptr callback) {
 ptr osi_make_uuid(void) {
 #ifdef _WIN32
   ptr r = Smake_bytevector(sizeof(UUID), 0);
-  RPC_STATUS rc = UuidCreate((UUID*)Sbytevector_data(r));
-  if (RPC_S_OK != rc)
-    return osi_make_error_pair("UuidCreate", rc);
-  return r;
+  UuidCreate((UUID*)Sbytevector_data(r));
 #else
   ptr r = Smake_bytevector(sizeof(uuid_t), 0);
   uuid_generate(*(uuid_t*)Sbytevector_data(r));
-  return r;
 #endif
+  return r;
 }
 
 void osi_exit(int status) {
@@ -920,8 +917,8 @@ uint64_t osi_get_hrtime(void) {
   return uv_hrtime();
 }
 
-int osi_is_tick_over(void) {
-  return (uv_hrtime() >= g_tick) ? 1 : 0;
+int osi_is_quantum_over(void) {
+  return (uv_hrtime() >= g_threshold) ? 1 : 0;
 }
 
 ptr osi_list_directory(const char* path, ptr callback) {
@@ -1110,8 +1107,8 @@ ptr osi_get_callbacks(uint64_t timeout) {
   return callbacks;
 }
 
-void osi_set_tick(uint64_t nanoseconds) {
-  g_tick = uv_hrtime() + nanoseconds;
+void osi_set_quantum(uint64_t nanoseconds) {
+  g_threshold = uv_hrtime() + nanoseconds;
 }
 
 ptr osi_get_stat(const char* path, int follow, ptr callback) {

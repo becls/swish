@@ -372,12 +372,8 @@ ptr osi_get_statement_columns(uptr statement) {
     return osi_make_error_pair("osi_get_statement_columns", UV_EBUSY);
   int count = sqlite3_column_count(s->stmt);
   ptr v = Smake_vector(count, Sfixnum(0));
-  for (int i=0; i < count; ++i) {
-    ptr name = Sstring_utf8(sqlite3_column_name(s->stmt, i), -1);
-    if (Spairp(name))
-      return name;
-    Svector_set(v, i, name);
-  }
+  for (int i=0; i < count; ++i)
+    Svector_set(v, i, Sstring_utf8(sqlite3_column_name(s->stmt, i), -1));
   return v;
 }
 

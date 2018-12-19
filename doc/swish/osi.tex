@@ -69,11 +69,12 @@ English error string.
 Section~\ref{sec:osi-api} describes the programming interface from the
 C side. The Scheme library \code{(osi)} provides foreign procedures
 for each C function using the same name. For functions that may return
-error pair \code{(\var{who} . \var{errno})}, the corresponding Scheme
-procedure $p$, e.g., \code{osi\_read\_port}, raises exception
-\code{\#(osi-error $p$ \var{who} \var{errno})}. In addition, the
-\code{(osi)} library exports another procedure with the \verb|*|
-suffix, e.g., \code{osi\_read\_port*}, that returns the error pair.
+an error pair, two Scheme procedures are defined: one that converts
+the error pair into an exception, and one with an asterisk suffix that
+returns the error pair. For example, if the \code{osi\_read\_port*}
+procedure returns error pair \code{(\var{who} . \var{errno})}, the
+\code{osi\_read\_port} procedure raises exception \code{\#(osi-error
+  osi\_read\_port \var{who} \var{errno})}.
 
 \section {Programming Interface}\label{sec:osi-api}
 
@@ -148,14 +149,14 @@ it calls the \code{GetSystemTimeAsFileTime} function in
 \texttt{kernel32.dll}. On all other systems, it calls the
 \code{clock\_gettime} function with \code{CLOCK\_REALTIME}.
 
-\defineentry{osi\_is\_tick\_over}
+\defineentry{osi\_is\_quantum\_over}
 \begin{function}
-  int \code{osi\_is\_tick\_over}(void);
+  int \code{osi\_is\_quantum\_over}(void);
 \end{function}
 
-The \code{osi\_is\_tick\_over} function returns 1 if the current time
+The \code{osi\_is\_quantum\_over} function returns 1 if the current time
 from \code{uv\_hrtime} is greater than or equal to the threshold set
-by the most recent call to \code{osi\_set\_tick} and 0 otherwise.
+by the most recent call to \code{osi\_set\_quantum} and 0 otherwise.
 
 \defineentry{osi\_list\_uv\_handles}
 \begin{function}
@@ -214,13 +215,13 @@ C vector of \var{argc} strings for use in the \code{osi\_get\_argv}
 function. It does not copy the strings, so the caller must not
 deallocate the memory for the arguments.
 
-\defineentry{osi\_set\_tick}
+\defineentry{osi\_set\_quantum}
 \begin{function}
-  void \code{osi\_set\_tick}(uint64\_t \var{nanoseconds});
+  void \code{osi\_set\_quantum}(uint64\_t \var{nanoseconds});
 \end{function}
 
-The \code{osi\_set\_tick} function sets the threshold for
-\code{osi\_is\_tick\_over} to be the current time from
+The \code{osi\_set\_quantum} function sets the threshold for
+\code{osi\_is\_quantum\_over} to be the current time from
 \code{uv\_hrtime} plus the given number of \var{nanoseconds}.
 
 \subsection {Port Functions}
@@ -403,11 +404,11 @@ successful and a negative error code otherwise.
 
 The \code{osi\_get\_real\_path} function uses the
 \code{uv\_fs\_realpath} function to issue a realpath operation on the
-file associated with the given file \var{port}. It returns \code{\#t}
-when the realpath operation is issued and an error pair
-otherwise. When the realpath operation finishes, it enqueues the
-callback list \code{(\var{callback} \var{result})}, where \var{result}
-is the string path when successful and a negative error code otherwise.
+given \var{path}. It returns \code{\#t} when the realpath operation is
+issued and an error pair otherwise. When the realpath operation
+finishes, it enqueues the callback list \code{(\var{callback}
+  \var{result})}, where \var{result} is the string path when
+successful and a negative error code otherwise.
 
 \defineentry{osi\_get\_stdin}
 \begin{function}
@@ -634,8 +635,7 @@ connection fails, the callback list \code{(\var{callback}
 \end{function}
 
 The \code{osi\_close\_tcp\_listener} function closes the given TCP/IP
-\var{listener} opened by \code{osi\_listen\_tcp}. It returns
-\code{\#t} when successful and an error pair otherwise.
+\var{listener} opened by \code{osi\_listen\_tcp}.
 
 \defineentry{osi\_get\_tcp\_listener\_port}
 \begin{function}
@@ -665,9 +665,9 @@ followed by a colon and the port number, e.g. \code{[::1]:80}.
 
 \subsection {SQLite Functions}
 
-For each open SQLite database, a worker thread performs the operations
-so that the main thread is not blocked. SQLite is compiled in
-multi-thread mode. The documentation states: ``In this mode, SQLite
+For each open SQLite database, a single worker thread performs the
+operations so that the main thread is not blocked. SQLite is compiled
+in multi-thread mode. The documentation states: ``In this mode, SQLite
 can be safely used by multiple threads provided that no single
 database connection is used simultaneously in two or more threads.''
 \concern{Two threads simultaneously access a SQLite database
@@ -697,6 +697,12 @@ overlap system error codes, the operating system interface maps them
 to system error codes by negating the sum of the result code and
 6,000,000. The \code{osi\_get\_error\_text} function supports these
 mapped error codes.
+
+SQLite returns additional error information in English strings, so
+error pairs from SQLite are often of the form \code{(\var{who}
+  . (\var{errno} . \var{text}))}, where \var{errno} is the mapped
+SQLite extended result code and \var{text} is the English error
+string.
 
 \defineentry{osi\_open\_database}
 \begin{function}

@@ -71,7 +71,7 @@
    osi_get_temp_directory*
    osi_get_time
    osi_interrupt_database
-   osi_is_tick_over
+   osi_is_quantum_over
    osi_kill
    osi_kill*
    osi_list_directory
@@ -97,7 +97,7 @@
    osi_rename*
    osi_reset_statement
    osi_reset_statement*
-   osi_set_tick
+   osi_set_quantum
    osi_spawn
    osi_spawn*
    osi_step_statement
@@ -161,10 +161,10 @@
   (define-osi osi_get_hostname)
   (fdefine osi_get_hrtime unsigned-64)
   (fdefine osi_get_time unsigned-64)
-  (fdefine osi_is_tick_over boolean)
+  (fdefine osi_is_quantum_over boolean)
   (fdefine osi_list_uv_handles ptr)
   (define-osi osi_make_uuid)
-  (fdefine osi_set_tick (nanoseconds unsigned-64) void)
+  (fdefine osi_set_quantum (nanoseconds unsigned-64) void)
 
   ;; Ports
   (define-osi osi_read_port (port uptr) (buffer ptr) (start-index size_t) (size unsigned-32) (offset integer-64) (callback ptr))

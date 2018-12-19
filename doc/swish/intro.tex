@@ -91,11 +91,9 @@ system statistics gen-server (see Chapter~\ref{chap:stats}) that
 periodically posts a \code{<statistics>} event.  The gatekeeper
 worker is the gen-server described in Chapter~\ref{chap:gatekeeper}.
 
-The \code{http-sup} supervisor is configured one-for-one with up to
-10 restarts every 10 seconds. The \code{http-listener},
+The \code{http-sup} supervisor is configured one-for-one with up to 10
+restarts every 10 seconds. The \code{http-listener},
 \code{http-cache}, and http-connection processes are described in
-Chapter~\ref{chap:http}.
-
-When running as a Windows service, Swish is configured to restart
-automatically 10 seconds after a failure. The failure is logged to the
-log file, and an event is logged to the Windows event log.
+Chapter~\ref{chap:http}. When the \code{http-port-number} parameter is
+set to its default value of \code{\#f}, the \code{http-sup} supervisor
+is not used.
