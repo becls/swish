@@ -52,6 +52,7 @@ typedef struct {
 
 EXPORT uv_loop_t* osi_loop;
 
+EXPORT void osi_add_callback_list(ptr callback, ptr args);
 EXPORT void osi_add_callback1(ptr callback, ptr arg);
 EXPORT void osi_add_callback2(ptr callback, ptr arg1, ptr arg2);
 EXPORT void osi_add_callback3(ptr callback, ptr arg1, ptr arg2, ptr arg3);

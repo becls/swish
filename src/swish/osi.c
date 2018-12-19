@@ -82,16 +82,20 @@ uv_loop_t* osi_loop;
 static uint64_t g_threshold;
 static ptr g_callbacks;
 
+void osi_add_callback_list(ptr callback, ptr args) {
+  g_callbacks = Scons(Scons(callback, args), g_callbacks);
+}
+
 void osi_add_callback1(ptr callback, ptr arg) {
-  g_callbacks = Scons(Scons(callback, Scons(arg, Snil)), g_callbacks);
+  osi_add_callback_list(callback, Scons(arg, Snil));
 }
 
 void osi_add_callback2(ptr callback, ptr arg1, ptr arg2) {
-  g_callbacks = Scons(Scons(callback, Scons(arg1, Scons(arg2, Snil))), g_callbacks);
+  osi_add_callback_list(callback, Scons(arg1, Scons(arg2, Snil)));
 }
 
 void osi_add_callback3(ptr callback, ptr arg1, ptr arg2, ptr arg3) {
-  g_callbacks = Scons(Scons(callback, Scons(arg1, Scons(arg2, Scons(arg3, Snil)))), g_callbacks);
+  osi_add_callback_list(callback, Scons(arg1, Scons(arg2, Scons(arg3, Snil))));
 }
 
 ptr osi_make_error_pair(const char* who, int error) {
@@ -100,6 +104,10 @@ ptr osi_make_error_pair(const char* who, int error) {
 
 char* osi_string_to_utf8(ptr s, size_t* utf8_len) {
   // utf8_len does not include the nul terminator character.
+  if (!Sstringp(s)) {
+    *utf8_len = 0;
+    return NULL;
+  }
   size_t n = Sstring_length(s);
   size_t len = 0;
   for (size_t i = 0; i < n; i++) {

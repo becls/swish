@@ -80,6 +80,81 @@ procedure returns error pair \code{(\var{who} . \var{errno})}, the
 
 Unless otherwise noted, all C strings are encoded in UTF-8.
 
+\subsection {C Interface}
+
+A single libuv I/O loop is used, \code{osi\_loop}.
+
+\defineentry{osi\_init}
+\begin{function}
+  void \code{osi\_init}(void);
+\end{function}
+
+The \code{osi\_init} function disables libuv stdio inheritance,
+initializes \code{osi\_loop}, initializes the timer used by
+\code{osi\_get\_callbacks}, and sets the list of callbacks to
+\code{()}. On Windows, it calls \code{timeBeginPeriod} to set the
+timer resolution to 1 ms. This function must be called exactly once
+from the main thread before any other \code{osi\_*} functions are
+called.
+
+\defineentry{osi\_add\_callback\_list}
+\begin{function}
+  void \code{osi\_add\_callback\_list(ptr \var{callback}, ptr \var{args})};
+\end{function}
+
+The \code{osi\_add\_callback\_list} function adds the callback list
+\code{(\var{callback} . \var{args})} to the list of callbacks. This
+function must be called on the main thread only.
+
+\defineentry{osi\_add\_callback1}
+\begin{function}
+  void \code{osi\_add\_callback1(ptr \var{callback}, ptr \var{arg})};
+\end{function}
+
+The \code{osi\_add\_callback1} function adds the callback list
+\code{(\var{callback} \var{arg})} to the list of callbacks. This
+function must be called on the main thread only.
+
+\defineentry{osi\_add\_callback2}
+\begin{function}
+  void \code{osi\_add\_callback2(ptr \var{callback}, ptr \var{arg1},
+    ptr \var{arg2})};
+\end{function}
+
+The \code{osi\_add\_callback2} function adds the callback list
+\code{(\var{callback} \var{arg1} \var{arg2})} to the list of
+callbacks. This function must be called on the main thread only.
+
+\defineentry{osi\_add\_callback3}
+\begin{function}
+  void \code{osi\_add\_callback3(ptr \var{callback}, ptr \var{arg1},
+    ptr \var{arg2}, ptr \var{arg3})};
+\end{function}
+
+The \code{osi\_add\_callback3} function adds the callback list
+\code{(\var{callback} \var{arg1} \var{arg2} \var{arg3})} to the list
+of callbacks. This function must be called on the main thread only.
+
+\defineentry{osi\_make\_error\_pair}
+\begin{function}
+  ptr \code{osi\_make\_error\_pair}(const char* \var{who}, int \var{error});
+\end{function}
+
+The \code{osi\_make\_error\_pair} function returns the error pair
+\code{(\var{who} . \var{error})}. This function must be called on the
+main thread only.
+
+\defineentry{osi\_string\_to\_utf8}
+\begin{function}
+  char* \code{osi\_string\_to\_utf8}(ptr \var{s}, size\_t* \var{utf8\_len});
+\end{function}
+
+The \code{osi\_string\_to\_utf8} function returns the address of a
+freshly allocated nul-terminated string representing the Scheme string
+\var{s}. The length in bytes of this string excluding the terminating
+nul is written to \code{*\var{utf8\_len}}. It returns NULL if \var{s}
+is not a string or malloc fails.
+
 \subsection {System Functions}
 
 \defineentry{osi\_get\_argv}
@@ -229,6 +304,11 @@ The \code{osi\_set\_quantum} function sets the threshold for
 The port functions in this section provide generic read, write, and
 close operations for port objects. The specific implementation depends
 on the type of port object.
+
+Port handles point to structures whose first element is a pointer to a
+virtual function table whose type is \code{osi\_port\_vtable\_t}. This
+table defines the specific \code{close}, \code{read}, and \code{write}
+procedures.
 
 \defineentry{osi\_read\_port}
 \begin{function}\begin{tabular}[t]{@{}l@{}l}
