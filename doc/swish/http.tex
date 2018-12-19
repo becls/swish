@@ -491,6 +491,69 @@ The \code{json:extend-object} construct adds the \var{key} /
 The \code{json:make-object} construct expands into a call to
 \code{json:extend-object} with a new hashtable.
 
+\defineentry{json:delete!}
+\begin{procedure}
+  \code{(json:delete! \var{ht} \var{path})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{json:delete!} procedure expects \var{path} to be a string or
+a non-empty list of strings.
+If \var{path} is a string, then \code{json:delete!} is equivalent
+to \code{hashtable-delete!}.
+Otherwise, \code{json:delete!} follows \var{path} as it descends into
+the nested hashtable \var{ht}, treating each element as a key into
+the hashtable reached by traversing the preceding elements.
+When \code{json:delete!} reaches the final key in \var{path},
+it calls \code{hashtable-delete!} to remove the association for
+that key in the hashtable reached at that point.
+If any key along the way does not map to a hashtable,
+\code{json:delete!} has no effect.
+
+\defineentry{json:ref}
+\begin{procedure}
+  \code{(json:ref \var{ht} \var{path} \var{default})}
+\end{procedure}
+\returns{} the value found by traversing \var{path} in \var{ht},
+\var{default} if none
+
+The \code{json:ref} procedure expects \var{path} to be a string or
+a non-empty list of strings.
+If \var{path} is a string, then \code{json:ref} is equivalent
+to \code{hashtable-ref}.
+Otherwise, \code{json:ref} follows \var{path} as it descends into
+the nested hashtable \var{ht}, treating each element as a key into
+the hashtable reached by traversing the preceding elements.
+When \code{json:ref} reaches the final key in \var{path},
+it calls \code{hashtable-ref} to retrieve the value of that key
+in the hashtable reached at that point.
+If any key along the way does not map to a hashtable,
+or if the final hashtable does not contain the final key,
+\code{json:ref} returns \var{default}.
+
+\defineentry{json:update!}
+\begin{procedure}
+  \code{(json:update! \var{ht} \var{path} \var{procedure} \var{default})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{json:update!} procedure expects \var{path} to be a string or
+a non-empty list of strings.
+If \var{path} is a string, then \code{json:update!} is equivalent
+to \code{hashtable-update!}.
+Otherwise, \code{json:update!} follows \var{path} as it descends into
+the nested hashtable \var{ht}, treating each element as a key into
+the hashtable reached by traversing the preceding elements.
+When \code{json:update!} reaches the final key in \var{path},
+it calls \code{hashtable-update!} to update that key in the
+hashtable reached at that point.
+If any key along the way does not map to a hashtable,
+\code{json:update!} installs an empty hashtable at that key
+before proceding.
+If \var{path} is malformed at some point, \code{json:update!} may
+still mutate hashtables along the valid portion of the path
+before reporting an error.
+
 \defineentry{json:read}
 \begin{procedure}
   \code{(json:read \var{ip} \opt{\var{custom-inflate}})}
@@ -577,6 +640,17 @@ The \code{json:object->bytevector} procedure calls \code{json:write}
 on \var{x} with the optional \var{indent} and \var{custom-write}, if
 any, using a bytevector output port transcoded using
 \code{(make-utf8-transcoder)} and returns the resulting bytevector.
+
+\defineentry{json:bytevector->object}
+\begin{procedure}
+  \code{(json:bytevector->object \var{x} \opt{\var{custom-inflate}})}
+\end{procedure}
+\returns{} a Scheme object
+
+The \code{json:bytevector->object} procedure creates a bytevector input port
+on \var{x}, calls \code{json:read} with the optional \var{custom-inflate},
+if any, and returns the resulting Scheme object after making sure the rest
+of the bytevector is only whitespace.
 
 \defineentry{json:object->string}
 \begin{procedure}

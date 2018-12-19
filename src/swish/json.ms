@@ -54,9 +54,13 @@
       (if custom-inflate
           (json:string->object x custom-inflate)
           (json:string->object x)))
+    (define (bytevector-> x)
+      (if custom-inflate
+          (json:bytevector->object x custom-inflate)
+          (json:bytevector->object x)))
     (let ([y (string-> (->string x))])
       (assert (equal? (dump x) (dump y))))
-    (let ([y (string-> (utf8->string (->bytevector x)))])
+    (let ([y (bytevector-> (->bytevector x))])
       (assert (equal? (dump x) (dump y))))
     'ok]))
 
@@ -123,6 +127,13 @@
    (lambda (obj)
      (match-let* ([#(,x ,y) obj])
        (assert (equal? (dump x) (dump (json:string->object y))))))
+   test-objs))
+
+(mat bytevector->object ()
+  (for-each
+   (lambda (obj)
+     (match-let* ([#(,x ,y) obj])
+       (assert (equal? (dump x) (dump (json:bytevector->object (string->utf8 y)))))))
    test-objs))
 
 (mat round-trip ()
@@ -297,7 +308,7 @@
     [,string (json:object->string x #f custom-write)]
     [ok (compare x (json:string->object string custom-inflate))]
     [,bv (json:object->bytevector x #f custom-write)]
-    [ok (compare x (json:string->object (utf8->string bv) custom-inflate))])
+    [ok (compare x (json:bytevector->object bv custom-inflate))])
    'ok))
 
 (mat errors ()
@@ -335,6 +346,42 @@
      (catch (json:string->object "\"\\ud800\""))]
     [#(EXIT invalid-surrogate-pair)
      (catch (json:string->object "\"\\ud800\\ud801\""))])
+   'ok)
+  (match-let*
+   ([#(EXIT #(bad-arg json:ref 7)) (catch (json:ref 7 "abc" "def"))]
+    [#(EXIT #(bad-arg json:ref (ument)))
+     (catch (json:ref (json:make-object) '(ument) #f))]
+    [#(EXIT #(bad-arg json:ref ()))
+     (catch (json:ref (json:make-object) '() #f))]
+    [#(EXIT #(bad-arg json:ref ("tarry" not)))
+     (let ([obj (json:make-object ["tarry" (json:make-object)])])
+       (catch (json:ref obj '("tarry" not) #f)))]
+    [#(EXIT #(bad-arg json:ref #\z))
+     (catch (json:ref (json:make-object) #\z "def"))]
+    [#(EXIT #(bad-arg json:update! 7)) (catch (json:update! 7 "abc" values 2))]
+    [#(EXIT #(bad-arg json:update! (ument)))
+     (catch (json:update! (json:make-object) '(ument) values #f))]
+    [#(EXIT #(bad-arg json:update! ("tarry" not)))
+     (let ([obj (json:make-object ["tarry" (json:make-object)])])
+       (catch (json:update! obj '("tarry" not) values 123)))]
+    [#(EXIT #(bad-arg json:update! ()))
+     (catch (json:update! (json:make-object) '() values 2))]
+    [#(EXIT #(bad-arg json:update! bogus))
+     (catch (json:update! (json:make-object) 'bogus values 2))]
+    [#(EXIT #(bad-arg json:update! #\a))
+     (catch (json:update! (json:make-object) #\a values 2))]
+    [#(EXIT #(bad-arg json:update! #\z))
+     (catch (json:update! (json:make-object) values #\z 2))]
+    [#(EXIT #(bad-arg json:delete! 7)) (catch (json:delete! 7 "abc"))]
+    [#(EXIT #(bad-arg json:delete! (ument)))
+     (catch (json:delete! (json:make-object) '(ument)))]
+    [#(EXIT #(bad-arg json:delete! ()))
+     (catch (json:delete! (json:make-object) '()))]
+    [#(EXIT #(bad-arg json:delete! ("tarry" not)))
+     (let ([obj (json:make-object ["tarry" (json:make-object)])])
+       (catch (json:delete! obj '("tarry" not))))]
+    [#(EXIT #(bad-arg json:delete! #\z))
+     (catch (json:delete! (json:make-object) #\z))])
    'ok))
 
 (mat stable-ordering ()
@@ -348,3 +395,63 @@
                  ["a" 1])]
          [str2 (json:object->string obj2)])
     (assert (equal? str1 str2))))
+
+(mat manipulate ()
+  (match-let*
+   ([,obj (json:make-object)]
+    [1 (json:ref obj "not-found" 1)]
+    [2 (json:ref obj '("not-found") 2)]
+    [3 (json:ref obj '("not-found" "either") 3)]
+    [,_ (json:update! obj "count" values 0)]
+    [0 (json:ref obj "count" 'wrong)]
+    [,_ (json:update! obj "count" add1 9000)]
+    [1 (json:ref obj "count" 'wrong)]
+    [,_ (json:update! obj '("count") list 'wrong)]
+    [(1) (json:ref obj "count" 'wrong)]
+    [,_ (json:update! obj "new" vector "init")]
+    [#("init") (json:ref obj "new" 'wrong)]
+    [,_ (json:update! obj '("new" "world") string-upcase "order")]
+    [#t (hashtable? (json:ref obj "new" 'wrong))]
+    ["ORDER" (json:ref obj '("new" "world") 'wrong)]
+    [other (json:ref obj '("New" "World") 'other)]
+    [,_ (json:update! obj '("new")
+          (lambda (ht) (assert (hashtable? ht)) 123)
+          'wrong)]
+    [123 (json:ref obj "new" 'wrong)]
+    [,_ (json:update! obj '("new" "deeper" "path" "a" "b" "c") values 'quarry)]
+    [quarry (json:ref obj '("new" "deeper" "path" "a" "b" "c") 'wrong)]
+    [,_ (json:update! obj '("new" "deeper" "path" "a" "b" "D") values "abcd")]
+    ["abcd" (json:ref obj '("new" "deeper" "path" "a" "b" "D") 'wrong)]
+    [,_ (json:update! obj '("new" "deeper" "path" "a" "B" "D") values "1234")]
+    ["1234" (json:ref obj '("new" "deeper" "path" "a" "B" "D") 'wrong)]
+    [,_ (json:update! obj '("new" "deeper" "path" "A" "B" "D") values "okay")]
+    [,_ (json:delete! obj "not-found")]
+    [,_ (json:delete! obj '("new" "deeper" "mystery"))]
+    ["okay" (json:ref obj '("new" "deeper" "path" "A" "B" "D") 'wrong)]
+    [quarry (json:ref obj '("new" "deeper" "path" "a" "b" "c") 'wrong)]
+    ["abcd" (json:ref obj '("new" "deeper" "path" "a" "b" "D") 'wrong)]
+    [,_ (json:delete! obj '("new" "deeper" "path" "a" "b" "D"))]
+    [gone (json:ref obj '("new" "deeper" "path" "a" "b" "D") 'gone)]
+    [,_ (json:update! obj '("new") hashtable? 7)]
+    [#t (json:ref obj '("new") 'wrong)]
+    [gone (json:ref obj '("new" "deeper" "path" "a" "b" "D") 'gone)]
+    [,_ (json:update! obj '("new") hashtable?
+          (make-hashtable string-hash string=?))]
+    [#f (json:ref obj '("new") 'wrong)]
+    [,_ (json:update! obj "count" car 'wrong)]
+    [#(("count" . 1) ("new" . #f)) (dump obj)]
+    [,_ (json:delete! obj '("count" "blessings"))]
+    [#(("count" . 1) ("new" . #f)) (dump obj)]
+    [,_ (json:delete! obj "not-found")]
+    [#(("count" . 1) ("new" . #f)) (dump obj)]
+    [,_ (json:delete! obj "count")]
+    [#(("new" . #f)) (dump obj)]
+    [,_ (json:delete! obj '("new"))]
+    [#() (dump obj)]
+    [,_ (json:delete! obj '("new"))]
+    [#() (dump obj)])
+   'ok)
+  ;; - behavior of json:update! is unspecified if given invalid path
+  ;;   such as ("foo" . bar)
+  ;;   in particular, we'll smash everything along that path
+   )

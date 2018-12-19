@@ -22,12 +22,16 @@
 
 (library (swish json)
   (export
+   json:bytevector->object
+   json:delete!
    json:extend-object
    json:make-object
    json:object->bytevector
    json:object->string
    json:read
+   json:ref
    json:string->object
+   json:update!
    json:write
    json:write-object
    json:write-structural-char
@@ -51,6 +55,42 @@
       [(_ (key val) ...)
        (json:extend-object (make-hashtable string-hash string=?)
          (key val) ...)]))
+
+  (define (walk-path who obj full-path extend? default found)
+    (unless (hashtable? obj) (bad-arg who obj))
+    (when (null? full-path) (bad-arg who full-path))
+    (if (string? full-path)
+        (found obj full-path default)
+        (let lp ([obj obj] [path full-path])
+          (match path
+            [(,key)
+             (guard (string? key))
+             (found obj key default)]
+            [(,key1 . ,more)
+             (guard (string? key1))
+             (let ([hit (hashtable-ref obj key1 #f)])
+               (cond
+                [(hashtable? hit) (lp hit more)]
+                [extend?
+                 (let ([new (json:make-object)])
+                   (json:extend-object obj [key1 new])
+                   (lp new more))]
+                [else default]))]
+            [,_ (bad-arg who full-path)]))))
+
+  (define (json:ref obj path default)
+    (walk-path 'json:ref obj path #f default hashtable-ref))
+
+  (define (json:update! obj path f default)
+    (unless (procedure? f) (bad-arg 'json:update! f))
+    (walk-path 'json:update! obj path #t default
+      (lambda (obj key default)
+        (hashtable-update! obj key f default))))
+
+  (define (json:delete! obj path)
+    (walk-path 'json:delete! obj path #f (void)
+      (lambda (obj key default)
+        (hashtable-delete! obj key))))
 
   (define (unexpected-input c ip)
     (if (eof-object? c)
@@ -364,13 +404,7 @@
     (case-lambda
      [(x) (json:string->object x no-custom-inflate)]
      [(x custom-inflate)
-      (let* ([ip (open-string-input-port x)]
-             [obj (json:read ip custom-inflate)])
-        ;; Make sure there's nothing but whitespace left.
-        (let ([x (seek-non-ws ip)])
-          (if (eof-object? x)
-              obj
-              (unexpected-input x ip))))]))
+      (->object (open-string-input-port x) custom-inflate)]))
 
   (define json:object->bytevector
     (case-lambda
@@ -380,6 +414,21 @@
       (call-with-bytevector-output-port
        (lambda (op) (json:write op x indent custom-write))
        (make-utf8-transcoder))]))
+
+  (define json:bytevector->object
+    (case-lambda
+     [(x) (json:bytevector->object x no-custom-inflate)]
+     [(x custom-inflate)
+      (->object (open-bytevector-input-port x (make-utf8-transcoder))
+        custom-inflate)]))
+
+  (define (->object ip custom-inflate)
+    (let ([obj (json:read ip custom-inflate)])
+      ;; Make sure there's nothing but whitespace left.
+      (let ([x (seek-non-ws ip)])
+        (if (eof-object? x)
+            obj
+            (unexpected-input x ip)))))
 
   (define (no-custom-inflate x) x)
 
