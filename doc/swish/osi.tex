@@ -152,8 +152,9 @@ main thread only.
 The \code{osi\_string\_to\_utf8} function returns the address of a
 freshly allocated nul-terminated string representing the Scheme string
 \var{s}. The length in bytes of this string excluding the terminating
-nul is written to \code{*\var{utf8\_len}}. It returns NULL if \var{s}
-is not a string or malloc fails.
+nul is written to \code{*\var{utf8\_len}}. It returns NULL if
+\code{malloc} fails. It is the caller's responsibility to call
+\code{free} when this memory is no longer needed.
 
 \subsection {System Functions}
 

@@ -104,10 +104,6 @@ ptr osi_make_error_pair(const char* who, int error) {
 
 char* osi_string_to_utf8(ptr s, size_t* utf8_len) {
   // utf8_len does not include the nul terminator character.
-  if (!Sstringp(s)) {
-    *utf8_len = 0;
-    return NULL;
-  }
   size_t n = Sstring_length(s);
   size_t len = 0;
   for (size_t i = 0; i < n; i++) {
