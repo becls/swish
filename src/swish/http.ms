@@ -138,7 +138,7 @@
 
     ;; internal server errors
     [(#(EXIT internal-error) .
-      "HTTP/1.1 500 \r\nContent-Length: 216\r\nCache-Control: no-cache\r\n\r\n<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>Internal server error</title></head><body><h1>The server encountered an unexpected condition which prevented it from fullfilling the request.</h1></body></html>")
+      "HTTP/1.1 500 \r\nContent-Length: 167\r\nCache-Control: no-cache\r\n\r\n<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>Internal server error</title></head><body><h1>The server was unable to complete the request.</h1></body></html>")
      (test-error&output "GET /mat?cmd=internal-error HTTP/1.1\r\n\r\n")]
     [(#(EXIT internal-error) . "partial-output")
      (test-error&output "GET /mat?cmd=internal-error&partial=partial-output HTTP/1.1\r\n\r\n")]

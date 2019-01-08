@@ -610,7 +610,7 @@
           (meta (@ (charset "UTF-8")))
           (title "Internal server error"))
          (body
-          (h1 "The server encountered an unexpected condition which prevented it from fullfilling the request."))))))
+          (h1 "The server was unable to complete the request."))))))
 
   (define (http:file-handler ip op request header params)
     (<request> open request (method path))
