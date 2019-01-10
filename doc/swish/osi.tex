@@ -32,32 +32,48 @@ via SQLite~\cite{sqlite-guide}.
 \section {Theory of Operation}
 
 The operating system interface is written in C99~\cite{c99} as a
-shared library that is statically linked against the libuv and SQLite
-libraries and dynamically linked against single-threaded Chez Scheme
-9.5.  Please refer to Chapter~4 of the \emph{Chez Scheme Version 9
-  User's Guide}~\cite{chez-scheme-users-guide} for information on the
-foreign function interface. C++ is not used because C++ destructors
-may interact badly with setjmp/longjmp, used by Chez Scheme.
+shared library that links to the Chez Scheme, libuv, and SQLite
+libraries. Please refer to Chapter~4 of the \emph{Chez Scheme Version
+  9 User's Guide}~\cite{chez-scheme-users-guide} for information on
+the foreign function interface. C++ is not used because C++
+destructors may interact badly with setjmp/longjmp, used by Chez
+Scheme.
 
 The single-threaded version of Chez Scheme is used because of its
-simplicity. All Scheme code runs in the main thread. In order to keep
-this thread responsive, operations that block for more than a
-millisecond are performed asynchronously.
+simplicity. All Scheme code runs in the main thread, and all C code
+must call Scheme functions from the main thread only. In order to keep
+this thread responsive, operations that block for more than a couple
+milliseconds are performed asynchronously.
+
+Operations that take longer should be run in a worker thread. Results
+are communicated back to the main thread using a libuv async
+handle. Beware of running long operations in the libuv thread pool
+because there are only a few worker threads (four by default).
 
 For each asynchronous function in the operating system interface, a
 Scheme callback procedure is passed as the last argument.  This
 callback procedure is later returned to Scheme in a list that includes
-the results of the asynchronous function call.
+the results of the asynchronous function call. This approach is
+simpler and more efficient than calling the callback procedure
+directly from the C side.
 
-Scheme object locking and unlocking is handled by the operating system
-interface because it manages the data structures that contain pointers
-to Scheme objects.
+Any time C code stores a pointer to a non-immediate Scheme object, the
+object must be locked. The operating system interface locks Scheme
+objects when it stores them in data structures managed in the C heap
+and unlocks them when the data structures are deallocated.
 
 The operating system interface uses port objects for files, console
 input, pipes to other processes, and TCP/IP connections. A port object
 is created by the various open functions, which return a port handle
 that is used for read, write, and close operations. Once a port is
 closed, its port object is freed.
+
+Whenever Scheme receives a handle to an object allocated in the C
+heap, the handle is wrapped in a Scheme record and registered with a
+guardian. Each type of handle has an associated finalizer (see
+\code{add-finalizer}) that uses its guardian to free the objects from
+the C heap after each garbage collection (see the finalizer process in
+\S\ref{finalizer-process}).
 
 For interface functions that can fail, an error pair\index{error pair}
 \code{(\var{who} . \var{errno})} is returned, where \var{who} is a
@@ -82,7 +98,9 @@ Unless otherwise noted, all C strings are encoded in UTF-8.
 
 \subsection {C Interface}
 
-A single libuv I/O loop is used, \code{osi\_loop}.
+A single libuv I/O loop is used, \code{osi\_loop}, which is unique to
+the operating system interface in order to avoid collisions with other
+libuv integrations.
 
 \defineentry{osi\_init}
 \begin{function}

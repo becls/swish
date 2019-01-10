@@ -233,9 +233,9 @@ starvation. The event-loop process does not starve other processes
 because it drains the completion queue without causing new completion
 packets to be enqueued.
 
-The finalizer process runs the finalizers registered via
-\code{add-finalizer}. These finalizers typically close operating
-system interface handles to objects that are no longer
+The finalizer process\label{finalizer-process} runs the finalizers
+registered via \code{add-finalizer}. These finalizers typically close
+operating system interface handles to objects that are no longer
 accessible. \concern{Ill-behaved finalizers may cause memory and
   handle leaks.}  \mitigation Finalizers are designed to execute
 quickly without failing. Typical finalizers guard against errors when
