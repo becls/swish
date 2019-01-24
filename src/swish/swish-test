@@ -334,124 +334,118 @@
   (library-directories)
   (or (opt "libdirs") '())))
 
-;; We define main to prevent the collector from discarding the code in the body,
-;; and the corresponding profile counts, before saving profile data, i.e., when
-;; we run "make coverage".
-(define (main)
-  (cond
-   [(zero? (hashtable-size (opt))) (usage #t '() #f)]
-   [(opt "help") =>
-    (lambda (sections)
-      (usage #f (map string->symbol sections) (opt)))]
-   [(hashtable-ref (opt) "repl" #f)
-    (let ([ignored
-           (remq #f
-             (map (lambda (x)
-                    (and (opt (<arg-spec> name x))
-                         (format-spec x '(or long short))))
-               misc-cli))])
-      (when (pair? ignored)
-        (printf "~@[Ignoring ~{~a~^, ~} in ~a mode\n~]" ignored
-          (option-named "repl"))))
-    (apply (scheme-start) (cons "--" (or (opt "files") '())))]
-   [else
-    (let ([incl-tags (map string->symbol (or (opt "incl-tags") '()))]
-          [excl-tags (map string->symbol (or (opt "excl-tags") '()))]
-          [exclude (or (opt "exclude") '())]
-          [include (or (opt "include") '())]
-          [save-prof (opt "save-prof")]
-          [load-prof (opt "load-prof")]
-          [progress (string->symbol (or (opt "progress") "test"))]
-          [report (opt "report")]
-          [coverage (opt "coverage")]
-          [suites (sort (lambda (s1 s2) (string<? (car s1) (car s2)))
-                    (extract-suites (or (opt "specs") '())))])
+(cond
+ [(zero? (hashtable-size (opt))) (usage #t '() #f)]
+ [(opt "help") =>
+  (lambda (sections)
+    (usage #f (map string->symbol sections) (opt)))]
+ [(hashtable-ref (opt) "repl" #f)
+  (let ([ignored
+         (remq #f
+           (map (lambda (x)
+                  (and (opt (<arg-spec> name x))
+                       (format-spec x '(or long short))))
+             misc-cli))])
+    (when (pair? ignored)
+      (printf "~@[Ignoring ~{~a~^, ~} in ~a mode\n~]" ignored
+        (option-named "repl"))))
+  (apply (scheme-start) (cons "--" (or (opt "files") '())))]
+ [else
+  (let ([incl-tags (map string->symbol (or (opt "incl-tags") '()))]
+        [excl-tags (map string->symbol (or (opt "excl-tags") '()))]
+        [exclude (or (opt "exclude") '())]
+        [include (or (opt "include") '())]
+        [save-prof (opt "save-prof")]
+        [load-prof (opt "load-prof")]
+        [progress (string->symbol (or (opt "progress") "test"))]
+        [report (opt "report")]
+        [coverage (opt "coverage")]
+        [suites (sort (lambda (s1 s2) (string<? (car s1) (car s2)))
+                  (extract-suites (or (opt "specs") '())))])
+    (cond
+     [(and load-prof (not (or save-prof coverage)))
+      (fail "~a requires ~a or ~a"
+        (option-named "load-prof")
+        (option-named "save-prof")
+        (option-named "coverage"))]
+     [(and coverage (not (or load-prof save-prof)))
+      (fail "~a requires ~a or ~a"
+        (option-named "coverage")
+        (option-named "load-prof")
+        (option-named "save-prof"))])
+    (let ([test-files (map car suites)])
+      (define to-file (and (or report coverage) #t))
+      (define report-files (map ->report-filename test-files))
+      (define status 0)
+      (define no-tests '())
+      (define full-load-filenames
+        (map
+         (lambda (load-fn)
+           (match (catch (get-real-path load-fn))
+             [#(EXIT ,reason)
+              (fail "~a ~a: file not found" (option-named "load-prof") load-fn)]
+             [,full-load-fn full-load-fn]))
+         (or load-prof '())))
+      (define (truncate-profile)
+        (match (catch (open-file-to-replace save-prof))
+          [#(EXIT ,reason)
+           (fail "~a ~a failed (~a)" (option-named "save-prof") save-prof
+             (exit-reason->english reason))]
+          [,op (close-port op)]))
       (cond
-       [(and load-prof (not (or save-prof coverage)))
-        (fail "~a requires ~a or ~a"
-          (option-named "load-prof")
-          (option-named "save-prof")
-          (option-named "coverage"))]
-       [(and coverage (not (or load-prof save-prof)))
-        (fail "~a requires ~a or ~a"
-          (option-named "coverage")
-          (option-named "load-prof")
-          (option-named "save-prof"))])
-      (let ([test-files (map car suites)])
-        (define to-file (and (or report coverage) #t))
-        (define report-files (map ->report-filename test-files))
-        (define status 0)
-        (define no-tests '())
-        (define full-load-filenames
-          (map
-           (lambda (load-fn)
-             (match (catch (get-real-path load-fn))
-               [#(EXIT ,reason)
-                (fail "~a ~a: file not found" (option-named "load-prof") load-fn)]
-               [,full-load-fn full-load-fn]))
-           (or load-prof '())))
-        (define (truncate-profile)
-          (match (catch (open-file-to-replace save-prof))
-            [#(EXIT ,reason)
-             (fail "~a ~a failed (~a)" (option-named "save-prof") save-prof
-               (exit-reason->english reason))]
-            [,op (close-port op)]))
-        (cond
-         [(and load-prof save-prof)
-          (let ([add-to-profile
-                 (match (catch (get-real-path save-prof))
-                   [#(EXIT ,reason) #f]
-                   [,full-save-fn
-                    (and (member full-save-fn full-load-filenames) full-save-fn)])])
-            (unless add-to-profile (truncate-profile))
-            ;; mute the console-event-handler
-            (parameterize ([console-output-port (open-output-string)])
-              (match-let* ([#(ok ,pid) (profile:start add-to-profile save-prof #t)])
-                (foreach ([to-load (map cons full-load-filenames load-prof)])
-                  (match-let* ([(,full-name . ,user-supplied-name) to-load])
-                    (unless (equal? full-name add-to-profile)
-                      (match (catch (profile:merge full-name))
-                        [ok (void)]
-                        [#(EXIT ,reason)
-                         (fail "cannot load profile data from ~a" user-supplied-name)]))))
-                (profile:stop))))]
-         [save-prof (truncate-profile)])
-        (when to-file
-          (foreach ([file report-files])
-            (catch (remove-file file))))
-        (foreach ([suite/test suites] [report-file report-files])
-          (let ([suite (car suite/test)]
-                [tests (cdr suite/test)])
-            (match (run-test-spec swish
-                     (<test-spec> make
-                       [test-file suite]
-                       [report-file (and to-file report-file)]
-                       [tests (and (pair? tests) tests)]
-                       [incl-tags incl-tags]
-                       [excl-tags excl-tags]
-                       [profile save-prof]
-                       [progress progress]
-                       [lib-dirs (library-directories)]
-                       [src-dirs (source-directories)]))
-              [#f (void)]
-              [fail (set! status 1)]
-              [skip (set! status 1)]
-              [no-tests (set! no-tests (cons suite no-tests))])))
-        (let ([report-files (filter file-exists? report-files)])
-          (when report
-            (html-report report report-files)
-            (printf "see ~a\n" (path->file-uri (get-real-path report))))
-          (when coverage
-            (if (profile:dump-html (or save-prof load-prof) coverage include exclude)
-                (printf "see ~a\n" (path->file-uri (get-real-path coverage)))
-                (printf "no profile to dump\n")))
-          (when (or report coverage)
-            (console-summary report-files))
-          (match (filter (lambda (fn) (string=? "ms" (path-extension fn))) no-tests)
-            [() (exit status)]
-            [,expected-tests
-             (unless (eq? progress 'none)
-               (printf "No tests found in~{\n ~a~}\n" expected-tests))
-             (exit (if (> status 0) status 3))]))))]))
-
-(main)
+       [(and load-prof save-prof)
+        (let ([add-to-profile
+               (match (catch (get-real-path save-prof))
+                 [#(EXIT ,reason) #f]
+                 [,full-save-fn
+                  (and (member full-save-fn full-load-filenames) full-save-fn)])])
+          (unless add-to-profile (truncate-profile))
+          ;; mute the console-event-handler
+          (parameterize ([console-output-port (open-output-string)])
+            (match-let* ([#(ok ,pid) (profile:start add-to-profile save-prof #t)])
+              (foreach ([to-load (map cons full-load-filenames load-prof)])
+                (match-let* ([(,full-name . ,user-supplied-name) to-load])
+                  (unless (equal? full-name add-to-profile)
+                    (match (catch (profile:merge full-name))
+                      [ok (void)]
+                      [#(EXIT ,reason)
+                       (fail "cannot load profile data from ~a" user-supplied-name)]))))
+              (profile:stop))))]
+       [save-prof (truncate-profile)])
+      (when to-file
+        (foreach ([file report-files])
+          (catch (remove-file file))))
+      (foreach ([suite/test suites] [report-file report-files])
+        (let ([suite (car suite/test)]
+              [tests (cdr suite/test)])
+          (match (run-test-spec swish
+                   (<test-spec> make
+                     [test-file suite]
+                     [report-file (and to-file report-file)]
+                     [tests (and (pair? tests) tests)]
+                     [incl-tags incl-tags]
+                     [excl-tags excl-tags]
+                     [profile save-prof]
+                     [progress progress]
+                     [lib-dirs (library-directories)]
+                     [src-dirs (source-directories)]))
+            [#f (void)]
+            [fail (set! status 1)]
+            [skip (set! status 1)]
+            [no-tests (set! no-tests (cons suite no-tests))])))
+      (let ([report-files (filter file-exists? report-files)])
+        (when report
+          (html-report report report-files)
+          (printf "see ~a\n" (path->file-uri (get-real-path report))))
+        (when coverage
+          (if (profile:dump-html (or save-prof load-prof) coverage include exclude)
+              (printf "see ~a\n" (path->file-uri (get-real-path coverage)))
+              (printf "no profile to dump\n")))
+        (when (or report coverage)
+          (console-summary report-files))
+        (match (filter (lambda (fn) (string=? "ms" (path-extension fn))) no-tests)
+          [() (exit status)]
+          [,expected-tests
+           (unless (eq? progress 'none)
+             (printf "No tests found in~{\n ~a~}\n" expected-tests))
+           (exit (if (> status 0) status 3))]))))])
