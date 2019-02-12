@@ -510,8 +510,11 @@
   (run-fat "fat-ml" '() '("^got: PDQ Bach$"))
   ;; library
   (swish-build-test
-   `("-L" ,(output-dir) "--library" "-o" ,lib-compiled ,(input-file "lib"))
-   (list (format "^~a$" (pregexp-quote "These libraries must be provided at run time: (miss)"))))
+   `("-L" ,(output-dir) "--library" "-vv" "-o" ,lib-compiled ,(input-file "lib"))
+   '(seek
+     "^These libraries must be provided at run time:"
+     ;; could be .so or .sop file depending on whether or not we're profiling
+     ".*miss\\.sop?: \\(miss\\)"))
   ;; delete lib.ss, but leave miss.so so we can check that the
   ;; compiled library works so long as (miss) can be found
   (assert (delete-file (input-file "lib")))
