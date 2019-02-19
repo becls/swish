@@ -36,26 +36,29 @@
    ["output-file" -o (string "<output>") "write output to <output>"]
    ["libdirs" -L (list "<libdir>") "add <libdir> to library-directories"]
    ["srcdirs" -s (list "<srcdir>") "add <srcdir> to source-directories"]
-   ["source-file" (string "<source>") "source filename (or -- <source>)"]
+   ["rt-libs" --rtlib (list "<lib>" ...)
+    '("visit compiled libraries <lib> ... before compiling <source>;"
+      "these libraries are added to <output> unless otherwise"
+      "specified, in which case they must be provided at run time")]
    ["help" -h --help (list "[<section>]" ...)
-    (format "display help, <section>={~{~a~^|~}}" help-sections)]))
+    (format "display help, <section>={~{~a~^|~}}" help-sections)]
+   ))
 
 (define library-cli
   (cli-specs
-   ["as-library" --library bool "make a compiled library"
-    (usage show req)]
-   ["rt-libs" --rtlib (list "<lib>" ...)
-    '("visit compiled libraries <lib> ... before compiling library;"
-      "these libraries must be provided at run time")]))
+   ["source-file" (string "<source>") "library source filename (or -- <source>)"]
+   ["as-library" --library bool "make a compiled library; <output> omits --rtlib libraries"
+    (usage show req)]))
 
 (define app-cli
   (cli-specs
+   ["source-file" (string "<source>") "program source filename (or -- <source>)"]
+   ["component" -c bool "make component; <output> omits --rtlib libraries"
+    (conflicts '("boot-files"))]
    ["boot-files" -b (list "<boot-file>")
-    "make stand-alone application including <boot-file>"]
+    "make stand-alone program including <boot-file>"]
    ["libs-visible" --libs-visible bool
-    "make imported libraries visible to eval"]
-   ["rt-libs" --rtlib (list "<lib>" ...)
-    "add compiled libraries <lib> ... to stand-alone boot file"]))
+    "make imported libraries visible to eval"]))
 
 (define swish-lib?
   (let ([libs (filter (lambda (lib) (match lib [(swish . ,_) #t] [,_ #f])) (library-list))])
@@ -143,7 +146,7 @@
     [(all help)
      (when ht (hashtable-delete! ht "help"))
      (display-options shared-cli ht)
-     (printf "\n  Application target options:\n")
+     (printf "\n  Program target options:\n")
      (display-options app-cli ht)
      (printf "\n  Library target options:\n")
      (display-options library-cli ht)]
@@ -151,41 +154,49 @@
      (define csvNNN.dll
        (format "csv~{~a~}.dll" (call-with-values scheme-version-number list)))
      (wrap 0
-       who "can make a stand-alone application, a linked application, or a compiled library."
-       "By default," who "creates a linked application.\n"
+       who "can make a compiled library, a component program, a stand-alone program, or a linked program."
+       "By default," who "creates a linked program.\n"
        "\n"
        "To compile a library, specify --library. The resulting compiled library may"
        "be loaded explicitly or used as a" who "--rtlib argument when compiling other"
-       "libraries or applications.\n"
+       "libraries or programs.\n"
        "\n"
-       "To create a stand-alone application, specify -b and provide a base boot file."
-       who "creates a stand-alone application"
+       "To create a component program, specify -c. A component program does not run on"
+       "its own, but may be loaded by another program.\n"
+       "\n"
+       "When" who "creates a compiled library or component program, the resulting <output> contains"
+       "compiled code for <source>  and the user libraries it references, but excludes"
+       "built-in libraries and libraries supplied via --rtlib.\n"
+       "\n"
+       "To create a stand-alone program, specify -b and provide a base boot file."
+       who "creates a stand-alone program"
        "by copying the" software-internal-name "executable to <out-file>"
        "and creating a boot file <out-file>.boot containing each"
        (format "-b~aboot-file" #\240)
        "in order, the run-time libraries included via --rtlib,"
-       "the libraries required by source-fn, and the compiled code"
-       "for source-fn.\n"
+       "the libraries required by <source>, and the compiled code"
+       "for <source>.\n"
        "\n"
-       "When run, a stand-alone application:\n")
+       "When run, a stand-alone program:\n")
      (list-item "1." "loads Chez Scheme's" csvNNN.dll "[Windows only],")
-     (list-item "2." "loads the application boot file, then")
+     (list-item "2." "loads the program boot file, then")
      (list-item "3." "invokes a custom scheme-start handler described below.\n")
      (wrap 0
-       "To create a linked application, omit the -b option.\n\n"
-       "When run, a linked application calls" software-internal-name "to:\n")
+       "To create a linked program, omit the -b option.\n\n"
+       "When run, a linked program calls" software-internal-name "to:\n")
      (list-item "1." "load Chez Scheme's" csvNNN.dll "[Windows only],")
      (list-item "2." "load Chez Scheme's petite.boot and scheme.boot,")
      (list-item "3." "load the standard" software-internal-name "boot file, then")
      (list-item "4." "invoke the" software-internal-name "scheme-start handler.\n")
-     (wrap 0 "In either case, the scheme-start handler:\n")
+     (wrap 0 "The scheme-start handler of a linked program or stand-alone program:\n")
      (list-item "1." "sets app:name, command-line, and command-line-arguments")
      (list-item "2." "installs an exception handler that prints app:name, if non-false, and")
-     (list-item "3." "invokes the compiled application code.")
+     (list-item "3." "invokes the compiled program code.")
      (wrap 0
        "\n"
-       "Compiling an application incorporates any --rtlib libraries directly into the -o file."
-       "If an application loads other compiled libraries explicitly at run time, it must also load"
+       "Compiling a linked program or stand-alone program incorporates any --rtlib libraries"
+       "directly into the <output> file."
+       "If a program loads other compiled libraries explicitly at run time, it must also load"
        "any --rtlib libraries they require."
        "The compiler skips --rtlib libraries during whole-library or whole-program"
        "optimization.\n")]
@@ -205,9 +216,13 @@
        "same petite.boot and scheme.boot that swish uses and makes the"
        "standard swish libraries available at run time, so that \"foo\""
        "can compile code that uses those libraries.\n")
-     (example (who "-o foo.so --library foo.ss")
-       "compiles the \"foo.ss\" library to \"foo.so\" and generates"
-       "\"foo.wpo\" for use by whole-program optimization.")])
+     (example (who "-o foo.library --library foo.ss")
+       "compiles the \"foo.ss\" library to \"foo.library\" and generates"
+       "\"foo.wpo\" for use by whole-program optimization.\n")
+     (example (who "-c bar.ss -o bar.component --rtlib foo.library bar.library")
+       "compiles the \"bar.ss\" program to \"bar.component\", which expects"
+       "\"foo.library\" and \"bar.library\" to be provided at run time.")
+     ])
   (let ([invalid (fold-right remq sections help-sections)])
     (unless (null? invalid)
       (fail "unrecognized help section~p:~{ ~a~}" (length invalid) invalid)))
@@ -217,7 +232,7 @@
   (syntax-rules ()
     [(_ expr [(k0 k1 ...) e0 e1 ...] ...)
      ;; require all cases
-     (equal? '(library linked stand-alone)
+     (equal? '(component library linked stand-alone)
        (sort (lambda (a b) (string<? (symbol->string a) (symbol->string b)))
          (apply append (datum ((k0 k1 ...) ...)))))
      (let ([target expr])
@@ -291,6 +306,7 @@
             (define (invoke)
               (with-exception-handler app-exception-handler ,body))
             ,(match target-type
+               [component `(invoke)]
                [stand-alone
                 `(scheme-start
                   (let ([orig (scheme-start)])
@@ -327,7 +343,7 @@
     (target-case target-type
       [(library)
        (compile-library source-fn tmp-out)]
-      [(linked stand-alone)
+      [(component linked stand-alone)
        (do-compile-program source-fn tmp-out target-type)])))
 
 (define (compile-wpo wpo-file output-fn target-type)
@@ -349,7 +365,7 @@
        (let ([missing (compile-whole-library wpo-file output-fn)])
          (rename-path wpo-file (change-extension output-fn ".wpo"))
          missing)]
-      [(linked stand-alone)
+      [(component linked stand-alone)
        (let ([missing (compile-whole-program wpo-file output-fn (opt "libs-visible"))])
          (rm-f wpo-file)
          missing)])))
@@ -367,11 +383,11 @@
       (let* ([wpo-file (change-extension tmp ".wpo")]
              [libs (compile-wpo wpo-file output-fn target-type)]
              [missing-libs
-              ;; Stand-alone application should have found all required non-swish libraries.
+              ;; Stand-alone program should have found all required non-swish libraries.
               ;; If swish libraries are incorporated via whole-program optimization,
               ;; then we must also have found the those libraries.
-              ;; Dependent applications can use swish libraries included in runtime,
-              ;; as can stand-alone applications that explicitly specify --rtlib swish.
+              ;; Dependent programs can use swish libraries included in runtime,
+              ;; as can stand-alone programs that explicitly specify --rtlib swish.
               (if swish-wpo?
                   libs
                   (remp swish-lib? libs))])
@@ -428,7 +444,7 @@
    missing-libs)
   ;; Prune --rtlib libraries from missing-libs, if needed.
   (when (target-case target-type
-          [(library) (= (verbosity) 0)]
+          [(component library) (= (verbosity) 0)]
           [(linked stand-alone) #t])
     (for-each (lambda (rt-lib) (hashtable-delete! ht rt-lib))
       rt-libs))
@@ -436,7 +452,7 @@
     (let ([files (vector->list keys)]
           [libs (vector->list vals)])
       (target-case target-type
-        [(library)
+        [(component library)
          (match (sort (lambda (a b) (string<? (car a) (car b)))
                   (map cons files libs))
            [() (void)]
@@ -463,9 +479,9 @@
            (printf "Added without whole-program optimization:~{~{ ~s~}~}\n" libs)])])
       files)))
 
-(define (show-files app-boot boot-files rt-libs other-libs source-fn)
+(define (show-files target-type app-boot boot-files rt-libs other-libs source-fn)
   (when (> (verbosity) 1)
-    (printf "making application~@[ boot file ~s~] from:" app-boot)
+    (printf "making ~a program~@[ boot file ~s~] from:" target-type app-boot)
     (printf "~@[~{\n-b      ~a~}~]" boot-files)
     (printf "~{\n--rtlib ~a~}" rt-libs)
     (printf "~{\n        ~a~}" other-libs)
@@ -514,6 +530,7 @@
           (cond
            [(hashtable-ref (opt) "as-library" #f) 'library]
            [(opt "boot-files") 'stand-alone]
+           [(opt "component") 'component]
            [else 'linked])]
          [libdirs (fold-right
                    (lambda (x acc)
@@ -532,7 +549,7 @@
          (do-compile source-fn output-fn #f 'library))]
       [(stand-alone)
        ;; Add location of swish system .wpo files only if we're building a
-       ;; stand-alone application (boot-files non-empty).
+       ;; stand-alone program (boot-files non-empty).
        (let* ([boot-files (map resolve-boot-file (opt "boot-files"))]
               [swish-wpo?
                (or (null? rt-libs)
@@ -553,7 +570,7 @@
                (let ([ip (open-file output-fn O_RDONLY 0 'binary-input)])
                  (on-exit (close-port ip)
                    (get-bytevector-all ip)))])
-         (show-files app-boot boot-files rt-libs other-libs source-fn)
+         (show-files target-type app-boot boot-files rt-libs other-libs source-fn)
          ;; avoid using swish library code within the expression we compile
          (compile-to-file
           `((load-compiled-from-port (open-bytevector-input-port ',compiled-code)))
@@ -561,6 +578,11 @@
          (apply make-boot-file app-boot '()
            (append boot-files rt-libs other-libs (list output-fn)))
          (copy-to output-fn (osi_get_executable_path)))]
+      [(component)
+       (library-setup #f libdirs rt-libs)
+       (resolve-missing-libs target-type rt-libs
+         (do-compile source-fn output-fn #f target-type))
+       (show-files target-type #f #f rt-libs '() source-fn)]
       [(linked)
        (library-setup #f libdirs rt-libs)
        (let* ([missing (do-compile source-fn output-fn #f target-type)]
@@ -577,7 +599,7 @@
               [op (open-file tmp (+ O_WRONLY O_CREAT O_APPEND) #o777 'binary-output)])
          (define (cleanup) (close-port ip) (close-port op))
          (match (catch
-                 (show-files #f #f rt-libs other-libs source-fn)
+                 (show-files target-type #f #f rt-libs other-libs source-fn)
                  (put-bytevector op (or hashbang (string->utf8 "#!/usr/bin/env swish\n")))
                  (for-each
                   (lambda (rt-lib)
