@@ -135,8 +135,8 @@ fi
 resolve "SCHEME" "--scheme=" "scheme"
 
 if no_errors; then
+  SCHEME="$(realpath "${SCHEME}")"
   if [ "${Windows}" = "yes" ]; then
-    SCHEME="$(cygpath -au "${SCHEME}")"
     PYTHON="$(cygpath -aw "${PYTHON}")"
     set +e
     ACTUAL="$(cmd /A /E:OFF /F:OFF /V:OFF /D /S /C "${PYTHON}" -c "import sys; print sys.version_info.major, sys.version_info.minor, sys.platform;" 2>&1)"
@@ -150,8 +150,6 @@ if no_errors; then
       err "Got: ${ACTUAL}"
       ;;
     esac
-  else
-    SCHEME="$(realpath -s "${SCHEME}")"
   fi
 fi
 
@@ -209,9 +207,9 @@ try_custom() {
       # be ./bin/swish.exe, so insert absolute Windows path to the directory
       # containing scheme.exe in place of %x.
       _bindir="$(cygpath -w "${_bindir}")"
-      SCHEMEHEAPDIRS="${_bindir};${_bindir}\\..\\boot\\%m;"
+      SCHEMEHEAPDIRS="${_bindir};${_bindir}\\..\\..\\boot\\%m;${_bindir}\\..\\lib\\csv%v\\%m"
     else
-      SCHEMEHEAPDIRS="$(realpath "${_bindir}/../boot")/%m:"
+      SCHEMEHEAPDIRS="$(realpath "${_bindir}/../../boot")/%m:$(realpath "${_bindir}/../lib")"/csv%v/%m
     fi
     CUSTOMHEAPDIRS="${SCHEMEHEAPDIRS}"
   fi
