@@ -27,4 +27,5 @@ clean: src/swish/Makefile
 	$(MAKE) -C src/swish clean
 
 pristine: clean
+	$(MAKE) -C src/swish pristine
 	rm -f src/swish/Makefile

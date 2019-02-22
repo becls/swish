@@ -38,7 +38,7 @@ platform-clean:
 	rm -f ../../${BUILD}/lib/swish/*.so
 	rm -f ../../${BUILD}/lib/swish/*.wpo
 	rm -f io-constants.{exe,ilk,obj,pdb}
-	rm -f {main,osi,run,sqlite,sqlite3}.obj
+	rm -f {main,osi,run,sqlite}.obj
 	rm -f vc140.pdb
 	rm -f ${SwishLibs}
 
