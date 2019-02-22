@@ -552,7 +552,7 @@
   ;; run as /usr/bin/env script
   (test-os-process (fix-exe "bash") '()
     (string-append
-     "PATH=$PATH:./build/mat-prereq/lib/swish.x.y.z/arch\n"
+     "PATH=./build/mat-prereq/lib/swish.x.y.z/arch:${PATH}\n"
      "./data/tmp/mat-output/howdy.ss\n"
      "exit\n")
     '("howdy folks"))
@@ -578,7 +578,7 @@
   ;; run as /usr/bin/env script
   (test-os-process (fix-exe "bash") '()
     (string-append
-     "PATH=$PATH:./build/mat-prereq/lib/swish.x.y.z/arch\n"
+     "PATH=./build/mat-prereq/lib/swish.x.y.z/arch:${PATH}\n"
      "./data/tmp/mat-output/crash.ss\n"
      "echo $?\n"
      "exit\n")
@@ -614,7 +614,7 @@
   ;; run as /usr/bin/env script
   (test-os-process (fix-exe "bash") '()
     (string-append
-     "PATH=$PATH:./build/mat-prereq/lib/swish.x.y.z/arch\n"
+     "PATH=./build/mat-prereq/lib/swish.x.y.z/arch:${PATH}\n"
      "./data/tmp/mat-output/bounce.ss\n"
      "exit\n")
     expected-output)
