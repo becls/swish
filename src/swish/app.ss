@@ -107,8 +107,26 @@
      ["args" -- (list . "arg") "remaining arguments are files to load"]
      ["files" (list . "file") "execute file with remaining arguments"]))
 
+  (define (try-import)
+    ;; Try to import the available swish libraries, since that is convenient for
+    ;; interactive use and for quick one-off scripts.
+    ;;
+    ;; We guard against the possibility that the libraries are present but not
+    ;; visible, which can happen if a stand-alone program is compiled without
+    ;; --libs-visible and invokes the swish-start exported by this library.
+    ;;
+    ;; Since a stand-alone program might include a subset of the swish
+    ;; libraries, we consult library-list rather than trying to directly import
+    ;; (swish imports), which may not be available at run time, as it has no
+    ;; exports of its own.
+    (for-each
+     (lambda (library)
+       (match library
+         [(swish . ,_) (catch (eval `(import ,library)))]
+         [,_ #f]))
+     (library-list)))
+
   (define (run)
-    (eval '(import (swish imports)))
     (let* ([opt (parse-command-line-arguments cli)]
            [files (or (opt "files") '())])
       (cond
@@ -123,6 +141,7 @@
           (unless (opt "quiet")
             (printf "\n~a Version ~a\n" software-product-name software-version)
             (flush-output-port))
+          (try-import)
           (parameterize ([waiter-prompt-string (if (opt "quiet") "" ">")])
             (for-each load filenames)
             (new-cafe)))]
@@ -133,6 +152,7 @@
                          [command-line-arguments (cdr cmdline)]
                          [app:name script-file]
                          [app:path script-file])
+            (try-import)
             ;; use exit handler installed by the script, if any
             (match (catch (load script-file))
               [#(EXIT ,reason)

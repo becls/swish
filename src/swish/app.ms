@@ -33,6 +33,17 @@
 (system-mat m1 ()
   'ok)
 
+(mat try-import ()
+  (define (check-library-path lib)
+    (match lib
+      [(swish . ,_) 'ok]
+      [(chezscheme) 'ok]
+      [(scheme) 'ok]))
+  ;; Check that the naming convention expected by (try-import) in app.ss
+  ;; is compatible with (import (swish imports)).
+  (for-each check-library-path
+    (library-requirements '(swish imports))))
+
 ;; make sure we review changes to the set of libraries in swish-core.library
 (mat core-library ()
   (define enumerate-libs-expr

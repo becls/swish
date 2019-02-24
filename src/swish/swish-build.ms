@@ -1231,6 +1231,96 @@
   (run-fat "bounce" '() (expected-output "bounce" '()))
   )
 
+(isolate-mat try-import ()
+  ;; combined into one big mat so we build fewer executables
+  (define (ref-export var)
+    (lambda ()
+      (pretty-print `(pretty-print ,var))))
+  (define core-script
+    (write-test-file "try-import-core-script"
+      ;; reference an export that is present in swish-core.library
+      ;; *without* explicitly importing swish libraries
+      (ref-export 'DIRENT_FILE)))
+  (define run-core (list (path-last core-script)))
+  (define non-core-script
+    (write-test-file "try-import-non-core-script"
+      ;; reference display-usage, which is not present in swish-core.library,
+      ;; but is provided by (swish cli) which is imported where swish-start is
+      ;; defined; again, no explicit import of swish libraries
+      (ref-export 'display-usage)))
+  (define run-non-core (list (path-last non-core-script)))
+  (define importer.ss-full-path
+    (write-test-file "try-import.ss"
+      (lambda ()
+        ;; no explicit swish imports, but swish-start script and repl
+        ;; cases do try-import so script we load can work
+        (printf "#! /usr/bin/env swish\n")
+        (for-each pretty-print
+          ;; cd so we can use relative path to keep Windows happy
+          '((cd (path-parent (app:path)))
+            (apply swish-start (command-line-arguments)))))))
+  (define importer.ss (path-last importer.ss-full-path))
+  (define importer (path-root importer.ss))
+  (define expected-output-core
+    (list (format "~s" DIRENT_FILE)))
+  (define expected-output-non-core
+    (list (pregexp-quote (format "~s" display-usage))))
+  (define repl-input-core
+    (format "~{~s\n~}"
+      '((reset-handler exit)
+        DIRENT_FILE
+        (printf "okay\n")
+        (exit))))
+  (define repl-input-non-core
+    (format "~{~s\n~}"
+      '((reset-handler exit)
+        display-usage
+        (printf "okay\n")
+        (exit))))
+  (set-file-mode importer.ss-full-path #o755)
+  ;; run as /usr/bin/env script
+  ;; core and non-core okay since we have all of swish
+  (run-bash importer.ss run-core expected-output-core)
+  (run-bash importer.ss run-non-core expected-output-non-core)
+  ;; run as swish script
+  ;; core and non-core okay since we have all of swish
+  (run-script importer.ss-full-path run-core expected-output-core)
+  (run-script importer.ss-full-path run-non-core expected-output-non-core)
+  ;; run as thin app
+  ;; core and non-core okay since we have all of swish
+  (build-example importer '())
+  (run-thin importer run-core expected-output-core)
+  ;; run-core via fat app: should work even without --libs-visible
+  ;; because we're going after an export present in core libraries
+  (assert (delete-file (output-file importer)))
+  (build-example importer '("-b" "petite"))
+  (run-fat importer run-core expected-output-core)
+  ;; run-non-core via fat app: should fail since libs are not visible
+  (match (catch (run-fat importer run-non-core expected-output-non-core))
+    [#(EXIT `(<os-process-failed> ,stderr))
+     (match-regexps
+      '("try-import-non-core-script: variable display-usage is not bound")
+      stderr)])
+  ;; repl-input-core in repl without --libs-visible should pass
+  (test-os-process (output-file importer) '("-q") repl-input-core
+    expected-output-core)
+  ;; repl-input-non-core in repl without --libs-visible should fail
+  (test-os-process (output-file importer) '("-q") repl-input-non-core
+    '("Exception: variable display-usage is not bound"))
+  ;; rebuild importer with --libs-visible
+  (assert (delete-file (output-file importer)))
+  (build-example importer '("-b" "petite" "--libs-visible"))
+  ;; run-core as fat app: should (still) pass with --libs-visible
+  (run-fat importer run-core expected-output-core)
+  ;; run-non-core as fat app: should (now) pass due to --libs-visible
+  (run-fat importer run-non-core expected-output-non-core)
+  ;; repl-input-core in repl with --libs-visible should (still) pass
+  (test-os-process (output-file importer) '("-q") repl-input-core
+    (append expected-output-core '("^okay")))
+  ;; repl-input-non-core in repl with --libs-visible should now pass
+  (test-os-process (output-file importer) '("-q") repl-input-non-core
+    (append expected-output-non-core '("^okay"))))
+
 (isolate-mat error-reporting ()
   (define bad
     (write-test-file "bad.ss"
