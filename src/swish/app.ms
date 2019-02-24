@@ -128,3 +128,38 @@
      (try "my" (make-message-condition "message"))]
     )
    'ok))
+
+(isolate-mat application-shutdown ()
+  ;; Make sure app:shutdown doesn't do a (receive).
+  ;; If a supervisor malfunctions while we're at the repl,
+  ;; we'd like to be able to investigate.
+  (match
+   (catch
+    (test-os-process swish-exe '()
+      (format "~{~s\n~}\n"
+        '((define repl self)
+          (define (bad-sup:start&link)
+            (define (init)
+              (process-trap-exit #t)
+              `#(ok #f))
+            (define (terminate reason state)
+              (spawn (lambda () (receive (after 10 (send repl 'locking-up)))))
+              (receive [disarm 'ok]))
+            (define (handle-call msg from state) (match msg))
+            (define (handle-cast msg state) (match msg))
+            (define (handle-info msg state) (match msg))
+            (gen-server:start&link 'bad-sup))
+          (app-sup-spec
+           `(#(bad-sup ,bad-sup:start&link permanent infinity supervisor)))
+          (app:start)
+          (app:shutdown 2)
+          ;; simulate repl interaction after surprising
+          ;; non-exit of app:shutdown
+          (receive (after 1000 (osi_exit 3))
+            [locking-up 'ok])
+          (printf "armed and ready\n")
+          (send (whereis 'bad-sup) 'disarm)
+          (receive (after 1000 (osi_exit 4)))))
+      '("expected non-zero exit")))
+   [#(EXIT `(<os-process-failed> [exit-status 2] ,stdout))
+    (match-regexps '(seek "armed and ready") stdout)]))

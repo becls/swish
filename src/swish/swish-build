@@ -206,11 +206,12 @@
      (list-item "1." "load Chez Scheme's" csvNNN.dll "[Windows only],")
      (list-item "2." "load Chez Scheme's petite.boot and scheme.boot,")
      (list-item "3." "load the standard" software-internal-name "boot file, then")
-     (list-item "4." "invoke the" software-internal-name "scheme-start handler.\n")
-     (wrap 0 "The scheme-start handler of a linked program or stand-alone program:\n")
+     (list-item "4." "invoke swish-start with the compiled program as the first argument,"
+       "followed by the arguments provided on the command line.\n")
+     (wrap 0 "On start-up a program (linked, stand-alone, or script):\n")
      (list-item "1." "sets app:name, app:path, command-line, and command-line-arguments")
      (list-item "2." "installs an exception handler that prints app:name, if non-false, and")
-     (list-item "3." "invokes the compiled program code.")
+     (list-item "3." "invokes the program code.")
      (wrap 0
        "\n"
        "Compiling a linked program or stand-alone program incorporates any --rtlib libraries"
@@ -311,51 +312,17 @@
 (define (rm-f filename)
   (catch (remove-file filename)))
 
-;; generate wrapper that invokes content of source-fn appropriately depending on
-;; the type of program we're compiling: stand-alone or linked.
-(define (do-compile-program source-fn dest target-type)
+;; wrap contents of source-fn in a top-level program with standard imports
+(define (do-compile-program source-fn dest)
   (with-sfd-source-offset source-fn
     (lambda (ip sfd source-offset)
       (define annotated-source
         (get-datum/annotations-all ip sfd source-offset))
-      (define dummy-source (make-source-object sfd source-offset source-offset))
-      (define body
-        (make-annotation
-         `(lambda () ,@annotated-source)
-         dummy-source
-         `(lambda () ,@(map annotation-stripped annotated-source))))
-      (define (setup args-expr index)
-        `(let ([who (vector-ref (osi_get_argv) ,index)]
-               [args ,args-expr])
-           ;; Referencing app:name used to invoke (swish app) library,
-           ;; which installed swish's scheme-start parameter. Now it
-           ;; invokes (swish app-core) instead, so we insert a reference
-           ;; to app:start to invoke (swish app-core).
-           app:start
-           (app:name who)
-           (app:path who)
-           (command-line (cons who args))
-           (command-line-arguments args)))
       (define program
         ;; source-fn must not use top-level-program, since it is spliced in as body
         `(top-level-program
           (import (scheme) (swish imports))
-          (let ()
-            (define (invoke)
-              (with-exception-handler app-exception-handler ,body))
-            ,(match target-type
-               [component `(invoke)]
-               [stand-alone
-                `(scheme-start
-                  (let ([orig (scheme-start)])
-                    (lambda args
-                      (scheme-start orig)
-                      ,(setup 'args 0)
-                      (invoke))))]
-               [linked
-                `(let ([args (command-line-arguments)])
-                   ,(setup 'args 1)
-                   (invoke))]))))
+          ,@annotated-source))
       (compile-to-file (list program) dest sfd))))
 
 (define (compile-help source-fn obj-fn target-type)
@@ -388,7 +355,7 @@
       [(library)
        (compile-library source-fn obj-fn)]
       [(component linked stand-alone)
-       (do-compile-program source-fn obj-fn target-type)])))
+       (do-compile-program source-fn obj-fn)])))
 
 (define (compile-wpo wpo-file output-fn target-type)
   (define default-library-search (library-search-handler))
@@ -622,12 +589,11 @@
                    ;; run-time library, else we could duplicate code
                    (not (member swish-library-filename rt-libs)))]
               [rt-libs
-               ;; Always include swish-core.library as --rtlib so that we
-               ;; disable whole-program optimization for (swish app-core)
-               ;; and its dependencies since these are required by the boot
-               ;; process for stand-alone apps and we don't want to risk
-               ;; duplicating those libraries within the compiled top-level program
-               ;; itself.
+               ;; Always include swish-core.library as --rtlib and disable
+               ;; whole-program optimization for (swish app-core) and its
+               ;; dependencies since these are required by the boot process
+               ;; for stand-alone apps and we don't want to risk duplicating
+               ;; those libraries within the compiled top-level program itself.
                (if (member swish-core-library-filename rt-libs)
                    rt-libs
                    (cons swish-core-library-filename rt-libs))]
@@ -646,10 +612,20 @@
                  (on-exit (close-port ip)
                    (get-bytevector-all ip)))])
          (show-files target-type app-boot boot-files rt-libs other-libs source-fn)
-         ;; avoid using swish library code within the expression we compile
+         ;; This expression must not reference exports that may
+         ;; participate in whole-program optimization, since that could
+         ;; result in duplicate library initialization within the compiled
+         ;; code.  Referencing exports provided by swish-core.library is
+         ;; fine, since they are excluded from wpo.
          (compile-to-file
           `((suppress-greeting #t)
-            (load-compiled-from-port (open-bytevector-input-port ',compiled-code)))
+            (let ([orig (scheme-start)])
+              (scheme-start
+               (lambda args
+                 (scheme-start orig)
+                 ($swish-start #t args
+                   (lambda ()
+                     (load-compiled-from-port (open-bytevector-input-port ',compiled-code))))))))
           output-fn)
          (apply make-boot-file app-boot '()
            (append boot-files rt-libs other-libs (list output-fn)))

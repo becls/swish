@@ -93,7 +93,7 @@ The \code{application:start} procedure calls
 \code{\#(ok \_)}, \code{application:start} returns \code{ok}. If
 it returns \code{\#(error \var{reason})}, \code{application:start}
 calls \code{(console-event-handler \#(application-start-failed
-  \var{reason}))} and \code{(exit-process 1)}.
+  \var{reason}))} and \code{(exit 1)}.
 
 \defineentry{application:shutdown}
 \begin{procedure}

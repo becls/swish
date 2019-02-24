@@ -23,7 +23,6 @@
 #!chezscheme
 (library (swish app)
   (export
-   app-exception-handler
    app-sup-spec
    app:resume
    app:shutdown
@@ -31,6 +30,7 @@
    app:suspend
    init-main-sup
    make-swish-sup-spec
+   swish-start
    )
   (import
    (chezscheme)
@@ -98,9 +98,6 @@
          (when reason (raise reason)))
        x)))
 
-  (define (set-random-seed)
-    (random-seed (+ (remainder (erlang:now) (- (ash 1 32) 1)) 1)))
-
   (define cli
     (cli-specs
      default-help
@@ -114,7 +111,6 @@
     (eval '(import (swish imports)))
     (let* ([opt (parse-command-line-arguments cli)]
            [files (or (opt "files") '())])
-      (when (opt "quiet") (waiter-prompt-string ""))
       (cond
        [(opt "help")
         (display-help (path-last (osi_get_executable_path)) cli (opt))
@@ -123,60 +119,28 @@
         (printf "~a (~a)\n" (swish-version) (software-revision 'swish))
         (values)]
        [(null? files)                   ; repl
-        (app:name #f)
-        (app:path #f)
         (let ([filenames (or (opt "args") '())])
           (unless (opt "quiet")
             (printf "\n~a Version ~a\n" software-product-name software-version)
             (flush-output-port))
-          (hook-console-input)
-          (set-random-seed)
-          (for-each load filenames)
-          (new-cafe))]
+          (parameterize ([waiter-prompt-string (if (opt "quiet") "" ">")])
+            (for-each load filenames)
+            (new-cafe)))]
        [else                            ; script
-        (let ([script-file (car files)])
-          (command-line (command-line-arguments))
-          (command-line-arguments (cdr (command-line)))
-          (app:name script-file)
-          (app:path script-file)
-          (set-random-seed)
-          ;; use exit handler installed by the script, if any
-          (match (catch (load script-file))
-            [#(EXIT ,reason)
-             (app-exception-handler reason)
-             ((exit-handler) 1)]
-            [,_ ((exit-handler))]))])))
+        (let ([script-file (car files)]
+              [cmdline (command-line-arguments)])
+          (parameterize ([command-line cmdline]
+                         [command-line-arguments (cdr cmdline)]
+                         [app:name script-file]
+                         [app:path script-file])
+            ;; use exit handler installed by the script, if any
+            (match (catch (load script-file))
+              [#(EXIT ,reason)
+               (app-exception-handler reason)
+               (exit 1)]
+              [,_ (exit)])))])))
 
-  (define (int32? x) (and (or (fixnum? x) (bignum? x)) (<= #x-7FFFFFFF x #x7FFFFFFF)))
-  (define (->exit-status exit-code)
-    (cond
-     [(int32? exit-code) exit-code]
-     [(eq? exit-code (void)) 0]
-     [else
-      (console-event-handler (format "application shutdown due to (exit ~s)" exit-code))
-      1]))
-  (define quit
-    (case-lambda
-     [() (quit 0)]
-     [(exit-code . _)
-      (app:shutdown (->exit-status exit-code))
-      (receive)]))
+  (define (swish-start . args)
+    ($swish-start #f args run))
 
-  (define swish-start
-    (lambda args
-      (let* ([argv (osi_get_argv)]
-             [who (if (= 0 (vector-length argv)) "scheme" (vector-ref argv 0))])
-        (command-line (cons who args))
-        (command-line-arguments args)
-        (with-exception-handler app-exception-handler
-          (lambda ()
-            (call-with-values run quit))))))
-
-  (suppress-greeting #t)
-
-  (scheme-start
-   (lambda args
-     (exit-handler quit)
-     (scheme-start swish-start)
-     (apply swish-start args)))
   )

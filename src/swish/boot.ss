@@ -1,2 +1,3 @@
 (import (swish app))
-app:start ;; reference export to force library initialization
+(suppress-greeting #t)
+(scheme-start swish-start)

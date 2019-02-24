@@ -20,21 +20,28 @@
 ;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 ;;; DEALINGS IN THE SOFTWARE.
 
+#!chezscheme
 (library (swish app-core)
   (export
+   $exit-process
+   $swish-start
    app-exception-handler
    app:name
    app:path
+   application:shutdown
    )
   (import
    (chezscheme)
    (swish erlang)
    (swish errors)
-   (swish io))
+   (swish io)
+   (swish osi))
+
+  (define application-exit-code 2)
 
   ;; intended to return short descriptive name of the application if known
   (define app:name
-    (make-parameter #f
+    (make-process-parameter #f
       (lambda (x)
         (unless (or (not x) (string? x))
           (bad-arg 'app:name x))
@@ -42,7 +49,7 @@
 
   ;; intended to return full path to the application script or executable, if known
   (define app:path
-    (make-parameter #f
+    (make-process-parameter #f
       (lambda (x)
         (unless (or (not x) (string? x))
           (bad-arg 'app:path x))
@@ -81,4 +88,61 @@
     (cond
      [(app:name) => (lambda (who) (claim-exception who c))]
      [else (default-exception-handler c)]))
+
+  (define (int32? x) (and (or (fixnum? x) (bignum? x)) (<= #x-7FFFFFFF x #x7FFFFFFF)))
+  (define (->exit-status exit-code)
+    (cond
+     [(int32? exit-code) exit-code]
+     [(eq? exit-code (void)) 0]
+     [else
+      (console-event-handler (format "application shutdown due to (exit ~s)" exit-code))
+      1]))
+
+  (define (exit-process exit-code)
+    (catch (flush-output-port (console-output-port)))
+    (catch (flush-output-port (console-error-port)))
+    (let ([p (#%$top-level-value '$console-input-port)])
+      ;; convince Chez Scheme to close console-input port
+      (#%$set-top-level-value! '$console-input-port #f)
+      (close-port p))
+    (osi_exit (->exit-status exit-code)))
+
+  (define ($exit-process)
+    (exit-process application-exit-code))
+
+  (define application:shutdown
+    (case-lambda
+     [() (application:shutdown 0)]
+     [(exit-code . _)
+      (cond
+       [(whereis 'application) =>
+        (lambda (p)
+          (set! application-exit-code exit-code)
+          (kill p 'shutdown))]
+       [else (exit-process exit-code)])]))
+
+  (define started? #f)
+  (define ($swish-start stand-alone? args run)
+    (let ([who (osi_get_executable_path)])
+      (parameterize ([command-line (cons who args)]
+                     [command-line-arguments args])
+        (with-exception-handler app-exception-handler
+          (lambda ()
+            (cond
+             [started? (run)]
+             [else
+              (set! started? #t)
+              (random-seed (+ (remainder (erlang:now) (- (ash 1 32) 1)) 1))
+              (hook-console-input)
+              (call/cc
+               (lambda (bail)
+                 (exit-handler
+                  (lambda args
+                    (apply application:shutdown args)
+                    (bail)))
+                 (when stand-alone?
+                   (app:name who)
+                   (app:path who))
+                 (call-with-values run exit)))
+              (receive)]))))))
   )

@@ -1225,6 +1225,18 @@
         (send finalizer-process 'go))))
 
   ;; Redefine Chez Scheme parameters
+  (redefine command-line
+    (make-process-parameter (command-line)
+      (lambda (x)
+        (unless (and (list? x) (andmap string? x))
+          (bad-arg 'command-line x))
+        x)))
+  (redefine command-line-arguments
+    (make-process-parameter (command-line-arguments)
+      (lambda (x)
+        (unless (and (list? x) (andmap string? x))
+          (bad-arg 'command-line-arguments x))
+        x)))
   (redefine custom-port-buffer-size
     (make-process-parameter 1024
       (lambda (x)
@@ -1312,6 +1324,12 @@
       (lambda (x)
         (unless (procedure? x)
           (bad-arg 'waiter-prompt-and-read x))
+        x)))
+  (redefine waiter-prompt-string
+    (make-process-parameter (waiter-prompt-string)
+      (lambda (x)
+        (unless (string? x)
+          (bad-arg 'waiter-prompt-string x))
         x)))
 
   (osi_set_quantum quantum-nanoseconds)

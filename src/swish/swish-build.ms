@@ -147,7 +147,17 @@
   (match (get-stat wpo-file)
     [`(<stat>) (raise "wpo file remains")]
     [,_ 'ok])
-  (run-fat "fat1" '() '("Hello, World!")))
+  (run-fat "fat1" '() '("Hello, World!"))
+  ;; run fat app via PATH search, not via relative or absolute path
+  (test-os-process (fix-exe "bash") '()
+    (string-append
+     "PATH=\"${PWD}/data/tmp/mat-output/:${PATH}\"\n"
+     "type -a fat1\n"
+     "fat1\n"
+     "exit\n")
+    '("^fat1 is .*/data/tmp/mat-output/fat1.*"
+      "^Hello, World!"))
+  )
 
 (isolate-mat fat2 ()
   ;; fat with petite and scheme
@@ -169,6 +179,26 @@
       (printf "Hello, World!\n")))
   (build-example "thin" '())
   (run-thin "thin" '() '("Hello, World!")))
+
+(isolate-mat top-level-program ()
+  (define tlp
+    (write-example "tlp"
+      ;; swish-build wraps body in a top-level-program with default imports
+      ;; top-level-program allows us to mix definitions and expressions
+      `((printf "before\n")
+        (define x 123)
+        (printf "after: ~a\n" x))))
+  ;; Run as a script. This does not go through swish-build, so it is not wrapped
+  ;; as a top-level program. Instead, swish calls load which reads and evaluates
+  ;; each source expression from the file in turn. Here that has the same effect
+  ;; as running the top-level program.
+  (run-script tlp '() '("before" "after: 123"))
+  ;; Run as a linked application.
+  (build-example "tlp" '())
+  (run-thin "tlp" '() '("before" "after: 123"))
+  ;; Run as a stand-alone application.
+  (build-example "tlp" '("-b" "petite"))
+  (run-fat "tlp" '() '("before" "after: 123")))
 
 (isolate-mat command-line-arguments ()
   ;; command-line thin and fat
@@ -565,22 +595,127 @@
     `("1 2" ,(pregexp-quote "[7,8]")))
   )
 
+(isolate-mat normal-exit ()
+  (define normal-exit (write-example "normal-exit" `((exit))))
+  ;; run as swish script
+  (run-script normal-exit '() '())
+  ;; run as thin app
+  (build-example "normal-exit" '())
+  (run-thin "normal-exit" '() '())
+  ;; run as fat app
+  (assert (delete-file (output-file "normal-exit")))
+  (build-example "normal-exit" '("-b" "petite"))
+  (run-fat "normal-exit" '() '()))
+
 (isolate-mat non-numeric-exit ()
+  (define-syntax assert-error
+    (syntax-rules ()
+      [(_ expr)
+       (match (catch expr)
+         [#(EXIT `(<os-process-failed>
+                   [exit-status 1]
+                   [stdout ()]
+                   [stderr ,stderr]))
+          (match-regexps '(seek "application shutdown due to \\(exit foo\\)") stderr)])]))
   ;; Attempt to call exit with a non-numeric exit code and is
   ;; confusing enough that we output a message with the
   ;; console-event-handler.
-  (write-example "non-numeric-exit"
-    `((import
-       (scheme)
-       (swish imports))
-      (exit 'foo)))
+  (define non-numeric-exit
+    (write-example "non-numeric-exit"
+      `((import
+         (scheme)
+         (swish imports))
+        (exit 'foo))))
+  ;; run as swish script
+  (assert-error (run-script non-numeric-exit '() '()))
+  ;; run as thin app
   (build-example "non-numeric-exit" '())
-  (match (catch (run-thin "non-numeric-exit" '() '()))
-    [#(EXIT `(<os-process-failed>
-              [exit-status 1]
-              [stdout ()]
-              [stderr ,stderr]))
-     (match-regexps '(seek "application shutdown due to \\(exit foo\\)") stderr)]))
+  (assert-error (run-thin "non-numeric-exit" '() '()))
+  ;; run as fat app
+  (assert (delete-file (output-file "non-numeric-exit")))
+  (build-example "non-numeric-exit" '("-b" "petite"))
+  (assert-error (run-fat "non-numeric-exit" '() '())))
+
+(isolate-mat exit-handler ()
+  ;; script may hook the exit handler to perform some cleanup on shutdown
+  (define hook-exit
+    (write-example "hook-exit"
+      `((let ([eh (exit-handler)])
+          (exit-handler
+           (lambda args
+             (printf "cleaning up\n")
+             (apply eh args))))
+        (printf "starting\n"))))
+  (define expected-output '("^starting" "^cleaning up"))
+  ;; run as swish script
+  (run-script hook-exit '() expected-output)
+  ;; run as thin app
+  (build-example "hook-exit" '())
+  (run-thin "hook-exit" '() expected-output)
+  ;; run as fat app
+  (assert (delete-file (output-file "hook-exit")))
+  (build-example "hook-exit" '("-b" "petite"))
+  (run-fat "hook-exit" '() expected-output))
+
+(isolate-mat application-shutdown ()
+  (define event "Event: #\\(<child-end> [0-9]+ #<process [678]> 1 (normal|shutdown)")
+  (define expected-output
+    `(seek "Date:" "Timestamp:" ,event
+      seek "Date:" "Timestamp:" ,event
+      seek "Date:" "Timestamp:" ,event))
+  (define app-shutdown
+    (write-test-file "app-shutdown.ss"
+      (lambda ()
+        (printf "#! /usr/bin/env swish\n")
+        (pretty-print
+          `(match (command-line-arguments)
+              [("normal") (app:start)]
+              [("abnormal")
+               (begin
+                 (app:start)
+                 (kill (whereis 'application) 'shutdown)
+                 (receive))]
+             [("specific")
+              (begin
+                (app:start)
+                (app:shutdown 42)
+                (receive))])))))
+  (set-file-mode app-shutdown #o755)
+  ;; run as /usr/bin/env script
+  (run-bash "app-shutdown.ss" '("normal") expected-output)
+  (match (catch (run-bash "app-shutdown.ss" '("abnormal") '()))
+    [#(EXIT `(<os-process-failed> ,stderr [exit-status 2]))
+     (match-regexps expected-output stderr)])
+  (match (catch (run-bash "app-shutdown.ss" '("specific") '()))
+    [#(EXIT `(<os-process-failed> ,stderr [exit-status 42]))
+     (match-regexps expected-output stderr)])
+  ;; run as swish script
+  (run-script app-shutdown '("normal") expected-output)
+  (match (catch (run-script app-shutdown '("abnormal") expected-output))
+    [#(EXIT `(<os-process-failed> ,stderr [exit-status 2]))
+     (match-regexps expected-output stderr)])
+  (match (catch (run-script app-shutdown '("specific") expected-output))
+    [#(EXIT `(<os-process-failed> ,stderr [exit-status 42]))
+     (match-regexps expected-output stderr)])
+  ;; run as thin app
+  (build-example "app-shutdown" '())
+  (run-thin "app-shutdown" '("normal") expected-output)
+  (match (catch (run-thin "app-shutdown" '("abnormal") '()))
+    [#(EXIT `(<os-process-failed> ,stderr [exit-status 2]))
+     (match-regexps expected-output stderr)])
+  (match (catch (run-thin "app-shutdown" '("specific") '()))
+    [#(EXIT `(<os-process-failed> ,stderr [exit-status 42]))
+     (match-regexps expected-output stderr)])
+  (assert (delete-file (output-file "app-shutdown")))
+  ;; run as fat app
+  (build-example "app-shutdown" '("--rtlib" "swish" "-b" "petite"))
+  (run-fat "app-shutdown" '("normal") expected-output)
+  (match (catch (run-fat "app-shutdown" '("abnormal") '()))
+    [#(EXIT `(<os-process-failed> ,stderr [exit-status 2]))
+     (match-regexps expected-output stderr)])
+  (match (catch (run-fat "app-shutdown" '("specific") '()))
+    [#(EXIT `(<os-process-failed> ,stderr [exit-status 42]))
+     (match-regexps expected-output stderr)]))
 
 (isolate-mat compile-library ()
   (define source (input-file "clib"))
@@ -967,28 +1102,133 @@
   (build-example "test-app-path" '("-b" "petite"))
   (run-fat "test-app-path" '() expect-binary))
 
-(isolate-mat scheme-start ()
-  ;; make sure we've restored swish's scheme-start, especially in fat app case
+(isolate-mat swish-start ()
+  (define buggy-script
+    (write-example "buggy-script"
+      `((printf "The ~a got~{ ~a~}.\n" (app:name) (command-line-arguments))
+        bug)))
+  (define set-prompt
+    (write-example "set-prompt"
+      `((waiter-prompt-string "#")
+        (printf "prompted\n"))))
+  (define outer-script-input "(* 6 4)\n(swish-start)\n")
+  (define outer-script
+    (write-example "outer-script"
+      `((printf "~a got args:~{ ~a~}.\n" (app:name) (command-line-arguments))
+        (swish-start "-q" "--" ,set-prompt) ;; reads outer-script-input
+        (parameterize ([console-input-port
+                        (open-input-string
+                         (format "(swish-start ~s~{ \"~s\"~})" ,buggy-script '(9 10 11)))])
+          (swish-start "-q"))
+        (printf "back to ~a\n" (app:name))
+        unbound-variable)))
   (define bounce
     (write-test-file "bounce.ss"
       (lambda ()
         (printf "#! /usr/bin/env swish\n")
-        (for-each pretty-print
-          '((printf "Hello from ")
-            ((scheme-start) "--version"))))))
-  (define expected-output '("Hello from Swish Version"))
+        (pretty-print
+         ;; We wrap the expressions in (module () ...)
+         ;; so that the input is a definition, which prevents
+         ;; top-level-program from converting this into
+         ;;   (letrec* ([t1 (printf ...)]
+         ;;             [t2 (swish-start "--version")])
+         ;;     (void))
+         ;; which would fail since swish-start returns zero values
+         ;; to a context that expects one (but may fail only if
+         ;; cp0 is disabled, as when running profiled mats).
+         `(module ()
+            (printf "Hello from ")
+            (match-let*
+             ([,',_ (swish-start "--version")]
+              [,',_ (swish-start "--help")]
+              ;; hook console early so (swish-start "-q") repl uses our string input port
+              [,',_ (hook-console-input)]
+              [5 (parameterize ([console-input-port
+                                 (open-input-string
+                                  "(pretty-print 12345) (exit (+ 2 3))")])
+                   (swish-start "-q"))]
+              [()
+               (call-with-values
+                 (lambda ()
+                   (parameterize ([console-input-port (open-input-string "7\n")])
+                     (swish-start)))
+                 list)]
+              [(1 2 3)
+               (call-with-values
+                 (lambda ()
+                   (parameterize ([console-input-port (open-input-string "(exit 1 2 3)\n")])
+                     (swish-start "-q")))
+                 list)]
+              [strategy
+               (call/cc
+                (lambda (bail)
+                  (parameterize ([exit-handler bail]
+                                 [reset-handler (lambda () (exit 'strategy))]
+                                 [console-input-port (open-input-string ,outer-script-input)])
+                    (swish-start ,outer-script "noodle" "soup"))))])
+             (printf "~a\n" (app:name))
+             (printf "okay\n")))))))
+  (define (expected-output who extra-stderr)
+    `(;; ==stdin==
+      ;; swish-start --version
+      "^Hello from Swish Version"
+      ;; swish-start --help
+      ,(format "^Usage: ~a *.*--verbose.*--version" who)
+      seek
+      "^ *-q *suppress startup message and prompt string"
+      seek
+      ;; swish-start -q
+      "^12345"
+      seek
+      ;; swish-start
+      "^Swish Version "
+      "7"
+      "> "
+      ;; swish-start file ...
+      "^outer-script got args: noodle soup\\."
+      ;;   swish-start -q -- arg ...
+      "^prompted"
+      "^# 24"
+      "^# "
+      ;;     swish-start
+      "^Swish Version"
+      "^>> "
+      ;; eof
+      "^# "
+      ;; swish-start -q
+      ;;   swish-start buggy-script
+      "^The buggy-script got 9 10 11\\."
+      "^back to outer-script"
+      ;; app:name
+      "^bounce"
+      "^okay"
+      ;; ==stderr==
+      ,@extra-stderr ;; for swish --verbose
+      "^buggy-script: variable bug is not bound\\."
+      "^outer-script: variable unbound-variable is not bound\\."
+      ))
+  (test-os-process swish-exe `("--verbose" ,bounce) ""
+    (expected-output "swish"
+      '("^trying .*swish\\.boot\\.*opened"
+        "^version and machine type check"
+        seek ;; may try more than one entry in SCHEMEHEAPDIRS
+        "^trying .*scheme.boot\\.*opened"
+        "^version and machine type check"
+        seek ;; may try more than one entry in SCHEMEHEAPDIRS
+        "^trying .*petite.boot\\.*opened"
+        "^version and machine type check")))
   (set-file-mode bounce #o755)
   ;; run as /usr/bin/env script
-  (run-bash "bounce.ss" '() expected-output)
+  (run-bash "bounce.ss" '() (expected-output "swish" '()))
   ;; run as swish script
-  (run-script bounce '() expected-output)
+  (run-script bounce '() (expected-output "swish" '()))
   ;; run as thin app
   (build-example "bounce" '())
-  (run-thin "bounce" '() expected-output)
+  (run-thin "bounce" '() (expected-output "swish" '()))
   (assert (delete-file (output-file "bounce")))
   ;; run as fat app
   (build-example "bounce" '("--rtlib" "swish" "-b" "petite"))
-  (run-fat "bounce" '() expected-output)
+  (run-fat "bounce" '() (expected-output "bounce" '()))
   )
 
 (isolate-mat error-reporting ()

@@ -104,9 +104,7 @@
                  (reset-handler (lambda () (exit 1)))
                  (void))
                (on-exit (profile:save)
-                 ;; call the (scheme-start) installed by app.ss to
-                 ;; mimic initial application startup
-                 (apply (scheme-start) ',script-file ',args)))
+                 (apply swish-start ',script-file ',args)))
              for-stdin)
            patterns)))]
      [else (test-os-process swish-exe `(,script-file ,@args) for-stdin patterns)]))
