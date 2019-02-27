@@ -6,7 +6,7 @@ endif
 ifneq (,$(shell "${CC}" --help=warnings 2> /dev/null | grep cast-function-type))
   HUSH:=${HUSH} -Wno-cast-function-type
 endif
-C = ${CC} -m32 -msse2 -fPIC -Wall -Wextra -Werror -O2 ${CPPFLAGS} ${CFLAGS} ${LDFLAGS}
+C = ${CC} -m32 -fPIC -Wall -Wextra -Werror -O2 ${CPPFLAGS} ${CFLAGS} ${LDFLAGS}
 OsiObj=osi.o sqlite.o sqlite3.o
 SystemLibs=-lm -ldl -lncurses -luuid -lpthread
 SwishLibs := ../../${BUILD}/bin/libosi.so ../../${BUILD}/lib/swish_kernel.o
