@@ -375,6 +375,15 @@ set_output() {
 
 BASE="$(git rev-parse --show-toplevel)"
 
+set_output src/swish/sh-config
+add "export SCHEME='${SCHEME}'"
+if [ -n "${SCHEMEHEAPDIRS:-}" ]; then
+  add "export SCHEMEHEAPDIRS='${SCHEMEHEAPDIRS}'"
+fi
+if [ "${Windows}" = "yes" ]; then
+  add "export PATH='${SCHEME_LIBPATH}:${PATH}'"
+fi
+
 set_output src/swish/Mf-config
 add "EXESUFFIX:=${EXESUFFIX}"
 add "DLLSUFFIX:=${DLLSUFFIX}"

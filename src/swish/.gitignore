@@ -13,6 +13,7 @@
 /osi.obj
 /run.o
 /run.obj
+/sh-config
 /sqlite.o
 /sqlite.obj
 /sqlite3.o

@@ -6,5 +6,5 @@ else
   echo "Run ./configure in the top-level directory to build src/swish/Makefile"
   exit 1
 fi
-if [ -z ${SCHEME+x} ]; then SCHEME=scheme; fi
+. swish/sh-config
 "${SCHEME}" --eedisable --program repl.ss "$@"

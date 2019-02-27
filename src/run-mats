@@ -34,6 +34,8 @@ fi
 rm -f data/TestLog.db3
 mkdir -p data
 
+. src/swish/sh-config
+
 # Windows can't handle symbolic links, so point to LIBDIR
 PATH="${LIBDIR}:${PATH}"
 
