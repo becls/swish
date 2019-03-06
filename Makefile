@@ -29,3 +29,4 @@ clean: src/swish/Makefile
 pristine: clean
 	$(MAKE) -C src/swish pristine
 	rm -f src/swish/Makefile
+	rm -f src/swish/Mf-config

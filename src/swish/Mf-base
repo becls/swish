@@ -9,8 +9,8 @@ ready: Makefile build-dirs io-constants.ss clibs git.revision
 	  exit 1; \
 	fi
 
-Makefile: Makefile.in ../../configure
-	$(error re-run configure to update Makefile)
+Makefile: Mf-base ../../configure
+	$(error re-run configure to ensure Makefile is up-to-date)
 
 build-dirs:
 	@mkdir -p ../../${BUILD}/bin

@@ -18,7 +18,7 @@ clibs: ${SwishLibs}
 	../vs64 lib /nologo /ltcg /out:$@ run.obj ${OsiObj} "${SchemeLib}" "${UvLib}"
 
 %.obj: %.c osi.h ${UvInclude}
-	$C /I"${SchemeInclude}" /I"${UvInclude}" /c $<
+	$C /I"${SCHEME_INCLUDE}" /I"${UvInclude}" /c $<
 
 sqlite3.obj: sqlite3.h sqlite3.c
 	$C /DSQLITE_ENABLE_JSON1 /DSQLITE_THREADSAFE=2 /c sqlite3.c

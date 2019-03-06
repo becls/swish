@@ -20,10 +20,10 @@ clibs: ${SwishLibs}
 	$C -shared -L${UvLib} -o ../../${BUILD}/bin/libosi.so ${OsiObj} -luv -luuid
 
 ../../${BUILD}/lib/swish_kernel.o: ${UvLib}/libuv.a run.o ${OsiObj}
-	ld -melf_x86_64 -r -X -o $@ run.o ${OsiObj} "${SchemeInclude}"/kernel.o ${UvLib}/libuv.a
+	ld -melf_x86_64 -r -X -o $@ run.o ${OsiObj} "${SCHEME_LIBPATH}"/kernel.o "${UvLib}"/libuv.a
 
 %.o: %.c osi.h ${UvInclude}
-	$C -I"${SchemeInclude}" -I${UvInclude} -c $<
+	$C -I"${SCHEME_INCLUDE}" -I${UvInclude} -c $<
 
 sqlite3.o: sqlite3.h sqlite3.c
 	$C -DSQLITE_ENABLE_JSON1 -DSQLITE_THREADSAFE=2 ${HUSH} -c sqlite3.c

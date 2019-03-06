@@ -14,10 +14,10 @@ clibs: ${SwishLibs}
 	$C -dynamiclib -undefined dynamic_lookup -L${UvLib} -o ../../${BUILD}/bin/libosi.dylib ${OsiObj} -luv
 
 ../../${BUILD}/lib/swish_kernel.o: ${UvLib}/libuv.a run.o ${OsiObj}
-	ld -r -o $@ run.o ${OsiObj} "${SchemeInclude}"/kernel.o ${UvLib}/libuv.a
+	ld -r -o $@ run.o ${OsiObj} "${SCHEME_LIBPATH}"/kernel.o "${UvLib}"/libuv.a
 
 %.o: %.c osi.h ${UvInclude}
-	$C -I"${SchemeInclude}" -I${UvInclude} -c $<
+	$C -I"${SCHEME_INCLUDE}" -I${UvInclude} -c $<
 
 sqlite3.o: sqlite3.h sqlite3.c
 	$C -DSQLITE_ENABLE_JSON1 -DSQLITE_THREADSAFE=2 -c sqlite3.c
