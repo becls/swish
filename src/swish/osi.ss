@@ -125,7 +125,7 @@
             (load-shared-object (format "../build/~a/bin/libosi.so" build-type))]
            [(memq (machine-type) '(a6nt ta6nt i3nt ti3nt))
             (load-shared-object (format "..\\build\\~a\\bin\\osi.dll" build-type))]
-           [(memq (machine-type) '(a6osx ta6osx i3osx ti3osx))
+           [(memq (machine-type) '(a6osx ta6osx))
             (load-shared-object (format "../build/~a/bin/libosi.dylib" build-type))]
            [else (error #f "Unsupported machine type")])))
       ((foreign-procedure "osi_init" () void))))

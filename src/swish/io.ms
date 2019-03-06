@@ -181,10 +181,10 @@
   (define (watch-callbacks renames updates)
     ;; macOS does not send update events consistently for new files.
     (let lp ([renames-tbd renames]
-             [updates-tbd (if (memq (machine-type) '(a6osx i3osx))
+             [updates-tbd (if (eq? (machine-type) 'a6osx)
                               '()
                               updates)]
-             [updates-seen (if (memq (machine-type) '(a6osx i3osx))
+             [updates-seen (if (eq? (machine-type) 'a6osx)
                                updates
                                '())])
       (receive
