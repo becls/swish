@@ -56,6 +56,26 @@
   (test-os-process swish-exe `(,filename ,@args) "" patterns))
 
 (define (run-fat basename args patterns)
+  (define (ctime fn)
+    (match (get-stat fn)
+      [`(<stat> [ctime (,sec . ,nsec)]) (make-time 'time-duration nsec sec)]
+      [,_ #f]))
+  (define (copy-file in out)
+    (let* ([bv (read-file in)]
+           [op (open-file out (+ O_WRONLY O_CREAT) #o777 'binary-output)])
+      (on-exit (close-port op)
+        (put-bytevector op bv))))
+  (when (memq (machine-type) '(a6nt i3nt))
+    (for-each
+     (lambda (fn)
+       (let* ([in (path-combine (prereq-path) fn)]
+              [out (path-combine (output-dir) fn)]
+              [in-time (ctime in)]
+              [out-time (ctime out)])
+         (when (or (not out-time) (time>? in-time out-time))
+           (copy-file in out))))
+     '("libuv.dll" "sqlite3.dll" "osi.dll")))
+
   (test-os-process (output-file basename) args "" patterns))
 
 (define (run-thin basename args patterns)

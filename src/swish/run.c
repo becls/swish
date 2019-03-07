@@ -20,10 +20,10 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+#include "osi.h"
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
-#include "osi.h"
 
 static void (* g_aux_init)(void) = NULL;
 
@@ -97,11 +97,14 @@ static char* get_boot_fn() {
   size_t suffixlen = strlen(suffix);
   size_t pathlast = strlen(execfn);
   char* bootfn = (char*)malloc(sizeof(char) * (pathlast + suffixlen + 1));
-  if (NULL == bootfn) { fprintf(stderr, "malloc failed\n"); exit(1); }
+  if (NULL == bootfn) {
+    fprintf(stderr, "malloc failed\n");
+    exit(1);
+  }
 #ifdef _WIN32
   const char* end = strrchr(execfn, '.');
   const char* exe = ".exe";
-  if (NULL != end && strcmp(end, exe) == 0) {
+  if (NULL != end && _strnicmp(end, exe, 5) == 0) {
     pathlast -=  strlen(exe);
   }
 #endif
@@ -128,6 +131,7 @@ static int allow_verbose_flag(const char* bootfn) {
 // initialization during Sbuild_heap.
 int swish_run(int argc, const char* argv[], void (*custom_init)(void)) {
   char* bootfn = get_boot_fn();
+
   Sscheme_init(NULL);
   // Don't interfere with swish scripts or stand-alone swish applications that
   // want to support a --verbose option.
@@ -135,13 +139,13 @@ int swish_run(int argc, const char* argv[], void (*custom_init)(void)) {
     Sset_verbose(1);
   }
   Sregister_boot_file(bootfn);
+
   osi_set_argv(argc, argv);
   g_aux_init = custom_init;
   Sbuild_heap(argv[0], swish_init);
   free(bootfn);
 
   int status = Sscheme_start(argc, argv);
-
   Sscheme_deinit();
   exit(status);
 }

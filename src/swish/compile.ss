@@ -1,3 +1,4 @@
+(include "../osi-bootstrap.ss")
 (compile-file-message #f)
 (compile-library-handler
  (lambda (source dest)

@@ -1,5 +1,3 @@
-UvInclude=../../libuv/include
-UvLib=../../libuv/out/Release/obj.target
 C = ${CC} -std=gnu99 -fPIC -Wall -Wextra -Werror -O2 ${CPPFLAGS} ${CFLAGS} ${LDFLAGS}
 OsiObj=osi.o sqlite.o sqlite3.o
 SystemLibs=-lm -ldl -lncurses -luuid -lpthread
@@ -11,19 +9,19 @@ clibs: ${SwishLibs}
 	$C -o $@ $^ -Wl,-E ${SystemLibs}
 
 ../../${BUILD}/bin/libosi.so: ${OsiObj} ${UvLib}/libuv.a
-	$C -shared -L${UvLib} -o ../../${BUILD}/bin/libosi.so ${OsiObj} -luv -luuid -lpthread
+	$C -shared -L"${LIBUV_LIBPATH}" -o ../../${BUILD}/bin/libosi.so ${OsiObj} -luv -luuid -lpthread
 
 ../../${BUILD}/lib/swish_kernel.o: ${UvLib}/libuv.a run.o ${OsiObj}
-	ld -r -X -o $@ run.o ${OsiObj} "${SCHEME_LIBPATH}"/kernel.o "${UvLib}"/libuv.a
+	ld -r -X -o $@ run.o ${OsiObj} "${SCHEME_LIBPATH}"/kernel.o -L"${LIBUV_LIBPATH}" -luv
 
-%.o: %.c osi.h ${UvInclude}
-	$C -I"${SCHEME_INCLUDE}" -I${UvInclude} -c $<
+%.o: %.c osi.h swish.h ${UvInclude}
+	$C -I"${SCHEME_INCLUDE}" -I"${LIBUV_INCLUDE}" -c $<
 
 sqlite3.o: sqlite3.h sqlite3.c
 	$C -DSQLITE_ENABLE_JSON1 -DSQLITE_THREADSAFE=2 -c sqlite3.c
 
 io-constants: io-constants.c ${UvInclude}
-	$C -I${UvInclude} io-constants.c -o io-constants
+	$C -I"${LIBUV_INCLUDE}" io-constants.c -o io-constants
 
 ${UvLib}/libuv.a: ${UvInclude}
 	  cd ../../libuv; "${PYTHON}" gyp_uv.py -Duv_library=static_library -Dtarget_arch="arm" -f make

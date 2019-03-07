@@ -3,7 +3,8 @@
 CORE := ../../${BUILD}/bin/swish${EXESUFFIX} ../../${BUILD}/bin/swish.boot ../../${BUILD}/bin/swish.library
 AUXLIB := ../../${BUILD}/lib/swish/mat.so ../../${BUILD}/lib/swish/profile.so ../../${BUILD}/lib/swish/testing.so
 
-ready: Makefile build-dirs io-constants.ss clibs git.revision
+ready:: | Makefile build-dirs git.revision
+ready:: io-constants.ss clibs
 	@if git submodule status --recursive | grep -q '^[^ ]'; then \
 	  echo "Please update git submodules (or stage submodule change)."; \
 	  exit 1; \

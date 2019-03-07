@@ -292,17 +292,18 @@ find_boot_file || try_custom || find_boot_file
 
 # find .lib file and .dll for Windows build; ensure .dll is in PATH
 if [ "${Windows}" = "yes" ]; then
-  SchemeLib="$(find "$(dirname "${SCHEME}")" -type f -name 'csv*.lib' | head -1)"
+  SchemeLibPrefix="$(echo '(printf "csv~{~a~}" (call-with-values scheme-version-number list))' | "${SCHEME}" -q)"
+  SchemeLib="$(find "$(dirname "${SCHEME}")" -type f -name "${SchemeLibPrefix}.lib" | head -1)"
   if [ -z "${SchemeLib}" ]; then
-    err "Cannot find csv*.lib for ${SCHEME}."
+    err "Cannot find ${SchemeLibPrefix}.lib for ${SCHEME}."
     checkerrs
   fi
   SCHEME_LIBPATH="$(dirname "${SchemeLib}")"
   SCHEME_LIBPATH="$(cygpath -w "${SCHEME_LIBPATH}")"
 
-  SchemeDLL="$(find "$(dirname "${SCHEME}")" -type f -name 'csv*.dll' | head -1)"
+  SchemeDLL="$(find "$(dirname "${SCHEME}")" -type f -name "${SchemeLibPrefix}.dll" | head -1)"
   if [ -z "${SchemeDLL}" ]; then
-    err "Cannot find csv*.dll for ${SCHEME}."
+    err "Cannot find ${SchemeLibPrefix}.dll for ${SCHEME}."
     checkerrs
   fi
   set +e
@@ -366,16 +367,40 @@ add() {
 }
 
 set_output() {
-  ADD_TO="$1"
+  local COMMENT="$1"
+  ADD_TO="$2"
   rm -f "${ADD_TO}"
-  add "# DO NOT EDIT this file"
-  add "# automatically generated by top-level configure script"
+  add "${COMMENT} DO NOT EDIT this file"
+  add "${COMMENT} automatically generated by top-level configure script"
   add ""
 }
 
 BASE="$(git rev-parse --show-toplevel)"
 
-set_output src/swish/sh-config
+SWISH_INCLUDE="${BASE}/src/swish"
+SWISH_LIBPATH="${BASE}/build/release/bin"
+LIBUV_INCLUDE="${BASE}/libuv/include"
+case "${CONFIG_UNAME}" in
+  CYGWIN_NT-*)
+    UvLib=libuv/Release
+    ;;
+  Darwin)
+    UvLib=libuv/build/Release
+    ;;
+  *)
+    UvLib=libuv/out/Release/obj.target
+    ;;
+esac
+LIBUV_LIBPATH="${BASE}/${UvLib}"
+if [ "${Windows}" = "yes" ]; then
+    SCHEME="$(cygpath -au "${SCHEME}")"
+    SWISH_INCLUDE="$(cygpath -aw "${SWISH_INCLUDE}")"
+    SWISH_LIBPATH="$(cygpath -aw "${SWISH_LIBPATH}")"
+    LIBUV_INCLUDE="$(cygpath -aw "${LIBUV_INCLUDE}")"
+    LIBUV_LIBPATH="$(cygpath -aw "${LIBUV_LIBPATH}")"
+fi
+
+set_output "#" src/swish/sh-config
 add "export SCHEME='${SCHEME}'"
 if [ -n "${SCHEMEHEAPDIRS:-}" ]; then
   add "export SCHEMEHEAPDIRS='${SCHEMEHEAPDIRS}'"
@@ -385,7 +410,7 @@ if [ "${Windows}" = "yes" ]; then
   add "export PATH='${SCHEME_LIBPATH}:${PATH}'"
 fi
 
-set_output src/swish/Mf-config
+set_output "#" src/swish/Mf-config
 add "EXESUFFIX:=${EXESUFFIX}"
 add "DLLSUFFIX:=${DLLSUFFIX}"
 add "INSTALLROOT:=${PREFIX}"
@@ -393,14 +418,19 @@ add "BASE_MACHINE_TYPE:=${BASE_MACHINE_TYPE}"
 add "MACHINE_TYPE:=${MACHINE_TYPE}"
 add "PYTHON:=${PYTHON}"
 add "SCHEME:=${SCHEME}"
-add "SCHEMEHEAPDIRS:=${SCHEMEHEAPDIRS:-}"
+if [ -n "${SCHEMEHEAPDIRS:-}" ]; then
+  add "SCHEMEHEAPDIRS:=${SCHEMEHEAPDIRS:-}"
+fi
 add "SCHEME_INCLUDE:=${SchemeInclude}"
 add "SCHEME_LIBPATH:=${SCHEME_LIBPATH}"
-add "SWISH_INCLUDE:=${BASE}/src/swish"
-add "SWISH_LIBPATH:=${BASE}/build/release/bin"
+if [ "${Windows}" = "yes" ]; then
+  add "SCHEME_LIB_PREFIX:=${SchemeLibPrefix}"
+fi
+add "SWISH_INCLUDE:=${SWISH_INCLUDE}"
+add "SWISH_LIBPATH:=${SWISH_LIBPATH}"
 add "SWISH_VERSION:=${SWISH_VERSION}"
-add "LIBUV_INCLUDE:=${BASE}/libuv/include"
-add "LIBUV_LIBPATH:=${BASE}/libuv/release"
+add "LIBUV_INCLUDE:=${LIBUV_INCLUDE}"
+add "LIBUV_LIBPATH:=${LIBUV_LIBPATH}"
 add "NORMALIZE_PATH:=${NORMALIZE_PATH}"
 if [ "${CONFIG_UNAME}" = "Darwin" ]; then
   add "GNU_INSTALL:=ginstall"
@@ -408,13 +438,31 @@ else
   add "GNU_INSTALL:=install"
 fi
 
-set_output src/swish/Makefile
+set_output ";;" src/osi-bootstrap.ss
+ROOT="$(${NORMALIZE_PATH} "${BASE}")"
+add "(let ()"
+add "  (define (path-combine . paths) (format \"~{~a~^/~}\" paths))"
+add "  (define dir"
+add "    (path-combine \"${ROOT}\""
+add "      (if (equal? \"yes\" (getenv \"PROFILE_MATS\"))"
+add "          \"build/profile\""
+add "          \"build/release\")"
+add "      \"bin\"))"
+if [ "${Windows}" = "yes" ]; then
+add "  (load-shared-object (path-combine dir \"libuv${DLLSUFFIX}\"))"
+add "  (load-shared-object (path-combine dir \"sqlite3${DLLSUFFIX}\"))"
+add "  (load-shared-object (path-combine dir \"osi${DLLSUFFIX}\"))"
+else
+add "  (load-shared-object (path-combine dir \"libosi${DLLSUFFIX}\"))"
+fi
+add ")"
+
+set_output "#" src/swish/Makefile
 add "CC:=${MYCC}"
 add "CPPFLAGS:=${MYCPPFLAGS}"
 add "CFLAGS:=${MYCFLAGS}"
 add "LDFLAGS:=${MYLDFLAGS}"
 if [ "${Windows}" = "yes" ]; then
-  add "SchemeLib:=$(cygpath -w "${SchemeLib:-}")"
   if [ ! -z "${CUSTOMPATH}" ]; then
     add "export PATH = ${PATH}"
   fi
@@ -422,6 +470,9 @@ fi
 if [ ! -z "${SCHEMEHEAPDIRS:-}" ]; then
    add "export SCHEMEHEAPDIRS = ${SCHEMEHEAPDIRS}"
 fi
+add ""
+add "UvInclude=../../libuv/include"
+add "UvLib=../../${UvLib}"
 if [ ! -z "${CUSTOMPATH}${CUSTOMHEAPDIRS}" ]; then
   echo "* $(basename "$0") set these environment variables in src/swish/Makefile:"
   add ""

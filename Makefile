@@ -31,3 +31,4 @@ pristine: clean
 	rm -f src/swish/Makefile
 	rm -f src/swish/Mf-config
 	rm -f src/swish/sh-config
+	rm -f src/osi-bootstrap.ss

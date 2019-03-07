@@ -1,37 +1,40 @@
-UvInclude=../../libuv/include
-UvLib=../../libuv/Release/lib/libuv.lib
 C=../vs64 cl /nologo /Ox /MD /W3 /Zi
-LD=../vs64 link /nologo /ltcg /nodefaultlib:libcmt
-OsiObj=osi.obj sqlite.obj sqlite3.obj
+LD=../vs64 link /nologo /nodefaultlib:libcmt /debug:full /libpath:"../../${BUILD}/bin" /libpath:"${SCHEME_LIBPATH}"
+OsiObj=osi.obj run.obj sqlite.obj
 SystemLibs=rpcrt4.lib ole32.lib advapi32.lib User32.lib
-SwishLibs := ../../${BUILD}/bin/osi.dll ../../${BUILD}/lib/swish_kernel.obj
+SwishLibs := ../../${BUILD}/bin/libuv.dll ../../${BUILD}/bin/sqlite3.dll ../../${BUILD}/bin/osi.dll
 
 clibs: ${SwishLibs}
 
-../../${BUILD}/bin/swish.exe: main.obj ../../${BUILD}/lib/swish_kernel.obj
-	${LD} /debug:full /out:$@ /subsystem:console $^ ${SystemLibs}
+../../${BUILD}/bin/swish.exe: main.obj
+	${LD} /out:$@ /subsystem:console main.obj ${SystemLibs}
 
-../../${BUILD}/bin/osi.dll: ${OsiObj} ${UvLib}
-	${LD} /debug:full /dll /out:$@ ${OsiObj} "${SchemeLib}" "${UvLib}"
+../../${BUILD}/bin/osi.dll: ${OsiObj} ../../${BUILD}/bin/libuv.lib ../../${BUILD}/bin/sqlite3.lib
+	${LD} /dll /out:$@ ${OsiObj} ${SCHEME_LIB_PREFIX}.lib libuv.lib sqlite3.lib
 
-../../${BUILD}/lib/swish_kernel.obj: ${UvLib} run.obj ${OsiObj}
-	../vs64 lib /nologo /ltcg /out:$@ run.obj ${OsiObj} "${SchemeLib}" "${UvLib}"
-
-%.obj: %.c osi.h ${UvInclude}
-	$C /I"${SCHEME_INCLUDE}" /I"${UvInclude}" /c $<
+%.obj: %.c osi.h swish.h ${UvInclude}
+	$C /DSCHEME_LIB=${SCHEME_LIB_PREFIX} /I"${SCHEME_INCLUDE}" /I"${LIBUV_INCLUDE}" /c $<
 
 sqlite3.obj: sqlite3.h sqlite3.c
-	$C /DSQLITE_ENABLE_JSON1 /DSQLITE_THREADSAFE=2 /c sqlite3.c
+	$C /DSQLITE_API=__declspec\(dllexport\) /DSQLITE_ENABLE_JSON1 /DSQLITE_THREADSAFE=2 /c sqlite3.c
+
+../../${BUILD}/bin/sqlite3.dll ../../${BUILD}/bin/sqlite3.lib: sqlite3.obj
+	${LD} /dll /out:../../${BUILD}/bin/sqlite3.dll sqlite3.obj
 
 io-constants.exe: io-constants.c ${UvInclude}
-	$C /I"${UvInclude}" io-constants.c
+	$C /I"${LIBUV_INCLUDE}" io-constants.c
 
-${UvLib}: ${UvInclude}
-	  -cd ../../libuv; PYTHON="${PYTHON}" cmd /c vcbuild.bat release vs2017 x64 static
+../../libuv/Release/libuv.dll: ${UvInclude}
+	-cd ../../libuv; PYTHON="${PYTHON}" cmd /c vcbuild.bat release vs2017 x64 shared
+
+../../${BUILD}/bin/libuv.dll ../../${BUILD}/bin/libuv.lib: ${UvLib}/libuv.dll ${UvLib}/libuv.lib
+	cp -f ${UvLib}/libuv.{dll,exp,lib,pdb} ../../${BUILD}/bin
 
 platform-clean:
-	rm -f ../../${BUILD}/bin/osi.{dll,exp,lib,pdb} osi.obj sqlite.obj io-constants.{exe,obj}
-	rm -f ../../${BUILD}/bin/swish.{exe,exp,lib,pdb}
+	rm -f ../../${BUILD}/bin/osi.{dll,exp,ilk,lib,pdb} osi.obj sqlite.obj io-constants.{exe,obj}
+	rm -f ../../${BUILD}/bin/sqlite3.{dll,exp,ilk,lib,pdb}
+	rm -f ../../${BUILD}/bin/libuv.{dll,exp,lib,pdb}
+	rm -f ../../${BUILD}/bin/swish.{exe,exp,ilk,lib,pdb}
 	rm -f ../../${BUILD}/bin/swish.boot
 	rm -f ../../${BUILD}/bin/swish.library
 	rm -f ../../${BUILD}/bin/swish.wpo
@@ -40,7 +43,6 @@ platform-clean:
 	rm -f io-constants.{exe,ilk,obj,pdb}
 	rm -f {main,osi,run,sqlite}.obj
 	rm -f vc140.pdb
-	rm -f ${SwishLibs}
 
 pristine: clean
 	rm -rf sqlite3.obj ../../libuv/Release

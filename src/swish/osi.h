@@ -20,18 +20,8 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifdef _WIN32
-#define WINVER 0x0601 // Windows 7
-#define _WIN32_WINNT WINVER
-#include "uv.h"
-#define SCHEME_IMPORT
-#include "scheme.h"
-#define strdup _strdup
-#undef EXPORT
-#define EXPORT extern __declspec (dllexport)
-#else
-#include "uv.h"
-#include "scheme.h"
+#include "swish.h"
+#ifndef _WIN32
 #include <stdlib.h>
 #include <unistd.h>
 #include <uuid/uuid.h>
@@ -49,15 +39,6 @@ typedef struct {
   ptr (*read)(uptr port, ptr buffer, size_t start_index, uint32_t size, int64_t offset, ptr callback);
   ptr (*write)(uptr port, ptr buffer, size_t start_index, uint32_t size, int64_t offset, ptr callback);
 } osi_port_vtable_t;
-
-EXPORT uv_loop_t* osi_loop;
-
-EXPORT void osi_add_callback_list(ptr callback, ptr args);
-EXPORT void osi_add_callback1(ptr callback, ptr arg);
-EXPORT void osi_add_callback2(ptr callback, ptr arg1, ptr arg2);
-EXPORT void osi_add_callback3(ptr callback, ptr arg1, ptr arg2, ptr arg3);
-EXPORT ptr osi_make_error_pair(const char* who, int error);
-EXPORT char* osi_string_to_utf8(ptr s, size_t* utf8_len);
 
 // System
 EXPORT ptr osi_get_argv(void);
@@ -102,7 +83,6 @@ EXPORT ptr osi_watch_path(const char* path, ptr callback);
 EXPORT void osi_close_path_watcher(uptr watcher);
 
 // TCP/IP
-
 EXPORT ptr osi_connect_tcp(const char* node, const char* service, ptr callback);
 EXPORT ptr osi_listen_tcp(const char* address, uint16_t port, ptr callback);
 EXPORT void osi_close_tcp_listener(uptr listener);

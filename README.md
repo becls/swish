@@ -35,7 +35,7 @@ I/O.
 
 ## Linux
 
-- Chez Scheme 9.5.1 from January 17, 2019 or later (commit 68e20f7)
+- Chez Scheme 9.5.2 or later
 - GCC, the GNU Compiler Collection
 - GNU C++ compiler for libuv
 - GNU make
@@ -44,7 +44,7 @@ I/O.
 
 ## Mac
 
-- Chez Scheme 9.5.1 from January 17, 2019 or later (commit 68e20f7)
+- Chez Scheme 9.5.2 or later
 - dot (can be installed through homebrew using `brew install graphviz --with-app`)
 - pdflatex (can be installed through homebrew using `brew cask install mactex`)
 - ginstall and realpath (can be installed through homebrew using `brew install coreutils`)
@@ -52,7 +52,7 @@ I/O.
 
 ## Windows
 
-- Chez Scheme 9.5.1 from January 17, 2019 or later (commit 68e20f7)
+- Chez Scheme 9.5.2 or later
 - Cygwin with bash, git, graphviz, grep, perl, texlive, GNU make, etc.
 - Microsoft Visual Studio 2017 or 2015 with Visual C++
 - Python 2.7 for Windows in C:\Python27 (see below for other options)
@@ -76,3 +76,36 @@ I/O.
   ```
   ./configure --python=~/Anaconda3/envs/py27/python.exe
   ```
+
+## Stand-alone Swish Applications
+
+Swish can be used to build, test, and deploy stand-alone
+applications. A given application might load foreign code for image
+processing or USB access. Code that may block should use the API
+described in Section
+[2.3](https://becls.github.io/swish/swish.pdf#section.2.3) to
+integrate with Swish's I/O loop.
+
+### Build
+
+For details about building a Swish application, see:
+`swish-build --help`
+
+### Test
+
+For details about testing a Swish application, see:
+`swish-test --help`
+
+### Deploying a Stand-alone Application
+
+On Linux and macOS, you can deploy your application's executable and
+boot file.
+
+On Windows, your install should include the application's executable
+and boot file, `osi.dll`, `libuv.dll`, `sqlite3.dll`, Chez Scheme's
+`csv952.dll`, and Microsoft's C Runtime Library `vcruntime140.dll`.
+
+Developers writing stand-alone applications should clone the Swish
+repository and run `configure`.  Swish's source repository provides
+`swish.h` to define callable exports for `osi.dll`. `Mf-config` can be
+used in makefiles to define variables for system-specific paths.
