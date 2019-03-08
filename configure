@@ -330,7 +330,7 @@ SchemeInclude="$(dirname "${PETITE_BOOT}")"
 
 check_missing() {
   if [ ! -f "$2/$1" ]; then
-    err "Missing $1 at ${SchemeInclude}"
+    err "Missing $1 at $2"
     checkerrs
   fi
 }
