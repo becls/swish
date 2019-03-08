@@ -64,9 +64,10 @@
 (isolate-mat installation ()
   ;; We use the relative path to make the coverage report tidier.
   ;; This test makes sure we're still testing what we installed.
-  (equal?
-   (read-file (path-combine (prereq-path) "swish-build"))
-   (read-file swish-build-src)))
+  (assert
+   (equal?
+    (read-file (path-combine (prereq-path) "swish-build"))
+    (read-file swish-build-src))))
 
 (isolate-mat help ()
   (swish-build-test '("--help")
