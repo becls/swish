@@ -3,8 +3,6 @@ OsiObj=osi.o sqlite.o sqlite3.o
 SystemLibs=-liconv -lm -lncurses
 SwishLibs := ../../${BUILD}/bin/libosi.dylib ../../${BUILD}/lib/swish_kernel.o
 
-clibs: ${SwishLibs}
-
 ../../${BUILD}/bin/swish: main.o ../../${BUILD}/lib/swish_kernel.o
 	$C -o $@ $^ ${SystemLibs}
 

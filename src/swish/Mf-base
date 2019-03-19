@@ -1,10 +1,11 @@
 .PHONY: all build-dirs clean platform-clean ready reminders
 
+SETUP := Makefile build-dirs git.revision
 CORE := ../../${BUILD}/bin/swish${EXESUFFIX} ../../${BUILD}/bin/swish.boot ../../${BUILD}/bin/swish.library
 AUXLIB := ../../${BUILD}/lib/swish/mat.so ../../${BUILD}/lib/swish/profile.so ../../${BUILD}/lib/swish/testing.so
 
-ready:: | Makefile build-dirs git.revision
-ready:: io-constants.ss clibs
+ready:: | ${SETUP}
+ready:: io-constants.ss ${SwishLibs}
 	@if git submodule status --recursive | grep -q '^[^ ]'; then \
 	  echo "Please update git submodules (or stage submodule change)."; \
 	  exit 1; \
@@ -36,13 +37,15 @@ io-constants.ss: io-constants${EXESUFFIX}
 	git submodule update --init ../../libuv
 	git clone https://github.com/chromium/gyp.git ../../libuv/build/gyp
 
-../../${BUILD}/bin/swish.boot: boot.ss ../../${BUILD}/bin/swish.library
+compile.ss: ${SwishLibs}
+
+../../${BUILD}/bin/swish.boot: boot.ss compile.ss ../../${BUILD}/bin/swish.library
 	@echo \
 	'(library-directories (quote ()))' \
 	'(make-boot-file "../${BUILD}/bin/swish.boot" (quote ("scheme" "petite")) "../${BUILD}/bin/swish.library" "swish/boot.ss")' \
 	| "${SCHEME}" -q ../../${BUILD}/bin/swish.library compile.ss
 
-../../${BUILD}/bin/swish.library: *.ss
+../../${BUILD}/bin/swish.library: *.ss io-constants.ss compile.ss | ${SETUP}
 	@echo \
 	'(library-directories (quote (("." . "../${BUILD}/lib"))))' \
 	'(library-extensions (quote ((".ss" . ".wpo"))))' \
@@ -52,12 +55,14 @@ io-constants.ss: io-constants${EXESUFFIX}
 	'(compile-whole-library "../'${BUILD}'/lib/swish/imports.wpo" "../${BUILD}/bin/swish.library")' \
 	| "${SCHEME}" -q compile.ss
 
-../../${BUILD}/lib/swish/%.so: %.ss ../../${BUILD}/bin/swish${EXESUFFIX} ../../${BUILD}/bin/swish.library
+../../${BUILD}/lib/swish/%.so: %.ss compile.ss ${CORE}
 	@echo \
 	'(library-directories (quote (("." . "../${BUILD}/lib"))))' \
 	'(generate-wpo-files #t)' \
 	'(import (swish $(<:.ss=)))' \
 	| ../../${BUILD}/bin/swish${EXESUFFIX} -q -- compile.ss
+
+../../${BUILD}/lib/swish/testing.so: ../../${BUILD}/lib/swish/mat.so ../../${BUILD}/lib/swish/profile.so
 
 clean: platform-clean
 	rm -f git.revision
@@ -108,5 +113,5 @@ install-bin: install-check all
 mat-prereq:
 	@printf "making mat-prereq ... "
 	@rm -rf ../../build/mat-prereq
-	@make install-bin INSTALLROOT="$$(${NORMALIZE_PATH} ../../build/mat-prereq)" SWISH_VERSION=".x.y.z" MACHINE_TYPE="arch" > /dev/null
+	@$(MAKE) install-bin INSTALLROOT="$$(${NORMALIZE_PATH} ../../build/mat-prereq)" SWISH_VERSION=".x.y.z" MACHINE_TYPE="arch" > /dev/null
 	@printf "done.\n"

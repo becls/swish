@@ -4,8 +4,6 @@ OsiObj=osi.obj run.obj sqlite.obj
 SystemLibs=rpcrt4.lib ole32.lib advapi32.lib User32.lib
 SwishLibs := ../../${BUILD}/bin/libuv.dll ../../${BUILD}/bin/sqlite3.dll ../../${BUILD}/bin/osi.dll
 
-clibs: ${SwishLibs}
-
 ../../${BUILD}/bin/swish.exe: main.obj
 	${LD} /out:$@ /subsystem:console main.obj ${SystemLibs}
 
@@ -27,7 +25,7 @@ io-constants.exe: io-constants.c ${UvInclude}
 ../../libuv/Release/libuv.dll: ${UvInclude}
 	-cd ../../libuv; PYTHON="${PYTHON}" cmd /c vcbuild.bat release vs2017 x64 shared
 
-../../${BUILD}/bin/libuv.dll ../../${BUILD}/bin/libuv.lib: ${UvLib}/libuv.dll ${UvLib}/libuv.lib
+../../${BUILD}/bin/libuv.dll ../../${BUILD}/bin/libuv.lib: ${UvLib}/libuv.dll ${UvLib}/libuv.lib | build-dirs
 	cp -f ${UvLib}/libuv.{dll,exp,lib,pdb} ../../${BUILD}/bin
 
 platform-clean:
