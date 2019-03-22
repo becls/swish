@@ -136,7 +136,7 @@
      [(mat/names test-file incl-tags excl-tags mo-op progress)
       (let-values ([(update-tally! get-tally) (make-tally-reporter)])
         (define progress-reporter (if (eq? progress 'test) (make-progress-reporter progress) NOP))
-        (define write-summary (if mo-op (make-write-summary test-file mo-op) NOP))
+        (define write-summary (if mo-op (make-write-summary mo-op) NOP))
         (define (reporter name tags result sstats)
           (define r
             (case (result-type result)
@@ -216,7 +216,7 @@
   (define mat-result-rtd (record-type-descriptor mat-result))
   (define mat-result-reader (make-record-reader mat-result-rtd))
 
-  (define (make-write-summary test-file op)
+  (define (make-write-summary op)
     (lambda (r)
       ;; sstats already uses default-record-writer
       (parameterize ([print-gensym #f] [time-writer default-record-writer])
@@ -228,7 +228,7 @@
   (define ($run-mats-to-file filename mat/names incl-tags excl-tags)
     (call-with-output-file filename
       (lambda (op)
-        (define reporter (make-write-summary filename op))
+        (define reporter (make-write-summary op))
         (for-each
          (lambda (mat/name)
            (run-mat mat/name reporter incl-tags excl-tags))
