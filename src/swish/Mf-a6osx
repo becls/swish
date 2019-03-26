@@ -26,15 +26,7 @@ ${UvLib}/libuv.a: ${UvInclude}
 	cd ../../libuv/out; xcodebuild -ARCHS="x86_64" -project uv.xcodeproj -configuration Release -target libuv
 
 platform-clean:
-	rm -f osi.o sqlite.o io-constants io-constants.ss
-	rm -f swish main.o run.o swish.boot
-	rm -f ${SwishLibs}
-	rm -f ../../${BUILD}/bin/swish
-	rm -f ../../${BUILD}/bin/swish.boot
-	rm -f ../../${BUILD}/bin/swish.library
-	rm -f ../../${BUILD}/bin/swish.wpo
-	rm -f ../../${BUILD}/lib/swish/*.so
-	rm -f ../../${BUILD}/lib/swish/*.wpo
+	rm -f main.o osi.o run.o sqlite.o
 
 pristine: clean
 	rm -rf sqlite3.o ../../libuv/build/Release

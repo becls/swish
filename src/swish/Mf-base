@@ -78,9 +78,17 @@ compile.ss: ${SwishLibs}
 ../../${BUILD}/lib/swish/testing.so: ../../${BUILD}/lib/swish/mat.so ../../${BUILD}/lib/swish/profile.so
 
 clean: platform-clean
+	rm -f ../../${BUILD}/bin/swish${EXESUFFIX}
+	rm -f ../../${BUILD}/bin/swish.boot
+	rm -f ../../${BUILD}/bin/swish-core.library
+	rm -f ../../${BUILD}/bin/swish.library
+	rm -f ../../${BUILD}/bin/swish.wpo
+	rm -f ../../${BUILD}/lib/swish/*.so
+	rm -f ../../${BUILD}/lib/swish/*.wpo
+	rm -f ${SwishLibs}
 	rm -f chezscheme.revision
 	rm -f git.revision
-	rm -f io-constants.ss
+	rm -f io-constants.ss io-constants${EXESUFFIX}
 	rm -f ../*.ss.html ../mat-report.html ../server-profile.html
 	rm -f *.mo *.ms.html *.ss.html
 

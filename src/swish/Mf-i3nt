@@ -33,11 +33,6 @@ platform-clean:
 	rm -f ../../${BUILD}/bin/sqlite3.{dll,exp,ilk,lib,pdb}
 	rm -f ../../${BUILD}/bin/libuv.{dll,exp,lib,pdb}
 	rm -f ../../${BUILD}/bin/swish.{exe,exp,ilk,lib,pdb}
-	rm -f ../../${BUILD}/bin/swish.boot
-	rm -f ../../${BUILD}/bin/swish.library
-	rm -f ../../${BUILD}/bin/swish.wpo
-	rm -f ../../${BUILD}/lib/swish/*.so
-	rm -f ../../${BUILD}/lib/swish/*.wpo
 	rm -f io-constants.{exe,ilk,obj,pdb}
 	rm -f {main,osi,run,sqlite}.obj
 	rm -f vc140.pdb
