@@ -69,6 +69,12 @@
       (lambda (fn)
         (warningf 'software-info.ss "file ~s not found at compile time" fn)
         #f)))
+
+  (software-revision 'chezscheme
+    (include-line "swish/chezscheme.revision"
+      (lambda (fn)
+        (warningf 'software-info.ss "file ~s not found at compile time" fn)
+        #f)))
   )
 
 #!eof mats

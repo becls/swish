@@ -425,6 +425,9 @@ add "SCHEME_INCLUDE:=${SchemeInclude}"
 add "SCHEME_LIBPATH:=${SCHEME_LIBPATH}"
 if [ "${Windows}" = "yes" ]; then
   add "SCHEME_LIB_PREFIX:=${SchemeLibPrefix}"
+  add "SCHEME_REVISION_PATH:=$(cygpath -u "${SchemeInclude}")"
+else
+  add "SCHEME_REVISION_PATH:=${SchemeInclude}"
 fi
 add "SWISH_INCLUDE:=${SWISH_INCLUDE}"
 add "SWISH_LIBPATH:=${SWISH_LIBPATH}"
