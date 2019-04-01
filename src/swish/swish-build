@@ -255,6 +255,16 @@
 (define (change-extension fn new-ext)
   (string-append (path-root fn) new-ext))
 
+;; to handle things like ".chezscheme.sls" -> ".chezscheme.so"
+(define (change-suffix filename old-ext new-ext)
+  (and (ends-with? filename old-ext)
+       (string-append (substring filename 0 (- (string-length filename) (string-length old-ext)))
+         new-ext)))
+
+(define (object-filename source-fn)
+  (ormap (lambda (pr) (change-suffix source-fn (car pr) (cdr pr)))
+    (library-extensions)))
+
 (define (copy ip op)
   (define buflen (expt 2 16))
   (define buf (make-bytevector buflen))
@@ -320,7 +330,7 @@
                    (invoke))]))))
       (compile-to-file (list program) dest sfd))))
 
-(define (compile-help source-fn tmp-out target-type)
+(define (compile-help source-fn obj-fn target-type)
   (define default-library-search (library-search-handler))
   ;; We add ".wpo" variants to the front of library-extensions so that the
   ;; expander forces library compilation if a ".wpo" file exists and is
@@ -342,9 +352,9 @@
                     (compile-library source (change-extension dest ".so")))])
     (target-case target-type
       [(library)
-       (compile-library source-fn tmp-out)]
+       (compile-library source-fn obj-fn)]
       [(component linked stand-alone)
-       (do-compile-program source-fn tmp-out target-type)])))
+       (do-compile-program source-fn obj-fn target-type)])))
 
 (define (compile-wpo wpo-file output-fn target-type)
   (define default-library-search (library-search-handler))
@@ -371,16 +381,20 @@
          missing)])))
 
 (define (do-compile source-fn output-fn swish-wpo? target-type)
-  (let ([tmp (tmp-filename source-fn)])
-    (on-exit (rm-f tmp)
+  (let* ([obj-fn (object-filename source-fn)]
+         [tmp-fn (if obj-fn #f (tmp-filename output-fn))]
+         [obj-fn (or obj-fn tmp-fn)])
+    (on-exit (target-case target-type
+               [(library) (when tmp-fn (rm-f tmp-fn))]
+               [(component linked stand-alone) (rm-f obj-fn)])
       (when (> (verbosity) 0) (printf "compiling ~a\n" (source-file)))
       (generate-inspector-information #f)
       (generate-procedure-source-information #t)
       (generate-wpo-files #t)
       (compile-imported-libraries #t)
       (compile-file-message #f)
-      (compile-help source-fn tmp target-type)
-      (let* ([wpo-file (change-extension tmp ".wpo")]
+      (compile-help source-fn obj-fn target-type)
+      (let* ([wpo-file (change-extension obj-fn ".wpo")]
              [libs (compile-wpo wpo-file output-fn target-type)]
              [missing-libs
               ;; Stand-alone program should have found all required non-swish libraries.
