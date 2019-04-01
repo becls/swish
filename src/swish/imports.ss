@@ -26,6 +26,7 @@
   (export
    (import
     (swish app)
+    (swish app-core)
     (swish app-io)
     (swish application)
     (swish cli)

@@ -31,7 +31,6 @@
    (swish erlang)
    (swish io)
    (swish osi)
-   (swish string-utils)
    )
 
   (define (exit-reason->english x)
@@ -56,7 +55,6 @@
       [#(deadlock ,resource) (format "Deadlock on resource ~s." resource)]
       [#(error ,reason) (exit-reason->english reason)]
       [#(error ,reason ,_stack) (exit-reason->english reason)]
-      [#(errors ,ls) (join (map exit-reason->english ls) #\space)]
       [#(find-files-failed ,spec ,who ,errno) (format "Error ~d from ~a during find-files ~s: ~a." errno who spec (errno->english errno))]
       [#(http-file-not-found ,path) (format "HTTP file not found: ~a." path)]
       [#(http-handler-failed ,reason) (format "HTTP handler failed: ~a" (exit-reason->english reason))]

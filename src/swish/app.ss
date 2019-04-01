@@ -25,7 +25,6 @@
   (export
    app-exception-handler
    app-sup-spec
-   app:name
    app:resume
    app:shutdown
    app:start
@@ -35,6 +34,7 @@
    )
   (import
    (chezscheme)
+   (swish app-core)
    (swish application)
    (swish cli)
    (swish erlang)
@@ -50,13 +50,6 @@
    (swish statistics)
    (swish supervisor)
    )
-
-  (define app:name
-    (make-parameter #f
-      (lambda (x)
-        (unless (or (not x) (string? x))
-          (bad-arg 'app:name x))
-        (and x (path-root (path-last x))))))
 
   (define (app:start) (application:start init-main-sup))
 
@@ -131,6 +124,7 @@
         (values)]
        [(null? files)                   ; repl
         (app:name #f)
+        (app:path #f)
         (let ([filenames (or (opt "args") '())])
           (unless (opt "quiet")
             (printf "\n~a Version ~a\n" software-product-name software-version)
@@ -144,6 +138,7 @@
           (command-line (command-line-arguments))
           (command-line-arguments (cdr (command-line)))
           (app:name script-file)
+          (app:path script-file)
           (set-random-seed)
           ;; use exit handler installed by the script, if any
           (match (catch (load script-file))
@@ -166,29 +161,6 @@
      [(exit-code . _)
       (app:shutdown (->exit-status exit-code))
       (receive)]))
-
-  (define (claim-exception who c)
-    (define stderr (console-error-port))
-    (define (fmt-condition c)
-      (let ([os (open-output-string)])
-        (cond
-         [(condition? c)
-          (display-condition (condition (make-who-condition #f) c) os)
-          (display (pregexp-replace "^(Warning|Exception): " (get-output-string os) "") os)]
-         [else (display (exit-reason->english c) os)])
-        (display "." os)
-        (get-output-string os)))
-    (fprintf stderr "~a: " who)
-    (match (catch (fmt-condition c))
-      [#(EXIT ,_) (display-condition c stderr)]
-      [,s (display s stderr)])
-    (fresh-line stderr)
-    (reset))
-
-  (define (app-exception-handler c)
-    (cond
-     [(app:name) => (lambda (who) (claim-exception who c))]
-     [else (default-exception-handler c)]))
 
   (define swish-start
     (lambda args

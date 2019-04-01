@@ -39,7 +39,8 @@
    ["rt-libs" --rtlib (list "<lib>" ...)
     '("visit compiled libraries <lib> ... before compiling <source>;"
       "these libraries are added to <output> unless otherwise"
-      "specified, in which case they must be provided at run time")]
+      "specified, in which case they must be provided at run time."
+      "Look for <lib> ... in library-directories (-L) if not found.")]
    ["help" -h --help (list "[<section>]" ...)
     (format "display help, <section>={~{~a~^|~}}" help-sections)]
    ))
@@ -70,8 +71,15 @@
 (define (system-libdir swish-wpo?)
   (path-combine swish-libdir (if swish-wpo? "wpo" "lib")))
 
+(define swish-core-library-filename
+  (get-real-path (path-combine swish-libdir "swish-core.library")))
+
 (define swish-library-filename
   (get-real-path (path-combine swish-libdir "swish.library")))
+
+(define (swish-library-file? full-path)
+  (or (string=? full-path swish-core-library-filename)
+      (string=? full-path swish-library-filename)))
 
 (define prevent-wpo (make-hashtable equal-hash equal?))
 
@@ -86,8 +94,19 @@
          [(swish . ,_) (hashtable-set! prevent-wpo lib #f)]
          [,_ (void)]))
      (library-list)))
-  ;; visit --rtlib libraries that are not already loaded
-  (for-each visit (remove swish-library-filename rt-libs))
+  ;; Disallow whole-program optimization for (swish app-core) and its
+  ;; dependencies so we can bake these libraries into the boot file for
+  ;; a stand-alone application where they can be used in the boot process.
+  (let forbid! ([lib* '((swish app-core))])
+    (match lib*
+      [(,lib . ,more)
+       (hashtable-set! prevent-wpo lib #t)
+       (forbid! (library-requirements lib))
+       (forbid! more)]
+      [() (void)]))
+  ;; visit --rtlib libraries (even swish libraries, so library-object-filename
+  ;; points to a swish library file instead of swish.boot)
+  (for-each visit rt-libs)
   ;; Disallow whole-program optimization for --rtlib libraries that will
   ;; be loaded separately at run time.
   (for-each
@@ -189,7 +208,7 @@
      (list-item "3." "load the standard" software-internal-name "boot file, then")
      (list-item "4." "invoke the" software-internal-name "scheme-start handler.\n")
      (wrap 0 "The scheme-start handler of a linked program or stand-alone program:\n")
-     (list-item "1." "sets app:name, command-line, and command-line-arguments")
+     (list-item "1." "sets app:name, app:path, command-line, and command-line-arguments")
      (list-item "2." "installs an exception handler that prints app:name, if non-false, and")
      (list-item "3." "invokes the compiled program code.")
      (wrap 0
@@ -274,17 +293,20 @@
         (put-bytevector op buf 0 n)
         (cp)))))
 
-(define (copy-to output-fn . input-fn*)
+(define (copy-file input-fn output-fn)
   ;; open-file applies mode #o777 only when creating the file, so first remove
   (rm-f output-fn)
   (let ([op (open-file output-fn (+ O_WRONLY O_CREAT) #o777 'binary-output)])
     (on-exit (close-port op)
-      (for-each
-       (lambda (input-fn)
-         (let ([ip (open-file input-fn O_RDONLY 0 'binary-input)])
-           (on-exit (close-port ip)
-             (copy ip op))))
-       input-fn*))))
+      (copy-to-port op (list input-fn)))))
+
+(define (copy-to-port op input-fn*)
+  (for-each
+   (lambda (input-fn)
+     (let ([ip (open-file input-fn O_RDONLY 0 'binary-input)])
+       (on-exit (close-port ip)
+         (copy ip op))))
+   input-fn*))
 
 (define (rm-f filename)
   (catch (remove-file filename)))
@@ -305,7 +327,13 @@
       (define (setup args-expr index)
         `(let ([who (vector-ref (osi_get_argv) ,index)]
                [args ,args-expr])
+           ;; Referencing app:name used to invoke (swish app) library,
+           ;; which installed swish's scheme-start parameter. Now it
+           ;; invokes (swish app-core) instead, so we insert a reference
+           ;; to app:start to invoke (swish app-core).
+           app:start
            (app:name who)
+           (app:path who)
            (command-line (cons who args))
            (command-line-arguments args)))
       (define program
@@ -405,7 +433,7 @@
                [missing-libs
                 ;; Stand-alone program should have found all required non-swish libraries.
                 ;; If swish libraries are incorporated via whole-program optimization,
-                ;; then we must also have found the those libraries.
+                ;; then we must also have found the wpo files for those libraries.
                 ;; Dependent programs can use swish libraries included in runtime,
                 ;; as can stand-alone programs that explicitly specify --rtlib swish.
                 (if swish-wpo?
@@ -442,11 +470,30 @@
    [(assoc (string-append boot ".boot") (boot-file-map)) => cdr]
    [else (fail "cannot resolve boot file ~a" boot)]))
 
-(define (resolve-rt-lib rt-lib)
-  (cond
-   [(regular-file? rt-lib) rt-lib]
-   [(equal? rt-lib "swish") swish-library-filename]
-   [else (fail "cannot resolve --rtlib ~s" rt-lib)]))
+(define (find-rt-lib rt-lib lib-dirs)
+  (if (regular-file? rt-lib)
+      (get-real-path rt-lib)
+      (ormap (lambda (lib-dir)
+               (let ([filename (path-combine (cdr lib-dir) rt-lib)])
+                 (and (regular-file? filename)
+                      (get-real-path filename))))
+        lib-dirs)))
+
+;; resolve to real path name; expand system libraries; preserve order; keep first occurence
+(define (resolve-rt-libs rt-lib* lib-dirs)
+  (define (cons-unique rt-lib ls)
+    (if (member rt-lib ls)
+        ls
+        (cons rt-lib ls)))
+  (define (add ls rt-lib)
+    (cond
+     [(find-rt-lib rt-lib lib-dirs) =>
+      (lambda (filename) (cons-unique filename ls))]
+     [(equal? rt-lib "swish")
+      (cons-unique swish-library-filename
+        (cons-unique swish-core-library-filename ls))]
+     [else (fail "cannot resolve --rtlib ~s" rt-lib)]))
+  (reverse (fold-left add '() rt-lib*)))
 
 (define (resolve-missing-libs target-type rt-libs missing-libs)
   (define ht (make-hashtable string-hash string=?))
@@ -557,9 +604,7 @@
                      (append (parse-library x) acc))
                    (library-directories)
                    (or (opt "libdirs") '()))]
-         [rt-libs
-          (map (lambda (x) (get-real-path (resolve-rt-lib x)))
-            (or (opt "rt-libs") '()))])
+         [rt-libs (resolve-rt-libs (or (opt "rt-libs") '()) libdirs)])
     (verbosity (or (opt "verbose") 0))
     (import-notify (> (verbosity) 2))
     (target-case target-type
@@ -576,6 +621,16 @@
                    ;; don't use wpo for swish library if we're including it as a
                    ;; run-time library, else we could duplicate code
                    (not (member swish-library-filename rt-libs)))]
+              [rt-libs
+               ;; Always include swish-core.library as --rtlib so that we
+               ;; disable whole-program optimization for (swish app-core)
+               ;; and its dependencies since these are required by the boot
+               ;; process for stand-alone apps and we don't want to risk
+               ;; duplicating those libraries within the compiled top-level program
+               ;; itself.
+               (if (member swish-core-library-filename rt-libs)
+                   rt-libs
+                   (cons swish-core-library-filename rt-libs))]
               [_ (library-setup swish-wpo? libdirs rt-libs)]
               [other-libs
                ;; load-compiled-from-port fails if given compressed
@@ -593,11 +648,12 @@
          (show-files target-type app-boot boot-files rt-libs other-libs source-fn)
          ;; avoid using swish library code within the expression we compile
          (compile-to-file
-          `((load-compiled-from-port (open-bytevector-input-port ',compiled-code)))
+          `((suppress-greeting #t)
+            (load-compiled-from-port (open-bytevector-input-port ',compiled-code)))
           output-fn)
          (apply make-boot-file app-boot '()
            (append boot-files rt-libs other-libs (list output-fn)))
-         (copy-to output-fn (osi_get_executable_path)))]
+         (copy-file (osi_get_executable_path) output-fn))]
       [(component)
        (library-setup #f libdirs rt-libs)
        (resolve-missing-libs target-type rt-libs
@@ -606,7 +662,10 @@
       [(linked)
        (library-setup #f libdirs rt-libs)
        (let* ([missing (do-compile source-fn output-fn #f target-type)]
-              [other-libs (resolve-missing-libs 'linked rt-libs missing)]
+              [ns-other-libs
+               (remp swish-library-file?
+                 (resolve-missing-libs 'linked rt-libs missing))]
+              [ns-rt-libs (remp swish-library-file? rt-libs)]
               [hashbang
                (let ([ip (open-file source-fn O_RDONLY 0 'binary-input)])
                  (on-exit (close-port ip)
@@ -619,15 +678,9 @@
               [op (open-file tmp (+ O_WRONLY O_CREAT O_APPEND) #o777 'binary-output)])
          (define (cleanup) (close-port ip) (close-port op))
          (match (catch
-                 (show-files target-type #f #f rt-libs other-libs source-fn)
+                 (show-files target-type #f #f ns-rt-libs ns-other-libs source-fn)
                  (put-bytevector op (or hashbang (string->utf8 "#!/usr/bin/env swish\n")))
-                 (for-each
-                  (lambda (rt-lib)
-                    (unless (equal? rt-lib swish-library-filename)
-                      (let ([ip (open-file rt-lib O_RDONLY 0 'binary-input)])
-                        (on-exit (close-port ip)
-                          (copy ip op)))))
-                  (append rt-libs other-libs))
+                 (copy-to-port op (append ns-rt-libs ns-other-libs))
                  (copy ip op))
            [#(EXIT ,reason)
             (cleanup)

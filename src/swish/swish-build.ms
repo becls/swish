@@ -45,12 +45,15 @@
   (write-test-file (string-append basename ".ss")
     (lambda () (for-each write exprs))))
 
-(define (build-example basename args)
-  (swish-build-test
-   `("-o" ,(output-file basename)
-     ,@args
-     ,(path-combine (output-dir) (format "~a.ss" basename)))
-   '()))
+(define build-example
+  (case-lambda
+   [(basename args) (build-example basename args '())]
+   [(basename args patterns)
+    (swish-build-test
+     `("-o" ,(output-file basename)
+       ,@args
+       ,(path-combine (output-dir) (format "~a.ss" basename)))
+     patterns)]))
 
 (define (run-script filename args patterns)
   (test-os-process swish-exe `(,filename ,@args) "" patterns))
@@ -80,6 +83,14 @@
 
 (define (run-thin basename args patterns)
   (test-os-process swish-exe `(,(output-file basename) ,@args) "" patterns))
+
+(define (run-bash script args expected-output)
+  (test-os-process (fix-exe "bash") '()
+    (string-append
+     "PATH=./build/mat-prereq/lib/swish.x.y.z/arch:${PATH}\n"
+     (format "./data/tmp/mat-output/~a~{ ~a~}\n" script args)
+     "exit\n")
+    expected-output))
 
 (isolate-mat installation ()
   ;; We use the relative path to make the coverage report tidier.
@@ -397,9 +408,15 @@
   (parameterize ([compile-file-message #f])
     (compile-file (path-combine (output-dir) "libdir/lib-abc")))
   (build-example "rtlibs-fat"
-    `("-b" "petite"
+    `("-b" "petite" "-vv"
       "--rtlib" ,(path-combine (output-dir) "libdir" "lib-abc.so")
-      "-L" ,(path-combine (output-dir) "libdir")))
+      "-L" ,(path-combine (output-dir) "libdir"))
+    '(seek
+      "^making stand-alone program boot file"
+      "^-b .*petite.boot"
+      "^--rtlib .*swish-core.library"
+      "^--rtlib .*lib-abc.so"
+      ".*rtlibs-fat.ss"))
 
   ;; Ensure source file and object file are not around after
   ;; compile-time.
@@ -426,8 +443,12 @@
   (parameterize ([compile-file-message #f])
     (compile-file (path-combine (output-dir) "libdir/lib-abc")))
   (build-example "rtlibs-thin"
-    `("--rtlib" ,(path-combine (output-dir) "libdir" "lib-abc.so")
-      "-L" ,(path-combine (output-dir) "libdir")))
+    `("-vv" "--rtlib" ,(path-combine (output-dir) "libdir" "lib-abc.so")
+      "-L" ,(path-combine (output-dir) "libdir"))
+    '(seek
+      "^making linked program"
+      "^--rtlib .*lib-abc.so"
+      ".*rtlibs-thin.ss"))
 
   ;; Ensure source file and object file are not around after
   ;; compile-time.
@@ -440,15 +461,16 @@
     `((import
        (scheme)
        (swish imports))
-      (printf "abc: ~a\n"
-        (top-level-value 'software-product-name (environment '(swish software-info))))))
+      ;; try to get something from a library that is not in swish-core.library
+      (printf "A: ~a\n" (json:object->string '(1 2 3)))
+      (printf "B: ~a\n" ((top-level-value 'json:object->string (environment '(swish json))) '(4 5 6)))))
 
   ;; Error case: swish library is not visible
   (build-example "rtlibs-swish-fat" `("-b" "petite"))
-  (match (catch (run-fat "rtlibs-swish-fat" '()
-                  (list (format "abc: ~a" software-product-name))))
+  (match (catch (run-fat "rtlibs-swish-fat" '() '()))
     [#(EXIT `(<os-process-failed>
-              [stderr ("rtlibs-swish-fat: library (swish software-info) is not visible.")]))
+              [stdout ("A: [1,2,3]")]
+              [stderr ("rtlibs-swish-fat: library (swish json) is not visible.")]))
      'ok])
 
   ;; Success case
@@ -456,7 +478,92 @@
     `("--rtlib" "swish"
       "-b" "petite"))
   (run-fat "rtlibs-swish-fat" '()
-    (list (format "abc: ~a" software-product-name))))
+    (map pregexp-quote '("A: [1,2,3]" "B: [4,5,6]"))))
+
+(isolate-mat find-rtlib ()
+  (define prog
+    (write-example "rtlib-prog"
+      `((import (rtlib-l1))
+        (printf "abc: ~a\n" abc))))
+  (define prog-compiled (output-file "rtlib-prog"))
+  (define lib
+    (write-example "rtlib-l1"
+      `((library (rtlib-l1)
+          (export abc)
+          (import (scheme))
+          (define abc "def")))))
+  (define libname "rtlib-l1.library")
+  (define libdir (path-combine (output-dir) "find-rtlib" "under" "here"))
+  ;; compile library under a subdirectory
+  (define lib-compiled (make-directory-path (path-combine libdir libname)))
+  (swish-build-test `("-o" ,lib-compiled "--library" ,lib) '())
+  ;; delete any secondary artifacts from compiling library
+  (delete-file lib)
+  (delete-file (pregexp-replace "\\.ss$" lib ".so"))
+  (delete-file (pregexp-replace "\\.ss$" lib ".wpo"))
+  ;; confirm that we can't build prog without --rtlib
+  (match (catch (swish-build-test `("-o" ,prog-compiled ,prog) '()))
+    [#(EXIT `(<os-process-failed>
+              [stderr ("swish-build: library (rtlib-l1) not found.")]))
+     'ok])
+  ;; confirm that we can't build prog despite --rtlib without -L
+  (let ([err (format "swish-build: cannot resolve --rtlib ~s." libname)])
+    (match (catch (swish-build-test `("-o" ,prog-compiled ,prog "--rtlib" ,libname) '()))
+      [#(EXIT `(<os-process-failed> [stderr (,@err)]))
+       'ok]))
+  ;; confirm that --rtlib can be located given a suitable -L
+  (swish-build-test `("-o" ,prog-compiled ,prog "--rtlib" ,libname "-L" ,libdir) '())
+  (run-thin "rtlib-prog" '() '("abc: def")))
+
+(isolate-mat rtlibs-output ()
+  (define rto-lib
+    (write-example "rto-lib"
+      `((library (rto-lib)
+          (export x y)
+          (import (scheme))
+          (define x 1)
+          (define y 2)))))
+  (define rto-library (string-append rto-lib ".library"))
+  (define rto-main
+    (write-example "rto-main"
+      `((import (rto-lib) (scheme))
+        (printf "~a ~a\n" x y)
+        (waiter-prompt-string "")
+        (new-cafe))))
+  (define rto-out (output-file "rto-main"))
+  (swish-build-test `("-o" ,rto-library "--library" ,rto-lib) '())
+  ;; thin app omits petite.boot, swish-core.library, and swish.library despite --rtlib swish
+  (swish-build-test
+   `("-vv" "-o" ,rto-out ,rto-main "--rtlib" ,rto-library "swish")
+   `(seek
+     ,(format "compiling ~a" (pregexp-quote rto-main))
+     "making linked program from:"
+     ,(format "--rtlib ~a" (pregexp-quote rto-library))
+     ,(format "        ~a" (pregexp-quote rto-main))))
+  (test-os-process swish-exe `(,rto-out)
+    (string-append
+     "(json:object->string '(3 4 5))"
+     "(exit)")
+    `("1 2" ,(pregexp-quote "[3,4,5]")))
+  (delete-file rto-out)
+  ;; fat app includes petite.boot, swish-core.library, and swish.library
+  (swish-build-test
+   `("-vv" "-o" ,rto-out ,rto-main "--rtlib" ,rto-library "swish" "-b" "petite")
+   `(seek
+     ,(format "compiling ~a" (pregexp-quote rto-main))
+     "making stand-alone program boot file .* from:"
+     ,(format "-b      .*~a" (pregexp-quote "petite.boot"))
+     ,(format "--rtlib ~a"   (pregexp-quote rto-library))
+     ,(format "--rtlib .*~a" (pregexp-quote "swish-core.library"))
+     ,(format "--rtlib .*~a" (pregexp-quote "swish.library"))
+     ,(format "        ~a"   (pregexp-quote rto-main))))
+  (test-os-process rto-out '()
+    (string-append
+     "(import (swish json))"
+     "(json:object->string '(7 8))"
+     "(exit)")
+    `("1 2" ,(pregexp-quote "[7,8]")))
+  )
 
 (isolate-mat non-numeric-exit ()
   ;; Attempt to call exit with a non-numeric exit code and is
@@ -797,12 +904,7 @@
             (newline))))))
   (set-file-mode howdy #o755)
   ;; run as /usr/bin/env script
-  (test-os-process (fix-exe "bash") '()
-    (string-append
-     "PATH=./build/mat-prereq/lib/swish.x.y.z/arch:${PATH}\n"
-     "./data/tmp/mat-output/howdy.ss\n"
-     "exit\n")
-    '("howdy folks"))
+  (run-bash "howdy.ss" '() '("howdy folks"))
   ;; run as swish script
   (run-script howdy '() '("^howdy folks$"))
   ;; run as thin app
@@ -823,13 +925,9 @@
         (pretty-print '(exit 3)))))
   (set-file-mode crash #o755)
   ;; run as /usr/bin/env script
-  (test-os-process (fix-exe "bash") '()
-    (string-append
-     "PATH=./build/mat-prereq/lib/swish.x.y.z/arch:${PATH}\n"
-     "./data/tmp/mat-output/crash.ss\n"
-     "echo $?\n"
-     "exit\n")
-    '("3"))
+  (match (catch (run-bash "crash.ss" '() '()))
+    [#(EXIT `(<os-process-failed> [exit-status 3]))
+     'ok])
   ;; run as swish script
   (match (catch (run-script crash '() '()))
     [#(EXIT `(<os-process-failed> [exit-status 3]))
@@ -847,6 +945,28 @@
      'ok])
   )
 
+;; app:path is not the same as osi_get_executable_path
+(isolate-mat app-path ()
+  (define source
+    (write-test-file "test-app-path.ss"
+      (lambda ()
+        (printf "#! /usr/bin/env swish\n")
+        (pretty-print '(printf "~a\n" (app:path))))))
+  (define expect-source (list (pregexp-quote source)))
+  (define expect-binary (list (pregexp-quote (output-file "test-app-path"))))
+  (set-file-mode source #o755)
+  ;; run as /usr/bin/env script
+  (run-bash "test-app-path.ss" '() expect-source)
+  ;; run as swish script
+  (run-script source '() expect-source)
+  ;; run as thin app
+  (build-example "test-app-path" '())
+  (run-thin "test-app-path" '() expect-binary)
+  (assert (delete-file (output-file "test-app-path")))
+  ;; run as fat app
+  (build-example "test-app-path" '("-b" "petite"))
+  (run-fat "test-app-path" '() expect-binary))
+
 (isolate-mat scheme-start ()
   ;; make sure we've restored swish's scheme-start, especially in fat app case
   (define bounce
@@ -859,12 +979,7 @@
   (define expected-output '("Hello from Swish Version"))
   (set-file-mode bounce #o755)
   ;; run as /usr/bin/env script
-  (test-os-process (fix-exe "bash") '()
-    (string-append
-     "PATH=./build/mat-prereq/lib/swish.x.y.z/arch:${PATH}\n"
-     "./data/tmp/mat-output/bounce.ss\n"
-     "exit\n")
-    expected-output)
+  (run-bash "bounce.ss" '() expected-output)
   ;; run as swish script
   (run-script bounce '() expected-output)
   ;; run as thin app
