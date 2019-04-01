@@ -332,24 +332,30 @@
 
 (define (compile-help source-fn obj-fn target-type)
   (define default-library-search (library-search-handler))
-  ;; We add ".wpo" variants to the front of library-extensions so that the
-  ;; expander forces library compilation if a ".wpo" file exists and is
-  ;; older than the source file, while still falling back on the usual
-  ;; object file if the ".wpo" file is not wanted, e.g., for the --rtlib
-  ;; case.  When the expander calls compile-library-handler, we restore the
-  ;; ".so" extension so that compile-library can build both the ".so" file
-  ;; and its ".wpo" by-product without conflict.
-  (parameterize ([library-extensions
-                  (append
-                   (map (lambda (x)
-                          (match-let* ([(,src . ,obj) x])
-                            (cons src (change-extension obj ".wpo"))))
-                     (library-extensions))
-                   (library-extensions))]
+  (parameterize ([library-search-handler
+                  (lambda (who path dir* all-ext*)
+                    (let-values ([(src-path obj-path obj-exists?)
+                                  (default-library-search who path dir* all-ext*)])
+                      (values src-path obj-path
+                        (and obj-exists?
+                             ;; - don't rebuild if we got this library via --rtlib
+                             ;; - if we have source and we're expected to generate
+                             ;;   wpo files for this library, then finding a ".so" file
+                             ;;   is not enough; we also need an up-to-date ".wpo" file
+                             ;;   for the use by compile-wpo
+                             (or (not src-path)
+                                 (hashtable-ref prevent-wpo path #f)
+                                 (not (generate-wpo-files))
+                                 (let ([wpo-file (string-append (path-root obj-path) ".wpo")])
+                                   (and (file-exists? wpo-file)
+                                        ;; account for low-resolution HFS timestamps
+                                        (time>=?
+                                         (file-modification-time wpo-file)
+                                         (file-modification-time src-path)))))))))]
                  [compile-library-handler
                   (lambda (source dest)
                     (when (> (verbosity) 0) (printf "compiling ~a\n" source))
-                    (compile-library source (change-extension dest ".so")))])
+                    (compile-library source dest))])
     (target-case target-type
       [(library)
        (compile-library source-fn obj-fn)]
