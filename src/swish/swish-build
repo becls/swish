@@ -318,10 +318,16 @@
     (lambda (ip sfd source-offset)
       (define annotated-source
         (get-datum/annotations-all ip sfd source-offset))
+      (define dummy-annotation
+        (match annotated-source
+          [(,x . ,_) (annotation-source x)]
+          [,_ (make-source-object sfd 0 0)]))
+      (define (annotate form)
+        (make-annotation form dummy-annotation form))
       (define program
         ;; source-fn must not use top-level-program, since it is spliced in as body
-        `(top-level-program
-          (import (scheme) (swish imports))
+        `(,(annotate 'top-level-program)
+          ,(annotate '(import (scheme) (swish imports)))
           ,@annotated-source))
       (compile-to-file (list program) dest sfd))))
 

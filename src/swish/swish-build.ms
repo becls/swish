@@ -1242,6 +1242,14 @@
         (for-each pretty-print
           `((define (foo a b) b)
             (foo 1 2 3 4 5))))))
+  (define duplicate-body
+    '((define register 'file)
+      (pretty-print register)))
+  (define duplicate
+    (write-test-file "duplicate.ss"
+      (lambda ()
+        (printf ";; comment to move error to line 2\n")
+        (for-each pretty-print duplicate-body))))
   (define incomplete
     (write-test-file "incomplete.ss"
       (lambda ()
@@ -1252,6 +1260,12 @@
     (list
      (format "swish-build: possible incorrect argument count.*~a"
        (pregexp-quote dubious))))
+  (define duplicate-patterns
+    ;; make sure we don't have stray #<annotation> showing up in the error message
+    (list
+     (format "swish-build: multiple definitions for register in body ~a near line 2, char 1 of ~a"
+       (pregexp-quote (format "~s" `(top-level-program (import (scheme) (swish imports)) ,@duplicate-body)))
+       (pregexp-quote duplicate))))
   (define incomplete-patterns
     (list
      (format "swish-build: unexpected end-of-file reading list.*~a"
@@ -1260,15 +1274,23 @@
   (match (catch (build-example "bad" '()))
     [#(EXIT `(<os-process-failed> ,stderr))
      (match-regexps bad-patterns stderr)])
-  ;; compile-time error thin
+  ;; compile-time error fat
   (match (catch (build-example "bad" '("-b" "petite")))
     [#(EXIT `(<os-process-failed> ,stderr))
      (match-regexps bad-patterns stderr)])
+  ;; compile-time error thin
+  (match (catch (build-example "duplicate" '()))
+    [#(EXIT `(<os-process-failed> ,stderr))
+     (match-regexps duplicate-patterns stderr)])
+  ;; compile-time error fat
+  (match (catch (build-example "duplicate" '("-b" "petite")))
+    [#(EXIT `(<os-process-failed> ,stderr))
+     (match-regexps duplicate-patterns stderr)])
   ;; compile-time warning thin
   (match (catch (build-example "dubious" '()))
     [#(EXIT `(<os-process-failed> ,stderr))
      (match-regexps dubious-patterns stderr)])
-  ;; compile-time warning thin
+  ;; compile-time warning fat
   (match (catch (build-example "dubious" '("-b" "petite")))
     [#(EXIT `(<os-process-failed> ,stderr))
      (match-regexps dubious-patterns stderr)])
@@ -1276,7 +1298,7 @@
   (match (catch (build-example "incomplete" '()))
     [#(EXIT `(<os-process-failed> ,stderr))
      (match-regexps incomplete-patterns stderr)])
-  ;; reader error thin
+  ;; reader error fat
   (match (catch (build-example "incomplete" '("-b" "petite")))
     [#(EXIT `(<os-process-failed> ,stderr))
      (match-regexps incomplete-patterns stderr)])
