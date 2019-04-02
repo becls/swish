@@ -36,6 +36,7 @@
    process-alive?
    run-os-process
    run-test-spec
+   scheme-exe
    sleep-ms
    start-event-mgr
    start-silent-event-mgr
@@ -61,6 +62,10 @@
    )
 
   (profile:exclude)
+
+  (define scheme-exe
+    (or (getenv (if (memq (machine-type) '(a6nt i3nt)) "SCHEME_WIN" "SCHEME"))
+        "scheme"))
 
   (define-syntax assert-syntax-error
     (syntax-rules ()

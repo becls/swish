@@ -431,7 +431,6 @@
      (match-regexps '("application shutdown due to \\(exit foo\\)") stdout)]))
 
 (isolate-mat compile-library ()
-  (define scheme (or (getenv "SCHEME") "scheme"))
   (define source (input-file "clib"))
   (define compiled (string-append (path-root source) ".so"))
   (define wpo (string-append (path-root source) ".wpo"))
@@ -449,12 +448,11 @@
   ;; see if it worked, making sure (import (clib))
   ;; can't just fall back on the source
   (assert (delete-file source))
-  (test-os-process scheme `("-q" ,compiled)
+  (test-os-process scheme-exe `("-q" ,compiled)
     (format "~{~s\n~}" `((import (clib)) (printf "y: ~a x: ~a\n" y x) #!eof))
     `("^y: not x: 123$")))
 
 (isolate-mat missing-libs ()
-  (define scheme (or (getenv "SCHEME") "scheme"))
   (define source (input-file "miss"))
   (define compiled (string-append (path-root source) ".so"))
   (define wpo (string-append (path-root source) ".wpo"))
@@ -491,7 +489,7 @@
   ;; delete lib.ss, but leave miss.so so we can check that the
   ;; compiled library works so long as (miss) can be found
   (assert (delete-file (input-file "lib")))
-  (test-os-process scheme `("-q" "--import-notify" "--libdirs" ,(output-dir) ,lib-compiled)
+  (test-os-process scheme-exe `("-q" "--import-notify" "--libdirs" ,(output-dir) ,lib-compiled)
     (format "~{~s\n~}"
       `((import (lib))
         (pretty-print a)
@@ -502,7 +500,7 @@
      (pregexp-quote (format "~s" '("PDQ" "Bach")))))
   ;; now delete miss.so so using compiled library fails
   (assert (delete-file compiled))
-  (test-os-process scheme `("-q" "--libdirs" ,(output-dir) ,lib-compiled)
+  (test-os-process scheme-exe `("-q" "--libdirs" ,(output-dir) ,lib-compiled)
     (format "~{~s\n~}" `((reset-handler exit) (console-error-port (console-output-port)) (import (lib))))
     (list "^Exception: library \\(miss\\) not found")))
 

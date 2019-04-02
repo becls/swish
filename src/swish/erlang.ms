@@ -77,7 +77,6 @@
   (and (exact? x) (integer? x) (positive? x)))
 
 (define (repl-test expected-exit code . patterns)
-  (define scheme (or (getenv "SCHEME") "scheme"))
   (define scheme-args
     (list
      "--eedisable"
@@ -88,7 +87,7 @@
   (define (launch)
     (match (vector->list (osi_get_argv))
       [()
-       (run-os-process scheme scheme-args write-stdin 10000 '())]
+       (run-os-process scheme-exe scheme-args write-stdin 10000 '())]
       [(,command . ,args)
        (run-os-process command args write-stdin 10000 '())]))
   (match (launch)

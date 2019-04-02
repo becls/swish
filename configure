@@ -381,6 +381,7 @@ if [ -n "${SCHEMEHEAPDIRS:-}" ]; then
   add "export SCHEMEHEAPDIRS='${SCHEMEHEAPDIRS}'"
 fi
 if [ "${Windows}" = "yes" ]; then
+  add "export SCHEME_WIN='$(cygpath -aw "${SCHEME}")'"
   add "export PATH='${SCHEME_LIBPATH}:${PATH}'"
 fi
 
