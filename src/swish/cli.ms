@@ -626,6 +626,7 @@
   (test "myexe" '() #f '("^Usage: myexe$"))
   (test "myexe" (cli-specs default-help) #f
     '("^Usage: myexe \\[-h\\]$"
+      seek
       "-h, --help\\s+display this help and exit"))
 
   ;; named booleans
@@ -670,13 +671,13 @@
   (usage "<pos> ..." (cli-specs ["pos" (list . "<pos>") "a rest positional"]))
 
   ;; help contains whitespace only should not indent at all
-  (test "help" (cli-specs ["named" -n bool " "]) #f '("^  -n$"))
+  (test "help" (cli-specs ["named" -n bool " "]) #f '(seek "^  -n$"))
 
   ;; help ends in whitespace should not write trailing whitespace
   (test "help"
     (cli-specs ["named" -n bool "named help   "])
     #f
-    '("^  -n\\s{16}named help$"))
+    '(seek "^  -n\\s{16}named help$"))
 
   ;; single-line where left column is exactly sized to make the right
   ;; column start on the next line followed by an arg list that has
@@ -687,7 +688,8 @@
      ["regexp-pass" -r (list "<type>" "<regexp>")
       "report <regexp> matches as <type>={info|warning|error}"])
     (make-ht ["regexp-pass" (list "info" "Zonk:.*")])
-    '("^  -r <type> <regexp>$"
+    '(seek
+      "^  -r <type> <regexp>$"
       "^\\s{20}report <regexp> matches as <type>=\\{info\\|warning\\|error\\}$"
       "^\\s{20}\\(info Zonk:\\.\\*\\)$"))
 
@@ -700,7 +702,8 @@
         "substitution strings:"
         "%file, %type, %line, %column, %bfp, %efp, %msg")])
     (make-ht ["format" "%file:%type:%line:%msg"])
-    '("^  --format <format> format specifiers that include the following substitution$"
+    '(seek
+      "^  --format <format> format specifiers that include the following substitution$"
       "^\\s{20}strings: %file, %type, %line, %column, %bfp, %efp, %msg$"
       "^\\s{20}\\(%file:%type:%line:%msg)$"))
 
@@ -711,7 +714,8 @@
                   "line two\n"
                   "line three")])
     #f
-    '("^  -m, --multi       line one$"
+    '(seek
+      "^  -m, --multi       line one$"
       "^\\s{20}line two$"
       "^\\s{20}line three$"))
 
@@ -722,7 +726,8 @@
                   "line two\n"
                   "line three")])
     (make-ht ["multi" "input"])
-    '("^  -m, --multi       line one$"
+    '(seek
+      "^  -m, --multi       line one$"
       "^\\s{20}line two$"
       "^\\s{20}line three \\(input\\)$"))
 
@@ -732,7 +737,8 @@
                 '("line one\n\n"
                   "line three")])
     #f
-    '("^  -m, --multi       line one$"
+    '(seek
+      "^  -m, --multi       line one$"
       "^$"
       "^\\s{20}line three$"))
 
@@ -742,7 +748,8 @@
                 '("line one \n"
                   "line two")])
     #f
-    '("^  -m, --multi       line one$"
+    '(seek
+      "^  -m, --multi       line one$"
       "^\\s{20}line two$")))
 
 (mat usage ()

@@ -213,17 +213,23 @@
               [exit-status exit-status])])))))
 
   (define (match-regexps patterns ls)
-    (let check ([patterns patterns] [lines ls])
+    (let check ([patterns patterns] [remaining-lines ls])
       (match patterns
-        [() lines]
-        [(,pattern . ,patterns)
-         (let search ([re (pregexp pattern)] [lines lines])
+        [() remaining-lines]
+        [(seek ,pattern . ,patterns)
+         (let search ([re (pregexp pattern)] [lines remaining-lines])
            (match lines
-             [() (raise `#(pattern-not-found ,pattern ,ls))]
+             [() (raise `#(pattern-not-found seek ,pattern ,remaining-lines))]
              [(,line . ,lines)
               (if (pregexp-match re line)
                   (check patterns lines)
-                  (search re lines))]))])))
+                  (search re lines))]))]
+        [(,pattern . ,patterns)
+         (match remaining-lines
+           [(,line . ,lines)
+            (guard (pregexp-match pattern line))
+            (check patterns lines)]
+           [,_ (raise `#(pattern-not-found ,pattern ,remaining-lines))])])))
 
   (define (delete-tree path)
     (if (file-directory? path)

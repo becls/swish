@@ -349,6 +349,7 @@
     '(begin
        (osi_list_directory "." (lambda (x) (receive)))
        (receive))
+    'seek
     "Event: run-queue-empty"))
 
 (isolate-mat panic-event-loop-process-terminated ()
@@ -356,11 +357,13 @@
     '(begin
        (osi_list_directory "." (lambda (x) (raise 'kaboom)))
        (receive))
+    'seek
     "Event: #\\(event-loop-process-terminated kaboom\\)")
   (repl-test 80
     '(begin
        (osi_list_directory "." (lambda (x) (kill self 'kill)))
        (receive))
+    'seek
     "Event: #\\(event-loop-process-terminated killed\\)"))
 
 (isolate-mat panic-finalizer-process-terminated ()
@@ -377,12 +380,14 @@
        (add-finalizer (lambda () (raise 'kaboom)))
        (collect)
        (receive))
+    'seek
     "Event: #\\(finalizer-process-terminated kaboom\\)")
   (repl-test 80
     '(begin
        (add-finalizer (lambda () (kill self 'kill)))
        (collect)
        (receive))
+    'seek
     "Event: #\\(finalizer-process-terminated killed\\)"))
 
 (isolate-mat chain-reaction ()
@@ -998,6 +1003,7 @@
 (isolate-mat application-start-failure ()
   (repl-test 1
     '(application:start (lambda () '#(error kaboom!)))
+    'seek
     "Event: #\\(application-start-failed kaboom!\\)"))
 
 (isolate-mat create-watched-process-io ()
@@ -1065,7 +1071,9 @@
             (printf "exited properly~{ ~s~}\n" args)
             (apply orig args))))
        (exit 1 2 3))
+    "attempting to app:start"
     "exited properly 1 2 3"
+    'seek
     "Date: "
     "Timestamp: "
     "Event: "))

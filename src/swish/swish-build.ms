@@ -92,13 +92,19 @@
 (isolate-mat help ()
   (swish-build-test '("--help")
     '("Usage:"
+      seek
       "write output"
+      seek
       "source filename"))
   (swish-build-test '("-h" "details")
-    '("To compile a library"
+    '(seek
+      "To compile a library"
+      seek
       "To create a stand-alone application"))
   (swish-build-test '("-h" "examples")
-    '("Examples:"
+    '(seek
+      "Examples:"
+      seek
       "swish-build -o foo -b petite foo.ss")))
 
 (define hello-fat
@@ -448,7 +454,7 @@
               [exit-status 1]
               [stdout ()]
               [stderr ,stderr]))
-     (match-regexps '("application shutdown due to \\(exit foo\\)") stderr)]))
+     (match-regexps '(seek "application shutdown due to \\(exit foo\\)") stderr)]))
 
 (isolate-mat compile-library ()
   (define source (input-file "clib"))
@@ -496,11 +502,11 @@
   (assert (delete-file wpo))
   ;; thin
   (swish-build-test `("-L" ,(output-dir) "-o" ,(output-file "thin-ml") ,(input-file "app"))
-    (list (format "^~a$" (pregexp-quote "Added without whole-program optimization: (miss)"))))
+    `(seek ,(format "^~a$" (pregexp-quote "Added without whole-program optimization: (miss)"))))
   (run-thin "thin-ml" '() '("^got: PDQ Bach$"))
   ;; fat
   (swish-build-test `("-L" ,(output-dir) "-o" ,(output-file "fat-ml") ,(input-file "app") "-b" "petite")
-    (list (format "^~a$" (pregexp-quote "Added without whole-program optimization: (miss)"))))
+    `(seek ,(format "^~a$" (pregexp-quote "Added without whole-program optimization: (miss)"))))
   (run-fat "fat-ml" '() '("^got: PDQ Bach$"))
   ;; library
   (swish-build-test
@@ -514,10 +520,11 @@
       `((import (lib))
         (pretty-print a)
         #!eof))
-    (list
-     "^import: found object file \".*miss\\.so\""
-     "^import: loading object file \".*miss\\.so\""
-     (pregexp-quote (format "~s" '("PDQ" "Bach")))))
+    `(seek
+      "^import: found object file \".*miss\\.so\""
+      seek
+      "^import: loading object file \".*miss\\.so\""
+      ,(pregexp-quote (format "~s" '("PDQ" "Bach")))))
   ;; now delete miss.so so using compiled library fails
   (assert (delete-file compiled))
   (test-os-process scheme-exe `("-q" "--libdirs" ,(output-dir) ,lib-compiled)
