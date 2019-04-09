@@ -11,11 +11,11 @@ src/swish/Makefile:
 	@echo "Run ./configure to create $@"
 	@exit 1
 
-test:
+test: src/swish/Makefile
 	@$(MAKE) -C src/swish mat-prereq
 	@./src/run-mats
 
-coverage:
+coverage: src/swish/Makefile
 	@PROFILE_MATS=yes $(MAKE) -C src/swish mat-prereq
 	@PROFILE_MATS=yes ./src/run-mats
 
