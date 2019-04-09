@@ -80,7 +80,7 @@
             [stdout stdout]
             [stderr stderr]
             [exit-status exit-status])))
-       (match-regexps patterns stdout)]))
+       (match-regexps patterns (append stdout stderr))]))
 
   (define (script-test script-file args for-stdin patterns)
     (cond

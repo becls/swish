@@ -401,7 +401,7 @@
                   (and (member full-save-fn full-load-filenames) full-save-fn)])])
           (unless add-to-profile (truncate-profile))
           ;; mute the console-event-handler
-          (parameterize ([console-output-port (open-output-string)])
+          (parameterize ([console-error-port (open-output-string)])
             (match-let* ([#(ok ,pid) (profile:start add-to-profile save-prof #t)])
               (foreach ([to-load (map cons full-load-filenames load-prof)])
                 (match-let* ([(,full-name . ,user-supplied-name) to-load])

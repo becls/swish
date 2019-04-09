@@ -28,7 +28,7 @@ The event manager (\code{event-mgr}) is a gen-server that provides a
 single dispatcher for events within the system. It buffers events and
 dispatches them to the log handler and a collection of other event
 handlers. If the log handler fails, the event manager logs events
-directly to the console.
+directly to the console error port.
 
 \section {Theory of Operation}
 
@@ -57,10 +57,10 @@ The event handlers should not perform blocking operations, because
 they block the entire event manager.
 
 If the log handler or its associated process fails, the event manager
-logs events to the console. If another event handler fails with some
-reason, the associated process is killed with the same reason. When
-the process associated with a handler terminates, the event manager
-removes it from the list.
+logs events to the console error port. If another event handler fails
+with some reason, the associated process is killed with the same
+reason. When the process associated with a handler terminates, the
+event manager removes it from the list.
 
 \paragraph* {state}\index{event-mgr!state}
 \begin{tuple}\code{<event-mgr-state>}\end{tuple}\antipar
@@ -83,8 +83,8 @@ The gen-server traps exits so that it can detect failure of event
 handler owner processes, as well as the \code{EXIT} message from the
 parent process.
 
-\genserver{event-mgr}{terminate}The \code{terminate} procedure
-flushes any pending events to the console using \code{do-notify}.
+\genserver{event-mgr}{terminate}The \code{terminate} procedure flushes
+any pending events to the console error port using \code{do-notify}.
 
 \genserver{event-mgr}{handle-call}The \code{handle-call} procedure
 processes the following messages:
@@ -150,8 +150,8 @@ handles the processing of each \var{event} with respect to the current
     \item If there is a log handler, call its \var{proc} with
       \var{event}. If it exits for some reason, unlink its
       \var{owner}, kill it with the same reason, log \var{event} to
-      the console using \code{console-event-handler}, and remove the
-      log handler from the state.
+      the console error port using \code{console-event-handler}, and
+      remove the log handler from the state.
     \end{enumerate}
 
   \item Otherwise, buffer the event.

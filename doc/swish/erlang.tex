@@ -788,10 +788,10 @@ unblock a \var{process} from a call to \code{wait-for-io}. If
 \returns{} unspecified
 
 The \code{console-event-handler} procedure prints an \var{event} to
-the console. It is used when the event manager is not available. It
-disables interrupts so that it can be called from multiple processes
-safely.  The output is designed to be machine readable. The output
-looks like this:
+the console error port. It is used when the event manager is not
+available. It disables interrupts so that it can be called from
+multiple processes safely.  The output is designed to be machine
+readable. The output looks like this:
 
 \begin{alltt}
 Date: Fri Aug 06 11:54:59 2010

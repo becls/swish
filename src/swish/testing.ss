@@ -157,7 +157,7 @@
        (mat name tags ($system-mat (lambda () (boot-system) e1 e2 ...)))]))
 
   (define ($system-mat thunk)
-    (parameterize ([console-output-port (open-output-string)])
+    (parameterize ([console-error-port (open-output-string)])
       (let* ([pid (spawn thunk)]
              [m (monitor pid)])
         (on-exit (shutdown-system)

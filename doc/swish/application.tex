@@ -76,8 +76,8 @@ to determine if the application shut down normally.
 \end{procedure}
 \returns{} never
 
-The \code{exit-process} procedure flushes the console output port,
-ignoring any exceptions, and then calls \code{(osi\_exit
+The \code{exit-process} procedure flushes the console output and error
+ports, ignoring any exceptions, and then calls \code{(osi\_exit
   \var{exit-code})}.
 
 \section {Programming Interface}

@@ -802,7 +802,7 @@
 
   (define (console-event-handler event)
     (with-interrupts-disabled
-     (let ([op (console-output-port)]
+     (let ([op (console-error-port)]
            [ht (or (event-condition-table) (make-eq-hashtable))])
        (event-condition-table ht)
        (fprintf op "\nDate: ~a\n" (date-and-time))

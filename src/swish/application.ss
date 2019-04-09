@@ -59,6 +59,7 @@
 
   (define (exit-process exit-code)
     (catch (flush-output-port (console-output-port)))
+    (catch (flush-output-port (console-error-port)))
     (osi_exit exit-code))
 
   (define (application:start starter)

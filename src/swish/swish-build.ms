@@ -446,9 +446,9 @@
   (match (catch (run-thin "non-numeric-exit" '() '()))
     [#(EXIT `(<os-process-failed>
               [exit-status 1]
-              [stdout ,stdout]
-              [stderr ()]))
-     (match-regexps '("application shutdown due to \\(exit foo\\)") stdout)]))
+              [stdout ()]
+              [stderr ,stderr]))
+     (match-regexps '("application shutdown due to \\(exit foo\\)") stderr)]))
 
 (isolate-mat compile-library ()
   (define source (input-file "clib"))
@@ -521,7 +521,7 @@
   ;; now delete miss.so so using compiled library fails
   (assert (delete-file compiled))
   (test-os-process scheme-exe `("-q" "--libdirs" ,(output-dir) ,lib-compiled)
-    (format "~{~s\n~}" `((reset-handler exit) (console-error-port (console-output-port)) (import (lib))))
+    (format "~{~s\n~}" `((reset-handler exit) (import (lib))))
     (list "^Exception: library \\(miss\\) not found")))
 
 (isolate-mat claim-exceptions ()
