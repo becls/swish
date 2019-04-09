@@ -29,6 +29,9 @@
    SQLITE_STATUS_MEMORY_USED
    columns
    database-count
+   database-create-time
+   database-filename
+   database?
    db:filename
    db:log
    db:start&link
@@ -54,6 +57,10 @@
    sqlite:sql
    sqlite:step
    statement-count
+   statement-create-time
+   statement-database
+   statement-sql
+   statement?
    transaction
    with-db
    )

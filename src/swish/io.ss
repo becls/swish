@@ -41,6 +41,7 @@
    list-directory
    listen-tcp
    listener-address
+   listener-create-time
    listener-port-number
    listener?
    make-directory
@@ -57,8 +58,12 @@
    open-file-to-write
    open-utf8-bytevector
    osi-port-count
+   osi-port-create-time
+   osi-port-name
+   osi-port?
    path-combine
    path-watcher-count
+   path-watcher-create-time
    path-watcher-path
    path-watcher?
    print-osi-ports
