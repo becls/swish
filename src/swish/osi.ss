@@ -64,7 +64,6 @@
    osi_get_statement_columns*
    osi_get_statement_expanded_sql
    osi_get_statement_expanded_sql*
-   osi_get_stdin
    osi_get_tcp_listener_port
    osi_get_tcp_listener_port*
    osi_get_temp_directory
@@ -85,6 +84,8 @@
    osi_make_uuid*
    osi_open_database
    osi_open_database*
+   osi_open_fd
+   osi_open_fd*
    osi_open_file
    osi_open_file*
    osi_prepare_statement
@@ -162,11 +163,11 @@
   (define-osi osi_kill (pid int) (signum int))
 
   ;; File System
+  (define-osi osi_open_fd (fd int) (close? boolean))
   (define-osi osi_open_file (path string) (flags int) (mode int) (callback ptr))
   (define-osi osi_get_executable_path)
   (define-osi osi_get_file_size (port uptr) (callback ptr))
   (define-osi osi_get_real_path (path string) (callback ptr))
-  (fdefine osi_get_stdin uptr)
   (define-osi osi_get_temp_directory)
   (define-osi osi_chmod (path string) (mode int) (callback ptr))
   (define-osi osi_make_directory (path string) (mode int) (callback ptr))

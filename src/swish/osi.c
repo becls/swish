@@ -146,12 +146,6 @@ char* osi_string_to_utf8(ptr s, size_t* utf8_len) {
   return result;
 }
 
-static ptr close_port_nosys(uptr port, ptr callback) {
-  (void)port;
-  (void)callback;
-  return osi_make_error_pair("close_port", UV_ENOSYS);
-}
-
 static void rw_fs_cb(uv_fs_t* req) {
   ssize_t result = req->result;
   rw_fs_req_t* fs_req = container_of(req, rw_fs_req_t, fs);
@@ -238,6 +232,19 @@ static ptr close_fs_port(uptr port, ptr callback) {
   }
   return Strue;
 }
+
+static ptr close_fd_port(uptr port, ptr callback) {
+  fs_port_t* p = (fs_port_t*)port;
+  free(p);
+  osi_add_callback1(callback, Sfixnum(0));
+  return Strue;
+}
+
+static osi_port_vtable_t fd_vtable = {
+  .close = close_fd_port,
+  .read = read_fs_port,
+  .write = write_fs_port
+};
 
 static osi_port_vtable_t file_vtable = {
   .close = close_fs_port,
@@ -997,6 +1004,17 @@ ptr osi_list_uv_handles(void) {
   return ls;
 }
 
+ptr osi_open_fd(int fd, int close) {
+  if (fd < 0)
+    return osi_make_error_pair("osi_open_fd", UV_EINVAL);
+  fs_port_t* port = malloc_container(fs_port_t);
+  if (!port)
+    return osi_make_error_pair("osi_open_fd", UV_ENOMEM);
+  port->vtable = close ? &file_vtable : &fd_vtable;
+  port->file = (uv_file)fd;
+  return Sunsigned((uptr)port);
+}
+
 ptr osi_open_file(const char* path, int flags, int mode, ptr callback) {
   uv_fs_t* req = malloc_container(uv_fs_t);
   if (!req)
@@ -1042,19 +1060,6 @@ ptr osi_rename(const char* path, const char* new_path, ptr callback) {
   return Strue;
 }
 
-uptr osi_get_stdin(void) {
-  static osi_port_vtable_t stdin_vtable = {
-    .close = close_port_nosys,
-    .read = read_fs_port,
-    .write = write_fs_port
-  };
-  static fs_port_t stdin_port = {
-    .vtable = &stdin_vtable,
-    .file = 0
-  };
-  return (uptr)&stdin_port;
-}
-
 ptr osi_get_temp_directory(void) {
   static char buffer[32768];
   size_t len = sizeof(buffer);
@@ -1094,7 +1099,7 @@ static void get_callbacks_timer_cb(uv_timer_t* handle) {
 
 ptr osi_get_callbacks(uint64_t timeout) {
   uv_update_time(osi_loop);
-  if (0 == timeout) {
+  if ((0 == timeout) || (Snil != g_callbacks)) {
     uv_run(osi_loop, UV_RUN_NOWAIT);
   } else {
     g_timer.data = 0;
