@@ -452,6 +452,33 @@ By default, \var{symbol->sql} is the identity function.
 
 \end{itemize}
 
+\defineentry{database?}
+\begin{procedure}
+  \code{(database? \var{x})}
+\end{procedure}
+\returns{} a boolean
+
+The \code{database?} procedure determines whether or not the datum
+\var{x} is a database record instance.
+
+\defineentry{database-create-time}
+\begin{procedure}
+  \code{(database-create-time \var{db})}
+\end{procedure}
+\returns{} a clock time in milliseconds
+
+The \code{database-create-time} procedure returns the clock time from
+\code{erlang:now} when database record instance \var{db} was created.
+
+\defineentry{database-filename}
+\begin{procedure}
+  \code{(database-filename \var{db})}
+\end{procedure}
+\returns{} a string
+
+The \code{database-filename} procedure returns the filename of
+database record instance \var{db}.
+
 \defineentry{database-count}
 \begin{procedure}
   \code{(database-count)}
@@ -470,6 +497,43 @@ databases.
 The \code{print-databases} procedure prints information about all open
 databases to textual output port \var{op}, which defaults to the
 current output port.
+
+\defineentry{statement?}
+\begin{procedure}
+  \code{(statement? \var{x})}
+\end{procedure}
+\returns{} a boolean
+
+The \code{statement?} procedure determines whether or not the datum
+\var{x} is a statement record instance.
+
+\defineentry{statement-create-time}
+\begin{procedure}
+  \code{(statement-create-time \var{stmt})}
+\end{procedure}
+\returns{} a clock time in milliseconds
+
+The \code{statement-create-time} procedure returns the clock time from
+\code{erlang:now} when statement record instance \var{stmt} was
+created.
+
+\defineentry{statement-database}
+\begin{procedure}
+  \code{(statement-database \var{stmt})}
+\end{procedure}
+\returns{} a string
+
+The \code{statement-database} procedure returns the database record
+instance of the statement record instance \var{stmt}.
+
+\defineentry{statement-sql}
+\begin{procedure}
+  \code{(statement-sql \var{stmt})}
+\end{procedure}
+\returns{} a string
+
+The \code{statement-sql} procedure returns the SQL string of the
+statement record instance \var{stmt}.
 
 \defineentry{statement-count}
 \begin{procedure}

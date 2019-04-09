@@ -1348,6 +1348,17 @@ The \code{listener-address} procedure returns the \code{address} of
 the given TCP \var{listener}\index{TCP listener}.
 
 % ----------------------------------------------------------------------------
+\defineentry{listener-create-time}
+\begin{procedure}
+  \code{(listener-create-time \var{listener})}
+\end{procedure}
+\returns{} a clock time in milliseconds
+
+The \code{listener-create-time} procedure returns the clock time from
+\code{erlang:now} when the given TCP \var{listener}\index{TCP
+  listener} was created.
+
+% ----------------------------------------------------------------------------
 \defineentry{listener-port-number}
 \begin{procedure}
   \code{(listener-port-number \var{listener})}
@@ -1581,6 +1592,36 @@ The \code{osi-port-count} procedure returns the number of open
 osi-ports.
 
 % ----------------------------------------------------------------------------
+\defineentry{osi-port-create-time}
+\begin{procedure}
+  \code{(osi-port-create-time \var{p})}
+\end{procedure}
+\returns{} a clock time in milliseconds
+
+The \code{osi-port-create-time} procedure returns the clock time from
+\code{erlang:now} when the osi-port \var{p} was created.
+
+% ----------------------------------------------------------------------------
+\defineentry{osi-port-name}
+\begin{procedure}
+  \code{(osi-port-name \var{p})}
+\end{procedure}
+\returns{} a string
+
+The \code{osi-port-name} procedure returns the name of osi-port
+\var{p}.
+
+% ----------------------------------------------------------------------------
+\defineentry{osi-port?}
+\begin{procedure}
+  \code{(osi-port? \var{x})}
+\end{procedure}
+\returns{} a boolean
+
+The \code{osi-port?} procedure determines whether or not the datum
+\var{x} is an osi-port.
+
+% ----------------------------------------------------------------------------
 \defineentry{path-combine}
 \begin{procedure}
   \code{(path-combine \var{path$_1$} \var{path$_2$} \etc{})}
@@ -1600,6 +1641,17 @@ needed.
 
 The \code{path-watcher-count} procedure returns the number of open
 path watchers\index{path watcher}.
+
+% ----------------------------------------------------------------------------
+\defineentry{path-watcher-create-time}
+\begin{procedure}
+  \code{(path-watcher-create-time \var{watcher})}
+\end{procedure}
+\returns{} a clock time in milliseconds
+
+The \code{path-watcher-create-time} procedure returns the clock time
+from \code{erlang:now} when the given path \var{watcher}\index{path
+  watcher} was created.
 
 % ----------------------------------------------------------------------------
 \defineentry{path-watcher-path}
