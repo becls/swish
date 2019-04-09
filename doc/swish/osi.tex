@@ -421,6 +421,16 @@ otherwise.
 
 \subsection {File System Functions}
 
+\defineentry{osi\_open\_fd}
+\begin{function}
+  ptr \code{osi\_open\_fd}(int \var{fd}, int \var{close});
+\end{function}
+
+The \code{osi\_open\_fd} function returns a port handle for the file
+descriptor \var{fd} when successful and an error pair otherwise. When
+the port is closed, the file descriptor \var{fd} is closed if and only
+if \var{close} is non-zero.
+
 \defineentry{osi\_open\_file}
 \begin{function}
   ptr \code{osi\_open\_file}(const char* \var{path}, int \var{flags}, int \var{mode}, ptr \var{callback});
@@ -508,15 +518,6 @@ issued and an error pair otherwise. When the realpath operation
 finishes, it enqueues the callback list \code{(\var{callback}
   \var{result})}, where \var{result} is the string path when
 successful and a negative error code otherwise.
-
-\defineentry{osi\_get\_stdin}
-\begin{function}
-  uptr \code{osi\_get\_stdin}(void);
-\end{function}
-
-The \code{osi\_get\_stdin} function returns a handle to a static port
-that reads from the standard input of the current process. This port
-cannot be closed.
 
 \defineentry{osi\_get\_temp\_directory}
 \begin{function}

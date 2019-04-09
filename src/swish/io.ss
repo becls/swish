@@ -45,7 +45,10 @@
    listener?
    make-directory
    make-directory-path
+   make-osi-input-port
+   make-osi-output-port
    make-utf8-transcoder
+   open-fd-port
    open-file
    open-file-port
    open-file-to-append
@@ -193,9 +196,19 @@
     (make-custom-binary-input-port name (make-r! port) #f #f
       (and close? (make-close port))))
 
+  (define (make-osi-input-port p)
+    (unless (osi-port? p)
+      (bad-arg 'make-osi-input-port p))
+    (make-iport (osi-port-name p) p #t))
+
   (define (make-oport name port)
     (make-custom-binary-output-port name (make-w! port) #f #f
       (make-close port)))
+
+  (define (make-osi-output-port p)
+    (unless (osi-port? p)
+      (bad-arg 'make-osi-output-port p))
+    (make-oport (osi-port-name p) p))
 
   (define (open-utf8-bytevector bv)
     (binary->utf8 (open-bytevector-input-port bv)))
@@ -349,9 +362,7 @@
   ;; Console Ports
 
   (define (make-console-input)
-    ;; no need to register static stdin port with the guardian
-    (define name "stdin-nb")
-    (binary->utf8 (make-iport name (make-osi-port name (erlang:now) (osi_get_stdin)) #f)))
+    (binary->utf8 (make-osi-input-port (open-fd-port "stdin-nb" 0 #f))))
 
   (define hook-console-input
     (let ([hooked? #f])
@@ -479,6 +490,16 @@
         (when (< result 0)
           (io-error path 'osi_chmod result))]
        [(,who . ,errno) (io-error path who errno)])))
+
+  (define (open-fd-port name fd close?)
+    (unless (string? name)
+      (bad-arg 'open-fd-port name))
+    (unless (and (fixnum? fd) (fx>= fd 0))
+      (bad-arg 'open-fd-port fd))
+    (with-interrupts-disabled
+     (match (osi_open_fd* fd close?)
+       [(,who . ,errno) (io-error name who errno)]
+       [,handle (@make-osi-port name handle)])))
 
   (define (open-file-port name flags mode)
     (define result)

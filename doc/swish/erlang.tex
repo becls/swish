@@ -1395,6 +1395,27 @@ for the file \var{path} using \var{mode}, which defaults to
 \code{\#o777}. It returns \var{path}.
 
 % ----------------------------------------------------------------------------
+\defineentry{make-osi-input-port}
+\begin{procedure}
+  \code{(make-osi-input-port \var{p})}
+\end{procedure}
+\returns{} a binary input port
+
+The \code{make-osi-input-port} procedure returns a custom binary input
+port that reads from osi-port \var{p}. It does not track position.
+
+% ----------------------------------------------------------------------------
+\defineentry{make-osi-output-port}
+\begin{procedure}
+  \code{(make-osi-output-port \var{p})}
+\end{procedure}
+\returns{} a binary output port
+
+The \code{make-osi-output-port} procedure returns a custom binary
+output port that writes to osi-port \var{p}. It does not track
+position.
+
+% ----------------------------------------------------------------------------
 \defineentry{make-utf8-transcoder}
 \begin{procedure}
   \code{(make-utf8-transcoder)}
@@ -1404,6 +1425,18 @@ for the file \var{path} using \var{mode}, which defaults to
 The \code{make-utf8-transcoder} procedure creates a UTF-8 transcoder
 with end-of-line style \code{none} and error-handling mode
 \code{replace}.
+
+% ----------------------------------------------------------------------------
+\defineentry{open-fd-port}
+\begin{procedure}
+  \code{(open-fd-port \var{name} \var{fd} \var{close?})}
+\end{procedure}
+\returns{} an osi-port
+
+The \code{open-fd-port} procedure creates an osi-port with the given
+\var{name} by calling \code{osi\_open\_fd} with \var{fd} and
+\var{close?}. The osi-port is registered with the osi-port
+guardian\index{osi-port guardian}.
 
 % ----------------------------------------------------------------------------
 \defineentry{open-file}
