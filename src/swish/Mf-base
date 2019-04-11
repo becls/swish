@@ -1,12 +1,14 @@
-.PHONY: all build-dirs clean platform-clean ready reminders
+.PHONY: all build-dirs clean platform-clean ready reminders submodules
 
-SETUP := Makefile build-dirs git.revision chezscheme.revision
+SETUP := Makefile submodules build-dirs git.revision chezscheme.revision
 CORE := ../../${BUILD}/bin/swish${EXESUFFIX} ../../${BUILD}/bin/swish.boot ../../${BUILD}/bin/swish.library
 AUXLIB := ../../${BUILD}/lib/swish/mat.so ../../${BUILD}/lib/swish/profile.so ../../${BUILD}/lib/swish/testing.so
 
 ready:: | ${SETUP}
 ready:: io-constants.ss ${SwishLibs}
-	@if git submodule status --recursive | grep -q '^[^ ]'; then \
+
+submodules:
+	@if cd ../.. && git submodule status --recursive | grep -q '^[^ ]'; then \
 	  echo "Please update git submodules (or stage submodule change)."; \
 	  exit 1; \
 	fi
