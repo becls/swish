@@ -804,8 +804,7 @@ ptr osi_spawn(const char* path, ptr args, ptr callback) {
     uv_close(&(in_port->h.handle), close_stream_cb);
     uv_close(&(out_port->h.handle), close_stream_cb);
     uv_close(&(err_port->h.handle), close_stream_cb);
-    Sunlock_object(callback);
-    free(p);
+    uv_close((uv_handle_t*)p, close_handle_data_cb);
     return osi_make_error_pair("uv_spawn", rc);
   }
   ptr r = Smake_vector(4, 0);
