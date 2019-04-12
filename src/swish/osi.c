@@ -1005,7 +1005,7 @@ ptr osi_list_uv_handles(void) {
 }
 
 ptr osi_open_fd(int fd, int close) {
-  if (fd < 0)
+  if ((fd < 0) || (close && (fd <= 2)))
     return osi_make_error_pair("osi_open_fd", UV_EINVAL);
   fs_port_t* port = malloc_container(fs_port_t);
   if (!port)

@@ -1413,7 +1413,9 @@ for the file \var{path} using \var{mode}, which defaults to
 \returns{} a binary input port
 
 The \code{make-osi-input-port} procedure returns a custom binary input
-port that reads from osi-port \var{p}. It does not track position.
+port that reads from osi-port \var{p}. It does not track
+position. Closing the input port closes the underlying osi-port
+\var{p}.
 
 % ----------------------------------------------------------------------------
 \defineentry{make-osi-output-port}
@@ -1424,7 +1426,8 @@ port that reads from osi-port \var{p}. It does not track position.
 
 The \code{make-osi-output-port} procedure returns a custom binary
 output port that writes to osi-port \var{p}. It does not track
-position.
+position. Closing the output port closes the underlying osi-port
+\var{p}.
 
 % ----------------------------------------------------------------------------
 \defineentry{make-utf8-transcoder}
@@ -1447,7 +1450,10 @@ with end-of-line style \code{none} and error-handling mode
 The \code{open-fd-port} procedure creates an osi-port with the given
 \var{name} by calling \code{osi\_open\_fd} with \var{fd} and
 \var{close?}. The osi-port is registered with the osi-port
-guardian\index{osi-port guardian}.
+guardian\index{osi-port guardian}. When the osi-port is closed, the
+underlying file descriptor \var{fd} is closed if and only if
+\var{close?} is not \code{\#f}. When $0 \le \var{fd} \le 2$,
+\var{close?} must be \code{\#f} for the standard I/O file descriptor.
 
 % ----------------------------------------------------------------------------
 \defineentry{open-file}
@@ -1580,6 +1586,16 @@ The \code{open-file-to-write} procedure calls\\
 
 The \code{open-utf8-bytevector} procedure calls
 \code{(binary->utf8 (open-bytevector-input-port \var{bv}))}.
+
+% ----------------------------------------------------------------------------
+\defineentry{osi-port-closed?}
+\begin{procedure}
+  \code{(osi-port-closed? \var{p})}
+\end{procedure}
+\returns{} a boolean
+
+The \code{osi-port-closed?} procedure determines whether or not the
+osi-port \var{p} is closed.
 
 % ----------------------------------------------------------------------------
 \defineentry{osi-port-count}

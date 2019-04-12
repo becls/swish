@@ -57,6 +57,7 @@
    open-file-to-replace
    open-file-to-write
    open-utf8-bytevector
+   osi-port-closed?
    osi-port-count
    osi-port-create-time
    osi-port-name
@@ -118,10 +119,17 @@
      (immutable create-time)
      (mutable handle)))
 
+  (define (get-osi-port-handle who p)
+    (unless (osi-port? p)
+      (bad-arg who p))
+    (or (osi-port-handle p)
+        (raise `#(osi-port-closed ,who ,p))))
+
   (define (read-osi-port port bv start n fp)
     (define result)
     (with-interrupts-disabled
-     (match (osi_read_port* (osi-port-handle port) bv start n fp
+     (match (osi_read_port* (get-osi-port-handle 'read-osi-port port)
+              bv start n fp
               (let ([p self])
                 (lambda (r)
                   (#%$keep-live port)
@@ -138,7 +146,8 @@
   (define (write-osi-port port bv start n fp)
     (define result)
     (with-interrupts-disabled
-     (match (osi_write_port* (osi-port-handle port) bv start n fp
+     (match (osi_write_port* (get-osi-port-handle 'write-osi-port port)
+              bv start n fp
               (let ([p self])
                 (lambda (r)
                   (#%$keep-live port)
@@ -152,6 +161,8 @@
        [(,who . ,errno) (io-error (osi-port-name port) who errno)])))
 
   (define (close-osi-port port)
+    (unless (osi-port? port)
+      (bad-arg 'close-osi-port port))
     (with-interrupts-disabled
      (let ([handle (osi-port-handle port)])
        (when handle
@@ -254,6 +265,11 @@
 
   (define osi-port-guardian (make-guardian))
   (define osi-port-table (make-weak-eq-hashtable))
+
+  (define (osi-port-closed? p)
+    (unless (osi-port? p)
+      (bad-arg 'osi-port-closed? p))
+    (not (osi-port-handle p)))
 
   (define (osi-port-count) (hashtable-size osi-port-table))
 
@@ -526,7 +542,7 @@
   (define (get-file-size port)
     (define result)
     (with-interrupts-disabled
-     (match (osi_get_file_size* (osi-port-handle port)
+     (match (osi_get_file_size* (get-osi-port-handle 'get-file-size port)
               (let ([p self])
                 (lambda (r)
                   (#%$keep-live port)
