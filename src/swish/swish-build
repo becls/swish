@@ -346,6 +346,8 @@
     ;; ".so" extension so that compile-library can build both the ".so" file
     ;; and its ".wpo" by-product without conflict.
     (generate-wpo-files #t)
+    (generate-inspector-information #f)
+    (generate-procedure-source-information #t)
     (compile-imported-libraries #t)
     (compile-file-message #f)
     (compile-library-handler

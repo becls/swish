@@ -59,6 +59,8 @@ compile.ss: ${SwishLibs}
 	'(library-directories (quote (("." . "../${BUILD}/lib"))))' \
 	'(library-extensions (quote ((".ss" . ".wpo"))))' \
 	'(generate-wpo-files #t)' \
+	'(generate-inspector-information #f)' \
+	'(generate-procedure-source-information #t)' \
 	'(import (swish imports))' \
 	'(printf "compiling swish.library~%")' \
 	'(compile-whole-library "../'${BUILD}'/lib/swish/imports.wpo" "../${BUILD}/bin/swish.library")' \
@@ -68,6 +70,8 @@ compile.ss: ${SwishLibs}
 	@echo \
 	'(library-directories (quote (("." . "../${BUILD}/lib"))))' \
 	'(generate-wpo-files #t)' \
+	'(generate-inspector-information #f)' \
+	'(generate-procedure-source-information #t)' \
 	'(import (swish $(<:.ss=)))' \
 	| ../../${BUILD}/bin/swish${EXESUFFIX} -q -- compile.ss
 
