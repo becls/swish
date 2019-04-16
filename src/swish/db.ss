@@ -348,31 +348,36 @@
 
   (define (database-count) (hashtable-size database-table))
 
+  (define (sorted-cells ht create-time)
+    (let ([v (with-interrupts-disabled (hashtable-cells ht))])
+      (vector-sort!
+       (lambda (x1 x2)
+         (let ([t1 (create-time (car x1))] [t2 (create-time (car x2))])
+           (cond
+            [(< t1 t2) #t]
+            [(> t1 t2) #f]
+            [else (< (cdr x1) (cdr x2))])))
+       v)
+      v))
+
   (define print-databases
     (case-lambda
      [() (print-databases (current-output-port))]
      [(op)
-      (let ([v (with-interrupts-disabled (hashtable-keys database-table))])
-        (vector-sort!
-         (lambda (d1 d2)
-           (let ([t1 (database-create-time d1)] [t2 (database-create-time d2)])
-             (cond
-              [(< t1 t2) #t]
-              [(> t1 t2) #f]
-              [else (< (database-handle d1) (database-handle d2))])))
-         v)
-        (vector-for-each
-         (lambda (d)
+      (vector-for-each
+       (lambda (x)
+         (let ([d (car x)])
            (fprintf op "  ~d: ~a opened ~d\n"
-             (database-handle d)
+             (cdr x)
              (database-filename d)
-             (database-create-time d)))
-         v))]))
+             (database-create-time d))))
+       (sorted-cells database-table database-create-time))]))
 
-  (define (@register-database db)
-    (database-guardian db)
-    (eq-hashtable-set! database-table db 0)
-    db)
+  (define (@make-database filename create-time handle)
+    (let ([db (make-database filename create-time handle)])
+      (database-guardian db)
+      (eq-hashtable-set! database-table db handle)
+      db))
 
   (define (close-dead-databases)
     (let ([db (database-guardian)])
@@ -396,28 +401,21 @@
     (case-lambda
      [() (print-statements (current-output-port))]
      [(op)
-      (let ([v (with-interrupts-disabled (hashtable-keys statement-table))])
-        (vector-sort!
-         (lambda (s1 s2)
-           (let ([t1 (statement-create-time s1)] [t2 (statement-create-time s2)])
-             (cond
-              [(< t1 t2) #t]
-              [(> t1 t2) #f]
-              [else (< (statement-handle s1) (statement-handle s2))])))
-         v)
-        (vector-for-each
-         (lambda (s)
+      (vector-for-each
+       (lambda (x)
+         (let ([s (car x)])
            (fprintf op "  ~d: ~d ~a prepared ~d\n"
-             (statement-handle s)
+             (cdr x)
              (database-handle (statement-database s))
              (statement-sql s)
-             (statement-create-time s)))
-         v))]))
+             (statement-create-time s))))
+       (sorted-cells statement-table statement-create-time))]))
 
-  (define (@register-statement s)
-    (statement-guardian s)
-    (eq-hashtable-set! statement-table s 0)
-    s)
+  (define (@make-statement database sql create-time handle)
+    (let ([s (make-statement database sql create-time handle)])
+      (statement-guardian s)
+      (eq-hashtable-set! statement-table s handle)
+      s))
 
   (define (close-dead-statements)
     (let ([s (statement-guardian)])
@@ -451,8 +449,7 @@
                 (lambda (r)
                   (if (pair? r)
                       (set! result r)
-                      (set! result (@register-database
-                                    (make-database filename (erlang:now) r))))
+                      (set! result (@make-database filename (erlang:now) r)))
                   (complete-io p))))
        [#t
         (wait-for-io filename)
@@ -480,7 +477,7 @@
             (wait-for-io (database-filename db))
             (when (pair? result)
               (database-handle-set! db handle)
-              (eq-hashtable-set! database-table db 0)
+              (eq-hashtable-set! database-table db handle)
               (db-error 'close result db))]
            [,error
             (db-error 'close error db)])))))
@@ -491,11 +488,9 @@
      (match (osi_prepare_statement* (database-handle db) sql
               (let ([p self])
                 (lambda (r)
-                  (#%$keep-live db)
                   (if (pair? r)
                       (set! result r)
-                      (set! result (@register-statement
-                                    (make-statement db sql (erlang:now) r))))
+                      (set! result (@make-statement db sql (erlang:now) r)))
                   (complete-io p))))
        [#t
         (wait-for-io (database-filename db))

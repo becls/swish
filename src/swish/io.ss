@@ -273,31 +273,35 @@
 
   (define (osi-port-count) (hashtable-size osi-port-table))
 
+  (define (sorted-cells ht create-time)
+    (let ([v (with-interrupts-disabled (hashtable-cells ht))])
+      (vector-sort!
+       (lambda (x1 x2)
+         (let ([t1 (create-time (car x1))] [t2 (create-time (car x2))])
+           (cond
+            [(< t1 t2) #t]
+            [(> t1 t2) #f]
+            [else (< (cdr x1) (cdr x2))])))
+       v)
+      v))
+
   (define print-osi-ports
     (case-lambda
      [() (print-osi-ports (current-output-port))]
      [(op)
-      (let ([v (with-interrupts-disabled (hashtable-keys osi-port-table))])
-        (vector-sort!
-         (lambda (p1 p2)
-           (let ([t1 (osi-port-create-time p1)] [t2 (osi-port-create-time p2)])
-             (cond
-              [(< t1 t2) #t]
-              [(> t1 t2) #f]
-              [else (< (osi-port-handle p1) (osi-port-handle p2))])))
-         v)
-        (vector-for-each
-         (lambda (p)
+      (vector-for-each
+       (lambda (x)
+         (let ([p (car x)])
            (fprintf op "  ~d: ~a opened ~d\n"
-             (osi-port-handle p)
+             (cdr x)
              (osi-port-name p)
-             (osi-port-create-time p)))
-         v))]))
+             (osi-port-create-time p))))
+       (sorted-cells osi-port-table osi-port-create-time))]))
 
   (define (@make-osi-port name handle)
     (let ([port (make-osi-port name (erlang:now) handle)])
       (osi-port-guardian port)
-      (eq-hashtable-set! osi-port-table port 0)
+      (eq-hashtable-set! osi-port-table port handle)
       port))
 
   (define (close-dead-osi-ports)
@@ -325,22 +329,14 @@
     (case-lambda
      [() (print-path-watchers (current-output-port))]
      [(op)
-      (let ([v (with-interrupts-disabled (hashtable-keys path-watcher-table))])
-        (vector-sort!
-         (lambda (p1 p2)
-           (let ([t1 (path-watcher-create-time p1)] [t2 (path-watcher-create-time p2)])
-             (cond
-              [(< t1 t2) #t]
-              [(> t1 t2) #f]
-              [else (< (path-watcher-handle p1) (path-watcher-handle p2))])))
-         v)
-        (vector-for-each
-         (lambda (p)
+      (vector-for-each
+       (lambda (x)
+         (let ([p (car x)])
            (fprintf op "  ~d: ~a opened ~d\n"
-             (path-watcher-handle p)
+             (cdr x)
              (path-watcher-path p)
-             (path-watcher-create-time p)))
-         v))]))
+             (path-watcher-create-time p))))
+       (sorted-cells path-watcher-table path-watcher-create-time))]))
 
   (define (close-dead-path-watchers)
     ;; This procedure runs in the finalizer process.
@@ -377,7 +373,7 @@
        [,handle
         (let ([w (make-path-watcher path (erlang:now) handle)])
           (path-watcher-guardian w)
-          (eq-hashtable-set! path-watcher-table w 0)
+          (eq-hashtable-set! path-watcher-table w handle)
           w)])))
 
   ;; Console Ports
@@ -706,31 +702,23 @@
     (case-lambda
      [() (print-tcp-listeners (current-output-port))]
      [(op)
-      (let ([v (with-interrupts-disabled (hashtable-keys listener-table))])
-        (vector-sort!
-         (lambda (l1 l2)
-           (let ([t1 (listener-create-time l1)] [t2 (listener-create-time l2)])
-             (cond
-              [(< t1 t2) #t]
-              [(> t1 t2) #f]
-              [else (< (listener-handle l1) (listener-handle l2))])))
-         v)
-        (vector-for-each
-         (lambda (l)
-           (define (contains-period? s)
-             (let lp ([i 0] [n (string-length s)])
-               (and (< i n)
-                    (or (char=? (string-ref s i) #\.)
-                        (lp (+ i 1) n)))))
-           (fprintf op "  ~d: " (listener-handle l))
-           (let ([addr (listener-address l)])
-             (if (contains-period? addr)
-                 (display-string addr op)
-                 (fprintf op "[~a]" addr)))
+      (vector-for-each
+       (lambda (x)
+         (define (contains-period? s)
+           (let lp ([i 0] [n (string-length s)])
+             (and (< i n)
+                  (or (char=? (string-ref s i) #\.)
+                      (lp (+ i 1) n)))))
+         (fprintf op "  ~d: " (cdr x))
+         (let* ([l (car x)]
+                [addr (listener-address l)])
+           (if (contains-period? addr)
+               (display-string addr op)
+               (fprintf op "[~a]" addr))
            (fprintf op ":~d opened ~d\n"
              (listener-port-number l)
-             (listener-create-time l)))
-         v))]))
+             (listener-create-time l))))
+       (sorted-cells listener-table listener-create-time))]))
 
   (define (port-number? x) (and (fixnum? x) (fx<= 0 x 65535)))
 
@@ -786,7 +774,7 @@
                    (erlang:now) handle)])
           (set-car! cell l)
           (listener-guardian l)
-          (eq-hashtable-set! listener-table l 0)
+          (eq-hashtable-set! listener-table l handle)
           l)])))
 
   (define (close-tcp-listener listener)
