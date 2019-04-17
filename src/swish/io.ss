@@ -128,20 +128,22 @@
   (define (read-osi-port port bv start n fp)
     (define result)
     (with-interrupts-disabled
-     (match (osi_read_port* (get-osi-port-handle 'read-osi-port port)
-              bv start n fp
-              (let ([p self])
-                (lambda (r)
-                  (#%$keep-live port)
-                  (set! result r)
-                  (complete-io p))))
-       [#t
-        (wait-for-io (osi-port-name port))
-        (cond
-         [(>= result 0) result]
-         [(eqv? result UV_EOF) 0]
-         [else (io-error (osi-port-name port) 'osi_read_port result)])]
-       [(,who . ,errno) (io-error (osi-port-name port) who errno)])))
+     (let retry ()
+       (match (osi_read_port* (get-osi-port-handle 'read-osi-port port)
+                bv start n fp
+                (let ([p self])
+                  (lambda (r)
+                    (#%$keep-live port)
+                    (set! result r)
+                    (complete-io p))))
+         [#t
+          (wait-for-io (osi-port-name port))
+          (cond
+           [(>= result 0) result]
+           [(eqv? result UV_EOF) 0]
+           [(eqv? result UV_EINTR) (retry)]
+           [else (io-error (osi-port-name port) 'osi_read_port result)])]
+         [(,who . ,errno) (io-error (osi-port-name port) who errno)]))))
 
   (define (write-osi-port port bv start n fp)
     (define result)
