@@ -52,8 +52,7 @@
     (let ([revs (make-hashtable symbol-hash eq?)])
       (case-lambda
        [()
-        (let-values ([(keys vals) (hashtable-entries revs)])
-          (vector->list (vector-map cons keys vals)))]
+        (vector->list (hashtable-cells revs))]
        [(key)
         (hashtable-ref revs key #f)]
        [(key hash)
