@@ -701,6 +701,7 @@ ptr osi_make_uuid(void) {
 }
 
 void osi_exit(int status) {
+  uv_loop_close(osi_loop);
   _exit(status);
 }
 

@@ -20,6 +20,7 @@
 ;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 ;;; DEALINGS IN THE SOFTWARE.
 
+#!chezscheme
 (library (swish application)
   (export
    application:shutdown
@@ -60,6 +61,10 @@
   (define (exit-process exit-code)
     (catch (flush-output-port (console-output-port)))
     (catch (flush-output-port (console-error-port)))
+    (let ([p (#%$top-level-value '$console-input-port)])
+      ;; convince Chez Scheme to close console-input port
+      (#%$set-top-level-value! '$console-input-port #f)
+      (close-port p))
     (osi_exit exit-code))
 
   (define (application:start starter)
