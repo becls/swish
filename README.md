@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/becls/swish.svg?branch=master)](https://travis-ci.org/becls/swish)
+
 # Swish Concurrency Engine
 
 The Swish Concurrency Engine is a framework used to write
