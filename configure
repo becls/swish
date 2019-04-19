@@ -504,3 +504,8 @@ add ""
 add "include Mf-config"
 add "include Mf-${BASE_MACHINE_TYPE}"
 add "include Mf-base"
+
+git submodule update --init
+if [ ! -d libuv/build/gyp ]; then
+    git clone --depth 1 https://github.com/chromium/gyp.git libuv/build/gyp
+fi
