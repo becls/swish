@@ -21,6 +21,6 @@ matrix:
         - sudo sysctl net.ipv6.conf.all.disable_ipv6=0
 dist: xenial
 script:
+  - .travis/get-chez-scheme.sh
   - .travis/build.sh
-after_failure:
-  - cat src/*.mo src/swish/*.mo
+  - .travis/test.sh
