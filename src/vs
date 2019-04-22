@@ -1,0 +1,4 @@
+#!/bin/bash
+BITS=$1
+shift
+MSYS_NO_PATHCONV=1 cmd.exe /c "${0//\//\\}${BITS}.bat" "$@"

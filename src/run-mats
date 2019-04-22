@@ -20,14 +20,20 @@ case $# in
   *) fail;;
 esac
 
-if [ ! -d "${LIBDIR}" ]; then
-  echo "${this} expected to find $LIBDIR"
-  echo ""
+GITTOP="$(git rev-parse --show-toplevel)"
+case "$(uname -s)" in
+  MINGW64_NT-* | MSYS_NT-*)
+    GITTOP="$(cygpath -u "$GITTOP")"
+    ;;
+esac
+if [ "$PWD" != "$GITTOP" ]; then
+  echo "${this} expected to be run from the repository root"
   fail
 fi
 
-if [ "$PWD" != "$(git rev-parse --show-toplevel)" ]; then
-  echo "${this} expected to be run from the repository root"
+if [ ! -d "${LIBDIR}" ]; then
+  echo "${this} expected to find $LIBDIR"
+  echo ""
   fail
 fi
 

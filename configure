@@ -35,9 +35,15 @@ MYCC=
 MYCPPFLAGS=
 MYCFLAGS=
 MYLDFLAGS=
+FSROOT=
 
 case "${CONFIG_UNAME}" in
   CYGWIN_NT-*)
+    Windows=yes
+    NORMALIZE_PATH="cygpath -au"
+    FSROOT="/cygdrive"
+    ;;
+  MINGW64_NT-* | MSYS_NT-*)
     Windows=yes
     NORMALIZE_PATH="cygpath -au"
     ;;
@@ -134,7 +140,7 @@ resolve() {
 
 
 if [ "${Windows}" = "yes" ]; then
-  resolve "PYTHON" "--python=" "/cygdrive/c/Python27/python.exe"
+  resolve "PYTHON" "--python=" "${FSROOT}/c/Python27/python.exe"
 else
   resolve "PYTHON" "--python=" "python2.7"
 fi
@@ -143,9 +149,8 @@ resolve "SCHEME" "--scheme=" "scheme"
 if no_errors; then
   SCHEME="$(realpath "${SCHEME}")"
   if [ "${Windows}" = "yes" ]; then
-    PYTHON="$(cygpath -aw "${PYTHON}")"
     set +e
-    ACTUAL="$(cmd /A /E:OFF /F:OFF /V:OFF /D /S /C "${PYTHON}" -c "import sys; print sys.version_info.major, sys.version_info.minor, sys.platform;" 2>&1)"
+    ACTUAL="$("${PYTHON}" -c "import sys; print sys.version_info.major, sys.version_info.minor, sys.platform;" 2>&1)"
     case "${ACTUAL}" in
       2\ 7\ win*)
       set -e
@@ -156,6 +161,7 @@ if no_errors; then
       err "Got: ${ACTUAL}"
       ;;
     esac
+    PYTHON="$(cygpath -aw "${PYTHON}")"
   fi
 fi
 
@@ -381,7 +387,7 @@ SWISH_INCLUDE="${BASE}/src/swish"
 SWISH_LIBPATH="${BASE}/build/release/bin"
 LIBUV_INCLUDE="${BASE}/libuv/include"
 case "${CONFIG_UNAME}" in
-  CYGWIN_NT-*)
+  CYGWIN_NT-* | MINGW64_NT-* | MSYS_NT-*)
     UvLib=libuv/Release
     ;;
   Darwin)
@@ -442,7 +448,11 @@ else
 fi
 
 set_output ";;" src/osi-bootstrap.ss
-ROOT="$(${NORMALIZE_PATH} "${BASE}")"
+if [ "${Windows}" = "yes" ]; then
+  ROOT="$(cygpath -am "${BASE}")"
+else
+  ROOT="$(realpath -m "${BASE}")"
+fi
 add "(let ()"
 add "  (define (path-combine . paths) (format \"~{~a~^/~}\" paths))"
 add "  (define dir"
@@ -467,7 +477,14 @@ add "CFLAGS:=${MYCFLAGS}"
 add "LDFLAGS:=${MYLDFLAGS}"
 if [ "${Windows}" = "yes" ]; then
   if [ ! -z "${CUSTOMPATH}" ]; then
-    add "export PATH = ${PATH}"
+    case "${CONFIG_UNAME}" in
+      MINGW64_NT-* | MSYS_NT-*)
+        add "export PATH=$(cygpath -pw "${PATH}")"
+        ;;
+      *)
+        add "export PATH=${PATH}"
+        ;;
+    esac
   fi
 fi
 if [ ! -z "${SCHEMEHEAPDIRS:-}" ]; then

@@ -19,6 +19,22 @@ matrix:
       env: TARGET_MACHINE=a6le
       before_script:
         - sudo sysctl net.ipv6.conf.all.disable_ipv6=0
+    - os: windows
+      env: TARGET_MACHINE=a6nt
+      before_script:
+        - git config core.autocrlf false
+        - rm .git/index
+        - git reset --hard
+        - choco install make -y
+        - choco install python2 -y
+    - os: windows
+      env: TARGET_MACHINE=i3nt
+      before_script:
+        - git config core.autocrlf false
+        - rm .git/index
+        - git reset --hard
+        - choco install make -y
+        - choco install python2 -y
 dist: xenial
 script:
   - .travis/get-chez-scheme.sh
