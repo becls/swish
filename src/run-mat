@@ -11,15 +11,15 @@ if [ $# != 1 ] && [ $# != 2 ]; then
   exit
 fi
 
-launch="./go -q -- $1.ms"
-
 find . -name "*.mo" -delete
 rm -f ../data/server.profile
 rm -f ../data/TestLog.db3
 make -s -C swish
 
-$launch <<EOF
-(import (swish mat))
+./go -q <<EOF
+(import (swish mat) (swish profile) (swish testing))
 (cd "..")
+(source-directories '("src" "."))
+(load "$1.ms")
 (run-mats $2)
 EOF

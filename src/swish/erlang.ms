@@ -80,14 +80,15 @@
   (define scheme-args
     (list
      "--eedisable"
-     "--program" "repl.ss"))
+     "--program" "repl.ss" "-q"))
   (define (write-stdin op)
     (fprintf op "~s\n" code)
     (flush-output-port op))
   (define (launch)
     (match (vector->list (osi_get_argv))
       [()
-       (run-os-process scheme-exe scheme-args write-stdin 10000 '())]
+       (parameterize ([cd "src"])
+         (run-os-process scheme-exe scheme-args write-stdin 10000 '()))]
       [(,command . ,args)
        (run-os-process command args write-stdin 10000 '())]))
   (match (launch)
