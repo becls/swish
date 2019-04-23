@@ -407,7 +407,7 @@ if [ -n "${SCHEMEHEAPDIRS:-}" ]; then
 fi
 if [ "${Windows}" = "yes" ]; then
   add "export SCHEME_WIN='$(cygpath -aw "${SCHEME}")'"
-  add "export PATH='${SCHEME_LIBPATH}:${PATH}'"
+  add "export PATH='${PATH}'"
 fi
 
 set_output "#" src/swish/Mf-config
