@@ -125,7 +125,10 @@
   (cp0-effort-limit 0)
   (run-cp0 (lambda (f x) x)))
 (cd "..")
-(new-cafe
- (lambda (x)
-   (reset-handler abort)
-   (eval x)))
+(call-with-values
+  (lambda ()
+    (new-cafe
+     (lambda (x)
+       (reset-handler abort)
+       (eval x))))
+  exit)
