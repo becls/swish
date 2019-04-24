@@ -22,17 +22,13 @@ matrix:
     - os: windows
       env: TARGET_MACHINE=a6nt
       before_script:
-        - git config core.autocrlf false
-        - rm .git/index
-        - git reset --hard
+        - git config core.autocrlf false; rm .git/index; git reset --hard
         - choco install make -y
         - choco install python2 -y
     - os: windows
       env: TARGET_MACHINE=i3nt
       before_script:
-        - git config core.autocrlf false
-        - rm .git/index
-        - git reset --hard
+        - git config core.autocrlf false; rm .git/index; git reset --hard
         - choco install make -y
         - choco install python2 -y
 dist: xenial
