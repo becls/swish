@@ -394,24 +394,24 @@
                [(library) (when tmp-fn (rm-f tmp-fn))]
                [(component linked stand-alone) (rm-f obj-fn)])
       (when (> (verbosity) 0) (printf "compiling ~a\n" (source-file)))
-      (generate-inspector-information #f)
-      (generate-procedure-source-information #t)
-      (generate-wpo-files #t)
-      (compile-imported-libraries #t)
-      (compile-file-message #f)
-      (compile-help source-fn obj-fn target-type)
-      (let* ([wpo-file (change-extension obj-fn ".wpo")]
-             [libs (compile-wpo wpo-file output-fn target-type)]
-             [missing-libs
-              ;; Stand-alone program should have found all required non-swish libraries.
-              ;; If swish libraries are incorporated via whole-program optimization,
-              ;; then we must also have found the those libraries.
-              ;; Dependent programs can use swish libraries included in runtime,
-              ;; as can stand-alone programs that explicitly specify --rtlib swish.
-              (if swish-wpo?
-                  libs
-                  (remp swish-lib? libs))])
-        missing-libs))))
+      (parameterize ([generate-inspector-information #f]
+                     [generate-procedure-source-information #t]
+                     [generate-wpo-files #t]
+                     [compile-imported-libraries #t]
+                     [compile-file-message #f])
+        (compile-help source-fn obj-fn target-type)
+        (let* ([wpo-file (change-extension obj-fn ".wpo")]
+               [libs (compile-wpo wpo-file output-fn target-type)]
+               [missing-libs
+                ;; Stand-alone program should have found all required non-swish libraries.
+                ;; If swish libraries are incorporated via whole-program optimization,
+                ;; then we must also have found the those libraries.
+                ;; Dependent programs can use swish libraries included in runtime,
+                ;; as can stand-alone programs that explicitly specify --rtlib swish.
+                (if swish-wpo?
+                    libs
+                    (remp swish-lib? libs))])
+          missing-libs)))))
 
 (define boot-file-map
   (let ([cache #f])

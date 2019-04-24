@@ -128,9 +128,14 @@
     (printf "Hello, World!\n")))
 
 (isolate-mat fat1 ()
+  (define wpo-file (string-append (path-root (input-file "fat1")) ".wpo"))
   ;; fat with petite only
   (write-example "fat1" hello-fat)
+  (delete-file wpo-file)
   (build-example "fat1" '("-b" "petite"))
+  (match (get-stat wpo-file)
+    [`(<stat>) (raise "wpo file remains")]
+    [,_ 'ok])
   (run-fat "fat1" '() '("Hello, World!")))
 
 (isolate-mat fat2 ()
