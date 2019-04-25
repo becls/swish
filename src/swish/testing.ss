@@ -64,7 +64,7 @@
   (profile:exclude)
 
   (define scheme-exe
-    (or (getenv (if (memq (machine-type) '(a6nt i3nt)) "SCHEME_WIN" "SCHEME"))
+    (or (getenv (if (memq (machine-type) '(a6nt i3nt ta6nt ti3nt)) "SCHEME_WIN" "SCHEME"))
         "scheme"))
 
   (define-syntax assert-syntax-error

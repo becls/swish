@@ -67,7 +67,7 @@
            [op (open-file out (+ O_WRONLY O_CREAT) #o777 'binary-output)])
       (on-exit (close-port op)
         (put-bytevector op bv))))
-  (when (memq (machine-type) '(a6nt i3nt))
+  (when (memq (machine-type) '(a6nt i3nt ta6nt ti3nt))
     (for-each
      (lambda (fn)
        (let* ([in (path-combine (prereq-path) fn)]

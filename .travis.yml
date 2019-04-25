@@ -1,10 +1,15 @@
 language: c
 matrix:
   include:
-    - os: osx
-      env: TARGET_MACHINE=a6osx
-    - os: linux
-      env: TARGET_MACHINE=i3le
+    # macOS
+    - env: TARGET_MACHINE=a6osx
+      os: osx
+    - env: TARGET_MACHINE=ta6osx
+      os: osx
+
+    # Linux
+    - env: TARGET_MACHINE=i3le
+      os: linux
       addons:
         apt:
           packages:
@@ -15,18 +20,48 @@ matrix:
             - uuid-dev:i386
       before_script:
         - sudo sysctl net.ipv6.conf.all.disable_ipv6=0
-    - os: linux
-      env: TARGET_MACHINE=a6le
+    - env: TARGET_MACHINE=ti3le
+      os: linux
+      addons:
+        apt:
+          packages:
+            - gcc-multilib
+            - g++-multilib
+            - lib32ncurses5-dev
+            - libx32ncurses5-dev
+            - uuid-dev:i386
       before_script:
         - sudo sysctl net.ipv6.conf.all.disable_ipv6=0
-    - os: windows
-      env: TARGET_MACHINE=a6nt
+    - env: TARGET_MACHINE=a6le
+      os: linux
+      before_script:
+        - sudo sysctl net.ipv6.conf.all.disable_ipv6=0
+    - env: TARGET_MACHINE=ta6le
+      os: linux
+      before_script:
+        - sudo sysctl net.ipv6.conf.all.disable_ipv6=0
+
+    # Windows
+    - env: TARGET_MACHINE=i3nt
+      os: windows
       before_script:
         - git config core.autocrlf false; rm .git/index; git reset --hard
         - choco install make -y
         - choco install python2 -y
-    - os: windows
-      env: TARGET_MACHINE=i3nt
+    - env: TARGET_MACHINE=ti3nt
+      os: windows
+      before_script:
+        - git config core.autocrlf false; rm .git/index; git reset --hard
+        - choco install make -y
+        - choco install python2 -y
+    - env: TARGET_MACHINE=a6nt
+      os: windows
+      before_script:
+        - git config core.autocrlf false; rm .git/index; git reset --hard
+        - choco install make -y
+        - choco install python2 -y
+    - env: TARGET_MACHINE=ta6nt
+      os: windows
       before_script:
         - git config core.autocrlf false; rm .git/index; git reset --hard
         - choco install make -y
