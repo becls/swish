@@ -17,9 +17,11 @@ rm -f ../data/TestLog.db3
 make -s -C swish
 
 ./go -q <<EOF
+(reset-handler abort)
 (import (swish mat) (swish profile) (swish testing))
 (cd "..")
 (source-directories '("src" "."))
+(library-directories '("src" "."))
 (load "$1.ms")
 (run-mats $2)
 EOF
