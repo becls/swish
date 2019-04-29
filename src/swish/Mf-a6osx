@@ -18,12 +18,12 @@ SwishLibs := ../../${BUILD}/bin/libosi.dylib ../../${BUILD}/lib/swish_kernel.o
 sqlite3.o: sqlite3.h sqlite3.c
 	$C -DSQLITE_ENABLE_JSON1 -DSQLITE_THREADSAFE=2 -c sqlite3.c
 
-io-constants: io-constants.c ${UvInclude}
-	$C -I"${LIBUV_INCLUDE}" io-constants.c -o io-constants
-
 ${UvLib}/libuv.a: ${UvInclude}
 	cd ../../libuv; "${PYTHON}" gyp_uv.py -Duv_library=static_library -Dtarget_arch="x64" -f xcode
 	cd ../../libuv/out; xcodebuild -ARCHS="x86_64" -project uv.xcodeproj -configuration Release -target libuv
+
+io-constants: io-constants.c ${UvInclude}
+	$C -I"${LIBUV_INCLUDE}" io-constants.c -o io-constants
 
 platform-clean:
 	rm -f main.o osi.o run.o sqlite.o

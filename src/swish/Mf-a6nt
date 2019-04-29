@@ -19,14 +19,14 @@ sqlite3.obj: sqlite3.h sqlite3.c
 ../../${BUILD}/bin/sqlite3.dll ../../${BUILD}/bin/sqlite3.lib: sqlite3.obj
 	${LD} /dll /out:../../${BUILD}/bin/sqlite3.dll sqlite3.obj
 
-io-constants.exe: io-constants.c ${UvInclude}
-	$C /I"${LIBUV_INCLUDE}" io-constants.c
-
 ../../libuv/Release/libuv.dll: ${UvInclude}
 	-cd ../../libuv; MSYS_NO_PATHCONV=1 PYTHON="${PYTHON}" cmd.exe /c vcbuild.bat release vs2017 x64 shared
 
 ../../${BUILD}/bin/libuv.dll ../../${BUILD}/bin/libuv.lib: ${UvLib}/libuv.dll ${UvLib}/libuv.lib | build-dirs
 	cp -f ${UvLib}/libuv.{dll,exp,lib,pdb} ../../${BUILD}/bin
+
+io-constants.exe: io-constants.c ${UvInclude}
+	$C /I"${LIBUV_INCLUDE}" io-constants.c
 
 platform-clean:
 	rm -f ../../${BUILD}/bin/osi.{dll,exp,ilk,lib,pdb} osi.obj sqlite.obj io-constants.{exe,obj}
