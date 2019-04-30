@@ -23,6 +23,7 @@
 (library (swish script-testing)
   (export
    <os-process-failed>
+   ensure-dlls
    fix-exe
    output-dir
    prereq-path
@@ -62,6 +63,27 @@
 
   (define swish-exe
     (get-real-path (path-combine (prereq-path) (fix-exe "swish"))))
+
+  (define (ensure-dlls)
+    (define (mtime fn)
+      (match (get-stat fn)
+        [`(<stat> [mtime (,sec . ,nsec)]) (make-time 'time-duration nsec sec)]
+        [,_ #f]))
+    (define (copy-file in out)
+      (let* ([bv (read-file in)]
+             [op (open-file out (+ O_WRONLY O_CREAT) #o777 'binary-output)])
+        (on-exit (close-port op)
+          (put-bytevector op bv))))
+    (when (memq (machine-type) '(a6nt i3nt ta6nt ti3nt))
+      (for-each
+       (lambda (fn)
+         (let* ([in (path-combine (prereq-path) fn)]
+                [out (path-combine (output-dir) fn)]
+                [in-time (mtime in)]
+                [out-time (mtime out)])
+           (when (or (not out-time) (time>? in-time out-time))
+             (copy-file in out))))
+       '("libuv.dll" "sqlite3.dll" "osi.dll"))))
 
   (define-tuple <os-process-failed> command args stdout stderr exit-status)
 

@@ -15,6 +15,13 @@
 /run.o
 /run.obj
 /sh-config
+/shlibtest.dll
+/shlibtest.exp
+/shlibtest.ilk
+/shlibtest.lib
+/shlibtest.obj
+/shlibtest.pdb
+/shlibtest.so
 /sqlite.o
 /sqlite.obj
 /sqlite3.o

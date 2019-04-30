@@ -31,6 +31,10 @@ ${UvLib}/libuv.a: ${UvInclude}
 io-constants: io-constants.c ${UvInclude}
 	$C -I"${LIBUV_INCLUDE}" io-constants.c -o io-constants
 
+SHLIBTEST := shlibtest.so
+${SHLIBTEST}: shlibtest.c
+	$C -shared -o $@ $^ -I"${LIBUV_INCLUDE}" -I"${SCHEME_INCLUDE}" -I"${SWISH_INCLUDE}"
+
 platform-clean:
 	rm -f main.o osi.o run.o sqlite.o
 

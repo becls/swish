@@ -80,6 +80,7 @@ clean: platform-clean
 	rm -f ../../${BUILD}/lib/swish/*.so
 	rm -f ../../${BUILD}/lib/swish/*.wpo
 	rm -f ${SwishLibs}
+	rm -f ${SHLIBTEST}
 	rm -f chezscheme.revision
 	rm -f git.revision
 	rm -f io-constants.ss io-constants${EXESUFFIX}
@@ -127,7 +128,8 @@ install-bin: install-check all
 	cd ../../web ; find . -type f -exec ${GNU_INSTALL} -D -T {} ${INSTWEBDIR}/{} \;
 
 .PHONY: mat-prereq
-mat-prereq:
+mat-prereq:: | ${SETUP}
+mat-prereq:: ${SHLIBTEST}
 	@printf "making mat-prereq ... "
 	@rm -rf ../../build/mat-prereq
 	@$(MAKE) install-bin INSTALLROOT="$$(${NORMALIZE_PATH} ../../build/mat-prereq)" SWISH_VERSION=".x.y.z" MACHINE_TYPE="arch" > /dev/null

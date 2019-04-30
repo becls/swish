@@ -35,6 +35,7 @@
     (swish errors)
     (swish event-mgr)
     (swish events)
+    (swish foreign)
     (swish gatekeeper)
     (swish gen-server)
     (swish ht)
