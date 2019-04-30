@@ -31,6 +31,7 @@
    find-source
    get-clause
    profile-me
+   profile-omit
    replace-source
    scar
    scdr
@@ -42,6 +43,12 @@
   (meta-cond
    [(compile-profile) (define profile-me void)]
    [else (define-syntax profile-me (identifier-syntax void))])
+
+  ;; strip source annotations to exclude from profile report
+  (define-syntax (profile-omit x)
+    (syntax-case x ()
+      [(kwd expr ...)
+       (datum->syntax #'kwd `(begin ,@(syntax->datum #'(expr ...))))]))
 
   (define (find-source x)
     (let ([annotation (syntax->annotation x)])

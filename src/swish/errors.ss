@@ -89,6 +89,7 @@
       [#(unsupported-db-version ,name ,version) (format "The database ~s schema version (~a) is unsupported by this software." name version)]
       [#(watch-directory-failed ,path ,who ,errno) (format "Error ~d from ~a during watch-directory ~s: ~a." errno who path (errno->english errno))]
       [content-limit-exceeded "Content limit exceeded."]
+      [expected-dictionary "Expected dictionary."]
       [input-limit-exceeded "Input limit exceeded."]
       [invalid-header "Invalid HTTP header."]
       [invalid-surrogate-pair "Invalid Unicode surrogate pair"]

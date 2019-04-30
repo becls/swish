@@ -35,6 +35,7 @@
    (swish erlang)
    (swish errors)
    (swish io)
+   (swish meta)
    (swish osi))
 
   (define application-exit-code 2)
@@ -98,17 +99,19 @@
       (console-event-handler (format "application shutdown due to (exit ~s)" exit-code))
       1]))
 
-  (define (exit-process exit-code)
-    (catch (flush-output-port (console-output-port)))
-    (catch (flush-output-port (console-error-port)))
-    (let ([p (#%$top-level-value '$console-input-port)])
-      ;; convince Chez Scheme to close console-input port
-      (#%$set-top-level-value! '$console-input-port #f)
-      (close-port p))
-    (osi_exit (->exit-status exit-code)))
+  (profile-omit ;; profiler won't have a chance to save data for these due to osi_exit
 
-  (define ($exit-process)
-    (exit-process application-exit-code))
+   (define (exit-process exit-code)
+     (catch (flush-output-port (console-output-port)))
+     (catch (flush-output-port (console-error-port)))
+     (let ([p (#%$top-level-value '$console-input-port)])
+       ;; convince Chez Scheme to close console-input port
+       (#%$set-top-level-value! '$console-input-port #f)
+       (close-port p))
+     (osi_exit (->exit-status exit-code)))
+
+   (define ($exit-process)
+     (exit-process application-exit-code)))
 
   (define application:shutdown
     (case-lambda
@@ -145,4 +148,26 @@
                    (app:path who))
                  (call-with-values run exit)))
               (receive)]))))))
+  )
+
+#!eof mats
+
+(load-this-exposing '(->exit-status))
+
+(import
+ (swish mat)
+ (swish profile)
+ (swish testing)
+ (swish app-core))
+
+(mat coverage ()
+  (match-let*
+   ([27 (->exit-status 27)]
+    [#x7ffffff (->exit-status #x7ffffff)]
+    [0 (->exit-status (void))]
+    [,os (open-output-string)]
+    [1 (parameterize ([console-error-port os]) (->exit-status 'other))]
+    [,stderr (get-output-string os)])
+   (match-regexps '(seek "Event: \"application shutdown due to \\(exit other\\)\"")
+     (split stderr #\newline)))
   )

@@ -35,6 +35,7 @@
   (import
    (chezscheme)
    (swish app-core)
+   (swish app-io)
    (swish application)
    (swish cli)
    (swish erlang)
@@ -151,7 +152,8 @@
           (parameterize ([command-line cmdline]
                          [command-line-arguments (cdr cmdline)]
                          [app:name script-file]
-                         [app:path script-file])
+                         [app:path script-file]
+                         [app:config #f])
             (try-import)
             ;; use exit handler installed by the script, if any
             (match (catch (load script-file))
