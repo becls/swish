@@ -1138,10 +1138,10 @@
          `(module ()
             (printf "Hello from ")
             (match-let*
-             ([,',_ (swish-start "--version")]
-              [,',_ (swish-start "--help")]
+             ([ok (begin (swish-start "--version") 'ok)]
+              [ok (begin (swish-start "--help") 'ok)]
               ;; hook console early so (swish-start "-q") repl uses our string input port
-              [,',_ (hook-console-input)]
+              [ok (begin (hook-console-input) 'ok)]
               [5 (parameterize ([console-input-port
                                  (open-input-string
                                   "(pretty-print 12345) (exit (+ 2 3))")])
