@@ -71,15 +71,22 @@ thread without blocking for I/O. The results from asynchronous
 operations are invoked synchronously by the Scheme code, allowing it
 to control re-entrancy.
 
-\section {Supervision Tree}
+\section {Supervision Tree}\label{sec:default-supervision-tree}
 
 \begin{figure}
   \center\includegraphics{swish/intro-sup-tree.pdf}
   \caption{\label{fig:intro-sup-tree}Supervision Tree}
 \end{figure}
 
+Calling \code{app:start} spawns a set of processes
+organized in a supervision tree.
 By default, Swish uses the supervision tree illustrated in
-Figure~\ref{fig:intro-sup-tree}. The top-level supervisor, main-sup,
+Figure~\ref{fig:intro-sup-tree}.
+The application (see Chapter~\ref{chap:application}) is a single gen-server
+that manages the lifetime of the program.
+It links the top-level supervisor and shuts down the program when
+requested or when the linked process dies.
+The top-level supervisor, main-sup,
 is configured one-for-all and no restarts so that a failure of any of
 its children crashes the program. The event-mgr worker is the event
 manager gen-server (see Chapter~\ref{chap:event-mgr}). The log-db
@@ -96,4 +103,4 @@ restarts every 10 seconds. The \code{http-listener},
 \code{http-cache}, and http-connection processes are described in
 Chapter~\ref{chap:http}. When the \code{http-port-number} parameter is
 set to its default value of \code{\#f}, the \code{http-sup} supervisor
-is not used.
+is not started.

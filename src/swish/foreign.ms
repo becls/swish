@@ -155,7 +155,7 @@
 
 (define (default-exception failure)
   (pregexp-quote
-   (format "Exception occurred with non-condition value ~s" failure)))
+   (format-app-exception "shlib-repl" failure)))
 
 (define (format-app-exception app-name failure)
   (format "~a: ~a" (path-last (path-root app-name)) (exit-reason->english failure)))
@@ -172,19 +172,13 @@
 (define (malformed-config-file app-name)
   (let* ([config-file (path-combine (output-dir) (config-file-name app-name))]
          [reason `#(invalid-config-file ,config-file unexpected-eof)])
-    (cond
-     [(equal? app-name shlib-repl) (default-exception reason)]
-     [else (app-exception app-name (exit-reason->english reason))])))
+    (app-exception app-name (exit-reason->english reason))))
 
 (define (bad-shared-object app-name caught)
   (match caught
     [#(EXIT ,reason)
      (let ([reason `#(cannot-load-shared-object "shlibtest" ,reason)])
-       (cond
-        [(equal? app-name shlib-repl)
-         (format "Exception occurred with non-condition value ~s" reason)]
-        [else
-         (format-app-exception app-name reason)]))]))
+       (format-app-exception app-name reason))]))
 
 (define (shlib-not-found app-name)
   (bad-shared-object app-name

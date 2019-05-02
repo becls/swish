@@ -1,0 +1,164 @@
+#!/usr/bin/env swish
+;;; Copyright 2019 Beckman Coulter, Inc.
+;;;
+;;; Permission is hereby granted, free of charge, to any person
+;;; obtaining a copy of this software and associated documentation
+;;; files (the "Software"), to deal in the Software without
+;;; restriction, including without limitation the rights to use, copy,
+;;; modify, merge, publish, distribute, sublicense, and/or sell copies
+;;; of the Software, and to permit persons to whom the Software is
+;;; furnished to do so, subject to the following conditions:
+;;;
+;;; The above copyright notice and this permission notice shall be
+;;; included in all copies or substantial portions of the Software.
+;;;
+;;; THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+;;; EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+;;; MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+;;; NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+;;; HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+;;; WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+;;; DEALINGS IN THE SOFTWARE.
+
+(define cli
+  (cli-specs
+   default-help
+   ["all" -a --all bool "Show all information."]
+   ["exclude" -e --exclude (list "<regexp>") "Exclude identifiers matching <regexp>."]
+   ["documented" -d --documented bool "Show documented entries."]
+   ["undocumented" -u --undocumented bool "Show entries that have no documentation."]
+   ["duplicated" -D --duplicated bool "Show with duplicate documentation."]
+   ["not-exported" -x --not-exported bool "Show unexported entries that have documentation."]
+   ["libraries" -L --library (list "<library>") "Use exports from <library>. Defaults to \"(swish imports)\"."]
+   ["debug-excluded" --debug-excluded bool "Show excluded entries."
+    (requires '("exclude"))]
+   ["repo-root" (string "<dir>") "The swish repository root to check."]))
+
+(define opt (parse-command-line-arguments cli))
+
+(define (find-files path . extensions)
+  (define (combine path fn) (if (equal? "." path) fn (path-combine path fn)))
+  (let search ([path path] [hits '()])
+    (match (catch (list-directory path))
+      [#(EXIT ,reason) hits]
+      [,found
+       (fold-left
+        (lambda (hits entry)
+          (match entry
+            [(,fn . ,@DIRENT_DIR) (search (combine path fn) hits)]
+            [(,fn . ,@DIRENT_FILE)
+             (if (member (path-extension fn) extensions)
+                 (cons (combine path fn) hits)
+                 hits)]
+            [,_ hits])) ;; not following symlinks
+        hits
+        found)])))
+
+(define exclude?
+  (cond
+   [(opt "exclude") =>
+    (lambda (ls)
+      (let ([regexp (pregexp (format "~{~a~^|~}" ls))])
+        (lambda (s)
+          (pregexp-match regexp (if (symbol? s) (symbol->string s) s)))))]
+   [else (lambda (s) #f)]))
+
+(define detex
+  (let ([decode (pregexp "\\\\code[{]([^}]*)")]) ;; won't have trailing } due to defineentry regexp
+    (lambda (s)
+      (match (pregexp-match decode s)
+        [(,_ ,hit)
+         (pregexp-replace* "\\\\" hit "")]
+        [,_ (pregexp-replace* "\\\\" s "")]))))
+
+(define entry-regex (pregexp "\\\\(?:defineentry|begin[{](?:pubevent|tupledef)[}])[{]([^}]+)[}]"))
+(define (for-each-entry filename f)
+  (let* ([s (utf8->string (read-file filename))]
+         [end (string-length s)])
+    (let scan ([i 0])
+      (unless (> i end)
+        (match (pregexp-match-positions entry-regex s i)
+          [(,_ (,from . ,to))
+           (f (detex (substring s from to)))
+           (scan (+ to 1))]
+          [#f (void)])))))
+
+(define (add-exports! ht)
+  (lambda (s)
+    (match (catch (read (open-input-string s)))
+      [#(EXIT ,reason) (errorf #f "invalid -L argument ~s" s)]
+      [,lib
+       (for-each
+        (lambda (e)
+          (hashtable-set! ht e
+            (if (exclude? e) 'debug-excluded 'undocumented)))
+        (library-exports lib))])))
+
+(define (update-entry! ht entry file)
+  (hashtable-update! ht (string->symbol entry)
+    (lambda (val)
+      (if (exclude? entry)
+          'debug-excluded
+          (match val
+            [undocumented file]
+            [#f 'not-exported]
+            [,other-file
+             (guard (string? other-file))
+             (list file other-file)]
+            [,ls
+             (guard (pair? ls))
+             (cons file ls)]
+            [not-exported val]
+            [debug-excluded val])))
+    #f))
+
+(define (dump dir)
+  (let ([exports (make-hashtable symbol-hash eq?)])
+    (for-each (add-exports! exports)
+      (or (opt "libraries") '("(swish imports)")))
+    (for-each
+     (lambda (fullname)
+       (let ([file (path-last fullname)])
+         (for-each-entry fullname
+           (lambda (entry)
+             (update-entry! exports entry file)))))
+     (find-files dir "tex"))
+    (let ([partitions (make-hashtable symbol-hash eq?)])
+      (vector-for-each
+       (lambda (e)
+         (let ([key (car e)] [val (cdr e)])
+           (hashtable-update! partitions
+             (cond
+              [(symbol? val) val]
+              [(string? val) 'documented]
+              [else 'duplicated])
+             (lambda (ls) (cons key ls))
+             '())))
+       (hashtable-cells exports))
+      (report-category 'documented partitions exports)
+      (report-category 'undocumented partitions)
+      (report-category 'not-exported partitions)
+      (report-category 'duplicated partitions exports)
+      (when (opt "debug-excluded") ;; exclude from --all
+        (report-category 'debug-excluded partitions)))))
+
+(define report-category
+  (case-lambda
+   [(category partitions)
+    (report-category category partitions #f)]
+   [(category partitions exports)
+    (let ([members (hashtable-ref partitions category #f)])
+      (when (and members (or (opt "all") (opt (symbol->string category))))
+        (let ([sorted (sort (lambda (a b) (string<? (symbol->string a) (symbol->string b))) members)])
+          (printf "~a:\n~{  ~a\n~}" category
+            (if exports
+                (map (lambda (key) (format "~a -> ~a" key (hashtable-ref exports key #f))) sorted)
+                sorted)))))]))
+
+(cond
+ [(opt "help") (display-help (app:name) cli)]
+ [(not (find opt '("all" "documented" "undocumented" "duplicated" "not-exported" "debug-excluded")))
+  (display-usage "Usage:" (app:name) cli)]
+ [(opt "repo-root") => dump]
+ [else (dump (current-directory))])

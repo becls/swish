@@ -1,5 +1,5 @@
 MAKEFLAGS += --no-print-directory
-.PHONY: clean coverage doc install pristine swish test
+.PHONY: clean coverage check-docs doc install pristine swish test
 
 swish: src/swish/Makefile
 	$(MAKE) -C src/swish all
@@ -18,6 +18,9 @@ test: src/swish/Makefile
 coverage: src/swish/Makefile
 	@PROFILE_MATS=yes $(MAKE) -C src/swish mat-prereq
 	@PROFILE_MATS=yes ./src/run-mats
+
+check-docs: src/swish/Makefile
+	@(cd src; ./go check-docs -uD -e '^osi_.*\*' -e '^[A-Z_]+' -e '^pregexp.*' -e '^\$$[a-z-]+' ../doc)
 
 install: swish doc
 	$(MAKE) -C src/swish install

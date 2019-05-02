@@ -43,3 +43,12 @@
 \newcommand{\mitigation}{\textsf{Mitigation:} }
 \newenvironment{impl}{\textbf{Implementation:} }{}
 \newcommand{\implementation}[1]{\begin{impl}#1\end{impl}}
+
+% For long options (--help) we want to explicitly see two hyphen characters
+% rather than an en-dash. For normal text use sopt and lopt. Inside
+% codebegin/end blocks Emacs may convert the characters but LaTeX will
+% still render them properly.
+
+\newcommand{\sopt}[1]{\code{{-}#1}}
+\newcommand{\lopt}[1]{\code{{-}{-}#1}}
+\newcommand{\str}[1]{\code{"#1"}}

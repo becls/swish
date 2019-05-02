@@ -23,12 +23,12 @@
 #!chezscheme
 (library (swish app)
   (export
+   $init-main-sup
    app-sup-spec
    app:resume
    app:shutdown
    app:start
    app:suspend
-   init-main-sup
    make-swish-sup-spec
    swish-start
    )
@@ -52,7 +52,7 @@
    (swish supervisor)
    )
 
-  (define (app:start) (application:start init-main-sup))
+  (define (app:start) (application:start $init-main-sup))
 
   (alias app:shutdown application:shutdown)
 
@@ -60,7 +60,7 @@
 
   (alias app:resume statistics:resume)
 
-  (define (init-main-sup)
+  (define ($init-main-sup)
     ;; When one process at this level crashes, we want the supervisor
     ;; to shutdown which only happens during restart. Thus, each
     ;; process is marked permanent and the restart intensity is 0.
