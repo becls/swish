@@ -83,7 +83,7 @@ is not thread safe and should be used from the main thread only.
   ./configure --python=~/Anaconda3/envs/py27/python.exe
   ```
 
-## Stand-alone Swish Applications
+# Stand-alone Swish Applications
 
 Swish can be used to build, test, and deploy stand-alone
 applications. A given application might load foreign code for image

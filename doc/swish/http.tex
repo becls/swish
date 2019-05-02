@@ -689,8 +689,7 @@ This procedure is intended for use within custom writers passed in to
 
 \section {Published Events}
 
-\begin{event}\codeindex{<http-request>}\end{event}\antipar
-\begin{argtbl}
+\begin{pubevent}{<http-request>}
   \argrow{timestamp}{timestamp from \code{erlang:now}}
   \argrow{pid}{handler process}
   \argrow{host}{the IP address of the client}
@@ -698,4 +697,4 @@ This procedure is intended for use within custom writers passed in to
   \argrow{path}{\code{<request>} path}
   \argrow{header}{an association list}
   \argrow{params}{an association list}
-\end{argtbl}
+\end{pubevent}

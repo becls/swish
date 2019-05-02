@@ -1286,7 +1286,7 @@
     expected-output-core)
   ;; repl-input-non-core in repl without --libs-visible should fail
   (test-os-process (output-file importer) '("-q") repl-input-non-core
-    '("Exception: variable display-usage is not bound"))
+    `(,(format "~a: variable display-usage is not bound" (path-root importer.ss))))
   ;; rebuild importer with --libs-visible
   (assert (delete-file (output-file importer)))
   (build-example importer '("-b" "petite" "--libs-visible"))

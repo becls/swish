@@ -92,6 +92,7 @@
                         [console-error-port os]
                         [reset-handler
                          (lambda ()
+                           (assert (eq? val (debug-condition)))
                            (k (get-output-string os)))])
            (app-exception-handler val))
          "failed to invoke reset-handler"))))

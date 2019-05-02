@@ -1,6 +1,7 @@
 digraph G {
   graph [margin=0,rankdir=LR];
   node [shape=box,fontname="Courier",fontsize=11];
+  application [label="application"];
   mainsup [label="main-sup",shape=ellipse];
   eventmgr [label="event-mgr"];
   logdb [label="log-db"];
@@ -12,6 +13,8 @@ digraph G {
   httpcache [label="http-cache"];
   hc1 [label="http-connection 1",fontname="Times-Roman"];
   hc2 [label="http-connection 2",fontname="Times-Roman"];
+  application -> mainsup;
+  mainsup -> application;
   mainsup -> eventmgr;
   mainsup -> logdb;
   mainsup -> eventmgrsentry;

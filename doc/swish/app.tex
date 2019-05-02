@@ -1,0 +1,584 @@
+% Copyright 2019 Beckman Coulter, Inc.
+%
+% Permission is hereby granted, free of charge, to any person
+% obtaining a copy of this software and associated documentation files
+% (the "Software"), to deal in the Software without restriction,
+% including without limitation the rights to use, copy, modify, merge,
+% publish, distribute, sublicense, and/or sell copies of the Software,
+% and to permit persons to whom the Software is furnished to do so,
+% subject to the following conditions:
+%
+% The above copyright notice and this permission notice shall be
+% included in all copies or substantial portions of the Software.
+%
+% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+% EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+% MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+% NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+% BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+% ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+% CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+% SOFTWARE.
+
+\chapter {Developing Software with Swish}\label{chap:app}
+
+\section {Introduction}
+
+Swish can be used to build, test, and deploy programs ranging
+from small scripts to large stand-alone applications.
+This chapter describes some of the tools and mechanisms that Swish provides
+for these purposes.
+
+% \section {Theory of Operation}
+% perhaps describe boot process?
+
+\section {Deployment Types}
+
+For interactive development, Swish provides a REPL that reads, evaluates,
+and prints the values of programs entered at the prompt.
+At the REPL, the \code{load} procedure can be used to evaluate the
+contents of a file containing source or object code.
+This is convenient when developing larger programs.
+
+Swish provides several options for deploying programs.
+This section describes these options and their trade-offs.
+
+\subsection {Scripts}
+
+A simple deployment option is to place source code in a file that begins with
+a \code{\#!} line specifying the absolute path to an executable that can
+evaluate the script.
+This could be the absolute path to the Swish executable.
+More often \code{/usr/bin/env} is used to locate the Swish executable via the
+program search path.
+For example, we might have:
+\codebegin
+$ cat hello
+#!/usr/bin/env swish
+(printf "Hello, World!{\textbackslash}n")
+$ chmod +x hello
+$ ./hello
+Hello, World!
+\codeend
+
+In the preceding example, running \code{./hello} invokes the Swish executable
+with \code{./hello} as its sole command-line argument.
+At boot time, Swish calls \code{swish-start} to process its command-line arguments.
+Since the first argument is not an option (\sopt{h}, \lopt{help}, etc.),
+\code{swish-start} runs the file named by that argument with the
+remaining arguments, if any, as its command-line arguments.
+For example, the following \code{Echo} script processes the arguments
+that are passed to the script.
+
+\codebegin
+$ cat Echo
+#!/usr/bin/env swish
+(printf "~\{~:(~a~)~\}{\textbackslash}n" (command-line-arguments))
+$ chmod +x Echo
+$ ./Echo some camel case identifiers are hard to read
+SomeCamelCaseIdentifiersAreHardToRead
+\codeend
+
+To provide arguments to the Swish executable before the script filename, add
+the \sopt{S} option to \code{env} and add the desired arguments after
+\code{swish}.
+Here the \lopt{} option tells Swish to start a REPL after loading the script.
+\codebegin
+$ cat howdy
+#!/usr/bin/env -S swish \lopt{}
+(printf "Howdy, Folks!{\textbackslash}n")
+(pretty-print (command-line-arguments))
+$ chmod +x howdy
+$ ./howdy
+
+Swish Version 0.0.0
+Howdy, Folks!
+("--" "./howdy")
+> (+ 2 3)
+5
+> (exit)
+\codeend
+
+% to show boot search while loading script:
+% #!/usr/bin/env -S swish --verbose
+
+% Note that we *can* write a script named --help, since
+% the argument comes in as something like ./--help.
+
+\subsubsection {Limitations}\label{sec:script-limitations}
+
+There are several constraints to consider when deploying Swish scripts. 
+\begin{itemize}
+  \item
+    Naturally, Swish must be installed.
+    To use \code{/usr/bin/env} as in the preceding examples, the \code{PATH}
+    environment variable must contain the directory where the Swish executable
+    is installed.
+    This is preferable to hard-coding the absolute to the Swish executable
+    in your scripts.
+  \item
+    Chez Scheme must also be installed.
+    In particular, the version of Chez Scheme that was used to build Swish
+    must be installed.
+    Swish must be able to locate the Chez Scheme boot files \code{petite.boot}
+    and \code{scheme.boot}.
+    % (Yes, we currently expect both boot files.)
+
+    If Chez Scheme is installed in a non-standard location, it may be
+    necessary to set the \code{SCHEMEHEAPDIRS} environment variable
+    to help Swish locate the boot files.
+    To see where Swish looks for boot files, run \code{swish \lopt{verbose}}.
+  \item
+    The \code{\#!} scripts shown in this section do not run under Windows.
+    In MinGW/MSYS, these scripts may work unless Posix path conversion is
+    disabled by setting the \code{MSYS\_NO\_PATHCONV} environment variable to 1.
+    In Cygwin, these scripts may work if the directory containing the script
+    is mounted as its Windows twin, e.g., \code{C:/Users} and \code{/Users}.
+    For either of these options to work, Swish must be able to locate the
+    appropriate Chez Scheme DLL via the standard search order.
+    Scripts will fail if the current drive is not the drive containing the script.
+\end{itemize}
+
+\subsection {Linked Programs}
+
+A linked program is simply a Scheme object file that begins
+with a ``\code{\#!/usr/bin/env swish}'' line.
+Swish runs these programs the same way it runs scripts,
+except that \code{swish-start} skips the compilation step
+when it runs the file.
+
+We can use \code{swish-build} to build a linked program \code{foo} from a
+source file \code{foo.ss}, as follows:
+\codebegin
+$ swish-build -o foo foo.ss
+\codeend
+
+\subsubsection {Limitations}
+
+All of the limitations in Section~\ref{sec:script-limitations} apply.
+Since linked programs use \code{/usr/bin/env}, the Swish executable
+must be in a directory in the \code{PATH} on the target machine.
+
+In addition, the Swish executable (and supporting code) that is used
+to run a linked program must be identical to the one that was used to
+build it.
+
+\subsection {Stand-alone Programs}
+
+A stand-alone program consists of an executable and a boot file
+that must be installed in the same directory.
+The name of the boot file is the same as the executable's name
+with any extension replaced by \code{.boot}.
+The executable is simply a copy of the Swish executable.
+The boot file includes the necessary Chez Scheme boot files
+along with the compiled application code.
+
+We can use \code{swish-build} to build a linked program \code{foo} from a
+source file \code{foo.ss} by specifying a base boot file via the \sopt{b}
+option:
+\codebegin
+$ swish-build -o foo foo.ss -b petite
+\codeend
+
+\subsubsection {Limitations}
+
+On Windows, the Swish DLLs \code{osi.dll}, \code{libuv.dll}, and \code{sqlite3.dll}
+must be installed in the same directory as the program executable.
+These DLLs can be found in the directory containing the Swish executable.
+In addition, the program executable must be able to locate
+Microsoft's C Runtime Library \code{vcruntime140.dll}
+and the appropriate Chez Scheme DLL via the standard search order.
+
+% TODO eventually add a section that describes testing
+%  - perhaps adapt scheme-testing-library.tex
+%  - mat
+%  - isolate-mat
+%  - #!eof mats
+
+\section {Programming Interface}
+
+\subsection{Configuration}
+
+\defineentry{app:config}
+\begin{procedure}
+  \code{(app:config \opt{\var{obj}})}
+\end{procedure}
+\returns{} a hashtable
+
+When called with no arguments, the \code{app:config} procedure
+returns the configuration data cached in a private process parameter.
+If the cache is empty, \code{app:config} first populates the cache by reading
+data from the file identified by \code{app:config-filename}.
+If that file does not exist, the procedure returns an empty hashtable.
+Otherwise, \code{app:config} expects the file to contain a single JSON object.
+
+The optional \var{obj} must be \code{\#f} or a hashtable in the form returned by
+\code{json:make-object}.
+Calling \code{app:config} with \code{\#f} clears the cache.
+Calling \code{app:config} with a hashtable installs the hashtable as the cached value.
+
+\defineentry{app:config-filename}
+\begin{procedure}
+  \code{(app:config-filename)}
+\end{procedure}
+\returns{} the name of the application's configuration file
+
+The \code{app:config-filename} procedure returns the name of the application
+configuration file that \code{app:config} will read.
+The filename returned depends on the value of \code{app:path}.
+
+If \code{app:path} is set to a value of the form
+\code{"\var{...}/bin/\var{app-name}\opt{.\var{ext}}"},
+that ends with a \code{"bin"} directory,
+then the result is a \code{config} file in the corresponding \code{"lib"} directory
+\code{"\var{...}/lib/\var{app-name}/config"}.
+If \code{app:path} is set to a value of the form
+\code{"\var{...}/\var{app-name}\opt{.\var{ext}}"},
+then the result is a file with a \code{.config} extension in the same directory:
+\code{"\var{...}/\var{app-name}.config"}.
+
+If \code{app:path} is not set, the result is a \code{.config} file in the base
+directory identified by value of the \code{base-dir} parameter.
+This can be useful when loading program code at the REPL during interactive
+development.
+
+\defineentry{app:name}
+\begin{parameter}
+  \code{(app:name \opt{\var{name}})}
+\end{parameter}
+\hasvalue{} a string or \code{\#f}
+
+The \code{app:name} parameter returns the short descriptive name of the
+application, if known.
+This value is used by the \code{app-exception-handler} to identify the program
+that is reporting an error.
+The value is also useful as an argument to \code{display-usage} and
+\code{display-help}.
+
+When called with a string, \code{app:name} treats the value as
+a filesystem path and stores only the last element of the path,
+dropping any file extension.
+
+For stand-alone programs, \code{swish-start}
+sets this parameter to the path of the running executable.
+For scripts or linked programs, \code{swish-start}
+sets this parameter to the path of the script or program file.
+
+\defineentry{app:path}
+\begin{parameter}
+  \code{(app:path \opt{\var{path}})}
+\end{parameter}
+\hasvalue{} an absolute path or \code{\#f}
+
+The \code{app:path} parameter returns the absolute path to the script or
+program, if known.
+This value is used by \code{app:config-filename} to determine the
+location of the application's configuration file.
+For scripts and linked programs, where the actual executable is Swish, this
+value is different from that returned by \code{osi\_get\_executable\_path}.
+
+When called with a string, \code{app:path} calls \code{get-real-path} to
+obtain an absolute path and stores the result.
+
+\defineentry{base-dir}
+\begin{parameter}
+  \code{(base-dir \opt{\var{path}})}
+\end{parameter}
+\hasvalue{} a file-system path
+
+When called without arguments, \code{base-dir} returns the file-system path of
+the application's base directory.
+Otherwise, the base directory is set to \var{path}, which must specify the
+file-system path of a directory that exists and is writable by the application.
+Setting \code{base-dir} sets the values of \code{data-dir}, \code{log-file},
+\code{tmp-dir}, and \code{web-dir} so that they refer to locations within the
+base directory.
+
+When the application starts, \code{base-dir} is set to the current directory.
+
+\defineentry{data-dir}
+\begin{parameter}
+  \code{(data-dir \opt{\var{path}})}
+\end{parameter}
+\hasvalue{} a file-system path
+
+The \code{data-dir} parameter holds the file-system path of a directory
+in which the application can write persistent data.
+Applications should not assume that this directory exists, but should
+instead use \code{make-directory-path} when creating files under \code{data-dir}.
+Its initial value is the path to a \code{"data"} subdirectory of
+the directory specified by \code{base-dir}.
+
+\defineentry{log-file}
+\begin{parameter}
+  \code{(log-file \opt{\var{filename}})}
+\end{parameter}
+\hasvalue{} a file name
+
+The \code{log-file} parameter holds the name of the file containing the SQLite
+log database managed by the \code{log-db} gen-server, which creates the file
+and the requisite directory structure when started.
+Its initial value is the path to a \code{"Log.db3"} file in the directory
+specified by \code{data-dir}.
+
+\defineentry{tmp-dir}
+\begin{parameter}
+  \code{(tmp-dir \opt{\var{path}})}
+\end{parameter}
+\hasvalue{} a file-system path
+
+The \code{tmp-dir} parameter holds the file-system path of a directory
+in which the application can write ephemeral data.
+Applications should not assume that this directory exists, but should
+instead use \code{make-directory-path} when creating files under \code{tmp-dir}.
+Its initial value is the path to a \code{"tmp"} subdirectory of
+the directory specified by \code{base-dir}.
+
+\defineentry{web-dir}
+\begin{parameter}
+  \code{(web-dir \opt{\var{path}})}
+\end{parameter}
+\hasvalue{} a file-system path
+
+The \code{web-dir} parameter holds the file-system path of the directory
+used by the HTTP interface (see Chapter~\ref{chap:http}).
+Its initial value is the path to a \code{"web"} subdirectory of
+the directory specified by \code{base-dir}.
+
+\subsection{Program Life Cycle}
+
+\defineentry{app-exception-handler}
+\begin{procedure}
+  \code{(app-exception-handler \var{obj})}
+\end{procedure}
+\returns{} unspecified
+
+When a Swish application starts, it sets the default value of the
+\code{base-exception-handler} parameter to \code{app-exception-handler}.
+This procedure expects a single argument, typically a condition or an object
+passed to \code{raise}, which it saves in the parameter \code{debug-condition}.
+
+If \code{app:name} is set, then \code{app-exception-handler} writes a
+message to the console error port, prefixed with the application name,
+before calling \code{reset}.
+If \var{obj} is a condition, then the message is formed by stripping the
+``Warning:'' or ``Exception:'' prefix from the output of \code{display-condition}.
+Otherwise, the message is generated by calling
+\code{exit-reason->english}
+on \var{obj}.
+
+If \code{app:name} is not set, then \code{app-exception-handler}
+calls the default exception handler.
+
+\defineentry{app-sup-spec}
+\begin{parameter}
+  \code{(app-sup-spec \opt{\var{start-specs}})}
+\end{parameter}
+\hasvalue{} a list of child specifications (see page~\pageref{page:child-spec})
+
+The \code{app-sup-spec} parameter supplies the \var{start-specs}
+that define the tree of child processes that are started by
+\code{app:start} and supervised by the \code{main-sup} gen-server.
+The initial value of \code{app-sup-spec} is constructed by calling
+\code{make-swish-sup-spec} with \code{swish-event-logger} as the
+sole logger.
+
+\defineentry{app:resume}
+\begin{syntax}
+  \code{(app:resume)}
+\end{syntax}
+
+This is an alias for \code{statistics:resume}.
+
+\defineentry{app:shutdown}
+\begin{syntax}
+  \code{(app:shutdown \opt{\var{exit-code}})}
+\end{syntax}
+
+This is an alias for \code{application:shutdown}.
+
+\defineentry{app:start}
+\begin{procedure}
+  \code{(app:start)}
+\end{procedure}
+\returns{} \code{ok}
+
+The \code{app:start} procedure calls \code{application:start}
+with a \var{starter} thunk that calls \code{supervisor:start\&link}
+with the value of the \code{app-sup-spec} parameter.
+
+\defineentry{app:suspend}
+\begin{syntax}
+  \code{(app:suspend)}
+\end{syntax}
+
+This is an alias for \code{statistics:suspend}.
+
+\defineentry{make-swish-sup-spec}
+\begin{procedure}
+  \code{(make-swish-sup-spec \var{loggers})}
+\end{procedure}
+\returns{} a list of child specifications (see page~\pageref{page:child-spec})
+
+The \code{make-swish-sup-spec} procedure builds a list of child specifications
+representing the default supervision tree described in
+Section~\ref{sec:default-supervision-tree}.
+The \var{loggers} argument is a list of \code{<event-logger>} tuples that will
+be passed to \code{log-db:setup} when the \code{log-db} gen-server is started.
+
+\defineentry{swish-start}
+\begin{procedure}
+  \code{(swish-start \var{arg} \ldots)}
+\end{procedure}
+\returns{} see below
+
+When a stand-alone program starts, it initializes several parameters:
+\code{app:name}, \code{app:path}, \code{command-line}, and
+\code{command-line-arguments}.
+When a Swish script, linked program, or REPL is started, it performs this
+initialization by applying \code{swish-start} to the original command-line
+arguments.
+
+The \code{swish-start} procedure expects zero or more strings as arguments
+and scans them left to right.
+It adds each string that begins with a single dash (\sopt{}) or double dash
+(\lopt{}) to a set of options to be handled later.
+If it encounters the string \str{\lopt{}}, it sets the REPL option and
+saves the remaining arguments as files to be loaded.
+If it encounters a string that does not begin with a dash, it stops scanning
+the arguments and marks that string and those that follow as ordinary
+arguments.
+
+If \code{swish-start} finds \lopt{help} among the options,
+it displays a summary of Swish's command-line options and returns.
+If it finds \lopt{version} among the options,
+it displays version information and returns.
+If the REPL option is set or it finds no ordinary arguments, then it
+suppresses the startup message and waiter prompt 
+if \lopt{quiet} is among the options,
+then loads any files that were specified,
+and then calls \code{new-cafe}. 
+Otherwise, it treats the first ordinary argument as a script or linked program.
+In this case, it installs the ordinary arguments as
+the value of \code{command-line},
+sets \code{app:name} and \code{app:path} to the first of them,
+sets \code{command-line-arguments} to the remaining ones,
+and clears \code{app:config}
+before loading the script or linked program.
+If an error occurs while loading the script or linked program,
+Swish exits with an exit code of 1.
+Otherwise, Swish exits normally.
+
+When it starts a REPL, script, or linked program, \code{swish-start} attempts
+to import any libraries found in \code{library-list} whose library path begins
+with the symbol \code{swish}.
+
+\subsection{Foreign Interface}
+
+Scheme libraries that rely on shared objects must arrange
+to call \code{load-shared-object} before calling \code{foreign-procedure} or
+calling \code{make-ftype-pointer} on a function ftype.
+We must consider shared-object naming conventions and search paths on
+different platforms when calling \code{load-shared-object}.
+We can provide its filename argument through some combination of conditional
+compilation, hard-coded relative or absolute paths, and general computation.
+
+The \code{provide-shared-object} and \code{require-shared-object} procedures
+in this section offer a simple way to:
+factor platform dependencies out of client code,
+load shared objects by absolute path to avoid search,
+specify shared object file names as paths relative
+to the application configuration file, and
+hook the operation that loads shared object code.
+
+These procedures coordinate via the application configuration object stored in
+\code{app:config}, which is populated on demand by reading the file specified
+by \code{app:config-filename}.
+A Scheme library can call \code{require-shared-object} before its
+\code{foreign-procedure} definitions and rely on demand-loading of the
+configuration file to supply the absolute path to the shared object code when
+the library is invoked.
+This simplifies a process that can otherwise be complicated
+by the fact that Chez Scheme invokes a library lazily as soon as
+one of its exports may be referenced.
+
+To see how these procedures are decoupled, consider the following REPL
+transcript on a 64-bit Linux machine:
+\codebegin
+Swish Version 0.0.0
+> (provide-shared-object "libc" "/lib64/libc.so.6")
+> (foreign-entry? "fork")
+#f
+> (require-shared-object "libc")
+> (foreign-entry? "fork")
+#t
+> (let ([op (open-file-to-write (app:config-filename))])
+    (on-exit (close-port op)
+      (json:write op (app:config) 0)))
+> (exit)
+\codeend
+
+If we start a new Swish REPL, we can call \code{require-shared-object}
+without first calling \code{provide-shared-object}
+because we explicitly wrote the value of \code{app:config} to the location
+specified by \code{app:config-filename} before exiting the original REPL.
+\codebegin
+Swish Version 0.0.0
+> (foreign-entry? "fork")
+#f
+> (require-shared-object "libc")
+> (foreign-entry? "fork")
+#t
+> (display (utf8->string (read-file (app:config-filename))))
+\{
+  "swish": \{
+    "shared-object": \{
+      "libc": \{
+        "a6le": \{
+          "file": "/lib64/libc.so.6"
+        \}
+      \}
+    \}
+  \}
+\}
+\codeend
+
+\defineentry{provide-shared-object}
+\begin{procedure}
+  \code{(provide-shared-object \var{so-name} \var{filename})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{provide-shared-object} procedure expects two strings as arguments:
+\var{so-name} is the generic name of a shared object and \var{filename} is the
+name of the actual file containing the shared object code.
+This procedure records \var{filename} in \code{app:config} under a
+path that includes \code{so-name} and the host \code{machine-type}.
+
+\defineentry{require-shared-object}
+\begin{procedure}
+  \code{(require-shared-object \var{so-name} \opt{\var{handler}})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{require-shared-object} procedure loads a shared object via an
+absolute path to prevent \code{load-shared-object} from searching for the
+shared object file in a system-specific set of directories.
+
+The \var{so-name} argument is a string that specifies the generic name of a
+shared object.
+The optional \var{handler} is a procedure that expects three arguments:
+\var{filename} is the absolute path to the shared object file,
+\var{key} is \var{so-name}, and \var{dict} is the hashtable
+retrieved from \code{app:config} via a path that includes
+\var{so-name} and the host \code{machine-type}.
+This hashtable contains a key \code{"file"} whose value
+is the file name originally supplied by \code{provide-shared-object}.
+The handler might examine other keys within the hashtable before
+loading the shared object.
+The default handler simply calls \code{load-shared-object} on \var{filename}.
+
+If the file name retrieved from \code{app:config} is a relative path,
+then \code{require-shared-object} determines the absolute path by
+treating the file name as a path relative to the parent directory
+containing the application configuration file name returned by \code{app:config-filename}.

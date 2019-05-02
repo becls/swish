@@ -261,7 +261,8 @@ links to all child processes.
 \section {Programming Interface}
 
 \code{supervisor:start\&link} and \code{supervisor:start-child}
-use a child specification. A child specification is defined as:
+use a child specification. A child specification\index{child specification}\label{page:child-spec}
+is defined as:
 
 \begin{grammar}
 \prodrow{\var{child-spec}}{\code{\#(\var{name} \var{thunk} \var{restart-type} \var{shutdown} \var{type})}}

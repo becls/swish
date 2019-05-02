@@ -140,7 +140,7 @@
 
   (define (boot-system)
     (log-file (path-combine (data-dir) "TestLog.db3"))
-    (match (init-main-sup)
+    (match ($init-main-sup)
       [#(ok ,pid) pid]))
 
   (define (shutdown-system)

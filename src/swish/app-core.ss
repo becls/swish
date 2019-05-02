@@ -86,6 +86,7 @@
     (reset))
 
   (define (app-exception-handler c)
+    (debug-condition c)
     (cond
      [(app:name) => (lambda (who) (claim-exception who c))]
      [else (default-exception-handler c)]))
@@ -129,25 +130,24 @@
     (let ([who (osi_get_executable_path)])
       (parameterize ([command-line (cons who args)]
                      [command-line-arguments args])
-        (with-exception-handler app-exception-handler
-          (lambda ()
-            (cond
-             [started? (run)]
-             [else
-              (set! started? #t)
-              (random-seed (+ (remainder (erlang:now) (- (ash 1 32) 1)) 1))
-              (hook-console-input)
-              (call/cc
-               (lambda (bail)
-                 (exit-handler
-                  (lambda args
-                    (apply application:shutdown args)
-                    (bail)))
-                 (when stand-alone?
-                   (app:name who)
-                   (app:path who))
-                 (call-with-values run exit)))
-              (receive)]))))))
+        (cond
+         [started? (run)]
+         [else
+          (set! started? #t)
+          (base-exception-handler app-exception-handler)
+          (random-seed (+ (remainder (erlang:now) (- (ash 1 32) 1)) 1))
+          (hook-console-input)
+          (call/cc
+           (lambda (bail)
+             (exit-handler
+              (lambda args
+                (apply application:shutdown args)
+                (bail)))
+             (when stand-alone?
+               (app:name who)
+               (app:path who))
+             (call-with-values run exit)))
+          (receive)]))))
   )
 
 #!eof mats
