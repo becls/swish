@@ -20,9 +20,14 @@ case $# in
   *) fail;;
 esac
 
+LIBSEP="::"
 GITTOP="$(git rev-parse --show-toplevel)"
 case "$(uname -s)" in
+  CYGWIN_NT-*)
+    LIBSEP=";;"
+    ;;
   MINGW64_NT-* | MSYS_NT-*)
+    LIBSEP=";;"
     GITTOP="$(cygpath -u "$GITTOP")"
     ;;
 esac
@@ -47,8 +52,8 @@ PATH="${LIBDIR}:${PATH}"
 
 if [ "$PROFILE_MATS" = "yes" ]; then
   # shellcheck disable=SC2086
-  "${LIBDIR}"/swish-test -s src -L src --report "${REPORT}" --progress "${PROGRESS}" --coverage "${COVERAGE}" --save-profile "${PROFILE}" --exclude '**mat-output**' ${TESTARGS}
+  "${LIBDIR}"/swish-test -s src -L src${LIBSEP}${LIBDIR}/lib --report "${REPORT}" --progress "${PROGRESS}" --coverage "${COVERAGE}" --save-profile "${PROFILE}" --exclude '**mat-output**' ${TESTARGS}
 else
   # shellcheck disable=SC2086
-  "${LIBDIR}"/swish-test -s src -L src --report "${REPORT}" --progress "${PROGRESS}" ${TESTARGS}
+  "${LIBDIR}"/swish-test -s src -L src${LIBSEP}${LIBDIR}/lib --report "${REPORT}" --progress "${PROGRESS}" ${TESTARGS}
 fi
