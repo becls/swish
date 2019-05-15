@@ -29,6 +29,7 @@
     (swish app-core)
     (swish app-io)
     (swish application)
+    (swish base64)
     (swish cli)
     (swish db)
     (swish digest)

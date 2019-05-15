@@ -2645,3 +2645,44 @@ This is the procedure returned by \code{(foreign-handle-print\ 'digests)}.
 The \code{digest-count} procedure returns the number of open
 message-digest contexts.
 This is the procedure returned by \code{(foreign-handle-count\ 'digests)}.
+
+% ----------------------------------------------------------------------------
+\subsection{Data-Encoding Utilities}
+
+% ----------------------------------------------------------------------------
+\defineentry{base64-decode-bytevector}
+\defineentry{base64url-decode-bytevector}
+\begin{procedure}
+  \code{(base64-decode-bytevector \var{bv})}\strut\\
+  \code{(base64url-decode-bytevector \var{bv})}\strut
+\end{procedure}
+\returns{} a bytevector
+
+The \code{base64-decode-bytevector} and \code{base64url-decode-bytevector}
+procedures return a new bytevector containing the data decoded from bytevector
+\var{bv}.
+The data in \var{bv} must be in the form described in Section 4 or 5,
+respectively, of IETF RFC 4648~\cite{rfc4648}.
+In keeping with Sections 3.1 and 3.3 of~\cite{rfc4648},
+line feeds and non-alphabetic characters are not permitted
+in \var{bv} and should be removed before calling these procedures.
+
+% ----------------------------------------------------------------------------
+\defineentry{base64-encode-bytevector}
+\defineentry{base64url-encode-bytevector}
+\begin{procedure}
+  \code{(base64-encode-bytevector \var{bv})}\strut\\
+  \code{(base64url-encode-bytevector \var{bv})}\strut
+\end{procedure}
+\returns{} a bytevector
+
+The \code{base64-encode-bytevector} and \code{base64url-encode-bytevector}
+procedures return a new byte\-vector containing the binary data from bytevector
+\var{bv} encoded as printable US-ASCII characters as described in Sections 4
+and 5, respectively, of IETF RFC 4648~\cite{rfc4648}.
+Both procedures encode data using an alphabet including \code{A}-\code{Z},
+\code{a}-\code{z}, and \code{0}-\code{9}.
+For \code{base64-encode-bytevector}, the alphabet also includes \code{+} and \code{/}.
+For \code{base64url-encode-bytevector} it includes \code{-} and \code{\_}.
+In keeping with Section 3.1 of~\cite{rfc4648}, these procedures
+do not introduce line breaks in the output.
