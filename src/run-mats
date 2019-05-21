@@ -21,6 +21,7 @@ case $# in
 esac
 
 LIBSEP="::"
+DIR="${PWD}"
 GITTOP="$(git rev-parse --show-toplevel)"
 case "$(uname -s)" in
   CYGWIN_NT-*)
@@ -30,8 +31,11 @@ case "$(uname -s)" in
     LIBSEP=";;"
     GITTOP="$(cygpath -u "$GITTOP")"
     ;;
+  *)
+    DIR="$(realpath "${DIR}")"
+    ;;
 esac
-if [ "$PWD" != "$GITTOP" ]; then
+if [ "$DIR" != "$GITTOP" ]; then
   echo "${this} expected to be run from the repository root"
   fail
 fi
