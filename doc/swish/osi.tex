@@ -162,6 +162,19 @@ The \code{osi\_make\_error\_pair} function returns the error pair
 \code{(\var{who} . \var{error})}. This function must be called on the
 main thread only.
 
+\defineentry{osi\_send\_request}
+\begin{function}
+  \code{int osi\_send\_request(handle\_request\_func \var{handler}, void* \var{payload});}
+\end{function}
+
+The \code{osi\_send\_request} function blocks the calling thread until
+the main thread returns from calling \code{\var{handler}(\var{payload})}.
+The \var{handler} function must execute quickly to avoid blocking the
+event loop.
+Typical handlers call \code{osi\_add\_callback\_list} or one of its variants.
+\code{osi\_send\_request} returns zero if successful.
+Otherwise it returns a libuv error code.
+
 \defineentry{osi\_string\_to\_utf8}
 \begin{function}
   \code{char* osi\_string\_to\_utf8(ptr \var{s}, size\_t* \var{utf8\_len});}

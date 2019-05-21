@@ -33,6 +33,11 @@ ${SHLIBTEST}: shlibtest.c ${SwishLibs}
 	$C -c $< /I"${LIBUV_INCLUDE}" /I"${SCHEME_INCLUDE}" /I"${SWISH_INCLUDE}"
 	${LD} /dll /out:$@ shlibtest.obj ${SCHEME_LIB_PREFIX}.lib libuv.lib osi.lib
 
+TESTREQUEST := test-request.dll
+${TESTREQUEST}: test-request.c ${SwishLibs}
+	$C -c $< /I"${LIBUV_INCLUDE}" /I"${SCHEME_INCLUDE}" /I"${SWISH_INCLUDE}"
+	${LD} /dll /out:$@ test-request.obj ${SCHEME_LIB_PREFIX}.lib libuv.lib osi.lib
+
 platform-clean:
 	rm -f ../../${BUILD}/bin/osi.{dll,exp,ilk,lib,pdb} osi.obj sqlite.obj io-constants.{exe,obj}
 	rm -f ../../${BUILD}/bin/sqlite3.{dll,exp,ilk,lib,pdb}
@@ -40,7 +45,8 @@ platform-clean:
 	rm -f ../../${BUILD}/bin/swish.{exe,exp,ilk,lib,pdb}
 	rm -f io-constants.{exe,ilk,obj,pdb}
 	rm -f sha1.obj
-	rm -f shlibtest.{dll,exp,lib,pdb}
+	rm -f shlibtest.{dll,exp,ilk,lib,pdb}
+	rm -f test-request.{dll,exp,ilk,lib,pdb}
 	rm -f {main,osi,run,sqlite}.obj
 	rm -f vc140.pdb
 

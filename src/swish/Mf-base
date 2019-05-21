@@ -129,7 +129,7 @@ install-bin: install-check all
 
 .PHONY: mat-prereq
 mat-prereq:: | ${SETUP}
-mat-prereq:: ${SHLIBTEST}
+mat-prereq:: ${SHLIBTEST} ${TESTREQUEST}
 	@printf "making mat-prereq ... "
 	@rm -rf ../../build/mat-prereq
 	@$(MAKE) install-bin INSTALLROOT="$$(${NORMALIZE_PATH} ../../build/mat-prereq)" SWISH_VERSION=".x.y.z" MACHINE_TYPE="arch" > /dev/null

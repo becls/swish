@@ -29,6 +29,10 @@ SHLIBTEST := shlibtest.so
 ${SHLIBTEST}: shlibtest.c
 	$C -shared -o $@ $^ -I"${LIBUV_INCLUDE}" -I"${SCHEME_INCLUDE}" -I"${SWISH_INCLUDE}"
 
+TESTREQUEST := test-request.so
+${TESTREQUEST}: test-request.c
+	$C -shared -o $@ $^ -I"${LIBUV_INCLUDE}" -I"${SCHEME_INCLUDE}" -I"${SWISH_INCLUDE}"
+
 platform-clean:
 	rm -f main.o osi.o run.o sha1.o sqlite.o
 

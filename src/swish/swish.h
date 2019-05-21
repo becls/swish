@@ -72,3 +72,6 @@ EXPORT ptr osi_make_error_pair(const char* who, int error);
 EXPORT char* osi_string_to_utf8(ptr s, size_t* utf8_len);
 
 EXPORT int swish_run(int argc, const char* argv[], void (*custom_init)(void));
+
+typedef void (*handle_request_func)(void*);
+EXPORT int osi_send_request(handle_request_func, void* payload);

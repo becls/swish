@@ -30,4 +30,12 @@
 /sqlite3.o
 /sqlite3.obj
 /swish_kernel.o
+/test-request.dll
+/test-request.dylib
+/test-request.exp
+/test-request.ilk
+/test-request.lib
+/test-request.obj
+/test-request.pdb
+/test-request.so
 /vc140.pdb

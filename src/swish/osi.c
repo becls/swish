@@ -77,10 +77,22 @@ typedef struct {
   uv_connect_t connect;
 } tcp_connect_t;
 
+typedef struct {
+  uv_async_t async;
+  uv_mutex_t mutex;
+  void (*code)(void*);
+  void* payload;
+  uv_cond_t cond;
+  uv_cond_t* sender;
+} send_request_t;
+
 uv_loop_t* osi_loop;
 
 static uint64_t g_threshold;
 static ptr g_callbacks;
+
+static send_request_t g_send_request;
+static uv_key_t g_scheme_thread_key;
 
 void osi_add_callback_list(ptr callback, ptr args) {
   g_callbacks = Scons(Scons(callback, args), g_callbacks);
@@ -701,6 +713,9 @@ ptr osi_make_uuid(void) {
 }
 
 void osi_exit(int status) {
+  uv_cond_destroy(&g_send_request.cond);
+  uv_mutex_destroy(&g_send_request.mutex);
+  uv_close((uv_handle_t*)&g_send_request.async, NULL);
   uv_loop_close(osi_loop);
   _exit(status);
 }
@@ -1260,6 +1275,52 @@ void osi_close_SHA1(SHA1Context* ctxt) {
   free(ctxt);
 }
 
+static void send_request_async_cb(uv_async_t* handle) {
+  (void)handle;
+  uv_mutex_lock(&g_send_request.mutex);
+  g_send_request.code(g_send_request.payload);
+  uv_cond_t* sender = g_send_request.sender;
+  g_send_request.code = NULL;
+  g_send_request.payload = NULL;
+  g_send_request.sender = NULL;
+  uv_cond_signal(sender);
+  uv_mutex_unlock(&g_send_request.mutex);
+}
+
+int osi_send_request(handle_request_func code, void* payload) {
+  if (!code) return UV_EINVAL;
+  void* is_scheme = uv_key_get(&g_scheme_thread_key);
+  if (is_scheme) {
+    code(payload);
+    return 0;
+  }
+  uv_mutex_lock(&g_send_request.mutex);
+  // wait our turn, guarding against spurious wakeup
+  while (g_send_request.sender) {
+    uv_cond_wait(&g_send_request.cond, &g_send_request.mutex);
+  }
+  int rc = uv_async_send(&g_send_request.async);
+  if (rc) {
+    uv_mutex_unlock(&g_send_request.mutex);
+    return rc;
+  }
+  // add our work if async send succeeded
+  g_send_request.code = code;
+  g_send_request.payload = payload;
+  uv_cond_t self;
+  uv_cond_init(&self);
+  g_send_request.sender = &self;
+  // wait for async callback to consume work
+  while (&self == g_send_request.sender) {
+    uv_cond_wait(&self, &g_send_request.mutex);
+  }
+  uv_cond_destroy(&self);
+  // let the next thread in
+  uv_cond_signal(&g_send_request.cond);
+  uv_mutex_unlock(&g_send_request.mutex);
+  return 0;
+}
+
 void osi_init(void) {
   uv_disable_stdio_inheritance();
   static uv_loop_t g_loop;
@@ -1267,7 +1328,12 @@ void osi_init(void) {
   osi_loop = &g_loop;
   uv_timer_init(osi_loop, &g_timer);
   g_callbacks = Snil;
+  uv_key_create(&g_scheme_thread_key);
+  uv_key_set(&g_scheme_thread_key, (void*)1);
 #ifdef _WIN32
   timeBeginPeriod(1); // Set timer resolution to 1 ms.
 #endif
+  uv_async_init(osi_loop, &g_send_request.async, send_request_async_cb);
+  uv_mutex_init(&g_send_request.mutex);
+  uv_cond_init(&g_send_request.cond);
 }

@@ -29,6 +29,10 @@ SHLIBTEST := shlibtest.dylib
 ${SHLIBTEST}: shlibtest.c
 	$C -dynamiclib -undefined dynamic_lookup -o $@ $^ -I"${LIBUV_INCLUDE}" -I"${SCHEME_INCLUDE}" -I"${SWISH_INCLUDE}"
 
+TESTREQUEST := test-request.dylib
+${TESTREQUEST}: test-request.c
+	$C -dynamiclib -undefined dynamic_lookup -o $@ $^ -I"${LIBUV_INCLUDE}" -I"${SCHEME_INCLUDE}" -I"${SWISH_INCLUDE}"
+
 platform-clean:
 	rm -f main.o osi.o run.o sha1.o sqlite.o
 
