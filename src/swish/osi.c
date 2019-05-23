@@ -1322,6 +1322,8 @@ int osi_send_request(handle_request_func code, void* payload) {
 }
 
 void osi_init(void) {
+  if (osi_loop)
+    return;
   uv_disable_stdio_inheritance();
   static uv_loop_t g_loop;
   uv_loop_init(&g_loop);

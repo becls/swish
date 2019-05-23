@@ -134,9 +134,7 @@ static int allow_verbose_flag(const char* bootfn) {
   return len >= suffixlen && !COMPARE(bootfn + len - suffixlen, suffix, suffixlen);
 }
 
-// custom_init may be NULL or a pointer to a function that performs application-specific
-// initialization during Sbuild_heap.
-int swish_run(int argc, const char* argv[], void (*custom_init)(void)) {
+static void scheme_init(int argc, const char* argv[], void (*custom_init)(void)) {
   char* bootfn = get_boot_fn();
 
   Sscheme_init(NULL);
@@ -152,7 +150,18 @@ int swish_run(int argc, const char* argv[], void (*custom_init)(void)) {
   Sbuild_heap(argv[0], swish_init);
   free(bootfn);
 
+  osi_init();
+}
+
+static int swish_start(int argc, const char* argv[]) {
   int status = Sscheme_start(argc, argv);
   Sscheme_deinit();
-  exit(status);
+  return status;
+}
+
+// custom_init may be NULL or a pointer to a function that performs application-specific
+// initialization during Sbuild_heap.
+int swish_run(int argc, const char* argv[], void (*custom_init)(void)) {
+  scheme_init(argc, argv, custom_init);
+  return swish_start(argc, argv);
 }
