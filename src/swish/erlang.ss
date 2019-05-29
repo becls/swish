@@ -36,8 +36,10 @@
    dump-stack
    erlang:now
    get-registered
+   inherited-parameters
    kill
    link
+   make-inherited-parameter
    make-process-parameter
    match
    match-let*
@@ -499,22 +501,33 @@
         (bad-arg 'process-id p))
       (pcb-id p)]))
 
+  (define (inherit-parameters thunk)
+    (define inherited (inherited-parameters))
+    (define vals (map (lambda (p) (p)) inherited))
+    (lambda ()
+      (for-each (lambda (p v) (p v)) inherited vals)
+      (set! inherited '())
+      (set! vals '())
+      (thunk)))
+
   (define (spawn thunk)
     (unless (procedure? thunk)
       (bad-arg 'spawn thunk))
-    (no-interrupts
-     (let ([p (@make-process (@thunk->cont thunk))])
-       (@enqueue p run-queue 0)
-       p)))
+    (let ([thunk (inherit-parameters thunk)])
+      (no-interrupts
+       (let ([p (@make-process (@thunk->cont thunk))])
+         (@enqueue p run-queue 0)
+         p))))
 
   (define (spawn&link thunk)
     (unless (procedure? thunk)
       (bad-arg 'spawn&link thunk))
-    (no-interrupts
-     (let ([p (@make-process (@thunk->cont thunk))])
-       (@link p self)
-       (@enqueue p run-queue 0)
-       p)))
+    (let ([thunk (inherit-parameters thunk)])
+      (no-interrupts
+       (let ([p (@make-process (@thunk->cont thunk))])
+         (@link p self)
+         (@enqueue p run-queue 0)
+         p))))
 
   (define (@send p x)
     (let ([inbox (pcb-inbox p)])
@@ -840,16 +853,37 @@
         (bad-arg 'make-process-parameter filter))
       (let ([ht (make-weak-eq-hashtable)]
             [initial (filter initial)])
-        (case-lambda
-         [() (no-interrupts (eq-hashtable-ref ht self initial))]
-         [(u)
-          (let ([v (filter u)])
-            (no-interrupts (eq-hashtable-set! ht self v)))]))]
+        (rec process-parameter
+          (case-lambda
+           [() (no-interrupts (eq-hashtable-ref ht self initial))]
+           [(u)
+            (let ([v (filter u)])
+              (no-interrupts (eq-hashtable-set! ht self v)))])))]
      [(initial)
       (let ([ht (make-weak-eq-hashtable)])
-        (case-lambda
-         [() (no-interrupts (eq-hashtable-ref ht self initial))]
-         [(u) (no-interrupts (eq-hashtable-set! ht self u))]))]))
+        (rec process-parameter
+          (case-lambda
+           [() (no-interrupts (eq-hashtable-ref ht self initial))]
+           [(u) (no-interrupts (eq-hashtable-set! ht self u))])))]))
+
+  (define inherited-parameters
+    (make-parameter '()
+      (lambda (ps)
+        (unless (and (list? ps) (andmap procedure? ps))
+          (bad-arg 'inherited-parameters ps))
+        ps)))
+
+  (define (add-inherited p)
+    (no-interrupts
+     (inherited-parameters (cons p (inherited-parameters))))
+    p)
+
+  (define make-inherited-parameter
+    (case-lambda
+     [(initial filter)
+      (add-inherited (make-process-parameter initial filter))]
+     [(initial)
+      (add-inherited (make-process-parameter initial))]))
 
   ;; to get better names for match continuations than native or
   (define-syntax match-or

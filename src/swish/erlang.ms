@@ -595,6 +595,82 @@
       [#(EXIT ,@pid normal) 'ok]))
    (list (spin) (spin) (spin) (spin) (spin))))
 
+(isolate-mat inherited-parameters ()
+  (define (get p) (p))
+  (parameterize ([inherited-parameters '()])
+    (match-let*
+     ([,ips (map (lambda (i) (make-inherited-parameter i)) (iota 10))]
+      [ok (and (andmap (lambda (ip) (memq ip ips)) (inherited-parameters)) 'ok)]
+      [ok (and (andmap (lambda (ip) (memq ip (inherited-parameters))) ips) 'ok)]
+      [,me self]
+      ;; parameters have the expected values in spawned process
+      [,expected (map get ips)]
+      [,pid (spawn&link (lambda () (send me `(,self ,@(map get ips)))))]
+      [,@expected
+       (receive (after 1000 (raise 'timeout))
+         [(,@pid . ,rest) rest])]
+      ;; changing parameters in child process does not affect parent parameters
+      [,pid
+       (spawn&link
+        (lambda ()
+          (for-each (lambda (p) (p (* (p) 10))) ips)
+          ;; grandchild gets the new parameter values from child
+          (let ([child (spawn&link (lambda () (send me `(,self ,@(map get ips)))))])
+            (send me `(,self ,child)))))]
+      [,@expected
+       (receive (after 1000 (raise 'timeout))
+         [(,@pid ,child)
+          (receive (after 1000 (raise 'timeout))
+            [(,@child . ,10x)
+             (map (lambda (x) (/ x 10)) 10x)])])]
+      ;; changing parameters in parent process does not affect child once spawned
+      [,pid
+       (spawn&link
+        (lambda ()
+          (receive (after 1000 (raise 'timeout))
+            [ready (send me `(,self ,@(map get ips)))])))]
+      [,@expected
+       (begin
+         (for-each (lambda (p) (p 'nut)) ips)
+         (send pid 'ready)
+         (receive (after 1000 (raise 'timeout))
+           [(,@pid . ,vals) vals]))]
+      [#10(nut) (list->vector (map get ips))])
+     'ok))
+  (let ([g1 (make-guardian)]
+        [g2 (make-guardian)]
+        [g3 (make-guardian)]
+        [me self])
+    ;; parameters and values can be collected
+    (let* ([val (list->string '(#\a #\b #\c))]
+           [default (list->string '(#\x #\y #\z))]
+           [p (make-inherited-parameter default)])
+      (g1 val)
+      (g2 default)
+      (g3 p)
+      (match-let*
+       ([,pid
+         (parameterize ([p val])
+           (spawn&link
+            (lambda ()
+              (let ([v (p)])
+                (send me 'ready)
+                ;; wait until first collect is done
+                (receive (after 1000 'timeout)
+                  [go (send me v)])))))]
+        ["xyz" (p)]
+        [ok (receive (after 1000 'timeout) [ready 'ok])]
+        [,_ (set! p #f)]
+        [,_ (inherited-parameters '())]
+        [,_ (gc)]
+        [(#f "xyz" ,x) (list(g1) (g2) (g3))]
+        [#t (procedure? x)]
+        [,_ (send pid 'go)]
+        [ok (receive (after 1000 'timeout) ["abc" 'ok])]
+        [,_ (gc)]
+        [("abc" #f #f) (list (g1) (g2) (g3))])
+       'ok))))
+
 (isolate-mat monitor ()
   (process-trap-exit #t)
   (let* ([host self]

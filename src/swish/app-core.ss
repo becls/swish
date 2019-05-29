@@ -42,7 +42,7 @@
 
   ;; intended to return short descriptive name of the application if known
   (define app:name
-    (make-process-parameter #f
+    (make-inherited-parameter #f
       (lambda (x)
         (unless (or (not x) (string? x))
           (bad-arg 'app:name x))
@@ -50,7 +50,7 @@
 
   ;; intended to return full path to the application script or executable, if known
   (define app:path
-    (make-process-parameter #f
+    (make-inherited-parameter #f
       (lambda (x)
         (unless (or (not x) (string? x))
           (bad-arg 'app:path x))

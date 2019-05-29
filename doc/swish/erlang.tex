@@ -881,7 +881,7 @@ the number of milliseconds in UTC since the UNIX epoch January 1,
 \begin{procedure}
   \code{(make-process-parameter \var{initial} \opt{\var{filter}})}
 \end{procedure}
-\returns{} a process parameter procedure
+\returns{} a process-parameter procedure
 
 The \code{make-process-parameter} procedure creates a parameter
 procedure $p$ that provides per-process, mutable storage using a weak
@@ -918,6 +918,33 @@ been redefined to use \code{make-process-parameter}:
 \code{reset-handler}, and
 \code{waiter-prompt-and-read},
 \code{waiter-prompt-string}.
+
+% -------------------------------------------------------------------------
+\defineentry{inherited-parameters}
+\begin{parameter}
+  \code{inherited-parameters}
+\end{parameter}
+\hasvalue{} a list of process-parameter procedures
+
+The \code{inherited-parameters} parameter contains a list of
+process parameters whose values are propagated into spawned
+processes.
+Before creating a process, \code{spawn} and \code{spawn\&link}
+record the current values of the \code{inherited-parameters}
+and install these values in the new process just before it calls
+the thunk.
+
+% -------------------------------------------------------------------------
+\defineentry{make-inherited-parameter}
+\begin{procedure}
+  \code{(make-inherited-parameter \var{initial} \opt{\var{filter}})}
+\end{procedure}
+\returns{} a process-parameter procedure
+
+The \code{make-inherited-parameter} procedure calls
+\code{make-process-parameter} to create a per-process
+parameter procedure \var{p} and adds \var{p} to the
+\code{inherited-parameters} list before returning \var{p}.
 
 % -------------------------------------------------------------------------
 \defineentry{on-exit}
