@@ -2,34 +2,37 @@
 (library (swish software-info)
   (export
    include-line
-   software-company
-   software-company-dir
-   software-copyright-year
-   software-internal-name
+   software-info
    software-product-name
    software-revision
    software-version
-   swish-version
    )
-  (import (chezscheme))
+  (import
+   (chezscheme)
+   (swish app-core)
+   (swish erlang)
+   (swish json))
 
-  (define software-company "Beckman Coulter, Inc.")
+  (define info (json:make-object))
 
-  (define software-company-dir "Beckman Coulter")
+  (define (software-info) info)
 
-  (define software-copyright-year "2018")
+  (define-syntax define-info
+    (syntax-rules ()
+      [(_ name leaf-key)
+       (define name
+         (case-lambda
+          [() (name (string->symbol (or (app:name) "swish")))]
+          [(key)
+           (arg-check 'name [key symbol?])
+           (json:ref info (cons key '(leaf-key)) #f)]
+          [(key val)
+           (arg-check 'name [key symbol?] [val string?])
+           (json:update! info (cons key '(leaf-key)) values val)]))]))
 
-  ;; The software-internal-name value is used as the name for the
-  ;; compiled exe and boot files. It must not contain spaces or any
-  ;; other character that requires quoting in GNU make.
-  (define software-internal-name "swish")
-
-  (define software-product-name "Swish")
-
-  (define software-version "0.0.0")
-
-  (define (swish-version)
-    (format "~a Version ~a" software-product-name software-version))
+  (define-info software-product-name product-name)
+  (define-info software-version version)
+  (define-info software-revision revision)
 
   (define-syntax (file-not-found x)
     (syntax-case x ()
@@ -48,27 +51,20 @@
                    (datum->syntax #'il (call-with-input-file path get-line))
                    #'(not-found filename))))))]))
 
-  (define software-revision
-    (let ([revs (make-hashtable symbol-hash eq?)])
-      (case-lambda
-       [()
-        (vector->list (hashtable-cells revs))]
-       [(key)
-        (hashtable-ref revs key #f)]
-       [(key hash)
-        (cond
-         [(hashtable-ref revs key #f) =>
-          (lambda (hit)
-            (unless (equal? hit hash)
-              (errorf 'software-revision "~s already specified hash ~s" key hit)))]
-         [else (hashtable-set! revs key hash)])])))
-
+  (software-product-name 'swish "Swish")
+  (software-version 'swish "0.0.0")
   (software-revision 'swish
     (include-line "swish/git.revision"
       (lambda (fn)
         (warningf 'software-info.ss "file ~s not found at compile time" fn)
         #f)))
 
+  (software-product-name 'chezscheme "Chez Scheme")
+  (software-version 'chezscheme
+    (let-syntax ([scheme-version
+                  (lambda (x)
+                    (format "~{~a~^.~}" (call-with-values scheme-version-number list)))])
+      scheme-version))
   (software-revision 'chezscheme
     (include-line "swish/chezscheme.revision"
       (lambda (fn)
@@ -82,18 +78,54 @@
 
 (mat software-revision ()
   (define swish-hash (include-line "swish/git.revision"))
+  (define chezscheme-hash (include-line "swish/chezscheme.revision"))
+  (define (symbol<? a b) (string<? (symbol->string a) (symbol->string b)))
   (match-let*
    ([#f (software-revision 'xyz)]
     [,_ (software-revision 'xyz "pdq")]
     ["pdq" (software-revision 'xyz)]
+    [,_ (json:delete! (software-info) 'xyz)] ;; try to keep xyz out of coverage report
+    [#(EXIT #(bad-arg software-revision "string"))
+     (catch (software-revision "string"))]
+    [#(EXIT #(bad-arg software-version bol))
+     (catch (software-version 'sym 'bol))]
+    [#(EXIT #(bad-arg software-product-name 123))
+     (catch (software-product-name 'zyx 123))]
+    [,@swish-hash (software-revision)]
     [,@swish-hash (software-revision 'swish)]
+    [,@chezscheme-hash (software-revision 'chezscheme)]
     [#f (software-revision 'abc)]
     [,_ (software-revision 'foo "bar")]
+    [,_ (software-revision 'foo "write-once by default; can json:update! info if needed")]
     ["bar" (software-revision 'foo)]
-    [,ls (software-revision)]
-    [(xyz . "pdq") (assq 'xyz ls)]
-    [(foo . "bar") (assq 'foo ls)]
-    [(swish . ,@swish-hash) (assq 'swish ls)]
-    [#(EXIT ,reason) (catch (software-revision 'foo "different"))]
-    [,_ (software-revision 'foo "bar")])
+    [#f (software-product-name 'foo)]
+    [,_ (software-product-name 'foo "Foo")]
+    [,_ (software-product-name 'foo "see above")]
+    ["Swish" (software-product-name)]
+    ["Foo" (software-product-name 'foo)]
+    [,_ (json:delete! (software-info) 'foo)] ;; try to keep foo out of coverage report
+    [,cs-version (scheme-version)]
+    [,@cs-version
+     (parameterize ([app:name "chezscheme"])
+       (format "~a Version ~a"
+         (software-product-name)
+         (software-version)))]
+    [#f (json:ref (software-info) '(abc version) #f)]
+    [,@swish-hash (json:ref (software-info) '(swish revision) #f)]
+    [#(product-name revision version)
+     (vector-sort symbol<?
+       (hashtable-keys
+        (json:ref (software-info) 'chezscheme #f)))]
+    [#(product-name revision version)
+     (vector-sort symbol<?
+       (hashtable-keys
+        (json:ref (software-info) 'swish #f)))]
+    [#(EXIT ,reason) (catch (eval '(include-line not-a-string-constant)))]
+    [#t (starts-with? (exit-reason->english reason)
+          "Exception: expected path as string")]
+    [#(EXIT ,reason) (catch (eval '(include-line "no-such-file")))]
+    ["Exception: file not found \"no-such-file\"." (exit-reason->english reason)]
+    [#(EXIT "no-such-file") (catch (eval '(include-line "no-such-file" raise)))]
+    [("no-such-file") (catch (eval '(include-line "no-such-file" list)))]
+    )
    'ok))

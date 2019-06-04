@@ -8,7 +8,7 @@
      (body
       (h1 "Main Page")
       ,(format "~a Version ~a "
-         software-product-name
-         software-version)
+         (software-product-name)
+         (software-version))
       (a (@ (href "swish/index")) "Diagnostics Pages")
       "."))))

@@ -189,7 +189,7 @@
        "\n"
        "To create a stand-alone program, specify -b and provide a base boot file."
        who "creates a stand-alone program"
-       "by copying the" software-internal-name "executable to <out-file>"
+       "by copying the swish executable to <out-file>"
        "and creating a boot file <out-file>.boot containing each"
        (format "-b~aboot-file" #\240)
        "in order, the run-time libraries included via --rtlib,"
@@ -202,10 +202,10 @@
      (list-item "3." "invokes a custom scheme-start handler described below.\n")
      (wrap 0
        "To create a linked program, omit the -b option.\n\n"
-       "When run, a linked program calls" software-internal-name "to:\n")
+       "When run, a linked program calls swish to:\n")
      (list-item "1." "load Chez Scheme's" csvNNN.dll "[Windows only],")
      (list-item "2." "load Chez Scheme's petite.boot and scheme.boot,")
-     (list-item "3." "load the standard" software-internal-name "boot file, then")
+     (list-item "3." "load the standard swish boot file, then")
      (list-item "4." "invoke swish-start with the compiled program as the first argument,"
        "followed by the arguments provided on the command line.\n")
      (wrap 0 "On start-up a program (linked, stand-alone, or script):\n")

@@ -41,6 +41,7 @@
    (swish event-mgr)
    (swish events)
    (swish io)
+   (swish json)
    (swish osi)
    (swish software-info)
    (swish string-utils)
@@ -64,7 +65,8 @@
             (event-mgr:flush-buffer)
             (system-detail <system-attributes>
               [date (current-date)]
-              [software-version software-version]
+              [software-info (software-info)]
+              [machine-type (symbol->string (machine-type))]
               [computer-name (osi_get_hostname)])
             'ignore)]
          [,error error])]
@@ -199,6 +201,7 @@
             (if stack-string
                 `#(error ,reason-string ,stack-string)
                 `#(error ,reason-string)))))]
+     [(json:object? x) (json:object->string x)]
      [else (format "~s" x)]))
 
   (define-syntax (log-sql x)
@@ -211,7 +214,7 @@
 
   (module (swish-event-logger)
     (define schema-name 'swish)
-    (define schema-version "2018-09-25")
+    (define schema-version "2019-05-24")
 
     (define-simple-events create-simple-tables log-simple-event
       (<child-end>
@@ -280,7 +283,8 @@
       (<system-attributes>
        (timestamp integer)
        (date text)
-       (software-version text)
+       (software-info text)
+       (machine-type text)
        (computer-name text))
       (<transaction-retry>
        (timestamp integer)
@@ -354,6 +358,14 @@
     (define (upgrade-db)
       (match (log-db:version schema-name)
         [,@schema-version (create-db)]
+        ["2018-09-25"
+         (execute "alter table system_attributes rename to system_attributes_orig")
+         (execute "create table system_attributes (timestamp integer, date text, software_info text, machine_type text, computer_name text)")
+         (execute "insert into system_attributes select timestamp, date, json_object('swish',json_object('product-name','Swish','version',software_version)), ?, computer_name from system_attributes_orig order by rowid"
+           (symbol->string (machine-type)))
+         (execute "drop table system_attributes_orig")
+         (log-db:version schema-name "2019-05-24")
+         (upgrade-db)]
         ["2018-03-02"
          (execute "alter table statistics rename to statistics_orig")
          (execute "create table statistics(timestamp integer, date text, reason text, bytes_allocated integer, osi_bytes_used integer, sqlite_memory integer, sqlite_memory_highwater integer, databases integer, statements integer, listeners integer, ports integer, watchers integer, cpu real, real real, bytes integer, gc_count integer, gc_cpu real, gc_real real, gc_bytes integer)")

@@ -359,7 +359,7 @@ else
   check_missing "kernel.o" "${SchemeInclude}"
 fi
 
-SWISH_VERSION=$(cd src; "${SCHEME}" --script get-software-info software-version)
+SWISH_VERSION=$(sed -n 's/^#define SWISH_VERSION \([0-9a-z."]*\)/\1/p' src/swish/swish.h)
 
 escape_backslash() { printf "%s" "$1" | sed 's_\\_\\\\_g' ; }
 ADD_TO=

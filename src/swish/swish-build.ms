@@ -1169,9 +1169,8 @@
       ;;   swish-start -q -- arg ...
       "^prompted"
       "^# 24"
-      "^# "
       ;;     swish-start
-      "^Swish Version"
+      "^# Swish Version"
       "^>> "
       ;; eof
       "^# "

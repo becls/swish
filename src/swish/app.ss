@@ -127,6 +127,18 @@
          [,_ #f]))
      (library-list)))
 
+  (define (print-banner revision)
+    (let-values ([(name version)
+                  (cond
+                   [(software-product-name) =>
+                    (lambda (name)
+                      (values name (software-version)))]
+                   [else
+                    (values
+                     (software-product-name 'swish)
+                     (software-version 'swish))])])
+      (printf "~a~@[ Version ~a~]~@[ (~a)~]\n" name version revision)))
+
   (define (run)
     (let* ([opt (parse-command-line-arguments cli)]
            [files (or (opt "files") '())])
@@ -135,12 +147,12 @@
         (display-help (path-last (osi_get_executable_path)) cli (opt))
         (values)]
        [(opt "version")
-        (printf "~a (~a)\n" (swish-version) (software-revision 'swish))
+        (print-banner (software-revision))
         (values)]
        [(null? files)                   ; repl
         (let ([filenames (or (opt "args") '())])
           (unless (opt "quiet")
-            (printf "\n~a Version ~a\n" software-product-name software-version)
+            (print-banner #f)
             (flush-output-port))
           (try-import)
           (parameterize ([waiter-prompt-string (if (opt "quiet") "" ">")])

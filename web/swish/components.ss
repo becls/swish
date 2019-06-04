@@ -84,7 +84,7 @@
 
 (define (navigation)
   (panel (osi_get_hostname)
-    (section software-product-name
+    (section (software-product-name)
       (link "index" "Home")
       (link "charts" "Charts")
       (link "errors?type=child&sql=&limit=100&offset=0" "Child Errors")

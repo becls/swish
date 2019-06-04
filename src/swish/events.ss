@@ -104,7 +104,8 @@
   (define-tuple <system-attributes>
     timestamp
     date
-    software-version
+    software-info
+    machine-type
     computer-name)
   (define-tuple <transaction-retry>
     timestamp

@@ -191,7 +191,8 @@
         (for-each pretty-print (sort string<? (map symbol->string (library-exports '(swish mat)))))
         (profile:save)
         (exit)))
-    `("" ,(swish-version) "okay" seek "add-mat" "mat" seek "run-mats" seek "summarize"))
+    `(,(format "~a Version ~a" (software-product-name 'swish) (software-version 'swish))
+      "okay" seek "add-mat" "mat" seek "run-mats" seek "summarize"))
   (script-test swish-test-src
     `("--repl" "--load-profile" "foo" "bar" "--save-profile" "chowder" "-s" "luke" "--progress" "ion" "--tag" "RFID" "--not" "really")
     (format "~{~s\n~}"

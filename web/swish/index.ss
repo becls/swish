@@ -37,7 +37,7 @@
       days hours minutes seconds)))
 
 (hosted-page
- (format "~a ~a" software-product-name software-version)
+ (format "~a ~a" (software-product-name) (software-version))
  '()
  `(p "Snapshot from " ,(date-and-time))
  `(p "Uptime: " ,(uptime))

@@ -345,6 +345,89 @@ used by the HTTP interface (see Chapter~\ref{chap:http}).
 Its initial value is the path to a \code{"web"} subdirectory of
 the directory specified by \code{base-dir}.
 
+\defineentry{include-line}
+\begin{syntax}
+  \code{(include-line \var{filenme} \opt{\var{not-found}})}
+\end{syntax}
+\returns{} see below
+
+The \code{include-line} macro expects a string constant \var{filename}
+identifying a file either via absolute path or as a path relative to a
+directory in \code{source-directories}.
+If such a file can be found at expand time, \code{include-line} expands to a
+string containing the first line of that file or the end-of-file object if the
+file is empty.
+If the file cannot be found, \code{include-line} expands to
+\code{(\var{not-found} \var{filename})}, where \var{not-found} defaults to an
+expression that raises a syntax error indicating that the file could not be
+found.
+
+\defineentry{software-info}
+\begin{procedure}
+  \code{(software-info)}
+\end{procedure}
+\hasvalue{} a JSON object
+
+The \code{software-info} procedure returns a JSON object containing the values
+stored by
+\code{software-product-name},
+\code{software-revision}, and
+\code{software-version}.
+Swish populates these parameters for the
+\code{swish} and \code{chezscheme} keys
+with values that are determined at compile time.
+
+\defineentry{software-product-name}
+\begin{parameter}
+  \code{(software-product-name \opt{\var{key}} \opt{\var{value}})}
+\end{parameter}
+\hasvalue{} a string or \code{\#f}
+
+The \code{software-product-name} procedure stores or retrieves the product
+name under the path \code{(\var{key} product-name)} in the
+\code{(software-info)} object.
+If \var{value} is omitted, this procedure returns the value, if any,
+associated with \var{key}, or else \code{\#f}.
+If \var{key} and \var{value} are omitted, this procedure returns the value
+associated with the key \code{(string->symbol (or (app:name) "swish"))}.
+If specified, \var{key} must be a symbol and \var{value} must be a string.
+If \var{key} and \var{value} are specified and a value has already been
+set for \var{key}, this procedure has no effect.
+
+\defineentry{software-revision}
+\begin{parameter}
+  \code{(software-revision \opt{\var{key}} \opt{\var{value}})}
+\end{parameter}
+\hasvalue{} a string or \code{\#f}
+
+The \code{software-revision} procedure stores or retrieves the software
+revision under the path \code{(\var{key} revision)} in the
+\code{(software-info)} object.
+If \var{value} is omitted, this procedure returns the value, if any,
+associated with \var{key}, or else \code{\#f}.
+If \var{key} and \var{value} are omitted, this procedure returns the value
+associated with the key \code{(string->symbol (or (app:name) "swish"))}.
+If specified, \var{key} must be a symbol and \var{value} must be a string.
+If \var{key} and \var{value} are specified and a value has already been
+set for \var{key}, this procedure has no effect.
+
+\defineentry{software-version}
+\begin{parameter}
+  \code{(software-version \opt{\var{key}} \opt{\var{value}})}
+\end{parameter}
+\hasvalue{} a string or \code{\#f}
+
+The \code{software-version} procedure stores or retrieves the software
+version under the path \code{(\var{key} version)} in the
+\code{(software-info)} object.
+If \var{value} is omitted, this procedure returns the value, if any,
+associated with \var{key}, or else \code{\#f}.
+If \var{key} and \var{value} are omitted, this procedure returns the value
+associated with the key \code{(string->symbol (or (app:name) "swish"))}.
+If specified, \var{key} must be a symbol and \var{value} must be a string.
+If \var{key} and \var{value} are specified and a value has already been
+set for \var{key}, this procedure has no effect.
+
 \subsection{Program Life Cycle}
 
 \defineentry{app-exception-handler}
