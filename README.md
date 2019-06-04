@@ -60,7 +60,7 @@ is not thread safe and should be used from the main thread only.
 - Chez Scheme 9.5.2 or later
 - Cygwin or MinGW/MSYS with bash, git, graphviz, grep, perl, texlive,
   GNU make, etc.
-- Microsoft Visual Studio 2017 or 2015 with Visual C++
+- Microsoft Visual Studio 2017 with Visual C++
 - Python 2.7 for Windows in C:\Python27 (see below for other options)
 - Put scheme in PATH.
 
