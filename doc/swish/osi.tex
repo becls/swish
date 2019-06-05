@@ -104,7 +104,7 @@ libuv integrations.
 
 \defineentry{osi\_init}
 \begin{function}
-  void \code{osi\_init}(void);
+  \code{void osi\_init(void);}
 \end{function}
 
 The \code{osi\_init} function disables libuv stdio inheritance,
@@ -117,7 +117,7 @@ called.
 
 \defineentry{osi\_add\_callback\_list}
 \begin{function}
-  void \code{osi\_add\_callback\_list(ptr \var{callback}, ptr \var{args})};
+  \code{void osi\_add\_callback\_list(ptr \var{callback}, ptr \var{args});}
 \end{function}
 
 The \code{osi\_add\_callback\_list} function adds the callback list
@@ -126,7 +126,7 @@ function must be called on the main thread only.
 
 \defineentry{osi\_add\_callback1}
 \begin{function}
-  void \code{osi\_add\_callback1(ptr \var{callback}, ptr \var{arg})};
+  \code{void osi\_add\_callback1(ptr \var{callback}, ptr \var{arg});}
 \end{function}
 
 The \code{osi\_add\_callback1} function adds the callback list
@@ -135,8 +135,8 @@ function must be called on the main thread only.
 
 \defineentry{osi\_add\_callback2}
 \begin{function}
-  void \code{osi\_add\_callback2(ptr \var{callback}, ptr \var{arg1},
-    ptr \var{arg2})};
+  \code{void osi\_add\_callback2(ptr \var{callback}, ptr \var{arg1},
+    ptr \var{arg2});}
 \end{function}
 
 The \code{osi\_add\_callback2} function adds the callback list
@@ -145,8 +145,8 @@ callbacks. This function must be called on the main thread only.
 
 \defineentry{osi\_add\_callback3}
 \begin{function}
-  void \code{osi\_add\_callback3(ptr \var{callback}, ptr \var{arg1},
-    ptr \var{arg2}, ptr \var{arg3})};
+  \code{void osi\_add\_callback3(ptr \var{callback}, ptr \var{arg1},
+    ptr \var{arg2}, ptr \var{arg3});}
 \end{function}
 
 The \code{osi\_add\_callback3} function adds the callback list
@@ -155,7 +155,7 @@ of callbacks. This function must be called on the main thread only.
 
 \defineentry{osi\_make\_error\_pair}
 \begin{function}
-  ptr \code{osi\_make\_error\_pair}(const char* \var{who}, int \var{error});
+  \code{ptr osi\_make\_error\_pair(const char* \var{who}, int \var{error});}
 \end{function}
 
 The \code{osi\_make\_error\_pair} function returns the error pair
@@ -164,7 +164,7 @@ main thread only.
 
 \defineentry{osi\_string\_to\_utf8}
 \begin{function}
-  char* \code{osi\_string\_to\_utf8}(ptr \var{s}, size\_t* \var{utf8\_len});
+  \code{char* osi\_string\_to\_utf8(ptr \var{s}, size\_t* \var{utf8\_len});}
 \end{function}
 
 The \code{osi\_string\_to\_utf8} function returns the address of a
@@ -178,7 +178,7 @@ nul is written to \code{*\var{utf8\_len}}. It returns NULL if
 
 \defineentry{osi\_get\_argv}
 \begin{function}
-  ptr \code{osi\_get\_argv}(void);
+  \code{ptr osi\_get\_argv(void);}
 \end{function}
 
 The \code{osi\_get\_argv} function returns a Scheme vector of strings
@@ -187,7 +187,7 @@ constructed from the most recent arguments passed to
 
 \defineentry{osi\_get\_bytes\_used}
 \begin{function}
-  size\_t \code{osi\_get\_bytes\_used}(void);
+  \code{size\_t osi\_get\_bytes\_used(void);}
 \end{function}
 
 The \code{osi\_get\_bytes\_used} function returns the number of bytes
@@ -197,7 +197,7 @@ it calls the \code{\_heapwalk} function.
 
 \defineentry{osi\_get\_callbacks}
 \begin{function}
-  ptr \code{osi\_get\_callbacks}(uint64\_t \var{timeout});
+  \code{ptr osi\_get\_callbacks(uint64\_t \var{timeout});}
 \end{function}
 
 The \code{osi\_get\_callbacks} function returns a list of callback
@@ -209,7 +209,7 @@ asynchronous function that returned one or more \var{result}s.
 
 \defineentry{osi\_get\_error\_text}
 \begin{function}
-  const char* \code{osi\_get\_error\_text}(int \var{err});
+  \code{const char* osi\_get\_error\_text(int \var{err});}
 \end{function}
 
 The \code{osi\_get\_error\_text} function returns the English string
@@ -217,7 +217,7 @@ for the given error number.
 
 \defineentry{osi\_get\_hostname}
 \begin{function}
-  ptr \code{osi\_get\_hostname}(void);
+  \code{ptr osi\_get\_hostname(void);}
 \end{function}
 
 The \code{osi\_get\_hostname} function returns the host name from
@@ -225,7 +225,7 @@ The \code{osi\_get\_hostname} function returns the host name from
 
 \defineentry{osi\_get\_hrtime}
 \begin{function}
-  uint64\_t \code{osi\_get\_hrtime}(void);
+  uint64\_t \code{osi\_get\_hrtime(void);}
 \end{function}
 
 The \code{osi\_get\_hrtime} function returns the current
@@ -234,7 +234,7 @@ not related to the time of day and is not subject to clock drift.
 
 \defineentry{osi\_get\_time}
 \begin{function}
-  uint64\_t \code{osi\_get\_time}(void);
+  uint64\_t \code{osi\_get\_time(void);}
 \end{function}
 
 The \code{osi\_get\_time} function returns the current clock time in
@@ -245,7 +245,7 @@ it calls the \code{GetSystemTimeAsFileTime} function in
 
 \defineentry{osi\_is\_quantum\_over}
 \begin{function}
-  int \code{osi\_is\_quantum\_over}(void);
+  \code{int osi\_is\_quantum\_over(void);}
 \end{function}
 
 The \code{osi\_is\_quantum\_over} function returns 1 if the current time
@@ -254,7 +254,7 @@ by the most recent call to \code{osi\_set\_quantum} and 0 otherwise.
 
 \defineentry{osi\_list\_uv\_handles}
 \begin{function}
-  ptr \code{osi\_list\_uv\_handles}(void);
+  \code{ptr osi\_list\_uv\_handles(void);}
 \end{function}
 
 The \code{osi\_list\_uv\_handles} function calls \code{uv\_walk} and
@@ -264,7 +264,7 @@ is the \code{uv\_handle\_type}.
 
 \defineentry{osi\_make\_uuid}
 \begin{function}
-  ptr \code{osi\_make\_uuid}(void);
+  \code{ptr osi\_make\_uuid(void);}
 \end{function}
 
 The \code{osi\_make\_uuid} function returns a new universally unique
@@ -301,7 +301,7 @@ representation of the octet at index $i$ of bytevector \var{uuid}.  If
 
 \defineentry{osi\_set\_argv}
 \begin{function}
-  void \code{osi\_set\_argv}(int \var{argc}, const char *\var{argv}[]);
+  \code{void osi\_set\_argv(int \var{argc}, const char *\var{argv}[]);}
 \end{function}
 
 The \code{osi\_set\_argv} function stores the \var{argv} pointer to a
@@ -311,7 +311,7 @@ deallocate the memory for the arguments.
 
 \defineentry{osi\_set\_quantum}
 \begin{function}
-  void \code{osi\_set\_quantum}(uint64\_t \var{nanoseconds});
+  \code{void osi\_set\_quantum(uint64\_t \var{nanoseconds});}
 \end{function}
 
 The \code{osi\_set\_quantum} function sets the threshold for
@@ -330,10 +330,12 @@ table defines the specific \code{close}, \code{read}, and \code{write}
 procedures.
 
 \defineentry{osi\_read\_port}
-\begin{function}\begin{tabular}[t]{@{}l@{}l}
-  ptr \code{osi\_read\_port}(& uptr \var{port}, ptr \var{buffer}, size\_t \var{start\_index}, uint32\_t \var{size},\\
-  & int64\_t \var{offset}, ptr \var{callback});
-\end{tabular}\end{function}
+\begin{function}
+\codebegin
+ptr osi\_read\_port(uptr \var{port}, ptr \var{buffer}, size\_t \var{start\_index}, uint32\_t \var{size},\strut
+       \     \      int64\_t \var{offset}, ptr \var{callback});\strut
+\codeend
+\end{function}
 
 The \code{osi\_read\_port} function issues a read on the given
 \var{port} of \var{size} bytes into the bytevector \var{buffer} at the
@@ -347,10 +349,11 @@ nonnegative number of bytes read when successful and a negative error
 code otherwise.
 
 \defineentry{osi\_write\_port}
-\begin{function}\begin{tabular}[t]{@{}l@{}l}
-  ptr \code{osi\_write\_port}(& uptr \var{port}, ptr \var{buffer}, size\_t \var{start\_index}, uint32\_t \var{size},\\
-  & int64\_t \var{offset}, ptr \var{callback});
-\end{tabular}\end{function}
+\begin{function}
+\codebegin
+ptr osi\_write\_port(uptr \var{port}, ptr \var{buffer}, size\_t \var{start\_index}, uint32\_t \var{size},\strut
+       \      \      int64\_t \var{offset}, ptr \var{callback});\strut
+\codeend\end{function}
 
 The \code{osi\_write\_port} function issues a write on the given
 \var{port} of \var{size} bytes from the bytevector \var{buffer} at the
@@ -365,7 +368,7 @@ error code otherwise.
 
 \defineentry{osi\_close\_port}
 \begin{function}
-  ptr \code{osi\_close\_port}(uptr \var{port}, ptr \var{callback});
+  \code{ptr osi\_close\_port(uptr \var{port}, ptr \var{callback});}
 \end{function}
 
 The \code{osi\_close\_port} function issues a close on the given
@@ -379,7 +382,7 @@ successful and a negative error code otherwise.
 
 \defineentry{osi\_exit}
 \begin{function}
-  void \code{osi\_exit}(int \var{status});
+  \code{void osi\_exit(int \var{status});}
 \end{function}
 
 The \code{osi\_exit} function calls the \code{\_exit} function to
@@ -389,7 +392,7 @@ systems it blocks if there is an outstanding read on stdin.
 
 \defineentry{osi\_spawn}
 \begin{function}
-  ptr \code{osi\_spawn}(const char* \var{path}, ptr \var{args}, ptr \var{callback});
+  \code{ptr osi\_spawn(const char* \var{path}, ptr \var{args}, ptr \var{callback});}
 \end{function}
 
 The \code{osi\_spawn} function uses the \code{uv\_spawn} function to
@@ -411,7 +414,7 @@ signal or 0 if the process did not terminate because of a signal.
 
 \defineentry{osi\_kill}
 \begin{function}
-  ptr \code{osi\_kill}(int \var{pid}, int \var{signum});
+  \code{ptr osi\_kill(int \var{pid}, int \var{signum});}
 \end{function}
 
 The \code{osi\_kill} function uses the \code{uv\_kill} function to
@@ -423,7 +426,7 @@ otherwise.
 
 \defineentry{osi\_open\_fd}
 \begin{function}
-  ptr \code{osi\_open\_fd}(int \var{fd}, int \var{close});
+  \code{ptr osi\_open\_fd(int \var{fd}, int \var{close});}
 \end{function}
 
 The \code{osi\_open\_fd} function returns a port handle for the file
@@ -435,7 +438,7 @@ non-zero value on a standard I/O file descriptor ($0 \le \var{fd} \le
 
 \defineentry{osi\_open\_file}
 \begin{function}
-  ptr \code{osi\_open\_file}(const char* \var{path}, int \var{flags}, int \var{mode}, ptr \var{callback});
+  \code{ptr osi\_open\_file(const char* \var{path}, int \var{flags}, int \var{mode}, ptr \var{callback});}
 \end{function}
 
 The \code{osi\_open\_file} function issues an open using the
@@ -487,7 +490,7 @@ The following constants are defined for \var{mode}:
 
 \defineentry{osi\_get\_executable\_path}
 \begin{function}
-  ptr \code{osi\_get\_executable\_path}(void);
+  \code{ptr osi\_get\_executable\_path(void);}
 \end{function}
 
 The \code{osi\_get\_executable\_path} function uses the
@@ -497,7 +500,7 @@ pair otherwise.
 
 \defineentry{osi\_get\_file\_size}
 \begin{function}
-  ptr \code{osi\_get\_file\_size}(uptr \var{port}, ptr \var{callback});
+  \code{ptr osi\_get\_file\_size(uptr \var{port}, ptr \var{callback});}
 \end{function}
 
 The \code{osi\_get\_file\_size} function uses the \code{uv\_fs\_fstat}
@@ -510,7 +513,7 @@ successful and a negative error code otherwise.
 
 \defineentry{osi\_get\_real\_path}
 \begin{function}
-  ptr \code{osi\_get\_real\_path}(const char* \var{path}, ptr \var{callback});
+  \code{ptr osi\_get\_real\_path(const char* \var{path}, ptr \var{callback});}
 \end{function}
 
 The \code{osi\_get\_real\_path} function uses the
@@ -523,7 +526,7 @@ successful and a negative error code otherwise.
 
 \defineentry{osi\_get\_temp\_directory}
 \begin{function}
-  ptr \code{osi\_get\_temp\_directory}(void);
+  \code{ptr osi\_get\_temp\_directory(void);}
 \end{function}
 
 The \code{osi\_get\_temp\_directory} function uses the
@@ -532,7 +535,7 @@ temporary directory and an error pair otherwise.
 
 \defineentry{osi\_chmod}
 \begin{function}
-  ptr \code{osi\_chmod}(const char* \var{path}, int \var{mode}, ptr \var{callback});
+  \code{ptr osi\_chmod(const char* \var{path}, int \var{mode}, ptr \var{callback});}
 \end{function}
 
 The \code{osi\_chmod} function issues a chmod operation using the
@@ -544,7 +547,7 @@ enqueues the callback list \code{(\var{callback} \var{errno})}, where
 
 \defineentry{osi\_make\_directory}
 \begin{function}
-  ptr \code{osi\_make\_directory}(const char* \var{path}, int \var{mode}, ptr \var{callback});
+  \code{ptr osi\_make\_directory(const char* \var{path}, int \var{mode}, ptr \var{callback});}
 \end{function}
 
 The \code{osi\_make\_directory} function issues a mkdir operation
@@ -556,7 +559,7 @@ enqueues the callback list \code{(\var{callback} \var{errno})}, where
 
 \defineentry{osi\_list\_directory}
 \begin{function}
-  ptr \code{osi\_list\_directory}(const char* \var{path}, ptr \var{callback});
+  \code{ptr osi\_list\_directory(const char* \var{path}, ptr \var{callback});}
 \end{function}
 
 The \code{osi\_list\_directory} function issues a scandir operation
@@ -583,7 +586,7 @@ is one of the following constants:
 
 \defineentry{osi\_remove\_directory}
 \begin{function}
-  ptr \code{osi\_remove\_directory}(const char* \var{path}, ptr \var{callback});
+  \code{ptr osi\_remove\_directory(const char* \var{path}, ptr \var{callback});}
 \end{function}
 
 The \code{osi\_remove\_directory} function issues a rmdir operation
@@ -595,7 +598,7 @@ is 0 when successful and a negative error code otherwise.
 
 \defineentry{osi\_rename}
 \begin{function}
-  ptr \code{osi\_rename}(const char* \var{path}, const char* \var{new\_path}, ptr \var{callback});
+  \code{ptr osi\_rename(const char* \var{path}, const char* \var{new\_path}, ptr \var{callback});}
 \end{function}
 
 The \code{osi\_rename} function issues a rename operation using the
@@ -607,7 +610,7 @@ is 0 when successful and a negative error code otherwise.
 
 \defineentry{osi\_get\_stat}
 \begin{function}
-  ptr \code{osi\_get\_stat}(const char* \var{path}, int \var{follow}, ptr \var{callback});
+  \code{ptr osi\_get\_stat(const char* \var{path}, int \var{follow}, ptr \var{callback});}
 \end{function}
 
 The \code{osi\_get\_stat} function issues a status operation on the
@@ -648,7 +651,7 @@ The time entries contain \code{(\var{sec} . \var{nsec})}, where
 
 \defineentry{osi\_unlink}
 \begin{function}
-  ptr \code{osi\_unlink}(const char* \var{path}, ptr \var{callback});
+  \code{ptr osi\_unlink(const char* \var{path}, ptr \var{callback});}
 \end{function}
 
 The \code{osi\_unlink} function issues an unlink operation using the
@@ -660,7 +663,7 @@ is 0 when successful and a negative error code otherwise.
 
 \defineentry{osi\_watch\_path}
 \begin{function}
-  ptr \code{osi\_watch\_path}(const char* \var{path}, ptr \var{callback});
+  \code{ptr osi\_watch\_path(const char* \var{path}, ptr \var{callback});}
 \end{function}
 
 The \code{osi\_watch\_path} function uses the
@@ -677,7 +680,7 @@ when successful and an error pair otherwise.
 
 \defineentry{osi\_close\_path\_watcher}
 \begin{function}
-  void \code{osi\_close\_path\_watcher}(uptr \var{watcher});
+  \code{void osi\_close\_path\_watcher(uptr \var{watcher});}
 \end{function}
 
 The \code{osi\_close\_path\_watcher} function stops and closes the
@@ -687,7 +690,7 @@ path \var{watcher} from \code{osi\_watch\_path}.
 
 \defineentry{osi\_connect\_tcp}
 \begin{function}
-  ptr \code{osi\_connect\_tcp}(const char* \var{node}, const char* \var{service}, ptr \var{callback});
+  \code{ptr osi\_connect\_tcp(const char* \var{node}, const char* \var{service}, ptr \var{callback});}
 \end{function}
 
 The \code{osi\_connect\_tcp} function initiates a TCP/IP connection to
@@ -705,7 +708,7 @@ connection. When the operation fails, the callback list
 
 \defineentry{osi\_listen\_tcp}
 \begin{function}
-  ptr \code{osi\_listen\_tcp}(const char* \var{address}, uint16\_t \var{port}, ptr \var{callback});
+  \code{ptr osi\_listen\_tcp(const char* \var{address}, uint16\_t \var{port}, ptr \var{callback});}
 \end{function}
 
 The \code{osi\_listen\_tcp} function starts a TCP/IP listener on the
@@ -733,7 +736,7 @@ connection fails, the callback list \code{(\var{callback}
 
 \defineentry{osi\_close\_tcp\_listener}
 \begin{function}
-  void \code{osi\_close\_tcp\_listener}(uptr \var{listener});
+  \code{void osi\_close\_tcp\_listener(uptr \var{listener});}
 \end{function}
 
 The \code{osi\_close\_tcp\_listener} function closes the given TCP/IP
@@ -741,7 +744,7 @@ The \code{osi\_close\_tcp\_listener} function closes the given TCP/IP
 
 \defineentry{osi\_get\_tcp\_listener\_port}
 \begin{function}
-  ptr \code{osi\_get\_tcp\_listener\_port}(uptr \var{listener});
+  \code{ptr osi\_get\_tcp\_listener\_port(uptr \var{listener});}
 \end{function}
 
 The \code{osi\_get\_tcp\_listener\_port} function returns the port
@@ -750,7 +753,7 @@ number of the given TCP/IP \var{listener} opened by
 
 \defineentry{osi\_get\_ip\_address}
 \begin{function}
-  ptr \code{osi\_get\_ip\_address}(uptr \var{port});
+  \code{ptr osi\_get\_ip\_address(uptr \var{port});}
 \end{function}
 
 The \code{osi\_get\_ip\_address} function uses the
@@ -808,7 +811,7 @@ string.
 
 \defineentry{osi\_open\_database}
 \begin{function}
-  ptr \code{osi\_open\_database}(const char* \var{filename}, int \var{flags}, ptr \var{callback});
+  \code{ptr osi\_open\_database(const char* \var{filename}, int \var{flags}, ptr \var{callback});}
 \end{function}
 
 The \code{osi\_open\_database} function starts a worker thread that
@@ -825,7 +828,7 @@ database handle when successful and an error pair otherwise.
 
 \defineentry{osi\_close\_database}
 \begin{function}
-  ptr \code{osi\_close\_database}(uptr \var{database}, ptr \var{callback});
+  \code{ptr osi\_close\_database(uptr \var{database}, ptr \var{callback});}
 \end{function}
 
 The \code{osi\_close\_database} function starts a close operation in
@@ -840,7 +843,7 @@ an error pair otherwise.
 
 \defineentry{osi\_prepare\_statement}
 \begin{function}
-  ptr \code{osi\_prepare\_statement}(uptr \var{database}, ptr \var{sql}, ptr \var{callback});
+  \code{ptr osi\_prepare\_statement(uptr \var{database}, ptr \var{sql}, ptr \var{callback});}
 \end{function}
 
 The \code{osi\_prepare\_statement} function starts a prepare operation
@@ -854,7 +857,7 @@ statement handle when successful and an error pair otherwise.
 
 \defineentry{osi\_finalize\_statement}
 \begin{function}
-  ptr \code{osi\_finalize\_statement}(uptr \var{statement});
+  \code{ptr osi\_finalize\_statement(uptr \var{statement});}
 \end{function}
 
 The \code{osi\_finalize\_statement} function uses the
@@ -865,7 +868,7 @@ statement is finalized regardless of the return value.
 
 \defineentry{osi\_bind\_statement}
 \begin{function}
-  ptr \code{osi\_bind\_statement}(uptr \var{statement}, int \var{index}, ptr \var{datum});
+  \code{ptr osi\_bind\_statement(uptr \var{statement}, int \var{index}, ptr \var{datum});}
 \end{function}
 
 The \code{osi\_bind\_statement} function maps the Scheme \var{datum}
@@ -877,7 +880,7 @@ mapped to SQLite.
 
 \defineentry{osi\_clear\_statement\_bindings}
 \begin{function}
-  ptr \code{osi\_clear\_statement\_bindings}(uptr \var{statement});
+  \code{ptr osi\_clear\_statement\_bindings(uptr \var{statement});}
 \end{function}
 
 The \code{osi\_clear\_statement\_bindings} function uses the
@@ -887,7 +890,7 @@ pair otherwise.
 
 \defineentry{osi\_get\_last\_insert\_rowid}
 \begin{function}
-  ptr \code{osi\_get\_last\_insert\_rowid}(uptr \var{database});
+  \code{ptr osi\_get\_last\_insert\_rowid(uptr \var{database});}
 \end{function}
 
 The \code{osi\_get\_last\_insert\_rowid} function uses the
@@ -897,7 +900,7 @@ otherwise.
 
 \defineentry{osi\_get\_statement\_columns}
 \begin{function}
-  ptr \code{osi\_get\_statement\_columns}(uptr \var{statement});
+  \code{ptr osi\_get\_statement\_columns(uptr \var{statement});}
 \end{function}
 
 The \code{osi\_get\_statement\_columns} function uses the
@@ -907,7 +910,7 @@ functions to return a vector of column name strings for the
 
 \defineentry{osi\_get\_statement\_expanded\_sql}
 \begin{function}
-  ptr \code{osi\_get\_statement\_expanded\_sql}(uptr \var{statement});
+  \code{ptr osi\_get\_statement\_expanded\_sql(uptr \var{statement});}
 \end{function}
 
 The \code{osi\_get\_statement\_expanded\_sql} function uses the
@@ -917,7 +920,7 @@ error pair otherwise.
 
 \defineentry{osi\_reset\_statement}
 \begin{function}
-  ptr \code{osi\_reset\_statement}(uptr \var{statement});
+  \code{ptr osi\_reset\_statement(uptr \var{statement});}
 \end{function}
 
 The \code{osi\_reset\_statement} function uses the
@@ -926,7 +929,7 @@ returns \code{\#t} when successful and an error pair otherwise.
 
 \defineentry{osi\_step\_statement}
 \begin{function}
-  ptr \code{osi\_step\_statement}(uptr \var{statement}, ptr \var{callback});
+  \code{ptr osi\_step\_statement(uptr \var{statement}, ptr \var{callback});}
 \end{function}
 
 The \code{osi\_step\_statement} function issues a step operation on
@@ -943,7 +946,7 @@ Scheme. Otherwise, the callback list \code{(\var{callback}
 
 \defineentry{osi\_interrupt\_database}
 \begin{function}
-  void \code{osi\_interrupt\_database}(uptr \var{database});
+  \code{void osi\_interrupt\_database(uptr \var{database});}
 \end{function}
 
 The \code{osi\_interrupt\_database} function calls the
@@ -952,7 +955,7 @@ of the \var{database}.
 
 \defineentry{osi\_get\_sqlite\_status}
 \begin{function}
-  ptr \code{osi\_get\_sqlite\_status}(int \var{operation}, int \var{resetp});
+  \code{ptr osi\_get\_sqlite\_status(int \var{operation}, int \var{resetp});}
 \end{function}
 
 The \code{osi\_get\_sqlite\_status} function uses the
