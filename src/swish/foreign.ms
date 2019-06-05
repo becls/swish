@@ -248,7 +248,7 @@
                          (printf "key: ~a = ~a\n" key (hashtable-ref dict key "NOT FOUND")))
                        (printf "handler called\n")
                        (printf "path = ~a\n" path)
-                       (show "file")
+                       (show 'file)
                        (load-shared-object path)))]
                  [else (match mode)]))
             (define after-rso (foreign-entry? "square"))

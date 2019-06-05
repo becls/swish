@@ -466,7 +466,7 @@ Scheme types:
   \var{string} & \var{string} \\
   \var{number} & \var{number} \\
   \var{array} & \var{list} \\
-  \var{object} & hashtable mapping case-sensitive strings to values \\
+  \var{object} & symbol hashtable mapping symbols to values \\
 
   \hline
 \end{tabular}
@@ -480,8 +480,9 @@ JavaScript implementation can interpret the data.
 \end{syntax}
 
 The \code{json:extend-object} construct adds the \var{key} /
-\var{value} pairs to the hashtable \var{ht} using
-\code{hashtable-set!}. The resulting expression returns \var{ht}.
+\var{value} pairs to the symbol hashtable \var{ht} using
+\code{symbol-hashtable-set!}. Each \var{key} is a literal
+identifier. The resulting expression returns \var{ht}.
 
 \defineentry{json:make-object}
 \begin{syntax}
@@ -489,7 +490,7 @@ The \code{json:extend-object} construct adds the \var{key} /
 \end{syntax}
 
 The \code{json:make-object} construct expands into a call to
-\code{json:extend-object} with a new hashtable.
+\code{json:extend-object} with a new symbol hashtable.
 
 \defineentry{json:delete!}
 \begin{procedure}
@@ -497,15 +498,15 @@ The \code{json:make-object} construct expands into a call to
 \end{procedure}
 \returns{} unspecified
 
-The \code{json:delete!} procedure expects \var{path} to be a string or
-a non-empty list of strings.
-If \var{path} is a string, then \code{json:delete!} is equivalent
-to \code{hashtable-delete!}.
+The \code{json:delete!} procedure expects \var{path} to be a symbol or
+a non-empty list of symbols.
+If \var{path} is a symbol, then \code{json:delete!} is equivalent
+to \code{symbol-hashtable-delete!}.
 Otherwise, \code{json:delete!} follows \var{path} as it descends into
 the nested hashtable \var{ht}, treating each element as a key into
 the hashtable reached by traversing the preceding elements.
 When \code{json:delete!} reaches the final key in \var{path},
-it calls \code{hashtable-delete!} to remove the association for
+it calls \code{symbol-hashtable-delete!} to remove the association for
 that key in the hashtable reached at that point.
 If any key along the way does not map to a hashtable,
 \code{json:delete!} has no effect.
@@ -517,15 +518,15 @@ If any key along the way does not map to a hashtable,
 \returns{} the value found by traversing \var{path} in \var{ht},
 \var{default} if none
 
-The \code{json:ref} procedure expects \var{path} to be a string or
-a non-empty list of strings.
-If \var{path} is a string, then \code{json:ref} is equivalent
-to \code{hashtable-ref}.
+The \code{json:ref} procedure expects \var{path} to be a symbol or
+a non-empty list of symbols.
+If \var{path} is a symbol, then \code{json:ref} is equivalent
+to \code{symbol-hashtable-ref}.
 Otherwise, \code{json:ref} follows \var{path} as it descends into
 the nested hashtable \var{ht}, treating each element as a key into
 the hashtable reached by traversing the preceding elements.
 When \code{json:ref} reaches the final key in \var{path},
-it calls \code{hashtable-ref} to retrieve the value of that key
+it calls \code{symbol-hashtable-ref} to retrieve the value of that key
 in the hashtable reached at that point.
 If any key along the way does not map to a hashtable,
 or if the final hashtable does not contain the final key,
@@ -537,15 +538,15 @@ or if the final hashtable does not contain the final key,
 \end{procedure}
 \returns{} unspecified
 
-The \code{json:update!} procedure expects \var{path} to be a string or
-a non-empty list of strings.
-If \var{path} is a string, then \code{json:update!} is equivalent
-to \code{hashtable-update!}.
+The \code{json:update!} procedure expects \var{path} to be a symbol or
+a non-empty list of symbols.
+If \var{path} is a symbol, then \code{json:update!} is equivalent
+to \code{symbol-hashtable-update!}.
 Otherwise, \code{json:update!} follows \var{path} as it descends into
 the nested hashtable \var{ht}, treating each element as a key into
 the hashtable reached by traversing the preceding elements.
 When \code{json:update!} reaches the final key in \var{path},
-it calls \code{hashtable-update!} to update that key in the
+it calls \code{symbol-hashtable-update!} to update that key in the
 hashtable reached at that point.
 If any key along the way does not map to a hashtable,
 \code{json:update!} installs an empty hashtable at that key
@@ -582,8 +583,9 @@ The following exceptions may be raised:
 
 The \code{json:write} procedure writes the object \var{x} to the
 textual output port \var{op} in JSON format. JSON objects are sorted
-by key using \code{string<?} to provide stable output. Scheme fixnums,
-bignums, and finite flonums may be used as numbers.
+by key using \code{string<?} on the string values of the symbols to
+provide stable output. Scheme fixnums, bignums, and finite flonums may
+be used as numbers.
 
 When \var{indent} is a non-negative fixnum, the output is more
 readable by a human. List items and key/value pairs are indented on
@@ -614,13 +616,13 @@ is raised.
 Given a textual output port \var{op}, an \var{indent} level, and a
 writer procedure \var{wr}, the \code{json:write-object} construct
 writes a JSON object with the given \var{key} / \var{value} pairs to
-\var{op}, sorted by key using \code{string<?}.  Each \var{key} must be
-a distinct string literal.  The \var{wr} procedure takes \var{op}, an
-object \var{x}, and an \var{indent} level just like the \var{wr}
-procedure that is passed to \code{json:write}'s \var{custom-write}
-procedure.
+\var{op}, sorted by key using \code{string<?} on the string values of
+the symbols.  Each \var{key} must be a distinct symbol.  The \var{wr}
+procedure takes \var{op}, an object \var{x}, and an \var{indent} level
+just like the \var{wr} procedure that is passed to \code{json:write}'s
+\var{custom-write} procedure.
 
-The following are equivalent, provided the keys are string literals.
+The following are equivalent, provided the keys are symbols.
 
 \antipar\begin{alltt}
 (begin (json:write \var{op} (json:make-object [\var{key} \var{value}] \etc) \var{indent}) \#t)

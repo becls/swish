@@ -45,52 +45,53 @@
   (define-syntax json:extend-object
     (syntax-rules ()
       [(_ $ht (key val) ...)
+       (for-all identifier? #'(key ...))
        (let ([ht $ht])
-         (hashtable-set! ht key val)
+         (symbol-hashtable-set! ht 'key val)
          ...
          ht)]))
 
   (define-syntax json:make-object
     (syntax-rules ()
       [(_ (key val) ...)
-       (json:extend-object (make-hashtable string-hash string=?)
+       (json:extend-object (make-hashtable symbol-hash symbol=?)
          (key val) ...)]))
 
   (define (walk-path who obj full-path extend? default found)
-    (unless (hashtable? obj) (bad-arg who obj))
+    (unless (symbol-hashtable? obj) (bad-arg who obj))
     (when (null? full-path) (bad-arg who full-path))
-    (if (string? full-path)
+    (if (symbol? full-path)
         (found obj full-path default)
         (let lp ([obj obj] [path full-path])
           (match path
             [(,key)
-             (guard (string? key))
+             (guard (symbol? key))
              (found obj key default)]
             [(,key1 . ,more)
-             (guard (string? key1))
-             (let ([hit (hashtable-ref obj key1 #f)])
+             (guard (symbol? key1))
+             (let ([hit (symbol-hashtable-ref obj key1 #f)])
                (cond
-                [(hashtable? hit) (lp hit more)]
+                [(symbol-hashtable? hit) (lp hit more)]
                 [extend?
                  (let ([new (json:make-object)])
-                   (json:extend-object obj [key1 new])
+                   (symbol-hashtable-set! obj key1 new)
                    (lp new more))]
                 [else default]))]
             [,_ (bad-arg who full-path)]))))
 
   (define (json:ref obj path default)
-    (walk-path 'json:ref obj path #f default hashtable-ref))
+    (walk-path 'json:ref obj path #f default symbol-hashtable-ref))
 
   (define (json:update! obj path f default)
     (unless (procedure? f) (bad-arg 'json:update! f))
     (walk-path 'json:update! obj path #t default
       (lambda (obj key default)
-        (hashtable-update! obj key f default))))
+        (symbol-hashtable-update! obj key f default))))
 
   (define (json:delete! obj path)
     (walk-path 'json:delete! obj path #f (void)
       (lambda (obj key default)
-        (hashtable-delete! obj key))))
+        (symbol-hashtable-delete! obj key))))
 
   (define (unexpected-input c ip)
     (if (eof-object? c)
@@ -285,11 +286,11 @@
                (let ([c (next-non-ws ip)])
                  (cond
                   [(eqv? c #\")
-                   (let* ([key (read-string ip buffer)]
+                   (let* ([key (string->symbol (read-string ip buffer))]
                           [c (next-non-ws ip)])
                      (unless (eqv? c #\:)
                        (unexpected-input c ip))
-                     (hashtable-set! obj key (rd ip)))
+                     (symbol-hashtable-set! obj key (rd ip)))
                    (let ([c (next-non-ws ip)])
                      (case c
                        [(#\,) (lp obj)]
@@ -370,17 +371,19 @@
                (wr op x indent))
              (cdr x))
             (json:write-structural-char #\] indent op))]
-         [(hashtable? x)
+         [(symbol-hashtable? x)
           (if (zero? (hashtable-size x))
               (display-string "{}" op)
               (let ([indent (json:write-structural-char #\{ indent op)])
                 (let ([v (hashtable-cells x)])
-                  (vector-sort! (lambda (x y) (string<? (car x) (car y))) v)
+                  (vector-sort! (lambda (x y)
+                                  (string<? (symbol->string (car x))
+                                    (symbol->string (car y)))) v)
                   (do ([i 0 (fx+ i 1)]) ((fx= i (vector-length v)))
                     (when (fx> i 0)
                       (json:write-structural-char #\, indent op))
                     (let ([p (vector-ref v i)])
-                      (write-string (car p) op)
+                      (write-string (symbol->string (car p)) op)
                       (json:write-structural-char #\: indent op)
                       (wr op (cdr p) indent))))
                 (json:write-structural-char #\} indent op)))]
@@ -453,12 +456,12 @@
       (define (get-preamble prefix k)
         (let-values ([(op get) (open-string-output-port)])
           (write-char prefix op)
-          (write-string k op)
+          (write-string (symbol->string k) op)
           (write-char #\: op)
           (get)))
       (define (get-key k)
         (let-values ([(op get) (open-string-output-port)])
-          (write-string k op)
+          (write-string (symbol->string k) op)
           (get)))
       (lambda (x)
         (syntax-case x ()
@@ -481,13 +484,13 @@
   (define-syntax (json:write-object x)
     (define (get-key x)
       (syntax-case x ()
-        [(key . rest) (datum key)]))
+        [(key . rest) (symbol->string (datum key))]))
     (define (valid? keys)
-      (let ([novel (make-hashtable string-hash string=?)])
+      (let ([novel (make-hashtable symbol-hash symbol=?)])
         (define (ok? key)
-          (and (string? key)
-               (hashtable-ref novel key #t)
-               (begin (hashtable-set! novel key #f) #t)))
+          (and (symbol? key)
+               (symbol-hashtable-ref novel key #t)
+               (begin (symbol-hashtable-set! novel key #f) #t)))
         (andmap ok? keys)))
     (define (parse-clause c)
       (syntax-case c ()
@@ -508,5 +511,4 @@
                ...
                (json:write-structural-char #\} indent op)
                #t)))]))
-
   )

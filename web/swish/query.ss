@@ -43,10 +43,10 @@
 (define (meta op)
   (json:write op
     (json:make-object
-     ["instance" (log-db:get-instance-id)]
-     ["computer-name" (osi_get_hostname)]
-     ["software-version" software-version]
-     ["software-product-name" software-product-name]))
+     [instance (log-db:get-instance-id)]
+     [computer-name (osi_get_hostname)]
+     [software-version software-version]
+     [software-product-name software-product-name]))
   'ok)
 
 (define (doit op)
@@ -91,4 +91,4 @@
       [ok (get)]
       [#(EXIT ,reason)
        (json:object->bytevector
-        (json:make-object ["error" (exit-reason->english reason)]))])))
+        (json:make-object [error (exit-reason->english reason)]))])))

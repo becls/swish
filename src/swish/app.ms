@@ -207,7 +207,7 @@
       ;; reject non-hashtable
       [#(EXIT #(bad-arg app:config rubbish)) (catch (app:config 'rubbish))]
       [,unspecified (void)]
-      [,obj (json:make-object ["foo" "bar"] ["baz" '(1 2 3)])]
+      [,obj (json:make-object [foo "bar"] [baz '(1 2 3)])]
       ;; hashtable okay
       [,@unspecified (app:config obj)]
       [,obj (app:config)]
@@ -215,14 +215,14 @@
       [#f (let ([me self])
             (spawn (lambda () (send me (app:config))))
             (receive [,cfg (eq? cfg (app:config))]))]
-      [(1 2 3) (json:ref (app:config) "baz" #f)]
+      [(1 2 3) (json:ref (app:config) 'baz #f)]
       ;; #f okay
       [,@unspecified (app:config #f)]
-      [#f (json:ref (app:config) "foo" #f)]
+      [#f (json:ref (app:config) 'foo #f)]
       ;; we're unaffected by process-parameter change
       [#f (begin
             (spawn (lambda () (app:config obj)))
-            (json:ref (app:config) "foo" #f))]
+            (json:ref (app:config) 'foo #f))]
       ;; check config path when no app:path set
       [,expected (path-combine (base-dir) ".config")]
       [,@expected (parameterize ([app:path #f])
@@ -239,9 +239,9 @@
          app:config-filename)]
       ;; read config from file
       [,data (json:make-object
-              ["powder" "keg"]
-              ["floss" (json:make-object ["sauce" "moss"])]
-              ["glass" '(3 4 5)])]
+              [powder "keg"]
+              [floss (json:make-object [sauce "moss"])]
+              [glass '(3 4 5)])]
       [,expected (json:object->string data)]
       [,@expected
        (with-fake-config `("flim" "flam" ,(fix-exe "blott"))
@@ -266,16 +266,16 @@
       ["got default"
        (with-fake-config `("Applications" ,(fix-exe "zap"))
          (lambda (op)
-           (json:write op (json:make-object ["flip" "pers"])))
+           (json:write op (json:make-object [flip "pers"])))
          (lambda ()
            ;; confirm config written
            (match-let*
-            (["pers" (json:ref (app:config) "flip" #f)])
+            (["pers" (json:ref (app:config) 'flip #f)])
             'ok)
            ;; now delete and force reload
            (assert (delete-file (app:config-filename)))
            (app:config #f)
-           (json:ref (app:config) "flip" "got default")))]
+           (json:ref (app:config) 'flip "got default")))]
       ;; found directory instead of file at app:config-filename
       ;; as happens if we start a swish repl in ${HOME}
       ["nope"
@@ -284,7 +284,7 @@
            (make-directory (app:config-filename))
            (app:config #f)
            (assert (directory? (app:config-filename)))
-           (json:ref (app:config) "grail" "nope")))]
+           (json:ref (app:config) 'grail "nope")))]
       )
      'ok)))
 

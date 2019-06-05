@@ -26,7 +26,13 @@
  (swish testing)
  )
 
-(alias make-ht json:make-object)
+(define-syntax make-ht
+  (syntax-rules ()
+    [(_ (key val) ...)
+     (let ([ht (make-hashtable string-hash string=?)])
+       (hashtable-set! ht key val)
+       ...
+       ht)]))
 
 (define (dump x)
   (cond
