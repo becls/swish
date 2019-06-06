@@ -314,6 +314,11 @@
    'ok))
 
 (mat errors ()
+  (define (match-form input violation-form)
+    (match (syntax->datum violation-form)
+      [,@input 'ok]))
+  (assert-syntax-error (json:make-object ["str" 123]) "invalid key \"str\" in" match-form)
+  (assert-syntax-error (json:extend-object x ["str" 123]) "invalid key \"str\" in" match-form)
   (match-let*
    ([#(EXIT #(bad-arg json:write -1))
      (catch (json:write (open-output-string) 12 -1))]

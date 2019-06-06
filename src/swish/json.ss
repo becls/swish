@@ -42,24 +42,30 @@
    (swish io)
    )
 
-  (define-syntax json:extend-object
+  (define-syntax extend-object-internal
     (syntax-rules ()
-      [(_ $ht (key val) ...)
+      [(_ x $ht (key val) ...)
        (let ([ht $ht])
-         (symbol-hashtable-set! ht (parse-key key) val)
+         (symbol-hashtable-set! ht (parse-key key x) val)
          ...
          ht)]))
 
-  (define-syntax parse-key
-    (syntax-rules (unquote)
-      [(_ id) (identifier? #'id) (quote id)]
-      [(_ (unquote e)) e]))
+  (define-syntax (parse-key x)
+    (syntax-case x (unquote)
+      [(_ id form) (identifier? #'id) #'(quote id)]
+      [(_ (unquote e) form) #'e]
+      [(_ key form) (syntax-error #'form (format "invalid key ~s in" (datum key)))]))
 
-  (define-syntax json:make-object
-    (syntax-rules ()
+  (define-syntax (json:extend-object x)
+    (syntax-case x ()
+      [(_ $ht (key val) ...)
+       #`(extend-object-internal #,x $ht (key val) ...)]))
+
+  (define-syntax (json:make-object x)
+    (syntax-case x ()
       [(_ (key val) ...)
-       (json:extend-object (make-hashtable symbol-hash symbol=?)
-         (key val) ...)]))
+       #`(extend-object-internal #,x (make-hashtable symbol-hash symbol=?)
+           (key val) ...)]))
 
   (define (walk-path who obj full-path extend? default found)
     (unless (symbol-hashtable? obj) (bad-arg who obj))

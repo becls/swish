@@ -69,12 +69,15 @@
 
   (define-syntax assert-syntax-error
     (syntax-rules ()
-      [(_ e expected) ($assert-syntax-error 'e expected)]))
+      [(_ e expected) ($assert-syntax-error 'e expected #f)]
+      [(_ e expected match-form) ($assert-syntax-error 'e expected match-form)]))
 
-  (define ($assert-syntax-error e expected)
+  (define ($assert-syntax-error e expected match-form)
     (guard
      (x
       [(and (syntax-violation? x) (string=? (condition-message x) expected))
+       (when match-form
+         (match-form e (syntax-violation-form x)))
        'ok])
      (eval e)
      (errorf 'assert-syntax-error "failed to raise syntax error: ~s" e)))
