@@ -204,6 +204,10 @@
       [,obj (json:string->object str)]
       [123 (json:ref obj g1 #f)]
       [456 (json:ref obj g2 #f)]
+      ["{}"
+       (begin
+         (json:write-object op #f json:write)
+         (get))]
       )
      'ok)))
 

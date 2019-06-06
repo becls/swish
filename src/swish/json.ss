@@ -561,6 +561,12 @@
         [(key field custom-write) c]
         [_ (syntax-error c)]))
     (syntax-case x ()
+      [(_ op-expr indent-expr wr-expr)
+       #'(begin
+           indent-expr
+           wr-expr
+           (display-string "{}" op-expr)
+           #t)]
       [(_ op-expr indent-expr wr-expr [key . spec] ...)
        (valid? (datum (key ...)))
        (with-syntax ([([k0 f0 cw0] [k1 f1 cw1] ...)
