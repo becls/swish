@@ -278,6 +278,16 @@
         (inexact (* mantissa (expt 10 exponent)))
         (inexact (/ mantissa (expt 10 (- exponent))))))
 
+  (define (string->key s)
+    (let ([len (string-length s)])
+      (or (and (fx>= len 6)
+               (char=? (string-ref s 0) #\#)
+               (char=? (string-ref s 1) #\{)
+               (char=? (string-ref s (fx- len 1)) #\})
+               (guard (c [else #f])
+                 (read (open-input-string s))))
+          (string->symbol s))))
+
   (define json:read
     (case-lambda
      [(ip) (json:read ip no-custom-inflate)]
@@ -322,7 +332,7 @@
                (let ([c (next-non-ws ip)])
                  (cond
                   [(eqv? c #\")
-                   (let* ([key (string->symbol (read-string ip buffer))]
+                   (let* ([key (string->key (read-string ip buffer))]
                           [c (next-non-ws ip)])
                      (unless (eqv? c #\:)
                        (unexpected-input c ip))
@@ -383,6 +393,22 @@
            (newline-and-indent indent op)
            indent])))
 
+  (define-syntax json-key->sort-key
+    (syntax-rules ()
+      [(_ expr)
+       (let ([x expr])
+         (if (gensym? x)
+             (gensym->unique-string x)
+             (symbol->string x)))]))
+
+  (define-syntax json-key->string
+    (syntax-rules ()
+      [(_ expr)
+       (let ([x expr])
+         (if (gensym? x)
+             (parameterize ([print-gensym #t]) (format "~s" x))
+             (symbol->string x)))]))
+
   (define json:write
     (case-lambda
      [(op x) (json:write op x #f)]
@@ -414,13 +440,13 @@
                 (let ([v (#3%hashtable-cells x)])
                   (vector-sort!
                    (lambda (x y)
-                     (string<? (symbol->string (car x)) (symbol->string (car y))))
+                     (string<? (json-key->sort-key (car x)) (json-key->sort-key (car y))))
                    v)
                   (do ([i 0 (fx+ i 1)]) ((fx= i (vector-length v)))
                     (when (fx> i 0)
                       (json:write-structural-char #\, indent op))
                     (let ([p (vector-ref v i)])
-                      (write-string (symbol->string (car p)) op)
+                      (write-string (json-key->string (car p)) op)
                       (json:write-structural-char #\: indent op)
                       (wr op (cdr p) indent))))
                 (json:write-structural-char #\} indent op)))]
@@ -493,12 +519,12 @@
       (define (get-preamble prefix k)
         (let-values ([(op get) (open-string-output-port)])
           (write-char prefix op)
-          (write-string (symbol->string k) op)
+          (write-string (json-key->string k) op)
           (write-char #\: op)
           (get)))
       (define (get-key k)
         (let-values ([(op get) (open-string-output-port)])
-          (write-string (symbol->string k) op)
+          (write-string (json-key->string k) op)
           (get)))
       (lambda (x)
         (syntax-case x ()
@@ -519,9 +545,9 @@
                  indent))]))))
 
   (define-syntax (json:write-object x)
-    (define (get-key x)
+    (define (sort-key x)
       (syntax-case x ()
-        [(key . rest) (symbol->string (datum key))]))
+        [(key . rest) (json-key->sort-key (datum key))]))
     (define (valid? keys)
       (let ([novel (make-hashtable symbol-hash eq?)])
         (define (ok? key)
@@ -540,7 +566,7 @@
        (with-syntax ([([k0 f0 cw0] [k1 f1 cw1] ...)
                       (sort
                        (lambda (x y)
-                         (string<? (get-key x) (get-key y)))
+                         (string<? (sort-key x) (sort-key y)))
                        (map parse-clause #'([key . spec] ...)))])
          #'(let ([op op-expr] [indent indent-expr] [wr wr-expr])
              (let ([indent (json-write-kv op indent wr #\{ k0 f0 cw0)])

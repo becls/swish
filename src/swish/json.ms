@@ -29,8 +29,13 @@
  (swish testing)
  )
 
+(define (key->string x)
+  (if (gensym? x)
+      (parameterize ([print-gensym #t]) (format "~s" x))
+      (symbol->string x)))
+
 (define (cell<? x y)
-  (string<? (symbol->string (car x)) (symbol->string (car y))))
+  (string<? (key->string (car x)) (key->string (car y))))
 
 (define (dump x)
   (cond
@@ -113,6 +118,10 @@
 
     #((-123 "foo" ,(json:make-object [bar '()]) #\nul)
       "[-123,\"foo\",{\"bar\":[]},null]")
+    #(,(json:make-object [,(gensym "bar" "unique-name") 456] [#{foo lish} 789])
+      "{\"#{foo lish}\":789,\"#{bar unique-name}\":456}")
+    #(,(json:make-object [,(string->symbol "#{foo not-gensym") 123])
+      "{\"#{foo not-gensym\":123}")
     ))
 
 (mat read ()
@@ -180,7 +189,22 @@
            [ghi 3]
            [abc '#(4 5 6) custom-write]
            [def '(7 8 9) custom-write])
-         (get))])
+         (get))]
+      [,g1 (gensym)]
+      [,g2 (gensym)]
+      [,str
+       (begin
+         ((eval
+           `(lambda (op)
+              (json:write-object op #f json:write
+                [,g1 123]
+                [,g2 456])))
+          op)
+         (get))]
+      [,obj (json:string->object str)]
+      [123 (json:ref obj g1 #f)]
+      [456 (json:ref obj g2 #f)]
+      )
      'ok)))
 
 (mat pretty ()
