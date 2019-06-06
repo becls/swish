@@ -94,7 +94,7 @@
 (define (write-valid-config)
   (with-temporary-app-config
    (lambda ()
-     (provide-shared-object "shlibtest" shlibtest.so)
+     (provide-shared-object 'shlibtest shlibtest.so)
      (json:write (current-output-port) (app:config) 0))))
 
 (define (get-relative-path base sub)
@@ -111,7 +111,7 @@
 (define (write-relative-config)
   (with-temporary-app-config
    (lambda ()
-     (provide-shared-object "shlibtest"
+     (provide-shared-object 'shlibtest
        ;; path relative to output-dir
        (path-combine
         (get-relative-path git-toplevel
@@ -123,7 +123,7 @@
   (with-temporary-app-config
    (lambda ()
      ;; file does not exist
-     (provide-shared-object "shlibtest" "this-file-does-not-exist")
+     (provide-shared-object 'shlibtest "this-file-does-not-exist")
      (json:write (current-output-port) (app:config) 0))))
 
 (define bogus-shared-object
@@ -135,7 +135,7 @@
   (with-temporary-app-config
    (lambda ()
      ;; file exists, but is not a shared library
-     (provide-shared-object "shlibtest" bogus-shared-object)
+     (provide-shared-object 'shlibtest bogus-shared-object)
      (json:write (current-output-port) (app:config) 0))))
 
 (define (write-malformed-config)
@@ -177,7 +177,7 @@
 (define (bad-shared-object app-name caught)
   (match caught
     [#(EXIT ,reason)
-     (let ([reason `#(cannot-load-shared-object "shlibtest" ,reason)])
+     (let ([reason `#(cannot-load-shared-object shlibtest ,reason)])
        (format-app-exception app-name reason))]))
 
 (define (shlib-not-found app-name)
@@ -240,9 +240,9 @@
             (define _rso_
               ,(case mode
                  [(explicit-init no-init main-init config-file base-config-file)
-                  '(require-shared-object "shlibtest")]
+                  '(require-shared-object 'shlibtest)]
                  [(hook-handler)
-                  '(require-shared-object "shlibtest"
+                  '(require-shared-object 'shlibtest
                      (lambda (path key dict)
                        (define (show key)
                          (printf "key: ~a = ~a\n" key (hashtable-ref dict key "NOT FOUND")))
@@ -264,7 +264,7 @@
             (export configure)
             (import (scheme) (swish foreign))
             (define (configure)
-              (provide-shared-object "shlibtest" ,shlibtest.so)))))))
+              (provide-shared-object 'shlibtest ,shlibtest.so)))))))
   (define linked (fix-exe (path-combine (output-dir) "shlib-linked")))
   (define stand-alone (fix-exe (path-combine (output-dir) "shlib-stand-alone")))
   (define stand-alone-rtlib1 (fix-exe (path-combine (output-dir) "shlib-stand-alone-rtlib1")))
@@ -274,7 +274,7 @@
     (list
      (format "~s" "EROFS")
      (pregexp-quote "((before #f) (after #t) (sq 81))")))
-  (define failure `#(unknown-shared-object "shlibtest"))
+  (define failure `#(unknown-shared-object shlibtest))
   (define (do-config app-name writer)
     (define filename (config-file-name app-name))
     (if writer
@@ -581,12 +581,12 @@
 
 (mat bad-args ()
   (match-let*
-   ([#(EXIT #(bad-arg provide-shared-object thing1))
-     (catch (provide-shared-object 'thing1 "string"))]
+   ([#(EXIT #(bad-arg provide-shared-object "thing1"))
+     (catch (provide-shared-object "thing1" "string"))]
     [#(EXIT #(bad-arg provide-shared-object thing2))
-     (catch (provide-shared-object "string" 'thing2))]
-    [#(EXIT #(bad-arg require-shared-object thing1))
-     (catch (require-shared-object 'thing1))]
+     (catch (provide-shared-object 'symbol 'thing2))]
+    [#(EXIT #(bad-arg require-shared-object "thing1"))
+     (catch (require-shared-object "thing1"))]
     [#(EXIT #(bad-arg require-shared-object thing2))
-     (catch (require-shared-object "string" 'thing2))])
+     (catch (require-shared-object 'symbol 'thing2))])
    'ok))

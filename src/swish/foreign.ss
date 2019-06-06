@@ -32,11 +32,11 @@
    (swish json))
 
   (define (so-path so-name . more)
-    `(swish shared-object ,(string->symbol so-name) ,(machine-type)
+    `(swish shared-object ,so-name ,(machine-type)
        ,@more))
 
   (define (provide-shared-object so-name filename)
-    (arg-check 'provide-shared-object [so-name string?] [filename string?])
+    (arg-check 'provide-shared-object [so-name symbol?] [filename string?])
     (json:update! (app:config) (so-path so-name 'file) values filename))
 
   (define require-shared-object
@@ -46,7 +46,7 @@
         (lambda (filename key dict)
           (load-shared-object filename)))]
      [(so-name handler)
-      (arg-check 'require-shared-object [so-name string?] [handler procedure?])
+      (arg-check 'require-shared-object [so-name symbol?] [handler procedure?])
       (let* ([dict (json:ref (app:config) (so-path so-name) #f)]
              [file (and (hashtable? dict) (hashtable-ref dict 'file #f))])
         (unless (string? file)

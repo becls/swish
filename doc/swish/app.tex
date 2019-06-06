@@ -506,10 +506,10 @@ To see how these procedures are decoupled, consider the following REPL
 transcript on a 64-bit Linux machine:
 \codebegin
 Swish Version 0.0.0
-> (provide-shared-object "libc" "/lib64/libc.so.6")
+> (provide-shared-object 'libc "/lib64/libc.so.6")
 > (foreign-entry? "fork")
 #f
-> (require-shared-object "libc")
+> (require-shared-object 'libc)
 > (foreign-entry? "fork")
 #t
 > (let ([op (open-file-to-write (app:config-filename))])
@@ -549,8 +549,9 @@ Swish Version 0.0.0
 \end{procedure}
 \returns{} unspecified
 
-The \code{provide-shared-object} procedure expects two strings as arguments:
-\var{so-name} is the generic name of a shared object and \var{filename} is the
+The \code{provide-shared-object} procedure expects a symbol
+\var{so-name} as the generic name of a shared object and
+a string \var{filename} that is the
 name of the actual file containing the shared object code.
 This procedure records \var{filename} in \code{app:config} under a
 path that includes \code{so-name} and the host \code{machine-type}.
@@ -565,14 +566,14 @@ The \code{require-shared-object} procedure loads a shared object via an
 absolute path to prevent \code{load-shared-object} from searching for the
 shared object file in a system-specific set of directories.
 
-The \var{so-name} argument is a string that specifies the generic name of a
+The \var{so-name} argument is a symbol that specifies the generic name of a
 shared object.
 The optional \var{handler} is a procedure that expects three arguments:
 \var{filename} is the absolute path to the shared object file,
 \var{key} is \var{so-name}, and \var{dict} is the hashtable
 retrieved from \code{app:config} via a path that includes
 \var{so-name} and the host \code{machine-type}.
-This hashtable contains a key \code{"file"} whose value
+This hashtable contains a key \code{file} whose value
 is the file name originally supplied by \code{provide-shared-object}.
 The handler might examine other keys within the hashtable before
 loading the shared object.
