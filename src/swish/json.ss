@@ -121,40 +121,39 @@
        [(ws? c) (seek-non-ws ip)]
        [else c])))
 
-  (define (read-string ip)
-    (let lp ([op (open-output-string)])
-      (let ([c (next-char ip)])
-        (case c
-          [(#\") (get-output-string op)]
-          [(#\\)
-           (let ([c (next-char ip)])
-             (case c
-               [(#\" #\\ #\/) (write-char c op)]
-               [(#\b) (write-char #\x08 op)]
-               [(#\f) (write-char #\x0C op)]
-               [(#\n) (write-char #\x0A op)]
-               [(#\r) (write-char #\x0D op)]
-               [(#\t) (write-char #\x09 op)]
-               [(#\u)
-                (let ([x (read-4hexdig ip)])
-                  (cond
-                   [(<= #xD800 x #xDBFF) ;; high surrogate
-                    (expect-char #\\ ip)
-                    (expect-char #\u ip)
-                    (let ([y (read-4hexdig ip)])
-                      (unless (<= #xDC00 y #xDFFF)
-                        (raise 'invalid-surrogate-pair))
-                      (write-char
-                       (integer->char
-                        (+ (ash (bitwise-and x #x3FF) 10)
-                           (bitwise-and y #x3FF)
-                           #x10000))
-                       op))]
-                   [(<= #xDC00 x #xDFFF) (raise 'invalid-surrogate-pair)]
-                   [else (write-char (integer->char x) op)]))]
-               [else (unexpected-input c ip)]))
-           (lp op)]
-          [else (write-char c op) (lp op)]))))
+  (define (read-string ip op)
+    (let ([c (next-char ip)])
+      (case c
+        [(#\") (get-output-string op)]
+        [(#\\)
+         (let ([c (next-char ip)])
+           (case c
+             [(#\" #\\ #\/) (write-char c op)]
+             [(#\b) (write-char #\x08 op)]
+             [(#\f) (write-char #\x0C op)]
+             [(#\n) (write-char #\x0A op)]
+             [(#\r) (write-char #\x0D op)]
+             [(#\t) (write-char #\x09 op)]
+             [(#\u)
+              (let ([x (read-4hexdig ip)])
+                (cond
+                 [(<= #xD800 x #xDBFF) ;; high surrogate
+                  (expect-char #\\ ip)
+                  (expect-char #\u ip)
+                  (let ([y (read-4hexdig ip)])
+                    (unless (<= #xDC00 y #xDFFF)
+                      (raise 'invalid-surrogate-pair))
+                    (write-char
+                     (integer->char
+                      (+ (ash (bitwise-and x #x3FF) 10)
+                         (bitwise-and y #x3FF)
+                         #x10000))
+                     op))]
+                 [(<= #xDC00 x #xDFFF) (raise 'invalid-surrogate-pair)]
+                 [else (write-char (integer->char x) op)]))]
+             [else (unexpected-input c ip)]))
+           (read-string ip op)]
+        [else (write-char c op) (read-string ip op)])))
 
   (define (read-4hexdig ip)
     (let* ([x (hex-digit ip)]
@@ -246,6 +245,7 @@
     (case-lambda
      [(ip) (json:read ip no-custom-inflate)]
      [(ip custom-inflate)
+      (define buffer (open-output-string))
       (define (rd ip)
         (let ([c (next-non-ws ip)])
           (cond
@@ -265,7 +265,7 @@
             (expect-char #\l ip)
             (expect-char #\l ip)
             #\nul]
-           [(eqv? c #\") (read-string ip)]
+           [(eqv? c #\") (read-string ip buffer)]
            [(eqv? c #\[)
             (let lp ([acc '()])
               (let ([c (next-non-ws ip)])
@@ -285,7 +285,7 @@
                (let ([c (next-non-ws ip)])
                  (cond
                   [(eqv? c #\")
-                   (let* ([key (read-string ip)]
+                   (let* ([key (read-string ip buffer)]
                           [c (next-non-ws ip)])
                      (unless (eqv? c #\:)
                        (unexpected-input c ip))
