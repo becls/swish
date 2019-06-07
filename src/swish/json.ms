@@ -108,7 +108,7 @@
     #((1 "foo") "[1,\"foo\"]")
 
     #(,(json:make-object [foo '(123)]) "{\"foo\":[123]}")
-    #(,(json:make-object [foo (json:make-object [bar #t])])
+    #(,(json:make-object [,'foo (json:make-object [bar #t])])
       "{\"foo\":{\"bar\":true}}")
 
     #((-123 "foo" ,(json:make-object [bar '()]) #\nul)

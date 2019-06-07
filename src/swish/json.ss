@@ -45,11 +45,15 @@
   (define-syntax json:extend-object
     (syntax-rules ()
       [(_ $ht (key val) ...)
-       (for-all identifier? #'(key ...))
        (let ([ht $ht])
-         (symbol-hashtable-set! ht 'key val)
+         (symbol-hashtable-set! ht (parse-key key) val)
          ...
          ht)]))
+
+  (define-syntax parse-key
+    (syntax-rules (unquote)
+      [(_ id) (identifier? #'id) (quote id)]
+      [(_ (unquote e)) e]))
 
   (define-syntax json:make-object
     (syntax-rules ()

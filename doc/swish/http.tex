@@ -481,8 +481,9 @@ JavaScript implementation can interpret the data.
 
 The \code{json:extend-object} construct adds the \var{key} /
 \var{value} pairs to the symbol hashtable \var{ht} using
-\code{symbol-hashtable-set!}. Each \var{key} is a literal
-identifier. The resulting expression returns \var{ht}.
+\code{symbol-hashtable-set!}. Each \var{key} is a literal identifier
+or an unquoted expression \code{,\var{e}} that evaluates to a
+symbol. The resulting expression returns \var{ht}.
 
 \defineentry{json:make-object}
 \begin{syntax}
