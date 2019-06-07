@@ -331,6 +331,8 @@
     [#(EXIT #(unexpected-input #\1 1)) (catch (json:string->object "{1}"))]
     [#(EXIT #(unexpected-input #\: 6))
      (catch (json:string->object "{\"a\":1:}"))]
+    [#(EXIT #(unexpected-input #\} 7))
+     (catch (json:string->object "{\"a\":1,}"))]
     [#(EXIT #(unexpected-input #\} 1)) (catch (json:string->object "[}"))]
     [#(EXIT unexpected-eof) (catch (json:string->object "-"))]
     [#(EXIT unexpected-eof) (catch (json:string->object "1."))]
@@ -338,6 +340,7 @@
     [#(EXIT unexpected-eof) (catch (json:string->object "1e+"))]
     [#(EXIT #(unexpected-input #\. 3)) (catch (json:string->object "1.2.3"))]
     [#(EXIT #(unexpected-input #\, 1)) (catch (json:string->object "[,"))]
+    [#(EXIT #(unexpected-input #\] 3)) (catch (json:string->object "[1,]"))]
     [#(EXIT #(unexpected-input #\2 3)) (catch (json:string->object "[1 2]"))]
     [#(EXIT #(unexpected-input #\. 3)) (catch (json:string->object "\"\\u.\""))]
     [#(EXIT #(unexpected-input #\g 2)) (catch (json:string->object "\"\\g\""))]

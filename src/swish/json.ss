@@ -269,34 +269,34 @@
            [(eqv? c #\[)
             (let lp ([acc '()])
               (let ([c (next-non-ws ip)])
-                (case c
-                  [(#\]) '()]
-                  [else
-                   (unread-char c ip)
-                   (let ([acc (cons (rd ip) acc)])
-                     (let ([c (next-non-ws ip)])
-                       (case c
-                         [(#\,) (lp acc)]
-                         [(#\]) (reverse acc)]
-                         [else (unexpected-input c ip)])))])))]
+                (cond
+                 [(and (eqv? c #\]) (null? acc)) '()]
+                 [else
+                  (unread-char c ip)
+                  (let* ([acc (cons (rd ip) acc)]
+                         [c (next-non-ws ip)])
+                    (case c
+                      [(#\,) (lp acc)]
+                      [(#\]) (reverse acc)]
+                      [else (unexpected-input c ip)]))])))]
            [(eqv? c #\{)
             (custom-inflate
              (let lp ([obj (json:make-object)])
                (let ([c (next-non-ws ip)])
-                 (case c
-                   [(#\")
-                    (let ([key (read-string ip)])
-                      (let ([c (next-non-ws ip)])
-                        (unless (eqv? c #\:)
-                          (unexpected-input c ip)))
-                      (hashtable-set! obj key (rd ip)))
-                    (let ([c (next-non-ws ip)])
-                      (case c
-                        [(#\,) (lp obj)]
-                        [(#\}) obj]
-                        [else (unexpected-input c ip)]))]
-                   [(#\}) obj]
-                   [else (unexpected-input c ip)]))))]
+                 (cond
+                  [(eqv? c #\")
+                   (let* ([key (read-string ip)]
+                          [c (next-non-ws ip)])
+                     (unless (eqv? c #\:)
+                       (unexpected-input c ip))
+                     (hashtable-set! obj key (rd ip)))
+                   (let ([c (next-non-ws ip)])
+                     (case c
+                       [(#\,) (lp obj)]
+                       [(#\}) obj]
+                       [else (unexpected-input c ip)]))]
+                  [(and (eqv? c #\}) (eqv? (hashtable-size obj) 0)) obj]
+                  [else (unexpected-input c ip)]))))]
            [(eqv? c #\-) (- (read-unsigned ip))]
            [else (unread-char c ip) (read-unsigned ip)])))
       (let ([x (seek-non-ws ip)])
