@@ -759,6 +759,24 @@ garbage collections. If \var{finalizer} is not a procedure, exception
 \code{\#(bad-arg add-finalizer \var{finalizer})} is raised.
 
 % ----------------------------------------------------------------------------
+\defineentry{arg-check}
+\begin{syntax}
+  \code{(arg-check \var{who} [\var{arg} \var{pred} \ldots] \ldots)}
+\end{syntax}
+\expandsto{}\begin{alltt}\antipar
+(let ([who \var{who}])
+  (let ([arg \var{arg}])
+    (unless (and (pred arg) \ldots)
+      (profile-me-as arg-check)
+      (bad-arg who arg)))
+    \ldots)\end{alltt}
+
+The \code{arg-check} macro raises a \code{bad-arg} exception if
+any \var{arg} fails any \var{pred} specified for that \var{arg}.
+Within coverage reports, profile counts on the \code{arg-check}
+keyword indicate the number of \code{bad-arg} cases encountered.
+
+% ----------------------------------------------------------------------------
 \defineentry{bad-arg}
 \begin{procedure}
   \code{(bad-arg \var{who} \var{arg})}
@@ -926,6 +944,21 @@ expression whenever control leaves the body.
 The \code{profile-me} procedure does nothing but provide a
 place-holder for the system profiler to count the call site. When
 profiling is turned off, \code{(profile-me)} expands to
+\code{(void)}, and the system optimizer eliminates it.
+
+% ----------------------------------------------------------------------------
+\defineentry{profile-me-as}
+\begin{syntax}
+  \code{(profile-me-as \var{form})}
+\end{syntax}
+\returns{} unspecified
+
+The \code{profile-me-as} macro does nothing but provide a
+place-holder for the system profiler to count the call site.
+If source information is present on \var{form}, the profile count
+for this call site is attributed to that \var{form}.
+When profiling is turned off or when source information is not
+present on \var{form}, \code{profile-me-as} expands to
 \code{(void)}, and the system optimizer eliminates it.
 
 % ----------------------------------------------------------------------------

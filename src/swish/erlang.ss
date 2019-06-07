@@ -24,6 +24,7 @@
 (library (swish erlang)
   (export
    add-finalizer
+   arg-check
    bad-arg
    catch
    complete-io
@@ -66,6 +67,17 @@
    (swish osi)
    )
   ;; Procedures starting with @ must be called with interrupts disabled.
+
+  (define-syntax (arg-check x)
+    (syntax-case x ()
+      [(k $who [$arg pred ...] ...)
+       #'(let ([who $who])
+           (let ([arg $arg])
+             (unless (and (pred arg) ...)
+               ;; count on arg-check indicates test coverage of bad-arg case
+               (profile-me-as k)
+               (bad-arg who arg)))
+           ...)]))
 
   (define-syntax on-exit
     (syntax-rules ()

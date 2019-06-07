@@ -466,14 +466,6 @@
             (raise `#(no-spec-with-name ,name)))
           (hashtable-ref ht name #f)]))))
 
-  (define-syntax arg-check
-    (syntax-rules ()
-      [(_ who [$arg pred] ...)
-       (begin
-         (let ([arg $arg])
-           (unless (pred arg) (bad-arg who arg)))
-         ...)]))
-
   (define parse-command-line-arguments
     (case-lambda
      [(specs) (parse-command-line-arguments specs (command-line-arguments))]
@@ -483,7 +475,7 @@
           (apply errorf #f fmt args)))]
      [(specs ls fail)
       (arg-check 'parse-command-line-arguments
-        [ls (lambda (x) (and (list? x) (for-all string? x)))]
+        [ls list? (lambda (x) (for-all string? x))]
         [fail procedure?])
       (parse-arguments specs ls fail)]))
 
@@ -643,7 +635,7 @@
         [prefix string?]
         [exe-name string?]
         [width valid-width?]
-        [op (lambda (p) (and (output-port? p) (textual-port? p)))])
+        [op output-port? textual-port?])
       (partial-check-specs specs)
       (let-values ([(pos opt) (partition positional? specs)])
         (display-usage-internal prefix exe-name width opt pos op))]))
@@ -661,7 +653,7 @@
      [(specs args op)
       (arg-check 'display-options
         [args parsed-options?]
-        [op (lambda (p) (and (output-port? p) (textual-port? p)))])
+        [op output-port? textual-port?])
       (partial-check-specs specs)
       (let-values ([(pos opt) (partition positional? specs)])
         (display-options-internal opt pos args op))]))
@@ -676,7 +668,7 @@
       (arg-check 'display-help
         [exe-name string?]
         [args parsed-options?]
-        [op (lambda (p) (and (output-port? p) (textual-port? p)))])
+        [op output-port? textual-port?])
       (check-specs specs)
       (let-values ([(pos opt) (partition positional? specs)])
         (display-usage-internal "Usage:" exe-name #f opt pos op)

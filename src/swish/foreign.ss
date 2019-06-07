@@ -36,8 +36,7 @@
        ,@more))
 
   (define (provide-shared-object so-name filename)
-    (unless (string? so-name) (bad-arg 'provide-shared-object so-name))
-    (unless (string? filename) (bad-arg 'provide-shared-object filename))
+    (arg-check 'provide-shared-object [so-name string?] [filename string?])
     (json:update! (app:config) (so-path so-name 'file) values filename))
 
   (define require-shared-object
@@ -47,8 +46,7 @@
         (lambda (filename key dict)
           (load-shared-object filename)))]
      [(so-name handler)
-      (unless (string? so-name) (bad-arg 'require-shared-object so-name))
-      (unless (procedure? handler) (bad-arg 'require-shared-object handler))
+      (arg-check 'require-shared-object [so-name string?] [handler procedure?])
       (let* ([dict (json:ref (app:config) (so-path so-name) #f)]
              [file (and (hashtable? dict) (hashtable-ref dict 'file #f))])
         (unless (string? file)

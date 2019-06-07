@@ -31,6 +31,7 @@
    find-source
    get-clause
    profile-me
+   profile-me-as
    profile-omit
    replace-source
    scar
@@ -41,8 +42,19 @@
   (import (chezscheme))
 
   (meta-cond
-   [(compile-profile) (define profile-me void)]
-   [else (define-syntax profile-me (identifier-syntax void))])
+   [(compile-profile)
+    (define profile-me void)
+    (define-syntax (profile-me-as x)
+      (syntax-case x ()
+        [(_ id)
+         (let* ([annotation (syntax->annotation #'id)]
+                [src (and annotation (annotation-source annotation))])
+           (if src
+               #`(profile #,src)
+               #'(void)))]))]
+   [else
+    (define-syntax profile-me (identifier-syntax void))
+    (define-syntax profile-me-as (syntax-rules () [(_ id) void]))])
 
   ;; strip source annotations to exclude from profile report
   (define-syntax (profile-omit x)
