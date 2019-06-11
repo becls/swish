@@ -562,10 +562,11 @@
         [_ (syntax-error c)]))
     (syntax-case x ()
       [(_ op-expr indent-expr wr-expr)
-       #'(begin
-           indent-expr
+       #'(let ([indent indent-expr] [op op-expr])
            wr-expr
-           (display-string "{}" op-expr)
+           (display-string "{}" op)
+           (when (eqv? indent 0)
+             (newline op))
            #t)]
       [(_ op-expr indent-expr wr-expr [key . spec] ...)
        (valid? (datum (key ...)))
@@ -578,6 +579,8 @@
              (let ([indent (json-write-kv op indent wr #\{ k0 f0 cw0)])
                (json-write-kv op indent wr #\, k1 f1 cw1)
                ...
-               (json:write-structural-char #\} indent op)
-               #t)))]))
+               (json:write-structural-char #\} indent op))
+             (when (eqv? indent 0)
+               (newline op))
+             #t))]))
   )

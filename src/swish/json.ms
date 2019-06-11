@@ -213,6 +213,15 @@
 
 (mat pretty ()
   (let-values ([(op get) (open-string-output-port)])
+    (define-syntax compare-output
+      (syntax-rules ()
+        [(_ indent [key val] ...)
+         (match-let*
+          ([,! (json:write op (json:make-object [key val] ...) indent)]
+           [,expected (get)]
+           [,! (json:write-object op indent json:write [key val] ...)]
+           [,@expected (get)])
+          expected)]))
     (match-let*
      (["{\n  \"abc\": [\n    \"four\",\n    \"five\",\n    \"six\"\n  ],\n  \"def\": [\n    7,\n    8,\n    9\n  ],\n  \"ghi\": 3\n}\n"
        (begin
@@ -260,7 +269,18 @@
                   [wiki "hello" goodbye])
                 #t]
                [,_ #f])))
-         (get))])
+         (get))]
+      ;; ensure that json:write-object matches json:write
+      ["{}" (compare-output #f)]
+      ["{}" (compare-output 3)]
+      ["{}\n" (compare-output 0)]
+      ["{\"bar\":2,\"foo\":1}"
+       (compare-output #f [foo 1] [bar 2])]
+      ["{\n  \"bar\": 2,\n  \"foo\": 1\n}\n"
+       (compare-output 0 [foo 1] [bar 2])]
+      ["{\n      \"bar\": 2,\n      \"foo\": 1\n    }"
+       (compare-output 4 [foo 1] [bar 2])]
+      )
      'ok)))
 
 (mat custom ()
