@@ -52,7 +52,6 @@
    summarize-results
    write-meta-data
    )
-  ;; deliberately limiting ourselves to Chez Scheme imports
   (import (chezscheme))
 
   (define mats (make-parameter '()))
