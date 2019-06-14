@@ -65,7 +65,7 @@
             (swish osi)
             (swish meta))))
        (split (get-output-string os) #\newline))]
-    [`(<os-result> [stdout ,actual])
+    [`(<os-result> [stdout ,@expected] [exit-status 0])
      ;; load swish-core.library into stock scheme and look at (library-list)
      (run-os-process scheme-exe '("-q")
        (lambda (op)
@@ -79,8 +79,7 @@
              (exit)))
          (flush-output-port op))
        1000
-       '())]
-    [,@expected actual])
+       '())])
    'ok))
 
 (mat app-exception-handler ()
