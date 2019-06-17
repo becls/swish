@@ -204,3 +204,59 @@
     ["     Hi\n  mom\n  and\n  dad\n  just\n  two?"
      (wt 0 5 2 "Hi mom and\ndad\njust\ntwo?")])
    'ok))
+
+(mat oxford-comma ()
+  (match-let*
+   (;; defaults to ~{ ... ~}
+    [,fmt1 (oxford-comma "~a" " and ")]
+    ["" (format fmt1 '())]
+    ["1" (format fmt1 '(1))]
+    ["1 and 2" (format fmt1 '(1 2))]
+    ["1, 2, and 3" (format fmt1 '(1 2 3))]
+    ["1, 2, 3, and 4" (format fmt1 '(1 2 3 4))]
+    ["foo and bar" (format fmt1 '("foo" "bar"))]
+    ["foo, bar, and baz" (format fmt1 '("foo" "bar" "baz"))]
+    ;; doing a little more with each element
+    [,fmt2 (oxford-comma "~:(~a~)" " and ")]
+    ["" (format fmt2 '())]
+    ["Tofu" (format fmt2 '(tofu))]
+    ["Beef and Broccoli" (format fmt2 '(beef broccoli))]
+    ["Bacon, Lettuce, and Tomato" (format fmt2 '(bacon lettuce tomato))]
+    ;; can use ~{ ... ~} to format each item
+    [,fmt3 (oxford-comma "~{~s -> ~s~}" " or ")]
+    ["" (format fmt3 '())]
+    ["a -> b" (format fmt3 '((a b)))]
+    ["a -> b or c -> d" (format fmt3 '((a b) (c d)))]
+    ["a -> b, c -> d, or p -> q" (format fmt3 '((a b) (c d) (p q)))]
+    ;; use ~@{ ... ~} as the outer layer to accept multiple arguments
+    [,fmt4 (oxford-comma "~@{" "~1{~a:~a~:}" " or " "~}")]
+    ["" (format fmt4)]
+    ["1:2" (format fmt4 '(1 2))]
+    ["1:2 or a:b" (format fmt4 '(1 2) '("a" b))]
+    ["1:2, a:b, or flap:jack" (format fmt4 '(1 2) '(a b) '(flap "jack"))]
+    ;; combining
+    [,fmt5 (oxford-comma (oxford-comma "~a" " and ") " or ")]
+    ["" (format fmt5 '())]
+    ["one" (format fmt5 '((one)))]
+    ["one and two" (format fmt5 '((one two)))]
+    ["one, two, and three" (format fmt5 '((one two three)))]
+    ["one or carbon" (format fmt5 '((one) (carbon)))]
+    ["one and two or carbon and hydrogen" (format fmt5 '((one two) (carbon hydrogen)))]
+    ["one, two, and three or carbon and hydrogen" (format fmt5 '((one two three) (carbon hydrogen)))]
+    ["one, two, and three or carbon, hydrogen, and nitrogen" (format fmt5 '((one two three) (carbon hydrogen nitrogen)))]
+    ["1, 2, and 3, a and b, or p, d, and q" (format fmt5 '((1 2 3) (a b) (p d q)))]
+    ;; more uses for prefix / suffix
+    [,fmt6 (oxford-comma "~@[~{" "~(~s~)" " or " "~}~]")]
+    ["" (format fmt6 #f)]
+    ["" (format fmt6 '())]
+    ["foo" (format fmt6 '(FOO))]
+    ["foo or bar" (format fmt6 '(FOO bar))]
+    ;; maybe useful as argument of ~? or ~@?
+    ["try pressing the control, alt, or delete key before continuing"
+     (format "try ~a the ~@? key before continuing" 'pressing
+       (oxford-comma "~a" " or ") '(control alt delete))]
+    ["try pressing control, alt, and delete before continuing"
+     (format "try ~a ~? before continuing" 'pressing
+       (oxford-comma "~@{" "~a" " and " "~}") '(control alt delete))])
+   'ok)
+  )

@@ -2234,6 +2234,25 @@ of the elements of list \var{ls} separated by displaying
 the last separator.
 
 % ----------------------------------------------------------------------------
+\defineentry{oxford-comma}
+\begin{procedure}
+  \code{(oxford-comma \opt{\var{prefix}} \var{elt-fmt} \var{conj} \opt{\var{suffix}})}
+\end{procedure}
+\returns{} a string
+
+The \code{oxford-comma} procedure constructs a format string for use with
+\code{errorf}, \code{format}, \code{printf}, etc., to join the elements
+of a list with commas and/or \var{conj}, as appropriate.
+The \var{elt-fmt} argument is the format string for individual
+items of the list.
+The \var{conj} argument is a string used to separate the final two elements
+of the list.
+The \var{prefix} and \var{suffix} arguments must be supplied together or
+omitted.
+If omitted, \var{prefix} defaults to \code{\fixtilde"~\{"} and \var{suffix}
+defaults to \code{\fixtilde"~\}"}.
+
+% ----------------------------------------------------------------------------
 \defineentry{split}
 \begin{procedure}
   \code{(split \var{str} \var{separator})}
