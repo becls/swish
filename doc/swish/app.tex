@@ -70,7 +70,7 @@ remaining arguments, if any, as its command-line arguments.
 For example, the following \code{Echo} script processes the arguments
 that are passed to the script.
 
-\codebegin
+\codebegin\fixtilde
 $ cat Echo
 #!/usr/bin/env swish
 (printf "~\{~:(~a~)~\}{\textbackslash}n" (command-line-arguments))

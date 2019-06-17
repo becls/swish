@@ -418,7 +418,7 @@ syntax object \var{x} and produce a query string and associated
 arguments according to the patterns below.
 When one of these patterns is matched, the \var{symbol->sql} procedure is
 applied to the remaining symbols of the input before they are spliced into the
-query string, as if by \code{(format "{\textasciitilde}a" (symbol->sql sym))}.
+query string, as if by \code{\fixtilde(format "~a" (symbol->sql sym))}.
 By default, \var{symbol->sql} is the identity function.
 
 \begin{itemize}

@@ -52,3 +52,14 @@
 \newcommand{\sopt}[1]{\code{{-}#1}}
 \newcommand{\lopt}[1]{\code{{-}{-}#1}}
 \newcommand{\str}[1]{\code{"#1"}}
+
+% the default \textasciitilde looks too much like a dash
+\newcommand{\schtilde}{{\fontfamily{phv}\selectfont\textasciitilde}}
+% use this within an environment to map ~ to \schtilde
+\begingroup
+\catcode`~=\active
+\gdef\fixtilde{%
+  \catcode`~=\active
+  \def~{\schtilde}%
+}
+\endgroup
