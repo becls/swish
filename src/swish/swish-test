@@ -33,7 +33,8 @@
    ["srcdirs" -s (list "<srcdir>") "add <srcdir> to source-directories"]
    ["help" -h --help (list "[<section>]" ...)
     (format "display help, <section>={~{~a~^|~}}" help-sections)
-    (usage hide)]))
+    (usage hide)]
+   ["version" --version bool "print version information"]))
 
 (define misc-cli
   (cli-specs
@@ -339,6 +340,10 @@
  [(opt "help") =>
   (lambda (sections)
     (usage #f (map string->symbol sections) (opt)))]
+ [(opt "version")
+  (printf "~a Version ~a (~a)\n" who
+    (software-version 'swish)
+    (software-revision 'swish))]
  [(hashtable-ref (opt) "repl" #f)
   (let ([ignored
          (remq #f

@@ -101,6 +101,10 @@
       seek
       "swish-build -o foo -b petite foo.ss")))
 
+(isolate-mat version ()
+  (swish-build-test '("--version")
+    '("swish-build Version (?:\\d+\\.){2}\\d+ \\([[:xdigit:]dirty-]+\\)")))
+
 (isolate-mat required-arguments ()
   (define testfile
     (write-example "triv"

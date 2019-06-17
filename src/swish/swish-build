@@ -43,6 +43,7 @@
       "Look for <lib> ... in library-directories (-L) if not found.")]
    ["help" -h --help (list "[<section>]" ...)
     (format "display help, <section>={~{~a~^|~}}" help-sections)]
+   ["version" --version bool "print version information"]
    ))
 
 (define library-cli
@@ -559,6 +560,10 @@
  [(opt "help") =>
   (lambda (sections)
     (usage #f (map string->symbol sections) (opt)))]
+ [(opt "version")
+  (printf "~a Version ~a (~a)\n" who
+    (software-version 'swish)
+    (software-revision 'swish))]
  [else
   (let* ([source-fn
           (or (source-file)

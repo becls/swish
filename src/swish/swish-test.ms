@@ -85,6 +85,10 @@
     "swish-test: unrecognized help section: me-obi-wan")
   )
 
+(isolate-mat version ()
+  (zero-exit (swish-test "--version")
+   '("swish-test Version (?:\\d+\\.){2}\\d+ \\([[:xdigit:]dirty-]+\\)")))
+
 (isolate-mat check-options ()
   (nonzero-exit (swish-test "--coverage foo")
     '() "--coverage requires --load-profile or --save-profile")
