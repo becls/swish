@@ -64,35 +64,45 @@
           (pregexp-match regexp (if (symbol? s) (symbol->string s) s)))))]
    [else (lambda (s) #f)]))
 
-(define detex
-  (let ([decode (pregexp "\\\\code[{]([^}]*)")]) ;; won't have trailing } due to defineentry regexp
-    (lambda (s)
-      (match (pregexp-match decode s)
-        [(,_ ,hit)
-         (pregexp-replace* "\\\\" hit "")]
-        [,_ (pregexp-replace* "\\\\" s "")]))))
+;; compile static regular expressions at expand time
+(define-syntax (re x)
+  (syntax-case x ()
+    [(re str)
+     (string? (datum str))
+     #`(quote #,(datum->syntax #'re (pregexp (datum str))))]))
 
-(define entry-regex (pregexp "\\\\(?:defineentry|begin[{](?:pubevent|tupledef)[}])[{]([^}]+)[}]"))
-(define (for-each-entry filename f)
+(define (detex s)
+  ;; won't have trailing } due to defineentry regexp
+  (match (pregexp-match (re "\\\\code[{]([^}]*)") s)
+    [(,_ ,hit)
+     (pregexp-replace* (re "\\\\") hit "")]
+    [,_ (pregexp-replace* (re "\\\\") s "")]))
+
+(define entry-regex (re "\\\\(?:defineentry|begin[{](?:pubevent|tupledef)[}])[{]([^}]+)[}]"))
+
+(define C-export-regex (re "EXPORT\\s+(?:(?:const\\s+|)[*\\w]+)\\s(\\w+)\\("))
+
+(define (for-each-regex-match filename regex f)
   (let* ([s (utf8->string (read-file filename))]
          [end (string-length s)])
     (let scan ([i 0])
       (unless (> i end)
-        (match (pregexp-match-positions entry-regex s i)
+        (match (pregexp-match-positions regex s i)
           [(,_ (,from . ,to))
-           (f (detex (substring s from to)))
+           (f (substring s from to))
            (scan (+ to 1))]
           [#f (void)])))))
+
+(define (add-export! ht e)
+  (hashtable-set! ht e
+    (if (exclude? e) 'debug-excluded 'undocumented)))
 
 (define (add-exports! ht)
   (lambda (s)
     (match (catch (read (open-input-string s)))
       [#(EXIT ,reason) (errorf #f "invalid -L argument ~s" s)]
       [,lib
-       (for-each
-        (lambda (e)
-          (hashtable-set! ht e
-            (if (exclude? e) 'debug-excluded 'undocumented)))
+       (for-each (lambda (e) (add-export! ht e))
         (library-exports lib))])))
 
 (define (update-entry! ht entry file)
@@ -118,11 +128,19 @@
     (for-each (add-exports! exports)
       (or (opt 'libraries) '("(swish imports)")))
     (for-each
+     (lambda (filename)
+       (let ([file.h (path-combine dir ".." "src" "swish" filename)])
+         (when (and (not (opt 'libraries)) (file-regular? file.h))
+           (for-each-regex-match file.h C-export-regex
+             (lambda (entry)
+               (add-export! exports (string->symbol entry)))))))
+     '("swish.h" "osi.h"))
+    (for-each
      (lambda (fullname)
        (let ([file (path-last fullname)])
-         (for-each-entry fullname
+         (for-each-regex-match fullname entry-regex
            (lambda (entry)
-             (update-entry! exports entry file)))))
+             (update-entry! exports (detex entry) file)))))
      (find-files dir "tex"))
     (let ([partitions (make-hashtable symbol-hash eq?)])
       (vector-for-each
