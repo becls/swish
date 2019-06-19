@@ -759,6 +759,128 @@ garbage collections. If \var{finalizer} is not a procedure, exception
 \code{\#(bad-arg add-finalizer \var{finalizer})} is raised.
 
 % ----------------------------------------------------------------------------
+\defineentry{make-foreign-handle-guardian}
+\begin{procedure}
+\codebegin
+(make-foreign-handle-guardian \var{type-name} \var{get-handle} \var{set-handle!}\strut
+                              \var{get-create-time} \var{close-handle} \var{print})\strut
+\codeend
+\end{procedure}
+\returns{} a procedure that expects \var{r} and \var{handle}
+
+The \code{make-foreign-handle-guardian} procedure assists in managing handles
+returned by foreign procedures.
+A common pattern is to wrap each foreign handle in a record, register the
+record with a guardian, and add a finalizer that closes the handles of records
+the guardian identifies as inaccessible.
+The \code{make-foreign-handle-guardian} procedure supports this pattern
+by creating a guardian and installing a suitable finalizer via \code{add-finalizer}.
+It also adds \var{type-name} to the set of foreign types recognized by
+\code{count-foreign-handles},
+\code{foreign-handle-count},
+\code{foreign-handle-print}, and
+\code{print-foreign-handles}
+to help monitor foreign handles that are still open.
+
+The \var{type-name} must be a symbol; the remaining arguments must be
+procedures.  It is an error if \var{type-name} has already been registered.
+The \var{get-handle} and \var{get-create-time} procedures should expect a
+single argument \var{r}; \var{get-create-time} must return an integer.
+The \var{set-handle!} procedure should expect \var{r} and \var{handle} and
+store \var{handle} in \var{r}, where it can be retrieved by \var{get-handle}.
+
+The \var{close-handle} procedure runs in the finalizer process.
+It should take \var{r} and disable interrupts before checking whether
+\code{(\var{get-handle}\ \var{r})} is already \code{\#f},
+since the guardian may return inaccessible objects that are already closed.
+If not, it should close the foreign handle and call the foreign-handle guardian
+with \var{r} and \code{\#f} to clear the association of \var{r} with \var{handle}.
+
+The \var{print} procedure should expect a textual output port \var{op},
+\var{r}, and \var{handle} and print diagnostic information about the
+\var{handle} to \var{op} followed by a newline.
+See the output of \code{print-foreign-handles} for examples.
+
+The \code{make-foreign-handle-guardian} procedure returns a procedure
+that expects two arguments: \var{r} and a \var{handle} that is
+either an integer or \code{\#f}.
+Other code should not call \var{set-handle!} but should instead
+call the resulting procedure with interrupts disabled.
+If \var{handle} is \code{\#f}, this procedure calls
+\code{(\var{set-handle!}\ \var{r}\ \#f)}
+and removes \var{r} from the weak eq-hashtable consulted by
+\code{foreign-handle-count}, etc.
+If \var{handle} is not \code{\#f}, then
+the procedure checks whether \code{(\var{get-handle}\ \var{r})}
+is \code{\#f}.
+If so, it calls \code{(\var{set-handle!}\ \var{r}\ \var{handle})}.
+Otherwise, it registers \var{r} with the guardian.
+In either case, it adds \var{r} to the weak eq-hashtable
+consulted by \code{foreign-handle-count}, etc.
+To ensure that \var{r} is registered with the guardian just once,
+\var{r} should already contain \var{handle} the first time
+the procedure is called with \var{r} and a \var{handle} that
+is not \code{\#f}.
+
+% ----------------------------------------------------------------------------
+\defineentry{count-foreign-handles}
+\begin{procedure}
+  \code{(count-foreign-handles \var{obj} \var{report-count})}
+\end{procedure}
+\returns{} \var{obj}
+
+The \code{count-foreign-handles} procedure takes an arbitrary \var{obj} and a
+procedure \var{report-count} that takes \var{obj}, a symbol \var{type}
+identifying a source of foreign handles, and \var{count}, the number of
+open handles of that type.
+The \code{count-foreign-handles} procedure calls \var{report-count} once for
+each foreign-handle type registered with \code{make-foreign-handle-guardian},
+in an unspecified order.
+
+% ----------------------------------------------------------------------------
+\defineentry{foreign-handle-count}
+\begin{procedure}
+  \code{(foreign-handle-count \var{type-name})}
+\end{procedure}
+\returns{} a procedure
+
+The \code{foreign-handle-count} procedure takes a symbol \var{type-name} that
+must already have been registered with \code{make-foreign-handle-guardian}
+and returns a procedure of no arguments that returns the number of open foreign
+handles of that type.
+
+% ----------------------------------------------------------------------------
+\defineentry{foreign-handle-print}
+\begin{procedure}
+  \code{(foreign-handle-print \var{type-name})}
+\end{procedure}
+\returns{} a procedure
+
+The \code{foreign-handle-print} procedure takes a symbol \var{type-name} that
+must already have been registered with \code{make-foreign-handle-guardian} and
+returns a procedure that prints information about open handles of that type.
+The procedure returned uses the \var{print} and \var{get-create-time}
+procedures registered with \code{make-foreign-handle-guardian}.
+The procedure takes an optional textual output port \var{op}, which defaults
+to the current output port, and calls \var{print} for each open handle of the
+designated type in increasing order of the creation time from \var{get-create-time}
+and then by increasing handle.
+
+% ----------------------------------------------------------------------------
+\defineentry{print-foreign-handles}
+\begin{procedure}
+  \code{(print-foreign-handles \opt{\var{op}})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{print-foreign-handles} procedure prints information about open
+foreign handles to textual output port \var{op}, which defaults to the current
+output port.
+The \code{print-foreign-handles} procedure
+calls the procedure returned by \code{(foreign-handle-print\ \var{type-name})}
+for each foreign-handle type registered with \code{make-foreign-handle-guardian}.
+
+% ----------------------------------------------------------------------------
 \defineentry{arg-check}
 \begin{syntax}
   \code{(arg-check \var{who} [\var{arg} \var{pred} \ldots] \ldots)}

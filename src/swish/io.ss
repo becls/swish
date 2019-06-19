@@ -29,8 +29,11 @@
    close-path-watcher
    close-tcp-listener
    connect-tcp
+   count-foreign-handles
    directory?
    force-close-output-port
+   foreign-handle-count
+   foreign-handle-print
    get-datum/annotations-all
    get-file-size
    get-real-path
@@ -46,6 +49,7 @@
    listener?
    make-directory
    make-directory-path
+   make-foreign-handle-guardian
    make-osi-input-port
    make-osi-output-port
    make-utf8-transcoder
@@ -67,6 +71,7 @@
    path-watcher-create-time
    path-watcher-path
    path-watcher?
+   print-foreign-handles
    print-osi-ports
    print-path-watchers
    print-tcp-listeners
@@ -267,6 +272,108 @@
 
   (define osi-port-guardian (make-guardian))
   (define osi-port-table (make-weak-eq-hashtable))
+  (define (future-sorted-cells ht create-time cell->record cell->handle)
+    ;; cell is in ht iff its cell->handle is not #f
+    (define (cell<? x1 x2)
+      (let ([t1 (create-time (cell->record x1))] [t2 (create-time (cell->record x2))])
+        (cond
+         [(< t1 t2) #t]
+         [(> t1 t2) #f]
+         [else (< (cell->handle x1) (cell->handle x2))])))
+    (let ([v (with-interrupts-disabled (hashtable-cells ht))])
+      (vector-sort! cell<? v)
+      v))
+
+  (define-record-type %type-reporter
+    (nongenerative)
+    (fields
+     (immutable name)
+     (immutable count)
+     (immutable print)))
+
+  (define foreign-handle-reporters (make-hashtable symbol-hash eq?))
+
+  (define (add-foreign-reporter name table cell->record cell->handle get-create-time print-one)
+    (define (get-count) (hashtable-size table))
+    (define print
+      (case-lambda
+       [() (print (current-output-port))]
+       [(op)
+        (vector-for-each
+         (lambda (x)
+           (print-one op (cell->record x) (cell->handle x)))
+         (future-sorted-cells table get-create-time cell->record cell->handle))]))
+    (hashtable-update! foreign-handle-reporters name
+      (lambda (prev)
+        (when prev (raise `#(type-already-registered ,name)))
+        (make-%type-reporter name get-count print))
+      #f))
+
+  (define (count-foreign-handles obj report-count)
+    (vector-for-each
+     (lambda (cell)
+       (report-count obj (car cell) ((%type-reporter-count (cdr cell)))))
+     (hashtable-cells foreign-handle-reporters))
+    obj)
+
+  (define (get-type-reporter who type)
+    (let ([tr (hashtable-ref foreign-handle-reporters type #f)])
+      (if (%type-reporter? tr)
+          tr
+          (bad-arg who type))))
+
+  (define (foreign-handle-count type)
+    (%type-reporter-count
+     (get-type-reporter 'foreign-handle-count type)))
+
+  (define (foreign-handle-print type)
+    (%type-reporter-print
+     (get-type-reporter 'foreign-handle-print type)))
+
+  (define print-foreign-handles
+    (case-lambda
+     [() (print-foreign-handles (current-output-port))]
+     [(op)
+      (define (symbol<? a b)
+        (string<? (symbol->string a) (symbol->string b)))
+      (vector-for-each
+       (lambda (cell)
+         (fprintf op "\n~a:\n" (car cell))
+         ((%type-reporter-print (cdr cell)) op))
+       (vector-sort (lambda (a b) (symbol<? (car a) (car b)))
+         (hashtable-cells foreign-handle-reporters)))]))
+
+  (define (make-foreign-handle-guardian name get-handle set-handle! get-create-time close-handle print)
+    (define guardian (make-guardian))
+    (define table (make-weak-eq-hashtable))
+    (define (close-dead-handles)
+      ;; This procedure runs in the finalizer process.
+      (let ([x (guardian)])
+        (when x
+          (catch (close-handle x))
+          (close-dead-handles))))
+    (arg-check 'make-foreign-handle-guardian
+      [name symbol?]
+      [get-handle procedure?]
+      [set-handle! procedure?]
+      [get-create-time procedure?]
+      [close-handle procedure?]
+      [print procedure?])
+    (add-finalizer close-dead-handles)
+    (add-foreign-reporter name table car cdr get-create-time print)
+    (lambda (record handle)
+      (cond
+       [handle
+        ;; avoid re-registering with guardian if we're reviving handle because
+        ;; close failed and we want to be able to print the handle
+        (if (get-handle record)
+            (guardian record)
+            (set-handle! record handle))
+        (eq-hashtable-set! table record handle)]
+       [else
+        (set-handle! record #f)
+        (eq-hashtable-delete! table record)])
+      record))
 
   (define (osi-port-closed? p)
     (unless (osi-port? p)
@@ -276,16 +383,7 @@
   (define (osi-port-count) (hashtable-size osi-port-table))
 
   (define (sorted-cells ht create-time)
-    (let ([v (with-interrupts-disabled (hashtable-cells ht))])
-      (vector-sort!
-       (lambda (x1 x2)
-         (let ([t1 (create-time (car x1))] [t2 (create-time (car x2))])
-           (cond
-            [(< t1 t2) #t]
-            [(> t1 t2) #f]
-            [else (< (cdr x1) (cdr x2))])))
-       v)
-      v))
+    (future-sorted-cells ht create-time car cdr))
 
   (define print-osi-ports
     (case-lambda

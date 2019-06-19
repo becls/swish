@@ -85,6 +85,7 @@
       [#(start-specs #(invalid-thunk ,x)) (format "Invalid thunk in start-specs: ~s." x)]
       [#(start-specs #(invalid-type ,x)) (format "Invalid type in start-specs: ~s." x)]
       [#(timeout-value ,x ,src) (format "Invalid timeout value~a: ~s." (src->english src) x)]
+      [#(type-already-registered ,name) (format "Type ~s is already registered." name)]
       [#(unexpected-input ,x ,position) (format "Unexpected input at position ~d: ~s." position x)]
       [#(unhandled-input ,x) (format "Unhandled input: ~s." x)]
       [#(unknown-shared-object ,so-name) (format "Unknown shared object ~s." so-name)]

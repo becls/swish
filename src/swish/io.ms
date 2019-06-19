@@ -376,4 +376,151 @@
   (gso 0 "#!r6rs")
   (gso 0 "!bang"))
 
+(isolate-mat foreign-handle ()
+  (define-syntax define-logged
+    (syntax-rules ()
+      [(_ logger [(f pat ...) body ...] ...)
+       (begin
+         (define logger
+           ;; log textual representation to avoid holding pointers to arguments
+           (let ([op (open-output-string)])
+             (case-lambda
+              [() (split (get-output-string op) #\newline)]
+              [(x) (write x op) (newline op) x])))
+         (define (f . args)
+           (match (logger `(f . ,args))
+             [(f pat ...) body ...]))
+         ...)]))
+  (define-logged logger
+    [(make-fake ,info ,create-time ,handle)
+     `#(fake ,info ,create-time ,handle)]
+    [(fake-info #(fake ,info ,_ ,_))
+     info]
+    [(fake-create-time #(fake ,_ ,create-time ,_))
+     create-time]
+    [(fake-handle #(fake ,_ ,_ ,handle))
+     handle]
+    [(fake-handle-set! ,[x <= #(fake ,_ ,_ ,_)] ,val)
+     (vector-set! x 3 val)]
+    [(close-fake ,[x <= #(fake ,_ ,_ ,handle)])
+     (when handle (fakes x #f))]
+    [(print-fake ,op ,[x <= #(fake ,_ ,_ ,handle)] ,@handle)
+     (let* ([info (fake-info x)]
+            [time (fake-create-time x)])
+       (fprintf op "  ~d: ~a created ~d\n" handle info time))])
+  (define fakes-id (gensym))
+  (define fakes
+    (make-foreign-handle-guardian fakes-id
+      fake-handle
+      fake-handle-set!
+      fake-create-time
+      close-fake
+      print-fake))
+  (match-let*
+    ([,fake-count (foreign-handle-count fakes-id)]
+    [,print-fakes (foreign-handle-print fakes-id)]
+    [,os (open-output-string)]
+    [0 (fake-count)]
+    ["" (begin (print-fakes os) (get-output-string os))]
+    [,build-fake
+     (lambda (info create-time handle)
+       (let ([r (make-fake info create-time handle)])
+         (fakes r handle)))]
+    [,x1 (build-fake 'info1 3 7000)]
+    [,x2 (build-fake 'info2 1 8000)]
+    [,x3 (build-fake 'info3 2 9000)]
+    [,x4 (build-fake 'info4 2 6000)]
+    ;; foreign-guardian made expected calls
+    [("(make-fake info1 3 7000)"
+      "(fake-handle #(fake info1 3 7000))"
+      "(make-fake info2 1 8000)"
+      "(fake-handle #(fake info2 1 8000))"
+      "(make-fake info3 2 9000)"
+      "(fake-handle #(fake info3 2 9000))"
+      "(make-fake info4 2 6000)"
+      "(fake-handle #(fake info4 2 6000))" "")
+     (logger)]
+    ;; count works
+    [4 (fake-count)]
+    ;; print sorts by creation time, then by handle
+    [("  8000: info2 created 1"
+      "  6000: info4 created 2"
+      "  9000: info3 created 2"
+      "  7000: info1 created 3"
+      "")
+     (begin
+       (print-fakes os)
+       (split (get-output-string os) #\newline))]
+    ;; finalize on collection
+    [("(close-fake #(fake info3 2 9000))"
+      "(fake-handle-set! #(fake info3 2 9000) #f)"
+      "")
+     (begin
+       (logger)
+       (set! x3 #f) ;; drop reference
+       (gc)
+       (assert (andmap vector? (list x1 x2 x4))) ;; live
+       (logger))]
+    [3 (fake-count)]
+    ;; test drop and restore of handles as happens in sqlite:close if osi_close_database* fails
+    [#(fake ,_ ,_ ,x1-handle) x1]
+    [#(fake ,_ ,_ ,x4-handle) x4]
+    ;; drop handle on x4 ...
+    [2 (begin (fakes x4 #f) (fake-count))]
+    ;; drop handle on x1 ...
+    [1 (begin (fakes x1 #f) (fake-count))]
+    ;; ... revive handle on x4
+    [2 (begin (fakes x4 x4-handle) (fake-count))]
+    ;; ... revive handle on x1
+    [3 (begin (fakes x1 x1-handle) (fake-count))]
+    [("(fake-handle-set! #(fake info4 2 6000) #f)"
+      "(fake-handle-set! #(fake info1 3 7000) #f)"
+      "(fake-handle #(fake info4 2 #f))"
+      "(fake-handle-set! #(fake info4 2 #f) 6000)"
+      "(fake-handle #(fake info1 3 #f))"
+      "(fake-handle-set! #(fake info1 3 #f) 7000)"
+      "")
+     (logger)]
+    [(,@fakes-id . 3)
+     (let ([pr (cons #f #f)])
+       (count-foreign-handles pr
+         (lambda (pr type count)
+           (when (eq? type fakes-id)
+             (set-car! pr type)
+             (set-cdr! pr count))))
+       pr)]
+    ;; finalize the rest
+    [(""
+      "(close-fake #(fake info1 3 7000))"
+      "(close-fake #(fake info2 1 8000))"
+      "(close-fake #(fake info4 2 6000))"
+      "(fake-handle-set! #(fake info1 3 7000) #f)"
+      "(fake-handle-set! #(fake info2 1 8000) #f)"
+      "(fake-handle-set! #(fake info4 2 6000) #f)")
+     (begin (logger) (gc) (sort string<? (logger)))]
+    [0 (fake-count)]
+    ["" (begin (print-fakes os) (get-output-string os))]
+    ["" (parameterize ([current-output-port os]) (print-fakes) (get-output-string os))])
+   'ok)
+  (match-let*
+   ([#(EXIT #(bad-arg make-foreign-handle-guardian "foo"))
+     (catch (make-foreign-handle-guardian "foo" values values values values values))]
+    [#(EXIT #(bad-arg make-foreign-handle-guardian "bar"))
+     (catch (make-foreign-handle-guardian 'foo "bar" values values values values))]
+    [#(EXIT #(bad-arg make-foreign-handle-guardian "baz"))
+     (catch (make-foreign-handle-guardian 'foo values "baz" values values values))]
+    [#(EXIT #(bad-arg make-foreign-handle-guardian "cod"))
+     (catch (make-foreign-handle-guardian 'foo values values "cod" values values))]
+    [#(EXIT #(bad-arg make-foreign-handle-guardian "dog"))
+     (catch (make-foreign-handle-guardian 'foo values values values "dog" values))]
+    [#(EXIT #(bad-arg make-foreign-handle-guardian "eel"))
+     (catch (make-foreign-handle-guardian 'foo values values values values "eel"))]
+    [#(EXIT #(bad-arg foreign-handle-count dracula))
+     (catch (foreign-handle-count 'dracula))]
+    [#(EXIT #(bad-arg foreign-handle-print radix))
+     (catch (foreign-handle-print 'radix))]
+    )
+   'ok)
+  )
+
 (hook-console-input)
