@@ -1,0 +1,64 @@
+#!/bin/bash
+
+if [ "$OS" != "Windows_NT" ]; then
+   echo "$0 currently has test cases only for Windows"
+   exit
+fi
+
+if [ $# == 0 ]; then
+  echo "Usage: $0 [test-case]"
+  echo "  where test-case is the number of a test case to run"
+  # I would bake this in if it weren't so slow:
+  echo "  be sure to make -C src/swish mat-prereq beforehand"
+  exit
+fi
+
+if [ "${PWD}" != "$(git rev-parse --show-toplevel)" ]; then
+  echo "$0 expects to be run from the repository root"
+  exit 1
+fi
+
+. src/swish/sh-config
+
+if [ "1" = "$1" ]; then
+echo "== Case 1"
+cat << 'EOF' > data/tmp/manual-test-case
+(begin
+  (app:start)
+  (printf "Press Ctrl-C now; expect normal shutdown console events.\n")
+  (receive (after 5000 (printf "giving up\n") (exit 7))))
+EOF
+cmd /D /E:OFF /F:OFF /V:OFF /C '.\build\mat-prereq\lib\swish.x.y.z\arch\swish data/tmp/manual-test-case'
+exit
+fi
+
+if [ "2" = "$1" ]; then
+echo "== Case 2"
+cat << 'EOF' > data/tmp/manual-test-case
+(begin
+  (app:start)
+  (printf "Press Ctrl-Break now; expect normal shutdown console events.\n")
+  (receive (after 5000 (printf "giving up\n") (exit 7))))
+EOF
+cmd /D /E:OFF /F:OFF /V:OFF /C '.\build\mat-prereq\lib\swish.x.y.z\arch\swish data/tmp/manual-test-case'
+exit
+fi
+
+if [ "3" = "$1" ]; then
+echo "== Case 3"
+rm -f data/tmp/output.log
+cat << 'EOF' > data/tmp/manual-test-case
+(begin
+  ;; vanilla port
+  (console-error-port (open-output-file "data/tmp/output.log" 'replace))
+  (app:start)
+  (printf "Close the new window; expect normal shutdown console events in log on other console.\n")
+  (receive (after 5000 (printf "giving up\n") (exit 7))))
+EOF
+cmd /D /E:OFF /F:OFF /V:OFF /C 'start /WAIT .\build\mat-prereq\lib\swish.x.y.z\arch\swish data/tmp/manual-test-case'
+ls -l data/tmp/output.log
+cat data/tmp/output.log
+exit
+fi
+
+echo "Unknown test case $1"

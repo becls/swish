@@ -51,6 +51,7 @@ static void swish_init(void) {
   add_foreign(osi_get_hrtime);
   add_foreign(osi_get_ip_address);
   add_foreign(osi_get_last_insert_rowid);
+  add_foreign(osi_get_pid);
   add_foreign(osi_get_real_path);
   add_foreign(osi_get_sqlite_status);
   add_foreign(osi_get_stat);
@@ -79,6 +80,8 @@ static void swish_init(void) {
   add_foreign(osi_rename);
   add_foreign(osi_reset_statement);
   add_foreign(osi_set_quantum);
+  add_foreign(osi_start_signal);
+  add_foreign(osi_stop_signal);
   add_foreign(osi_spawn);
   add_foreign(osi_step_statement);
   add_foreign(osi_unlink);

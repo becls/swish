@@ -54,6 +54,7 @@
    osi_get_ip_address*
    osi_get_last_insert_rowid
    osi_get_last_insert_rowid*
+   osi_get_pid
    osi_get_real_path
    osi_get_real_path*
    osi_get_sqlite_status
@@ -99,6 +100,10 @@
    osi_reset_statement
    osi_reset_statement*
    osi_set_quantum
+   osi_start_signal
+   osi_start_signal*
+   osi_stop_signal
+   osi_stop_signal*
    osi_spawn
    osi_spawn*
    osi_step_statement
@@ -146,11 +151,14 @@
   (fdefine osi_get_error_text (err int) string)
   (define-osi osi_get_hostname)
   (fdefine osi_get_hrtime unsigned-64)
+  (fdefine osi_get_pid int)
   (fdefine osi_get_time unsigned-64)
   (fdefine osi_is_quantum_over boolean)
   (fdefine osi_list_uv_handles ptr)
   (define-osi osi_make_uuid)
   (fdefine osi_set_quantum (nanoseconds unsigned-64) void)
+  (define-osi osi_start_signal (signum int))
+  (define-osi osi_stop_signal (handler uptr))
 
   ;; Ports
   (define-osi osi_read_port (port uptr) (buffer ptr) (start-index size_t) (size unsigned-32) (offset integer-64) (callback ptr))

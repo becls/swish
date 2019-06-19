@@ -78,6 +78,7 @@
    print-foreign-handles
    print-osi-ports
    print-path-watchers
+   print-signal-handlers
    print-tcp-listeners
    read-bytevector
    read-file
@@ -87,6 +88,8 @@
    remove-file
    rename-path
    set-file-mode
+   signal-handler
+   signal-handler-count
    spawn-os-process
    stat-directory?
    stat-regular-file?
@@ -869,4 +872,74 @@
              (let ([name (osi-port-name port)])
                (values (make-iport name port #f) (make-oport name port)))]))])))
 
+  (define-record-type sighandler
+    (nongenerative)
+    (fields
+     (immutable signum)
+     (immutable create-time)
+     (immutable handle)
+     (immutable callback)))
+
+  (define signal-handlers
+    (let ([table (make-hashtable values fx=)])
+      (define cell->record cdr)
+      (define (cell->handle cell) (sighandler-handle (cell->record cell)))
+      (add-foreign-reporter 'signal-handlers table cell->record cell->handle
+        sighandler-create-time
+        (lambda (op s handle)
+          (fprintf op "  ~d: for signal ~a registered ~d\n" handle
+            (sighandler-signum s)
+            (sighandler-create-time s))))
+      table))
+
+  (define signal-handler-count (foreign-handle-count 'signal-handlers))
+  (define print-signal-handlers (foreign-handle-print 'signal-handlers))
+
+  (define (@signal-handler-callback signum)
+    (cond
+     [(hashtable-ref signal-handlers signum #f) => sighandler-callback]
+     [else #f]))
+
+  (define (@deliver-signal signum)
+    (cond
+     [(@signal-handler-callback signum) =>
+      (lambda (callback) (callback signum))]))
+
+  (define signal-handler
+    (case-lambda
+     [(signum)
+      (arg-check 'signal-handler [signum fixnum? fxpositive?])
+      (with-interrupts-disabled
+        (@signal-handler-callback signum))]
+     [(signum callback)
+      (arg-check 'signal-handler
+        [signum fixnum? fxpositive?]
+        [callback (lambda (cb) (or (not cb) (procedure? cb)))])
+      (with-interrupts-disabled
+       (let* ([cell (hashtable-cell signal-handlers signum #f)]
+              [prev (cdr cell)])
+         (define (set-handler! signum handle callback)
+           (set-cdr! cell
+             (make-sighandler signum (erlang:now) handle callback)))
+         (cond
+          [(sighandler? prev)
+           (if (not callback)
+               (@close-sighandler prev)
+               (set-handler! signum (sighandler-handle prev) callback))]
+          [(procedure? callback)
+           (match (osi_start_signal* signum)
+             [(,who . ,errno)
+              (hashtable-delete! signal-handlers signum)
+              (io-error signum who errno)]
+             [,handle
+              (set-handler! signum handle callback)])])))]))
+
+  (define (@close-sighandler handler)
+    (let ([handle (sighandler-handle handler)])
+      (match (osi_stop_signal* handle)
+        [#t
+         (hashtable-delete! signal-handlers (sighandler-signum handler))]
+        [(,who . ,errno) (io-error (sighandler-signum handler) who errno)])))
+
+  (set-top-level-value! '@deliver-signal @deliver-signal)
   )

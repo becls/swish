@@ -48,6 +48,7 @@ EXPORT ptr osi_get_callbacks(uint64_t timeout);
 EXPORT const char* osi_get_error_text(int err);
 EXPORT ptr osi_get_hostname(void);
 EXPORT uint64_t osi_get_hrtime(void);
+EXPORT int osi_get_pid(void);
 EXPORT uint64_t osi_get_time(void);
 EXPORT void osi_init(void);
 EXPORT int osi_is_quantum_over(void);
@@ -65,6 +66,8 @@ EXPORT ptr osi_close_port(uptr port, ptr callback);
 EXPORT void osi_exit(int status);
 EXPORT ptr osi_spawn(const char* path, ptr args, ptr callback);
 EXPORT ptr osi_kill(int pid, int signum);
+EXPORT ptr osi_start_signal(int signum);
+EXPORT ptr osi_stop_signal(uptr signal);
 
 // File System
 EXPORT ptr osi_open_fd(int fd, int close);

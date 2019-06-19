@@ -108,7 +108,8 @@
      (let ([p (#%$top-level-value '$console-input-port)])
        ;; convince Chez Scheme to close console-input port
        (#%$set-top-level-value! '$console-input-port #f)
-       (close-port p))
+       (when (input-port? p)
+         (close-port p)))
      (osi_exit (->exit-status exit-code)))
 
    (define ($exit-process)
@@ -124,6 +125,19 @@
           (set! application-exit-code exit-code)
           (kill p 'shutdown))]
        [else (exit-process exit-code)])]))
+
+  (define (handle-signal n)
+    (spawn application:shutdown))
+
+  (define (trap-signals)
+    (meta-cond
+     [(memq (machine-type) '(i3nt ti3nt a6nt ta6nt))
+      (signal-handler SIGBREAK handle-signal)
+      (signal-handler SIGHUP handle-signal)
+      (signal-handler SIGINT handle-signal)]
+     [else
+      (signal-handler SIGINT handle-signal)
+      (signal-handler SIGTERM handle-signal)]))
 
   (define started? #f)
   (define ($swish-start stand-alone? args run)
@@ -146,6 +160,7 @@
              (when stand-alone?
                (app:name who)
                (app:path who))
+             (trap-signals)
              (call-with-values run exit)))
           (receive)]))))
   )

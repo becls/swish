@@ -104,7 +104,8 @@
             [exit-status exit-status])))
        (match-regexps patterns (append stdout stderr))]))
 
-  (define (script-test script-file args for-stdin patterns)
+  (define (script-test maybe-script args for-stdin patterns)
+    (define script-file (or maybe-script "-q"))
     (cond
      [(whereis 'profiler)
       (let ([tmp-file (string-append (profile:filename) ".sub-process")])
@@ -125,7 +126,7 @@
                  (library-extensions (append (library-extensions) '((".ss" . ".so"))))
                  (reset-handler (lambda () (exit 1)))
                  (void))
-               (on-exit (profile:save)
+               (on-exit (begin (profile:save) (unless ,maybe-script (exit)))
                  (apply swish-start ',script-file ',args)))
              for-stdin)
            patterns)))]

@@ -830,6 +830,46 @@ ptr osi_kill(int pid, int signum) {
   return Strue;
 }
 
+int osi_get_pid() {
+  return uv_os_getpid();
+}
+
+static void fire_signal(uv_signal_t* handle, int signum) {
+  (void)handle;
+  ptr callback = Stop_level_value(Sstring_to_symbol("@deliver-signal"));
+  osi_add_callback1(callback, Sinteger(signum));
+}
+
+static void close_signal_cb(uv_handle_t* handle) {
+  free(handle);
+}
+
+ptr osi_start_signal(int signum) {
+  uv_signal_t* signal = malloc_container(uv_signal_t);
+  if (!signal)
+    return osi_make_error_pair("osi_start_signal", UV_ENOMEM);
+  int rc = uv_signal_init(osi_loop, signal);
+  if (rc) {
+    free(signal);
+    return osi_make_error_pair("uv_signal_init", rc);
+  }
+  rc = uv_signal_start(signal, fire_signal, signum);
+  if (rc) {
+    uv_close((uv_handle_t*)signal, close_signal_cb);
+    return osi_make_error_pair("uv_signal_start", rc);
+  }
+  return Sunsigned((uptr)signal);
+}
+
+ptr osi_stop_signal(uptr handler) {
+  uv_signal_t* signal = (uv_signal_t*)handler;
+  int rc = uv_signal_stop(signal);
+  if (rc)
+    return osi_make_error_pair("uv_signal_stop", rc);
+  uv_close((uv_handle_t*)signal, close_signal_cb);
+  return Strue;
+}
+
 ptr osi_get_file_size(uptr port, ptr callback) {
   fs_port_t* p = (fs_port_t*)port;
   if (p->vtable != &file_vtable)

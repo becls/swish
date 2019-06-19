@@ -650,6 +650,7 @@ SPAN
                 '()))]))]))
 
   (profile:exclude "swish/mat.ss")
+  (profile:exclude "src/swish/script-testing.ss")
 
   )
 

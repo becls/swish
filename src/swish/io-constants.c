@@ -22,11 +22,13 @@
 
 #include <stdio.h>
 #include <fcntl.h>
+#include <signal.h>
 #include "uv.h"
 #define XX(name,flag) printf("(define-export "name" %d)\n", flag)
 #define XUV(id) XX(#id,UV_##id)
 #define XFS(id) XX(#id,UV_FS_##id)
 #define XERRNO(name,_) XX("UV_"#name, UV_##name);
+#define XS(id) XX(#id,id)
 #ifdef _WIN32
 #define XFM(id) XX(#id,_##id)
 #define _S_IFBLK 0
@@ -81,6 +83,56 @@ int main(int argc, char** argv) {
   XFM(S_IFSOCK);
 
   UV_ERRNO_MAP(XERRNO)
+
+  // C standard signals
+  XS(SIGABRT);
+  XS(SIGFPE);
+  XS(SIGILL);
+  XS(SIGINT);
+  XS(SIGSEGV);
+  XS(SIGTERM);
+
+  // platform-specific signals
+#ifdef _WIN32
+  XS(SIGBREAK);
+  XS(SIGHUP);
+  XS(SIGKILL);
+  XS(SIGWINCH);
+#else
+  XS(SIGALRM);
+  XS(SIGBUS);
+  XS(SIGCHLD);
+  XS(SIGCONT);
+  XS(SIGHUP);
+#if defined(SIGINFO)
+  XS(SIGINFO);
+#endif
+  XS(SIGIO);
+  XS(SIGKILL);
+  XS(SIGPIPE);
+#if defined(SIGPWR)
+  XS(SIGPWR);
+#endif
+  XS(SIGPROF);
+  XS(SIGQUIT);
+#if defined(SIGRTMIN)
+  XS(SIGRTMIN);
+  XS(SIGRTMAX);
+#endif
+  XS(SIGSTOP);
+  XS(SIGSYS);
+  XS(SIGTRAP);
+  XS(SIGTSTP);
+  XS(SIGTTIN);
+  XS(SIGTTOU);
+  XS(SIGURG);
+  XS(SIGUSR1);
+  XS(SIGUSR2);
+  XS(SIGVTALRM);
+  XS(SIGWINCH);
+  XS(SIGXCPU);
+  XS(SIGXFSZ);
+#endif
 
   return 0;
 }

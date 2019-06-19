@@ -412,6 +412,14 @@ When the process exits, the callback list \code{(\var{callback}
 integer exit status, and \var{term-signal} is the integer termination
 signal or 0 if the process did not terminate because of a signal.
 
+\defineentry{osi\_get\_pid}
+\begin{function}
+  \code{int osi\_get\_pid();}
+\end{function}
+
+The \code{osi\_get\_pid} function uses the \code{uv\_os\_getpid}
+function to return the current operating-system process ID.
+
 \defineentry{osi\_kill}
 \begin{function}
   \code{ptr osi\_kill(int \var{pid}, int \var{signum});}
@@ -421,6 +429,26 @@ The \code{osi\_kill} function uses the \code{uv\_kill} function to
 send termination signal \var{signum} to the process identified by
 \var{pid}. It returns \code{\#t} when successful and an error pair
 otherwise.
+
+\defineentry{osi\_start\_signal}
+\begin{function}
+  \code{ptr osi\_start\_signal(int \var{signum});}
+\end{function}
+
+The \code{osi\_start\_signal} function uses the \code{uv\_signal\_start}
+function to trap the signal \var{signum}.
+It returns a signal handle when successful and an error pair
+otherwise.
+Signals are delivered via the internal \code{@deliver-signal} procedure, which
+invokes the handler registered via \code{signal-handler}.
+
+\defineentry{osi\_stop\_signal}
+\begin{function}
+  \code{ptr osi\_stop\_signal(uptr \var{signal\_handle});}
+\end{function}
+
+The \code{osi\_stop\_signal} function stops trapping the signal
+and frees the signal handle returned by \code{osi\_start\_signal}.
 
 \subsection {File System Functions}
 

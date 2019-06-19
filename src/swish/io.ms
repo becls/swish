@@ -26,6 +26,7 @@
  (swish io)
  (swish mat)
  (swish osi)
+ (swish script-testing)
  (swish testing)
  )
 (define (make-byte-stream prime)
@@ -584,6 +585,112 @@
      (catch (foreign-handle-print 'radix))]
     )
    'ok)
+  )
+
+(isolate-mat signal-handler ()
+  (define (extract-signum s)
+    (define pat (re "^  [0-9]+: for signal ([0-9]+) registered [0-9]+"))
+    (match-define (,_ ,sig) (pregexp-match pat s))
+    (string->number sig))
+  (define (->signals output)
+    (sort <
+      (map extract-signum
+        (remq "" (split output #\newline)))))
+  (match-let*
+   ([#(EXIT #(bad-arg signal-handler sym)) (catch (signal-handler 'sym))]
+    [#(EXIT #(bad-arg signal-handler "string")) (catch (signal-handler "string" #f))]
+    [#(EXIT #(bad-arg signal-handler 123)) (catch (signal-handler SIGWINCH 123))]
+    [#(EXIT #(io-error 1234 uv_signal_start ,_)) (catch (signal-handler 1234 pretty-print))]
+    [,handle-it (lambda (n) 'ignored)]
+    [ok (begin (signal-handler SIGWINCH handle-it) 'ok)]
+    [,@handle-it (signal-handler SIGWINCH)]
+    [,trapped-signals ;; in app-core.ss
+      (sort <
+        (cons SIGWINCH
+          (meta-cond
+           [(memq (machine-type) '(i3nt ti3nt a6nt ta6nt))
+            (list SIGBREAK SIGHUP SIGINT)]
+           [else
+            (list SIGINT SIGTERM)])))]
+    [ok (and (andmap procedure? (map signal-handler trapped-signals)) 'ok)]
+    [,@trapped-signals
+      (let ([os (open-output-string)])
+        (print-signal-handlers os)
+        (->signals (get-output-string os)))]
+    [,@trapped-signals
+     (let ([os (open-output-string)])
+       (parameterize ([current-output-port os])
+         (print-signal-handlers))
+       (->signals (get-output-string os)))]
+    [,expected (length trapped-signals)]
+    [,@expected (signal-handler-count)]
+    [ok (begin (signal-handler SIGWINCH #f) 'ok)]
+    [#f (signal-handler SIGWINCH)]
+    [,expected (- expected 1)]
+    [,@expected (signal-handler-count)])
+   'ok)
+  (meta-cond
+   [(memq (machine-type) '(i3nt ti3nt a6nt ta6nt))
+    ;; skip signal-handling tests on Windows
+    (void)]
+   [else
+    (script-test #f '("--")
+      (format "~{~s\n~}"
+        `((define (ignore signum)
+            ;; Bad example: should not do I/O in a signal handler.
+            ;; We get away with writing to the default output port.
+            (printf "parent ignoring ~s\n" signum))
+          (define parent-pid (osi_get_pid))
+          (signal-handler SIGCHLD ignore)
+          (signal-handler SIGINT ignore)
+          (let-values ([(to-stdin from-stdout from-stderr os-pid)
+                        (spawn-os-process (osi_get_executable_path) '("-q" "--") self)])
+            (let ([to-stdin (binary->utf8 to-stdin)]
+                  [from-stdout (binary->utf8 from-stdout)]
+                  [from-stderr (binary->utf8 from-stderr)])
+              (define (dump p)
+                (let ([line (get-line p)])
+                  (unless (eof-object? line)
+                    (printf "~a\n" line)
+                    (dump p))))
+              ;; parent re-hooks SIGINT
+              (signal-handler SIGINT
+                (let ([orig (signal-handler SIGINT)])
+                  (lambda (x)
+                    (orig x)
+                    (printf "parent terminating child via ~s\n" SIGTERM)
+                    (osi_kill os-pid SIGTERM))))
+              (for-each
+               (lambda (x)
+                 (pretty-print x to-stdin))
+               `((signal-handler SIGTERM
+                   (lambda (x)
+                     (printf "child caught ~s\n" x)
+                     (signal-handler x #f)
+                     (printf "child unregistered signal handler and re-raised ~s\n" x)
+                     (osi_kill (osi_get_pid) x)))
+                 (printf "child killing parent with ~s\n" SIGINT)
+                 (begin
+                   (osi_kill ,parent-pid SIGINT)
+                   (receive))))
+              (flush-output-port to-stdin)
+              (receive (after 2000 (raise 'fail))
+                [#(process-terminated ,',@os-pid ,',exit-status ,',@SIGTERM)
+                 'ok])
+              (printf "child-output:\n")
+              (dump from-stdout)
+              (dump from-stderr)
+              (printf "done\n")
+              (exit)))))
+      `(,(format "parent ignoring ~s" SIGINT)
+        ,(format "parent terminating child via ~s" SIGTERM)
+        ,(format "parent ignoring ~s" SIGCHLD)
+        "child-output:"
+        ,(format "child killing parent with ~s" SIGINT)
+        ,(format "child caught ~s" SIGTERM)
+        ,(format "child unregistered signal handler and re-raised ~s" SIGTERM)
+        "done"
+        ))])
   )
 
 (hook-console-input)

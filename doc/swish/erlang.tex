@@ -200,7 +200,7 @@ mapping names to processes. The reverse mapping is maintained in the
 \code{pcb} record through the \code{name} field.
 
 There are two system processes: the
-\emph{event-loop}\index{event-loop} and the
+\emph{event-loop}\index{event-loop}\label{page:event-loop} and the
 \emph{finalizer}\index{finalizer}.
 
 The event-loop process calls \code{osi\_get\_callbacks} to retrieve
@@ -2041,6 +2041,17 @@ open path watchers\index{path watcher} to textual output port
 \var{op}, which defaults to the current output port.
 
 % ----------------------------------------------------------------------------
+\defineentry{print-signal-handlers}
+\begin{procedure}
+  \code{(print-signal-handlers \opt{\var{op}})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{print-signal-handlers} procedure prints information about all
+active signal handlers\index{signal handlers} to textual output port
+\var{op}, which defaults to the current output port.
+
+% ----------------------------------------------------------------------------
 \defineentry{print-tcp-listeners}
 \begin{procedure}
   \code{(print-tcp-listeners \opt{\var{op}})}
@@ -2158,6 +2169,56 @@ file mode of \var{path} to \var{mode}.
 If \code{osi\_chmod} fails with error pair \code{(\var{who}
   . \var{errno})}, exception \code{\#(io-error \var{path} \var{who}
   \var{errno})} is raised.
+
+% ----------------------------------------------------------------------------
+\defineentry{signal-handler}
+\begin{procedure}
+  \code{(signal-handler \var{signum} \opt{\var{callback}})}
+\end{procedure}
+\returns{} see below
+
+The \code{signal-handler} procedure manages an internal table of
+global handlers for low-level signals.
+The \var{signum} argument must be a positive fixnum.
+If no \var{callback} is supplied, \code{signal-handler} returns the
+callback, if any, registered to handle that signal, or else \code{\#f}.
+If the optional \var{callback} argument is supplied, it must be \code{\#f} or
+a procedure of one argument that is called with the signal number when
+that signal is delivered.
+Since the \var{callback} procedure is called on the event loop, it must obey
+the restrictions on event-loop callbacks (see page~\pageref{page:event-loop}).
+Do not call \code{app:shutdown} from \var{callback}, because it is not
+process-safe when no application is running.
+Instead, \code{(spawn app:shutdown)}.
+At startup, Swish installs handlers that call \code{app:shutdown}
+safely when certain signals are delivered.
+The set of signals trapped at startup depends on the platform.
+
+This procedure is like Chez Scheme's \code{register-signal-handler}, except
+that \code{signal-handler} is integrated into the Swish event loop.
+In particular, the callback supplied to \code{signal-handler} can wake a
+sleeping process via \code{send}.
+When a signal \var{signum} is delivered to the Swish operating-system process,
+e.g., via \code{osi\_kill}, \code{osi\_get\_callbacks} returns a list of
+callbacks that includes \code{(@deliver-signal \var{signum})}.
+If \var{callback} has been established to handle \var{signum},
+then \code{@deliver-signal} calls \var{callback} with \var{signum}.
+
+The \code{(swish io)} library exports constants for the available signal
+numbers, which vary among platforms.
+For platform-specific notes on signal handling, see~\cite{libuv}.
+Some signals cannot be handled even though a handler may be established.
+Handling some signals may result in undefined behavior.
+
+% ----------------------------------------------------------------------------
+\defineentry{signal-handler-count}
+\begin{procedure}
+  \code{(signal-handler-count)}
+\end{procedure}
+\returns{} the number of open signal handlers
+
+The \code{signal-handler-count} procedure returns the number of open
+signal handlers.
 
 % ----------------------------------------------------------------------------
 \defineentry{spawn-os-process}
