@@ -1,7 +1,6 @@
 pdf :=\
   c-coding-standard.pdf\
   scheme-coding-standard.pdf\
-  scheme-testing-library.pdf\
   swish.pdf\
 
 .SUFFIXES:

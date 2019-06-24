@@ -20,34 +20,28 @@
 % CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 % SOFTWARE.
 
-\documentclass[letterpaper,11pt,twoside,final]{article}
-\usepackage{swish}
+\subsection {Testing}
 
-\begin{document}
-
-\title {Scheme Testing Library}
-\author {Leif Danielson \and Bob Burger}
-\date {\copyright\ 2018 Beckman Coulter, Inc.
-  Licensed under the \href{https://opensource.org/licenses/MIT}{MIT License}.}
-\maketitle
-
-\section* {Introduction}
-
-The Scheme Testing Library \code{(swish mat)} provides methods to
+The \code{(swish mat)} library provides methods to
 define, iterate through, and run test cases, and to log the
-results. Test cases are called \emph{mats} and consist of a name, a
-set of tags, and a test procedure.  The set of mats is stored in
-reverse order in a single, global list.  The list of tags allows the
+results.
+The \code{swish-test} script provides a convenient way to
+run tests and report the results.
+See \code{swish-test \lopt{help} all} for details.
+To access the \code{(swish mat)} library directly, run
+\code{swish-test \lopt{repl}} instead of \code{swish},
+then import the library as usual.
+
+Test cases are called \emph{mats} and consist of a name, a
+set of tags, and a test procedure of no arguments.
+The set of mats is stored in
+reverse order in a single, global list.
+The list of tags allows the
 user to group tests or mark them.  For example, tags can be used to
 note that a test was created for a particular change request.
 
-A \emph{mat} is an entry in the global list of the form
-\code{(\var{name} \var{tags} . \var{test})}. The \var{test} is a
-procedure of no arguments.
-
-\section* {Programming Interface}
-
 % ----------------------------------------------------------------------------
+\defineentry{mat}\label{sec:mat}
 \begin{syntax}
   \code{(mat \var{name} (\var{tag} \etc) $e_1$ $e_2$ \etc)}
 \end{syntax}
@@ -59,6 +53,21 @@ The \code{mat} macro creates a mat with the given \var{name},
 \code{add-mat} procedure.
 
 % ----------------------------------------------------------------------------
+\defineentry{isolate-mat}
+\begin{syntax}
+  \code{(isolate-mat \var{name} (\var{tag} \etc) $e_1$ $e_2$ \etc)}
+\end{syntax}
+\expandsto{}
+\code{(mat \var{name} (\var{tag} \etc) (\$isolate-mat (lambda () $e_1$ $e_2$ \etc)))}
+
+Tests involving process operations, such as \code{spawn}, \code{send}, and
+\code{receive}, should use \code{isolate-mat} in place of \code{mat}
+to isolate the host system from the test code.
+The \code{isolate-mat} macro is provided by the \code{(swish testing)} library,
+which can be accessed via \code{swish-test}.
+
+% ----------------------------------------------------------------------------
+\defineentry{add-mat}
 \begin{procedure}
   \code{(add-mat \var{name} \var{tags} \var{test})}
 \end{procedure}
@@ -66,11 +75,12 @@ The \code{mat} macro creates a mat with the given \var{name},
 
 The \code{add-mat} procedure adds a mat to the front of the global
 list. \var{name} is a symbol, \var{tags} is a list, and \var{test} is
-a procedure of no argument.
+a procedure of no arguments.
 
 If \var{name} is already used, an exception is raised.
 
 % ----------------------------------------------------------------------------
+\defineentry{run-mat}
 \begin{procedure}
   \code{(run-mat \var{name} \var{reporter})}
 \end{procedure}
@@ -88,21 +98,20 @@ After the mat completes, the \code{run-mat} procedure tail calls
 If no mat with the given \var{name} exists, an exception is raised.
 
 % ----------------------------------------------------------------------------
+\defineentry{run-mats}
 \begin{syntax}
-  \code{(run-mats)}
-\end{syntax}
-\begin{syntax}
-  \code{(run-mats \var{name$_1$} \var{name$_2$} \etc)}
+  \code{(run-mats \opt{\var{name}} \etc)}
 \end{syntax}
 \returns{} unspecified
 
 The \code{run-mats} macro runs each mat specified by symbols
-\var{name$_1$} \var{name$_2$} \etc.  When no names are supplied, all
+\var{name} \etc.  When no names are supplied, all
 mats are executed.  After each mat is executed, its result, name, and
 exception if it failed are displayed.  When the mats are finished, a
 summary of the number run, passed, and failed is displayed.
 
 % ----------------------------------------------------------------------------
+\defineentry{run-mats-to-file}
 \begin{procedure}
   \code{(run-mats-to-file \var{filename})}
 \end{procedure}
@@ -115,6 +124,7 @@ sequence of s-expressions readable with \code{load-results} and
 \code{summarize}.
 
 % ----------------------------------------------------------------------------
+\defineentry{for-each-mat}
 \begin{procedure}
   \code{(for-each-mat \var{procedure})}
 \end{procedure}
@@ -124,6 +134,7 @@ The \code{for-each-mat} procedure calls \code{(\var{procedure}
   \var{name} \var{tags})} for each mat, in no particular order.
 
 % ----------------------------------------------------------------------------
+\defineentry{load-results}
 \begin{procedure}
   \code{(load-results \var{filename})}
 \end{procedure}
@@ -162,6 +173,7 @@ and a list of result records:
 \codeend
 
 % ----------------------------------------------------------------------------
+\defineentry{summarize}
 \begin{procedure}
   \code{(summarize \var{files})}
 \end{procedure}
@@ -173,5 +185,3 @@ The \code{summarize} procedure reads the contents of each file in
 passing mats, the number of failing mats, and the number of skipped mats.
 An error is raised if any
 entry is malformed.
-
-\end{document}

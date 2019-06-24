@@ -189,10 +189,15 @@ In addition, the program executable must be able to locate
 Microsoft's C Runtime Library \code{vcruntime140.dll}
 and the appropriate Chez Scheme DLL via the standard search order.
 
-% TODO eventually add a section that describes testing
-%  - perhaps adapt scheme-testing-library.tex
-%  - mat
-%  - isolate-mat
+\section{Running Tests}
+
+Use the \code{mat} and \code{isolate-mat} forms described in
+Section~\ref{sec:mat} to define automated tests.
+Use the \code{swish-test} script to run tests and report the results.
+This script treats each file with a \code{.ms} extension as a suite of tests.
+See \code{swish-test \lopt{help} all} for details.
+
+% TODO eventually describe
 %  - #!eof mats
 
 \section {Programming Interface}
@@ -666,3 +671,5 @@ If the file name retrieved from \code{app:config} is a relative path,
 then \code{require-shared-object} determines the absolute path by
 treating the file name as a path relative to the parent directory
 containing the application configuration file name returned by \code{app:config-filename}.
+
+\input{swish/testing.tex}
