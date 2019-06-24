@@ -444,24 +444,54 @@
             (mat TEST1 (good) (assert #t))
             (mat TEST2 (tag1 tag2) (assert #f))
             (mat TEST3 () (cdr 17)))))))
+  (define incomplete
+    ;; create incomplete test suite output
+    (write-test-file "incomplete.ms.mo"
+      (lambda ()
+        (let ([op (current-output-port)])
+          ;; keep in sync w/ write-meta-data in mat.ss to avoid export
+          (json:write-object op #f json:write
+            [_type_ "meta-kv"]
+            [key "completed"]
+            [value #f])
+          (json:write-object op #f json:write
+            [_type_ "meta-kv"]
+            [key "test-file"]
+            [value "incomplete.ms"])))))
   (define test-file2 (write-test-file "test-report2.ms" void))
-  (define (check results test-name type tags message)
+  (define test-file3
+    (write-test-file "test-report3.ms"
+      (lambda ()
+        (for-each pretty-print
+          `((import (swish mat))
+            ;; raise error with a stack to dump
+            (define (bug n)
+              (if (= n 0)
+                  (errorf 'bug "didn't handle zero")
+                  (cons n (bug (- n 1)))))
+            (mat zero ()
+              (assert (list? (bug 10)))))))))
+  (define (check results test-name type tags message stack)
     (match-let*
      ([,mr (find (lambda (mr) (equal? test-name (mat-result-test mr))) results)]
       [#t (mat-result? mr)]
       [,@type (mat-result-type mr)]
       [,@tags (mat-result-tags mr)]
-      [,@message (mat-result-message mr)])
+      [,@message (mat-result-message mr)]
+      [,@stack (and stack (mat-result-stack mr))])
      'ok))
+  (define mo-path1 (string-append test-file ".mo"))
+  (define mo-path2 (string-append test-file2 ".mo"))
+  (define mo-path3 (string-append test-file3 ".mo"))
   (define (get-data content)
-    (match-let* ([(,_ ,data) (pregexp-match "<script>var data = (.*);</script>" content)])
-     (json:string->object data)))
+    (match-let* ([(,_ ,data) (pregexp-match "<script>var data = (.*);</script><script>\n  function escapeHtml" content)])
+      (json:string->object data)))
   (define (results-of-type t obj)
-    (filter (lambda (r) (equal? t (json:ref r 'type #f)))
-     (json:ref obj 'results #f)))
+    (filter (lambda (r) (eq? t (mat-result-type r)))
+      (mat-data-results obj)))
   (define (find-test name obj)
-    (find (lambda (r) (equal? name (json:ref r 'test #f)))
-      (json:ref obj 'results #f)))
+    (find (lambda (r) (eq? name (mat-result-test r)))
+      (mat-data-results obj)))
   (nonzero-exit
    (swish-test "--progress none --report " report-file " " test-file)
    '())
@@ -470,9 +500,9 @@
    ([#t (file-exists? report-file)]
     [,content (utf8->string (read-file report-file))]
     [(,obj) (get-data content)]
-    [,test1-result (find-test "TEST1" obj)]
-    [,test2-result (find-test "TEST2" obj)]
-    [,test3-result (find-test "TEST3" obj)]
+    [,test1-result (find-test 'TEST1 obj)]
+    [,test2-result (find-test 'TEST2 obj)]
+    [,test3-result (find-test 'TEST3 obj)]
     ["pass" (json:ref test1-result 'type #f)]
     ["fail" (json:ref test2-result 'type #f)]
     [(,_) (pregexp-match "Exception: failed assertion #f at line 3,.*" (json:ref test2-result 'message #f))]
@@ -480,13 +510,61 @@
     ["Exception in cdr: 17 is not a pair" (json:ref test3-result 'message #f)])
    'ok)
   ;; check .mo results file
-  (let ([mo-path (string-append test-file ".mo")])
-    (let ([results (mat-data-results (load-results mo-path))])
-      (check results 'TEST1 'pass '(good) "")
+  (let ([data (load-results mo-path1)])
+    (let ([results (mat-data-results data)])
+      (check results 'TEST1 'pass '(good) "" "")
       (check results 'TEST2 'fail '(tag1 tag2)
-        (format "Exception: failed assertion #f at line 3, char 32 of ~a" test-file))
-      (check results 'TEST3 'fail '() "Exception in cdr: 17 is not a pair")
-      'ok))
+        (format "Exception: failed assertion #f at line 3, char 32 of ~a" test-file)
+        #f)
+      (check results 'TEST3 'fail '() "Exception in cdr: 17 is not a pair" #f))
+    (match-let*
+     ([,meta (mat-data-meta-data data)]
+      ;; (meta-data completed)
+      [#t (json:ref meta 'completed #f)]
+      ;; (meta-data software-info)
+      [,ignore-swish-revision
+       (lambda (x)
+         (json:object->string
+          (let ([copy (json:string->object (json:object->string x))])
+            (json:set! copy '(swish revision) "ignored")
+            copy)))]
+      [,expected (ignore-swish-revision (software-info))]
+      [,@expected (ignore-swish-revision (json:ref meta 'software-info #f))]
+      ;; (meta-data date)
+      [,date-regexp  "([^ ]+ [^ ]+ [^ ]+ [^ ]+) ([^:]+):([^:]+)"]
+      [(,_ ,exp-day ,exp-hour ,exp-min)
+       (pregexp-match date-regexp (format-rfc2822 (current-date)))]
+      [(,_ ,act-day ,act-hour ,act-min)
+       (pregexp-match date-regexp (json:ref meta 'date ""))]
+      [#t (or (string=? exp-day act-day)
+              (string=? act-hour "23"))]
+      ;; (meta-data timestamp)
+      [,then (json:ref meta 'timestamp (expt 2 64))]
+      [,now (erlang:now)]
+      [#t (< then now)]
+      ;; (meta-data test-file)
+      [,test-file (path-last test-file)]
+      [,@test-file (path-last (json:ref meta 'test-file "fail"))]
+      ;; (meta-data test-run)
+      [,test-run (json:ref meta 'test-run "fail")]
+      [ok (and (string->uuid test-run) 'ok)]
+      ;; (meta-data hostname)
+      [,hostname (osi_get_hostname)]
+      [,@hostname (json:ref meta 'hostname #f)]
+      ;; (meta-data machine-type)
+      [,arch (machine-type)]
+      [,@arch (string->symbol (json:ref meta 'machine-type ""))])
+     'ok))
+  ;; check stack field
+  (nonzero-exit
+   (swish-test test-file3)
+   '(seek "Exception in bug: didn't handle zero"))
+  (let* ([data (load-results mo-path3)]
+         [results (mat-data-results data)])
+    (check results 'zero 'fail '() "Exception in bug: didn't handle zero"
+      (format "~:{#<continuation in bug> at line 5, char 15 of ~a\n  n: ~a\n~}Stack dump truncated due to max-depth = 10.\n"
+        (map (lambda (n) (list test-file3 (+ n 1)))
+          (iota 10)))))
   ;; all pass, but some skipped so nonzero exit
   (nonzero-exit
    (swish-test "--progress none --tag good --report " report-file1 " " test-file)
@@ -496,9 +574,9 @@
    ([#t (file-exists? report-file1)]
     [,content (utf8->string (read-file report-file1))]
     [(,obj) (get-data content)]
-    [1 (length (results-of-type "pass" obj))]
-    [2 (length (results-of-type "skip" obj))]
-    [0 (length (results-of-type "fail" obj))])
+    [1 (length (results-of-type 'pass obj))]
+    [2 (length (results-of-type 'skip obj))]
+    [0 (length (results-of-type 'fail obj))])
    'ok)
   ;; all pass, some skipped, but test specified explicitly so zero exit
   (zero-exit
@@ -509,9 +587,9 @@
    ([#t (file-exists? report-file2)]
     [,content (utf8->string (read-file report-file2))]
     [(,obj) (get-data content)]
-    [1 (length (results-of-type "pass" obj))]
-    [0 (length (results-of-type "skip" obj))]
-    [0 (length (results-of-type "fail" obj))])
+    [1 (length (results-of-type 'pass obj))]
+    [0 (length (results-of-type 'skip obj))]
+    [0 (length (results-of-type 'fail obj))])
    'ok)
   ;; some skipped so nonzero exit, no results for test-file2
   (nonzero-exit
@@ -524,12 +602,19 @@
     [(,obj1 ,obj2) (get-data content)]
     ["test-report.ms" (path-last (json:ref obj1 '(meta-data test-file) #f))]
     ["test-report2.ms" (path-last (json:ref obj2 '(meta-data test-file) #f))]
-    [1 (length (results-of-type "pass" obj1))]
-    [2 (length (results-of-type "skip" obj1))]
-    [0 (length (results-of-type "fail" obj1))]
-    [,test1-result (find-test "TEST1" obj1)]
+    [1 (length (results-of-type 'pass obj1))]
+    [2 (length (results-of-type 'skip obj1))]
+    [0 (length (results-of-type 'fail obj1))]
+    [,test1-result (find-test 'TEST1 obj1)]
     ["pass" (json:ref test1-result 'type #f)]
     [() (json:ref obj2 'results #f)])
+   'ok)
+  ;; check summary
+  (match-let*
+   ([(1 0 2 2 3)
+     (call-with-values
+       (lambda () (summarize (list mo-path1 mo-path2 incomplete)))
+       list)])
    'ok)
   ;; tests fail, some skipped
   (nonzero-exit
@@ -540,9 +625,81 @@
    ([#t (file-exists? report-file4)]
     [,content (utf8->string (read-file report-file4))]
     [(,obj) (get-data content)]
-    [0 (length (results-of-type "pass" obj))]
-    [1 (length (results-of-type "skip" obj))]
-    [2 (length (results-of-type "fail" obj))])
+    [0 (length (results-of-type 'pass obj))]
+    [1 (length (results-of-type 'skip obj))]
+    [2 (length (results-of-type 'fail obj))])
+   'ok)
+  ;; check summary
+  (match-let*
+   ([(0 2 1 2 2)
+     (call-with-values
+       (lambda () (summarize (list mo-path1 mo-path2)))
+       list)])
+   'ok)
+  )
+
+(isolate-mat incomplete ()
+  (define abort.ms
+    (write-test-file "abort.ms"
+      (lambda ()
+        (pretty-print '(abort)))))
+  (define no-tests.ms (write-test-file "no-tests.ms" void))
+  (define pass.ms
+    (write-test-file "pass.ms"
+      (lambda ()
+        (for-each pretty-print
+          `((import (swish mat))
+            (mat good () (assert #t)))))))
+  (nonzero-exit
+   ;; complain if test suite does not complete
+   (swish-test abort.ms)
+   `("Some test suite did not complete"))
+  (nonzero-exit
+   ;; complain if test suite does not complete
+   (swish-test abort.ms " " no-tests.ms)
+   `(seek
+     "Tests run: 0   Pass: 0   Fail: 0   Skip: 0"
+     seek
+     "Some test suite did not complete"
+     seek
+     "No tests found in"
+     "no-tests.ms"))
+  (nonzero-exit
+   ;; complain if test suite does not complete
+   (swish-test abort.ms " " no-tests.ms " " pass.ms)
+   `(seek
+     "Tests run: 1   Pass: 1   Fail: 0   Skip: 0"
+     seek
+     "Some test suite did not complete"
+     seek
+     "No tests found in"
+     "no-tests.ms"))
+  ;; check summary
+  (match-let*
+   ([(1 0 0 2 3)
+     (call-with-values
+       (lambda ()
+         (summarize
+          (map (lambda (fn) (string-append fn ".mo"))
+            (list abort.ms pass.ms no-tests.ms))))
+       list)])
+   'ok)
+  ;; check available meta-data for incomplete .mo
+  (match-let*
+   ([,abort-result (load-results (string-append abort.ms ".mo"))]
+    [() (mat-data-results abort-result)]
+    [,abort-meta (mat-data-meta-data abort-result)]
+    ;; (meta-data completed)
+    [#f (json:ref abort-meta 'completed "oops")]
+    ;; (meta-data test-file)
+    [,expected (path-last abort.ms)]
+    [,@expected (path-last (json:ref abort-meta 'test-file ""))]
+    ;; (meta-data hostname)
+    [,hostname (osi_get_hostname)]
+    [,@hostname (json:ref abort-meta 'hostname #f)]
+    ;; (meta-data machine-type)
+    [,arch (symbol->string (machine-type))]
+    [,@arch (json:ref abort-meta 'machine-type #f)])
    'ok)
   )
 

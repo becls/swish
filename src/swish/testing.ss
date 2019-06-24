@@ -33,6 +33,7 @@
    isolate-mat
    match-prefix
    match-regexps
+   may-have-mats?
    process-alive?
    run-os-process
    run-test-spec
@@ -57,6 +58,7 @@
    (swish osi)
    (swish pregexp)
    (swish profile)
+   (swish software-info)
    (swish string-utils)
    (swish supervisor)
    (swish watcher)
@@ -245,7 +247,7 @@
               (delete-directory path)))
         (delete-file path)))
 
-  (define-tuple <test-spec> test-file report-file tests incl-tags excl-tags profile progress src-dirs lib-dirs)
+  (define-tuple <test-spec> test-file test-run report-file tests incl-tags excl-tags profile progress src-dirs lib-dirs)
 
   (define (run-test-spec swish trspec)
     (<test-spec> open trspec [test-file lib-dirs])
@@ -259,7 +261,7 @@
          (match (run-os-process swish '("-q") write-stdin 'infinity '(stdout stderr))
            [`(<os-result> ,exit-status)
             (case exit-status
-              [(0) #f]
+              [(0) 'ran]
               [(1) 'fail]
               [(2) 'skip]
               [(3) 'no-tests]
@@ -268,7 +270,7 @@
   ;; expects to run in a separate OS process.
   ;; expects test-file to contain tests since file has been screened by may-have-mats?.
   (define ($run-test-spec trspec)
-    (<test-spec> open trspec [test-file report-file tests incl-tags excl-tags profile progress src-dirs lib-dirs])
+    (<test-spec> open trspec [test-file test-run report-file tests incl-tags excl-tags profile progress src-dirs lib-dirs])
     (reset-handler (lambda () (printf "\nTest Failed: ~a\n" test-file) (exit 1)))
     (base-dir (cd))
     (library-directories lib-dirs)
@@ -284,17 +286,11 @@
       [#(EXIT ,reason) (raise reason)]
       [none (exit 3)]
       [ok
-       (let ([mo-op (and report-file (open-file-to-replace report-file))])
-         (when mo-op
-           ;; record revision information after loading mats, but before running mats
-           (write-meta-data mo-op test-file 'software-info
-             (let ()
-               (import (swish software-info))
-               (json:object->string (software-info)))))
+       (let ([mo-op (open-file-to-append report-file)])
          (on-exit
           (begin
             (when profile (profile:save))
-            (when mo-op (close-port mo-op)))
+            (close-port mo-op))
           (match ($run-mats tests test-file incl-tags excl-tags mo-op progress)
             [(,_ (fail ,fail) ,_)
              (guard (> fail 0))

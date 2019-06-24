@@ -22,37 +22,37 @@
 
 (library (swish mat)
   (export
+   $init-mat-output-file
    $run-mats
    add-mat
    for-each-mat
    load-results
    mat
-   mat-data
    mat-data-meta-data
    mat-data-report-file
    mat-data-results
    mat-data?
-   mat-result
    mat-result-message
-   mat-result-sstats
+   mat-result-stack
    mat-result-tags
    mat-result-test
-   mat-result-test-file
    mat-result-type
    mat-result?
-   meta-data
-   meta-data-key
-   meta-data-test-file
-   meta-data-value
-   meta-data?
    run-mat
    run-mats
    run-mats-to-file
    summarize
    summarize-results
-   write-meta-data
    )
-  (import (chezscheme))
+  (import
+   (chezscheme)
+   (swish erlang)
+   (swish io)
+   (swish json)
+   (swish meta)
+   (swish osi)
+   (swish software-info)
+   (swish string-utils))
 
   (define mats (make-parameter '()))
 
@@ -63,29 +63,64 @@
      (immutable tags)
      (immutable test)))
 
-  (define-record-type mat-data
-    (nongenerative)
-    (fields
-     (immutable report-file)
-     (immutable meta-data)
-     (immutable results)))
+  (define-syntax (define-json x)
+    (syntax-case x ()
+      [(_ type field ...)
+       (let* ([transform-help
+               (lambda (field clauses)
+                 (let ([clauses (collect-clauses x clauses '(-> <-))])
+                   (with-syntax ([(-> out) (or (find-clause '-> clauses) #'(-> values))]
+                                 [(<- in) (or (find-clause '<- clauses) #'(<- values))])
+                     (list field #'out #'in (compound-id field #'type "-" field)))))]
+              [transform-field
+               (lambda (f)
+                 (syntax-case f ()
+                   [field
+                    (identifier? #'field)
+                    (transform-help #'field '())]
+                   [(field clause ...)
+                    (transform-help #'field #'(clause ...))]))])
+         (with-syntax ([pred? (compound-id #'type #'type "?")]
+                       [maker (compound-id #'type "make-" #'type)]
+                       [((field -> <- getter) ...)
+                        (map transform-field #'(field ...))])
+           #`(begin
+               (define (maker field ...)
+                 (json:make-object
+                  [_type_ (symbol->string 'type)]
+                  [field (-> field)] ...))
+               (define (pred? r)
+                 (and (json:object? r)
+                      (equal? (symbol->string 'type) (json:ref r '_type_ #f))))
+               (define (getter r)
+                 (unless (pred? r) (bad-arg 'getter r))
+                 (<- (json:ref r 'field #f)))
+               ...)))]))
 
-  (define-record-type meta-data
-    (nongenerative)
-    (fields
-     (immutable test-file)
-     (immutable key)
-     (immutable value)))
+  (define-json mat-result
+    test-file
+    [test (-> symbol->string) (<- string->symbol)]
+    [tags
+     (-> (lambda (x) (map symbol->string x)))
+     (<- (lambda (x) (map string->symbol x)))]
+    [type (-> symbol->string) (<- string->symbol)]
+    message
+    stack
+    [sstats
+     (->
+      (lambda (sstats)
+        (json:make-object
+         [cpu (time-duration (sstats-cpu sstats))]
+         [real (time-duration (sstats-real sstats))]
+         [bytes (sstats-bytes sstats)]
+         [gc-count (sstats-gc-count sstats)]
+         [gc-cpu (time-duration (sstats-gc-cpu sstats))]
+         [gc-real (time-duration (sstats-gc-real sstats))]
+         [gc-bytes (sstats-gc-bytes sstats)])))])
 
-  (define-record-type mat-result
-    (nongenerative)
-    (fields
-     (immutable test-file)
-     (immutable test)
-     (immutable tags)
-     (immutable type)
-     (immutable message)
-     (immutable sstats)))
+  (define (time-duration t)
+    (+ (time-second t)
+       (/ (time-nanosecond t) 1000000000.0)))
 
   (define-syntax mat
     (syntax-rules ()
@@ -152,8 +187,24 @@
           (get))
         (format "~s" x)))
 
+  (define (stack x)
+    (if (continuation-condition? x)
+        (let-values ([(op get) (open-string-output-port)])
+          (dump-stack (condition-continuation x) op 'default)
+          (get))
+        ""))
+
   (define (print-col col1 col2 col3)
     (printf " ~8a ~14a ~a\n" col1 col2 col3))
+
+  (define ($init-mat-output-file report-file test-file uuid)
+    (let ([op (open-file-to-replace report-file)])
+      (on-exit (close-port op)
+        (write-meta-data op 'completed #f)
+        (write-meta-data op 'test-file test-file)
+        (write-meta-data op 'hostname (osi_get_hostname))
+        (write-meta-data op 'machine-type (symbol->string (machine-type)))
+        (write-meta-data op 'test-run uuid))))
 
   (define $run-mats
     (case-lambda
@@ -165,8 +216,8 @@
         (define (reporter name tags result sstats)
           (define r
             (case (result-type result)
-              [(pass skip) (make-mat-result test-file name tags result "" sstats)]
-              [(fail) (make-mat-result test-file name tags 'fail (extract (cdr result)) sstats)]
+              [(pass skip) (make-mat-result test-file name tags result "" "" sstats)]
+              [(fail) (make-mat-result test-file name tags 'fail (extract (cdr result)) (stack (cdr result)) sstats)]
               [else (errorf '$run-mats "unknown result ~s" result)]))
           (update-tally! r)
           (progress-reporter r)
@@ -181,10 +232,16 @@
            (print-col "Result" "Test name" "Message")
            (sep)])
         (flush-output-port)
+        (when mo-op
+          ;; record revision information after loading mats, but before running mats
+          (write-meta-data mo-op 'software-info (software-info))
+          (write-meta-data mo-op 'date (format-rfc2822 (current-date)))
+          (write-meta-data mo-op 'timestamp (erlang:now)))
         (for-each
          (lambda (mat/name)
            (run-mat mat/name reporter incl-tags excl-tags))
          (or mat/names (all-mats)))
+        (when mo-op (write-meta-data mo-op 'completed #t))
         (let-values ([(pass fail skip) (get-tally)])
           (case progress
             [none (void)]
@@ -225,73 +282,53 @@
         [else (errorf 'test-progress-reporter "unknown result ~s" r)])
       (flush-output-port)))
 
-  (define sstats (statistics))
-  (define sstats-rtd (record-rtd sstats))
-  (define time-rtd (record-rtd (sstats-real sstats)))
-  (define default-record-writer (record-writer sstats-rtd))
-  ;; make adapter so we can use parameterize syntax for dynamic-wind
-  (define (make-param record-io-param key)
-    (case-lambda
-     [() (record-io-param key)]
-     [(v) (record-io-param key v)]))
-  (define time-writer (make-param record-writer time-rtd))
-  (define (make-record-reader rtd) (make-param record-reader (record-type-name rtd)))
-  (define time-reader (make-record-reader time-rtd))
-  (define sstats-reader (make-record-reader sstats-rtd))
-  (define mat-data-rtd (record-type-descriptor mat-data))
-  (define mat-data-reader (make-record-reader mat-data-rtd))
-  (define mat-result-rtd (record-type-descriptor mat-result))
-  (define mat-result-reader (make-record-reader mat-result-rtd))
-  (define meta-data-rtd (record-type-descriptor meta-data))
-  (define meta-data-reader (make-record-reader meta-data-rtd))
+  (define-json meta-kv key value)
 
-  (define (write-meta-data op test-file key value)
-    (parameterize ([print-gensym #f])
-      (fprintf op "~s\n" (make-meta-data test-file key value))))
+  (define (write-meta-data op key value)
+    (json:write-object op 0 json:write
+      [_type_ "meta-kv"]
+      [key (symbol->string key)]
+      [value value]))
 
   (define (make-write-summary op)
     (lambda (r)
-      ;; sstats already uses default-record-writer
-      (parameterize ([print-gensym #f] [time-writer default-record-writer])
-        (fprintf op "~s\n" r))))
+      (json:write op r 0)))
 
   (define (run-mats-to-file filename)
-    ($run-mats-to-file filename (all-mats) '() '()))
+    (define test-file (string-append "to " filename))
+    ($init-mat-output-file filename test-file (uuid->string (osi_make_uuid)))
+    (let ([mo-op (open-file-to-append filename)])
+      (on-exit (close-port mo-op)
+        ($run-mats #f test-file '() '() mo-op 'test))))
 
-  (define ($run-mats-to-file filename mat/names incl-tags excl-tags)
-    (call-with-output-file filename
-      (lambda (op)
-        (define reporter (make-write-summary op))
-        (for-each
-         (lambda (mat/name)
-           (run-mat mat/name reporter incl-tags excl-tags))
-         (or mat/names (all-mats))))
-      'replace))
+  (define-json mat-data report-file meta-data results)
 
   (define (load-results filename)
-    (parameterize ([mat-data-reader mat-data-rtd]
-                   [mat-result-reader mat-result-rtd]
-                   [meta-data-reader meta-data-rtd]
-                   [sstats-reader sstats-rtd]
-                   [time-reader time-rtd])
-      (call-with-input-file filename
-        (lambda (ip)
-          (let lp ([meta-data '()] [results '()])
-            (let ([x (read ip)])
-              (cond
-               [(eof-object? x)
-                (make-mat-data filename (reverse meta-data) (reverse results))]
-               [(meta-data? x) (lp (cons x meta-data) results)]
-               [(mat-result? x) (lp meta-data (cons x results))]
-               [else (raise `#(unexpected-mat-result ,x))])))))))
+    (define meta-data (json:make-object))
+    (define obj (make-mat-data filename meta-data '()))
+    (let ([ip (open-file-to-read filename)])
+      (let rd ()
+        (let ([r (json:read ip)])
+          (unless (eof-object? r)
+            (match (json:ref r '_type_ #f)
+              ["mat-result"
+               (json:update! obj 'results (lambda (old) (cons r old)) #f)]
+              ["meta-kv"
+               (json:set! meta-data (string->symbol (meta-kv-key r)) (meta-kv-value r))])
+            (rd)))))
+    obj)
 
   (define (summarize-results results*)
-    (let-values ([(update-tally! get-tally) (make-tally-reporter)])
+    (let-values ([(update-tally! get-tally) (make-tally-reporter)]
+                 [(completed) 0])
       (for-each
        (lambda (data)
-         (for-each update-tally! (mat-data-results data)))
+         (for-each update-tally! (mat-data-results data))
+         (when (json:ref data '(meta-data completed) #f)
+           (set! completed (+ completed 1))))
        results*)
-      (get-tally)))
+      (let-values ([(pass fail skip) (get-tally)])
+        (values pass fail skip completed (length results*)))))
 
   (define (summarize files)
     (summarize-results (map load-results files)))

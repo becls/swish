@@ -181,220 +181,319 @@
  (swish testing)
  )
 
+;; expands to a procedure that returns content between enclosed
+;; block-comment delimiters as a string
+(define-syntax (extract-block-comment x)
+  (let ([annotation (syntax->annotation x)])
+    (assert annotation)
+    (let* ([src (annotation-source annotation)]
+           [bfp (source-object-bfp src)]
+           [efp (source-object-efp src)]
+           [path (source-file-descriptor-path (source-object-sfd src))])
+      #`(lambda ()
+          (let ([s (utf8->string (read-file #,path))])
+            (define (scan i dir prev)
+              (let ([c (string-ref s i)] [next (+ i dir)])
+                (unless (< 0 next #,efp)
+                  (errorf 'extract-block-comment "expected to find #| ... |# in ~a" s))
+                (if (and (char=? c #\|) (eqv? prev #\#))
+                    next
+                    (scan next dir c))))
+            (substring s (scan #,bfp 1 #f) (scan #,efp -1 #f)))))))
+
 (define (html-report filename report-files)
-  (define (mat-data->json mat-data)
-    (json:make-object
-     [report-file (mat-data-report-file mat-data)]
-     [meta-data (meta-data->json (mat-data-meta-data mat-data))]
-     [results (results->json (mat-data-results mat-data))]))
-  (define (meta-data->json meta-data*)
-    (let ([obj (json:make-object)])
-      (for-each
-       (lambda (meta-data)
-         (let ([key (meta-data-key meta-data)])
-           (json:extend-object obj
-             [test-file (meta-data-test-file meta-data)]
-             [,key (prepare-meta-data key (meta-data-value meta-data))])))
-       meta-data*)
-      obj))
-  (define (prepare-meta-data key val)
-    (match key
-      [software-info (json:string->object val)]
-      [,_ val]))
-  (define (results->json result*)
-    (map
-     (lambda (x)
-       (json:make-object
-        [test-file (mat-result-test-file x)]
-        [test (symbol->string (mat-result-test x))]
-        [tags (map symbol->string (mat-result-tags x))]
-        [type (symbol->string (mat-result-type x))]
-        [message (mat-result-message x)]
-        [sstats
-         (let ([s (mat-result-sstats x)])
-           (json:make-object
-            [cpu (time-duration (sstats-cpu s))]
-            [real (time-duration (sstats-real s))]
-            [bytes (sstats-bytes s)]
-            [gc-count (sstats-gc-count s)]
-            [gc-cpu (time-duration (sstats-gc-cpu s))]
-            [gc-real (time-duration (sstats-gc-real s))]
-            [gc-bytes (sstats-gc-bytes s)]))]))
-     result*))
-  (define (time-duration t)
-    (+ (time-second t)
-       (/ (time-nanosecond t) 1000000000.0)))
-  (define (stringify x)
-    (if (string? x)
-        x
-        (format "~s" x)))
-  (define (make-row c1 c2 c3)
-    (let ([result (or c3 `(span (@ (style "color:#007F00;")) "PASS"))])
-      `(tr (td ,c1) (td ,(stringify c2)) (td ,result))))
-  (define (make-result r)
-    (let ([name (mat-result-test r)])
-      (match (mat-result-type r)
-        [pass (make-row "" name #f)]
-        [skip (void)]
-        [fail (make-row "" name (mat-result-message r))])))
-  (define (results< x y)
-    (define (get-name r) (symbol->string (mat-result-test r)))
-      (string-ci<? (get-name x) (get-name y)))
-  (let ([mat-data* (map load-results report-files)]
-        [op (open-file-to-replace filename)])
+  (define mat-data* (map load-results report-files))
+  (define op (open-file-to-replace filename))
+  (define js-code
+    ((extract-block-comment
+#|
+  function escapeHtml(text) {
+    var map = {'&': '&amp;','<': '&lt;','>': '&gt;','"': '&quot;',"'": '&#039;'};
+    return text.replace(/[&<>"']/g, m => map[m]);
+  }
+  let header = {
+    "message": "",
+    "sstats": {
+      "bytes": "bytes",
+      "cpu": "cpu",
+      "gc-bytes": "GC bytes",
+      "gc-count": "# GC",
+      "gc-cpu": "GC cpu",
+      "gc-real": "GC real",
+      "real": "real"
+    },
+    "stack": "",
+    "suite": {
+      "completed": true,
+      "test-file": "Suite"
+    },
+    "tags": [],
+    "test": "Name",
+    "type": "Result"
+  };
+  function renderMeta(meta) {
+    if (!meta.hostname) return '';
+    let info = meta['software-info'];
+    var keys = [];
+    for (key in info) keys.push(key);
+    keys.sort((a, b) => a > b);
+    return `<div class="suite-meta">
+             <span class="date">${meta.date || "?"}<\/span>
+             <span class="hostname">${meta['hostname']}<\/span>
+             <span class="machine-type">${meta['machine-type']}<\/span>
+             ${keys.map(key => `<div class="product"><span class="product-name">${escapeHtml(info[key]['product-name'])}<\/span>
+                                  <span class="version">${escapeHtml(info[key]['version'])}<\/span>
+                                  <div class="revision">${escapeHtml(info[key]['revision'])}<\/div>
+                                <\/div>`).join('')}
+            <\/div>`;
+  }
+  var results = [];
+  var showStatistics;
+  let locale = new Intl.NumberFormat().resolvedOptions().locale;
+  let formatter = new Intl.NumberFormat(locale, {
+    style: 'decimal',
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3
+  });
+  function renderDuration(duration) {
+    return typeof(duration) == 'number' ? formatter.format(duration) : duration;
+  }
+  function renderSstats(stats) {
+    return (showStatistics.checked) ?
+      `<td><div class="result-sstats sstats-cpu">${renderDuration(stats.cpu)}<\/div><\/td>
+       <td><div class="result-sstats sstats-real">${renderDuration(stats.real)}<\/div><\/td>
+       <td><div class="result-sstats sstats-bytes">${stats.bytes}<\/div><\/td>
+       <td><div class="result-sstats sstats-gc-count">${stats["gc-count"]}<\/div><\/td>
+       <td><div class="result-sstats sstats-gc-cpu">${renderDuration(stats["gc-cpu"])}<\/div><\/td>
+       <td><div class="result-sstats sstats-gc-real">${renderDuration(stats["gc-real"])}<\/div><\/td>
+       <td><div class="result-sstats sstats-gc-bytes">${stats["gc-bytes"]}<\/div><\/td>`
+      : '<td colspan="7"><\/td>';
+  }
+  function renderSummary(data) {
+    var summary = {
+      pass: 0,
+      skip: 0,
+      fail: 0,
+      incomplete: 0
+    };
+    data.forEach(suite => suite.results.forEach(r => summary[r.type] += 1));
+    data.forEach(suite => summary.incomplete += suite['meta-data'].completed ? 0 : 1);
+    let incomplete = summary.incomplete ? ` <span class="incomplete">(${summary.incomplete} suites incomplete)<\/span>` : false;
+    let skipped = summary.skip ? ` (skipped ${summary.skip})` : false;
+    if (summary.fail) return `<div class="summary-fail">Failed ${summary.fail} of ${summary.fail + summary.pass} tests${skipped||''}${incomplete||''}.<\/div>`;
+    if (incomplete) return `<div class="summary-pass">passed ${summary.pass} tests${skipped||''}${incomplete}.<\/div>`;
+    if (skipped) return `<div class="summary-pass">passed ${summary.pass} tests${skipped}.<\/div>`;
+    if (summary.pass == 0) return `<div class="summary-pass">No tests run.<\/div>`;
+    return `<div class="summary-pass">PASSED all ${summary.pass} tests.<\/div>`;
+  }
+  let prevSuite = false;
+  let prevSuiteMeta = '';
+  function renderSuite(r) {
+    let dup = (prevSuite === r.suite);
+    prevSuite = r.suite;
+    if (!dup) prevSuiteMeta = renderMeta(r.suite);
+    return `<td class="suite ${dup ? 'duplicate' : '' }">
+              <div class="suite-name ${r.suite.completed ? '' : 'incomplete'}">
+                ${escapeHtml(r.suite['test-file'])}
+                ${prevSuiteMeta}
+              <\/div>
+            <\/td>`;
+  }
+  function renderName(r) {
+    if (!r.test) return `<td></td>`;
+    return `<td>
+              <div class="result-info">
+                <span class="result-name">${escapeHtml(r.test)}<\/span>
+                <span class="result-tags">${r.tags.sort((a,b) => a > b).map(escapeHtml).join(', ')}<\/span>
+              <\/div>
+            <\/td>`;
+  }
+  function renderType(r) {
+    return `<td class="result-type"><div class="result-${r.type}">${escapeHtml(r.type)}<\/div><\/td>`;
+  }
+  function renderDetails(r) {
+    return (r.message || r.stack) ?
+      `<td colspan="7">
+         <div class="result-error">
+           <div class="result-message">${escapeHtml(r.message)}<\/div>
+           <div class="result-stack">${escapeHtml(r.stack)}<\/div>
+         <\/div>
+       <\/td>`
+      : ('pass' == r.type || 'Result' == r.type) ? renderSstats(r.sstats) : '<td colspan="7"><\/td>';
+  }
+  function renderResult(r, id) {
+    return `<tr id="${id}">${renderSuite(r)}${renderName(r)}${renderType(r)}${renderDetails(r)}<\/tr>`;
+  }
+  let ordering = [];
+  function compareResults(r1, r2) {
+    return ordering.reduceRight((verdict, order) => verdict || order.compare(r1, r2) * (order.invert ? -1 : 1), 0);
+  }
+  function compareString(getter) {
+    return (r1, r2) => {
+      let v1 = getter(r1) || '';
+      let v2 = getter(r2) || 'z';
+      if (v1 < v2) return -1;
+      if (v1 > v2) return 1;
+      return 0;
+    }
+  }
+  function compareNumeric(getter) { return (r1, r2) => getter(r1) - getter(r2); }
+  function setSort(col) {
+    let hit = ordering.find(x => x.col == col);
+    if (hit) ordering.splice(ordering.indexOf(hit), 1);
+    else hit = {};
+    if (hit.invert) return;
+    hit.invert = hit.hasOwnProperty('invert');
+    hit.col = col;
+    switch (col) {
+      case 'Suite':
+        hit.class = 'suite-name';
+        hit.compare = compareString(r => r.suite['test-file']);
+        break;
+      case 'Name':
+        hit.class = 'result-name';
+        hit.compare = compareString(r => r.test);
+        break;
+      case 'Result':
+        hit.class = 'result-Result';
+        hit.compare = compareString(r => r.type);
+        break;
+      case 'cpu':
+      case 'real':
+      case 'bytes':
+        hit.class = `sstats-${col}`;
+        hit.compare = compareNumeric(r => r.sstats && r.sstats[col]);
+        break;
+      case '# GC':
+        hit.class = `sstats-gc-count`;
+        hit.compare = compareNumeric(r => r.sstats && r.sstats['gc-count']);
+        break;
+      case 'GC cpu':
+        hit.class = `sstats-gc-cpu`;
+        hit.compare = compareNumeric(r => r.sstats && r.sstats['gc-cpu']);
+        break;
+      case 'GC real':
+        hit.class = `sstats-gc-real`;
+        hit.compare = compareNumeric(r => r.sstats && r.sstats['gc-real']);
+        break;
+      case 'GC bytes':
+        hit.class = `sstats-gc-bytes`;
+        hit.compare = compareNumeric(r => r.sstats && r.sstats['gc-bytes']);
+        break;
+    }
+    if (hit.compare) ordering.push(hit);
+  }
+  function render() {
+    let content = document.getElementById('content');
+    let stylesheet = document.styleSheets[1];
+    if (stylesheet.ownerNode.id == 'activeheaders') {
+      while (stylesheet.cssRules.length > 0) stylesheet.deleteRule(0);
+      ordering.forEach(order => stylesheet.insertRule(`#tableheader .${order.class}:after { padding-left: .25em; float: right; content: "${order.invert ? '\u25bc' : '\u25b2'}"; }`, stylesheet.cssRules.length));
+    }
+    results.sort(compareResults);
+    content.innerHTML = renderResult(header, 'tableheader') + results.map(renderResult).join('');
+    let x = document.getElementById('tableheader');
+    x.onclick = e => {
+      setSort(e.target.innerHTML.trim());
+      render();
+    };
+  }
+  document.addEventListener('DOMContentLoaded', function(event) {
+    data.forEach(suite => {
+      let meta = suite['meta-data'];
+      let rs = suite.results || [];
+      if (!meta.completed && 0 == rs.length) rs.push({ 'type' : '?'});
+      rs.forEach(r => {
+        r['suite'] = meta;
+        results.push(r);
+      });
+    });
+    showStatistics = document.getElementById('showStatistics');
+    showStatistics.checked = false;
+    showStatistics.onclick = event => {
+      render();
+    };
+    let summary = document.getElementById('summary');
+    summary.innerHTML = renderSummary(data);
+    setSort('Name');
+    setSort('Suite');
+    if (!results.every(r => 'pass' == r.type || 'skip' == r.type)) setSort('Result');
+    render();
+  });
+|#)))
+  (let ([op (open-file-to-replace filename)])
     (on-exit (close-port op)
       (html->string op
         `(html5
-          (head (meta (@ (charset "UTF-8"))))
-          (script ;; separate script tag to help automated tests parse output
-           ,(format "var data = ~a;"
-              (json:object->string (map mat-data->json mat-data*))))
-          (script
-           "function escapeHtml(text) {var map = {'&': '&amp;','<': '&lt;','>': '&gt;','\"': '&quot;',\"'\": '&#039;'}; return text.replace(/[&<>\"']/g, function(m) { return map[m]; });}"
-           "function renderMeta(meta) {
-              var info = meta['software-info'];
-              if (!info) return '';
-              var keys = [];
-              for (key in info) keys.push(key);
-              keys.sort((a,b) => a > b);
-              return `<div class=\"suite-meta\">
-                       ${keys.map(key =>
-                           `<div class=\"product\">
-                              <span class=\"product-name\">${escapeHtml(info[key]['product-name'])}</span>
-                              <span class=\"version\">${escapeHtml(info[key]['version'])}</span>
-                              <div class=\"revision\">${escapeHtml(info[key]['revision'])}</div>
-                            </div>`).join('')}
-                     </div>`;
-            }"
-           "function renderSuite(suite) {
-             return `<div class=\"suite\">
-                <div class=\"suite-name\">
-                  ${escapeHtml(suite[\"meta-data\"][\"test-file\"])}
-                  ${renderMeta(suite[\"meta-data\"])}
-                </div>
-                <div class=\"suite-results\">${renderResults(suite[\"results\"])}</div>
-              </div>`;
-           }"
-           "var showStatistics;"
-           "var showAllResults;"
-           "function renderResults(results) {
-              results.sort((a, b) => a.test > b.test);
-              return results.filter(r => showAllResults.checked || r.type != 'pass')
-                .map(r => `<div class=\"result\">
-                            <div class=\"result-info\">
-                             <span class=\"result-name\">${escapeHtml(r.test)}</span>
-                             <span class=\"result-tags\">${r.tags.sort((a,b) => a > b).map(escapeHtml).join(', ')}</span>
-                            </div>
-                            ${renderType(r.type)}
-                            ${renderMessageOrStats(r)}
-                           </div>`).join('');
-            }"
-           "function renderMessageOrStats(r) {
-              return (r.message) ? `<div class=\"result-message\">${escapeHtml(r.message)}</div>` : renderSstats(r.sstats);
-            }"
-           "function renderType(type) { return `<div class=\"result-${type}\">${type}</div>`; }"
-           "let locale = new Intl.NumberFormat().resolvedOptions().locale;"
-           "let formatter = new Intl.NumberFormat(locale, { style: 'decimal', minimumFractionDigits: 3, maximumFractionDigits: 3 });"
-           "function renderDuration(duration) { return typeof(duration) == 'number' ? formatter.format(duration) : duration; }"
-           "function renderSstats(stats) {
-              return (showStatistics.checked) ?
-                `<div class=\"result-sstats\">
-                  <div class=\"result-sstats-cpu\">${renderDuration(stats.cpu)}</div>
-                  <div class=\"result-sstats-real\">${renderDuration(stats.real)}</div>
-                  <div class=\"result-sstats-bytes\">${stats.bytes}</div>
-                  <div class=\"result-sstats-gc-count\">${stats[\"gc-count\"]}</div>
-                  <div class=\"result-sstats-gc-cpu\">${renderDuration(stats[\"gc-cpu\"])}</div>
-                  <div class=\"result-sstats-gc-real\">${renderDuration(stats[\"gc-real\"])}</div>
-                  <div class=\"result-sstats-gc-bytes\">${stats[\"gc-bytes\"]}</div>
-               </div>` : '';
-            }"
-           "function renderSummary(data) {
-              var summary = { pass: 0, skip: 0, fail: 0 };
-              data.forEach(suite => suite.results.forEach(r => summary[r.type] += 1));
-              let skipped = summary.skip ? ` (skipped ${summary.skip})` : false;
-              if (summary.fail)
-                return `<div class=\"summary-fail\">Failed ${summary.fail} of ${summary.fail + summary.pass} tests${skipped||''}.</div>`;
-              if (skipped)
-                return `<div class=\"summary-pass\">passed ${summary.pass} tests${skipped}.</div>`;
-              return `<div class=\"summary-pass\">PASSED all ${summary.pass} tests.</div>`;
-            }"
-           ,(format "let headers = ~a;"
-              (json:object->string
-               (json:make-object
-                [meta-data (json:make-object [test-file "Suite"])]
-                [results
-                 (list
-                  (json:make-object
-                   [test "Name"]
-                   [tags '()]
-                   [type "Result"]
-                   [sstats
-                    (json:make-object
-                     [cpu "cpu"]
-                     [real "real"]
-                     [bytes "bytes"]
-                     [gc-count "# GC"]
-                     [gc-cpu "GC cpu"]
-                     [gc-real "GC real"]
-                     [gc-bytes "GC bytes"])]))])))
-           "function render(data) {
-              let summary = document.getElementById('summary');
-              let content = document.getElementById('content');
-              summary.innerHTML = renderSummary(data);
-              content.innerHTML = renderSuite(headers) + data.map(renderSuite).join('');
-            }"
-           "document.addEventListener('DOMContentLoaded', function(event) {
-             showStatistics = document.getElementById('showStatistics');
-             showStatistics.checked = false;
-             showStatistics.onclick = event => { render(data); };
-             showAllResults = document.getElementById('showAllResults')
-             showAllResults.checked = data.every(md => md.results.every(r => 'pass' == r.type || 'skip' == r.type));
-             showAllResults.onclick = event => { render(data); };
-             render(data);
-           });")
-          (style
-            ".header {background: lightgray; margin-bottom: .5ex; }"
-            "#summary {font-size: x-large; }"
-            ".summary-fail {color: red;}"
-            ".summary-pass {}"
-            "#controls { display: flex; align-items: center; }"
-            "#showStatistics {margin-left: 1em;}"
-            ".suite { display: flex; flex-direction: row; align-items: first baseline; border-bottom-color: lightgrey; border-bottom-style: solid; border-bottom-width: 1px; }"
-            ".suite-name { width: 20vw; position: relative; }"
-            ".suite-name .suite-meta { display: none; visibility: hidden; opacity: 0; }"
-            ".suite-name:hover .suite-meta { position: absolute; z-index: 1; display: block; visibility: visible; opacity: 1; padding: 10px; width: 300px; background: rgba(240,240,240,1); border-radius: 10px; }"
-            ".suite-results { }"
-            ".result { display: flex; flex-direction: row; }"
-            ".result-info { width: 20vw; }"
-            ".result-name { }"
-            ".result-tags { font-family: sans; font-size: x-small; margin-left: 1em;}"
-            ".result-pass { width: 4em; text-transform: uppercase; color: green;}"
-            ".result-skip { width: 4em; text-transform: uppercase; font-style: oblique;}"
-            ".result-fail { width: 4em; text-transform: uppercase; color: red;}"
-            ".result-message { width: 50vw; }"
-            ".result-Result { width: 4em; }"
-            ".result-sstats { display: flex; text-align: right;}"
-            ".result-sstats-cpu { width: 6em; }"
-            ".result-sstats-real { width: 6em; }"
-            ".result-sstats-bytes { width: 7em; }"
-            ".result-sstats-gc-count { width: 4em; }"
-            ".result-sstats-gc-cpu { width: 6em; }"
-            ".result-sstats-gc-real { width: 6em; }"
-            ".result-sstats-gc-bytes { width: 7em; }")
+          (head
+           (meta (@ (charset "UTF-8")))
+           (title "Test Results")
+           ;; separate script tag to help automated tests parse output
+           (script ,(format "var data = ~a;" (json:object->string mat-data*)))
+           (script ,js-code)
+           (style
+             "body {--tableheaderheight: 1.25rem; --marginwidth: 4px; margin: var(--marginwidth); height: calc(100vh - 2*var(--marginwidth)); display: grid; grid-template-rows: auto 1fr; overflow: hidden;}"
+             ".header {background: lightgray; margin-bottom: .5ex; }"
+             "#summary {font-size: x-large; }"
+             ".summary-fail {color: red;}"
+             ".summary-pass {}"
+             "#controls { display: flex; align-items: center; }"
+             "#showStatistics { }"
+             ".product { display: list-item; margin-left: 1em; }"
+             ".date { }"
+             ".hostname { }"
+             ".machine-type { }"
+             ".suite { border-top: 1px solid lightgray; position: relative; }"
+             ".suite-name { }"
+             ".suite-name .suite-meta { display: none; visibility: hidden; opacity: 0; font-size: small; }"
+             ".suite-name:hover .suite-meta { position: absolute; z-index: 1; display: block; visibility: visible; opacity: 1; padding: 10px; margin-top: .5em; width: 300px; background: rgba(240,240,240,1); border-radius: 10px; }"
+             ".duplicate { visibility: hidden; border-top-style: none; }"
+             ".incomplete { background: yellow; }"
+             ".result-info { word-break: break-all; min-width: 15vw; max-width: 25vw; }"
+             ".result-name { }"
+             ".result-tags:not(:empty) { font-family: sans; font-size: x-small; margin-left: 1em;}"
+             ".result-pass { width: 4em; text-transform: uppercase; color: green;}"
+             ".result-skip { width: 4em; text-transform: uppercase; font-style: oblique;}"
+             ".result-fail { width: 4em; text-transform: uppercase; color: red;}"
+             ".result-error { position: relative; min-width: 50vw; max-width: 60vw; }"
+             ".result-message { }"
+             ".result-stack:hover { max-height: 10em; overflow: auto; }"
+             ".result-stack:not(:hover):not(:empty):before { content: \"...\"; position: absolute; right: 0px; bottom: 0px; margin-right: .5em; font-size: large; }"
+             ".result-stack { font-family: monospace; white-space: pre; background: rgba(255,220,220,.125); max-height: 1em; overflow: hidden; }"
+             ".result-type { width: 5em; }"
+             ".result-sstats { text-align: right;}"
+             ".sstats-cpu { width: 6em; }"
+             ".sstats-real { width: 6em; }"
+             ".sstats-bytes { width: 7em; }"
+             ".sstats-gc-count { width: 4em; }"
+             ".sstats-gc-cpu { width: 6em; }"
+             ".sstats-gc-real { width: 6em; }"
+             ".sstats-gc-bytes { width: 7em; }"
+             ".vscroll { overflow-y: auto; overflow-x: hidden; margin-top: var(--tableheaderheight); }"
+             ".vscroll tr:first-child td {border-top-style: none; position: unset;}"
+             ".vscroll tr:first-child div {background: rgb(245,245,245); position: absolute; top 0px; margin-top: calc(-1 * var(--tableheaderheight));}"
+             "table { table-layout: fixed; border-collapse: collapse; }"
+             "tr { vertical-align: text-top; }"
+             "tr:not(:first-child):hover { background: #f4f4f4; }"
+             "td:not(:last-child) { padding-right: .5em; }")
+           (style (@ (id "activeheaders"))))
           (body (@ (style "font-family:monospace;"))
             (div (@ (class "header"))
               (div (@ (id "summary")))
               (div (@ (id "controls"))
-                (input (@ (type "checkbox") (id "showAllResults")))
-                (label (@ (for "showAllResults")) "Show All")
                 (input (@ (type "checkbox") (id "showStatistics")))
                 (label (@ (for "showStatistics")) "Show Statistics")))
-            (div (@ (id "content")))))))))
+            (div (@ (class "vscroll"))
+              (table (@ (id "content"))))))))))
 
-(define (console-summary report-files)
-  (let-values ([(pass fail skip) (summarize report-files)])
-    (printf "Tests run: ~s   Pass: ~s   Fail: ~s   Skip: ~s\n\n"
-      (+ pass fail) pass fail skip)))
+(define (console-summary report-files reporting?)
+  (let-values ([(pass fail skip completed attempted) (summarize report-files)])
+    (when reporting?
+      (printf "Tests run: ~s   Pass: ~s   Fail: ~s   Skip: ~s\n\n"
+        (+ pass fail) pass fail skip))
+    (let ([incomplete (- attempted completed)])
+      (unless (zero? incomplete)
+        (printf "*** Some test suite~p did not complete ***\n\n" incomplete)))))
 
 (define (if-exists fn) (and (regular-file? fn) fn))
 
@@ -422,10 +521,11 @@
 (define (extract-suites specs)
   (let ([ht (make-hashtable string-hash string=?)])
     (define (add-suite suite)
-      (hashtable-update! ht suite
-        (lambda (old)
-          (or old (make-hashtable string-hash string=?)))
-        #f))
+      (when (may-have-mats? suite)
+        (hashtable-update! ht suite
+          (lambda (old)
+            (or old (make-hashtable string-hash string=?)))
+          #f)))
     (let lp ([specs specs])
       (cond
        [(null? specs)
@@ -538,8 +638,8 @@
         (option-named "coverage")
         (option-named "load-prof")
         (option-named "save-prof"))])
-    (let ([test-files (map car suites)])
-      (define to-file (and (or report coverage) #t))
+    (let ([test-files (map car suites)]
+          [uuid (uuid->string (osi_make_uuid))])
       (define report-files (map ->report-filename test-files))
       (define status 0)
       (define no-tests '())
@@ -577,16 +677,16 @@
                        (fail "cannot load profile data from ~a" user-supplied-name)]))))
               (profile:stop))))]
        [save-prof (truncate-profile)])
-      (when to-file
-        (foreach ([file report-files])
-          (catch (remove-file file))))
+      (foreach ([suite/test suites] [report-file report-files])
+        ($init-mat-output-file report-file (car suite/test) uuid))
       (foreach ([suite/test suites] [report-file report-files])
         (let ([suite (car suite/test)]
               [tests (cdr suite/test)])
           (match (run-test-spec swish
                    (<test-spec> make
                      [test-file suite]
-                     [report-file (and to-file report-file)]
+                     [test-run uuid]
+                     [report-file report-file]
                      [tests (and (pair? tests) tests)]
                      [incl-tags incl-tags]
                      [excl-tags excl-tags]
@@ -594,7 +694,7 @@
                      [progress progress]
                      [lib-dirs (library-directories)]
                      [src-dirs (source-directories)]))
-            [#f (void)]
+            [ran (void)]
             [fail (set! status 1)]
             [skip (set! status 1)]
             [no-tests (set! no-tests (cons suite no-tests))])))
@@ -606,8 +706,7 @@
           (if (profile:dump-html (or save-prof load-prof) coverage include exclude)
               (printf "see ~a\n" (path->file-uri (get-real-path coverage)))
               (printf "no profile to dump\n")))
-        (when (or report coverage)
-          (console-summary report-files))
+        (console-summary report-files (or report coverage))
         (match (filter (lambda (fn) (string=? "ms" (path-extension fn))) no-tests)
           [() (exit status)]
           [,expected-tests
