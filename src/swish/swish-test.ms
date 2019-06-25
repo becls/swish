@@ -567,6 +567,24 @@
       [,arch (machine-type)]
       [,@arch (string->symbol (json:ref meta 'machine-type ""))])
      'ok))
+  ;; specify explicit uuid
+  (let ([test-file
+         (write-test-file "explicit-uuid.ms"
+           (lambda ()
+             (for-each pretty-print
+               `((import (swish mat))
+                 (mat good () (assert #t))
+                 (mat bad () (assert #f))))))]
+        [explicit.json (path-combine (output-dir) "explicit.json")]
+        [uuid (uuid->string (osi_make_uuid))])
+    (nonzero-exit
+     (swish-test "--test-run " (format "~(~a~)" uuid) " --report " explicit.json " " test-file)
+     '(seek
+       "Tests run: 2   Pass: 1   Fail: 1   Skip: 0"))
+    (match-let*
+     ([(,file1) (json:bytevector->object (read-file explicit.json))]
+      [,@uuid (json:ref file1 '(meta-data test-run) #f)])
+     'ok))
   ;; check stack field
   (nonzero-exit
    (swish-test test-file3)

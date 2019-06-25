@@ -42,6 +42,8 @@
    [incl-tags --tag (list "<tag>") "run only the tests with this tag"]
    [excl-tags --not (list "<tag>") "exclude tests with this tag"]
    [progress --progress (string "<mode>") "<mode>={test|suite|none}"]
+   [test-run --test-run (string "<UUID>")
+    "use the specified <UUID> to identify the test run instead of generating one"]
    [specs (list . "<spec>") "directory | suite [{test | -t test} ...]"]))
 
 (define test-and-report-cli
@@ -731,7 +733,16 @@
         (option-named 'load-results)
         (option-named 'files))])
     (let ([test-files (map car suites)]
-          [uuid (uuid->string (osi_make_uuid))])
+          [test-run
+           (uuid->string ;; normalize to swish's format
+            (cond
+             [(opt 'test-run) =>
+              (lambda (s)
+                (match (catch (string->uuid s))
+                  [#(EXIT ,reason)
+                   (fail "invalid ~a UUID ~a" (option-named 'test-run) s)]
+                  [,uuid uuid]))]
+             [else (osi_make_uuid)]))])
       (define report-files (map ->report-filename test-files))
       (define status 0)
       (define no-tests '())
@@ -770,14 +781,14 @@
               (profile:stop))))]
        [save-prof (truncate-profile)])
       (foreach ([suite/test suites] [report-file report-files])
-        ($init-mat-output-file report-file (car suite/test) uuid))
+        ($init-mat-output-file report-file (car suite/test) test-run))
       (foreach ([suite/test suites] [report-file report-files])
         (let ([suite (car suite/test)]
               [tests (cdr suite/test)])
           (match (run-test-spec swish
                    (<test-spec> make
                      [test-file suite]
-                     [test-run uuid]
+                     [test-run test-run]
                      [report-file report-file]
                      [tests (and (pair? tests) tests)]
                      [incl-tags incl-tags]
