@@ -130,22 +130,51 @@ The \code{for-each-mat} procedure calls \code{(\var{procedure}
 \begin{procedure}
   \code{(load-results \var{filename})}
 \end{procedure}
-\returns{} a list of expressions
+\returns{} a Scheme record
 
 The \code{load-results} procedure reads the contents of the file
-specified by string \var{filename} and returns the list of
-s-expressions contained within.
+specified by string \var{filename} and returns a Scheme record:
+\codebegin
+(define-record-type mat-data
+  (nongenerative)
+  (fields
+    (immutable report-file)
+    (immutable meta-data)
+    (immutable results)))
+\codeend
+containing the \var{filename}, a list of meta-data records:
+\codebegin
+(define-record-type meta-data
+  (nongenerative)
+  (fields
+   (immutable test-file)
+   (immutable key)
+   (immutable value)))
+\codeend
+and a list of result records:
+\codebegin
+(define-record-type mat-result
+  (nongenerative)
+  (fields
+   (immutable test-file)
+   (immutable test)
+   (immutable tags)
+   (immutable type)
+   (immutable message)
+   (immutable sstats)))
+\codeend
 
 % ----------------------------------------------------------------------------
 \begin{procedure}
   \code{(summarize \var{files})}
 \end{procedure}
-\returns{} two values: the number of passing mats and the number of
-failing mats
+\returns{} three values: the number of passing mats, the number of
+failing mats, and the number of skipped mats
 
 The \code{summarize} procedure reads the contents of each file in
 \var{files}, a list of string filenames, and returns the number of
-passing mats and the number of failing mats. An error is raised if any
+passing mats, the number of failing mats, and the number of skipped mats.
+An error is raised if any
 entry is malformed.
 
 \end{document}

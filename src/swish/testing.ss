@@ -51,6 +51,7 @@
    (swish gatekeeper)
    (swish gen-server)
    (swish io)
+   (swish json)
    (swish log-db)
    (swish mat)
    (swish osi)
@@ -284,6 +285,12 @@
       [none (exit 3)]
       [ok
        (let ([mo-op (and report-file (open-file-to-replace report-file))])
+         (when mo-op
+           ;; record revision information after loading mats, but before running mats
+           (write-meta-data mo-op test-file 'software-info
+             (let ()
+               (import (swish software-info))
+               (json:object->string (software-info)))))
          (on-exit
           (begin
             (when profile (profile:save))

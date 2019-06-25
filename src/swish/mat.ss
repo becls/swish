@@ -27,6 +27,11 @@
    for-each-mat
    load-results
    mat
+   mat-data
+   mat-data-meta-data
+   mat-data-report-file
+   mat-data-results
+   mat-data?
    mat-result
    mat-result-message
    mat-result-sstats
@@ -35,10 +40,17 @@
    mat-result-test-file
    mat-result-type
    mat-result?
+   meta-data
+   meta-data-key
+   meta-data-test-file
+   meta-data-value
+   meta-data?
    run-mat
    run-mats
    run-mats-to-file
    summarize
+   summarize-results
+   write-meta-data
    )
   ;; deliberately limiting ourselves to Chez Scheme imports
   (import (chezscheme))
@@ -51,6 +63,20 @@
      (immutable name)
      (immutable tags)
      (immutable test)))
+
+  (define-record-type mat-data
+    (nongenerative)
+    (fields
+     (immutable report-file)
+     (immutable meta-data)
+     (immutable results)))
+
+  (define-record-type meta-data
+    (nongenerative)
+    (fields
+     (immutable test-file)
+     (immutable key)
+     (immutable value)))
 
   (define-record-type mat-result
     (nongenerative)
@@ -91,10 +117,10 @@
         (and (pair? excl-tags) (present (%mat-tags mat) excl-tags))))
 
   (define (do-run-mat mat reporter incl-tags excl-tags)
-    (let* ([before (statistics)]
+    (let* ([skip (and (skip? mat incl-tags excl-tags) 'skip)]
+           [before (statistics)]
            [result
-            (if (skip? mat incl-tags excl-tags)
-                'skip
+            (or skip
                 (guard (e [else (cons 'fail e)])
                   ((%mat-test mat))
                   'pass))])
@@ -213,8 +239,16 @@
   (define (make-record-reader rtd) (make-param record-reader (record-type-name rtd)))
   (define time-reader (make-record-reader time-rtd))
   (define sstats-reader (make-record-reader sstats-rtd))
+  (define mat-data-rtd (record-type-descriptor mat-data))
+  (define mat-data-reader (make-record-reader mat-data-rtd))
   (define mat-result-rtd (record-type-descriptor mat-result))
   (define mat-result-reader (make-record-reader mat-result-rtd))
+  (define meta-data-rtd (record-type-descriptor meta-data))
+  (define meta-data-reader (make-record-reader meta-data-rtd))
+
+  (define (write-meta-data op test-file key value)
+    (parameterize ([print-gensym #f])
+      (fprintf op "~s\n" (make-meta-data test-file key value))))
 
   (define (make-write-summary op)
     (lambda (r)
@@ -236,35 +270,31 @@
       'replace))
 
   (define (load-results filename)
-    (parameterize ([mat-result-reader mat-result-rtd]
+    (parameterize ([mat-data-reader mat-data-rtd]
+                   [mat-result-reader mat-result-rtd]
+                   [meta-data-reader meta-data-rtd]
                    [sstats-reader sstats-rtd]
                    [time-reader time-rtd])
       (call-with-input-file filename
         (lambda (ip)
-          (let lp ()
+          (let lp ([meta-data '()] [results '()])
             (let ([x (read ip)])
-              (if (eof-object? x)
-                  '()
-                  (cons x (lp)))))))))
+              (cond
+               [(eof-object? x)
+                (make-mat-data filename (reverse meta-data) (reverse results))]
+               [(meta-data? x) (lp (cons x meta-data) results)]
+               [(mat-result? x) (lp meta-data (cons x results))]
+               [else (raise `#(unexpected-mat-result ,x))])))))))
+
+  (define (summarize-results results*)
+    (let-values ([(update-tally! get-tally) (make-tally-reporter)])
+      (for-each
+       (lambda (data)
+         (for-each update-tally! (mat-data-results data)))
+       results*)
+      (get-tally)))
 
   (define (summarize files)
-    (let ([pass 0] [fail 0] [skip 0])
-      (for-each
-       (lambda (in-file)
-         (for-each
-          (lambda (r)
-            (cond
-             [(mat-result? r)
-              (case (mat-result-type r)
-                [pass (set! pass (+ pass 1))]
-                [fail (set! fail (+ fail 1))]
-                [skip (set! skip (+ skip 1))]
-                [else
-                 (errorf 'summarize "unknown result ~s in file ~a" (mat-result-type r) in-file)])]
-             [else
-              (errorf 'summarize "unknown entry ~s in file ~a" r in-file)]))
-          (load-results in-file)))
-       files)
-      (values pass fail skip)))
+    (summarize-results (map load-results files)))
 
   )

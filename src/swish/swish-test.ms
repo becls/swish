@@ -453,6 +453,15 @@
       [,@tags (mat-result-tags mr)]
       [,@message (mat-result-message mr)])
      'ok))
+  (define (get-data content)
+    (match-let* ([(,_ ,data) (pregexp-match "<script>var data = (.*);</script>" content)])
+     (json:string->object data)))
+  (define (results-of-type t obj)
+    (filter (lambda (r) (equal? t (json:ref r 'type #f)))
+     (json:ref obj 'results #f)))
+  (define (find-test name obj)
+    (find (lambda (r) (equal? name (json:ref r 'test #f)))
+      (json:ref obj 'results #f)))
   (nonzero-exit
    (swish-test "--progress none --report " report-file " " test-file)
    '())
@@ -460,19 +469,24 @@
   (match-let*
    ([#t (file-exists? report-file)]
     [,content (utf8->string (read-file report-file))]
-    [(,_ ,rest) (pregexp-match ".*<tr>[<td/>]*<td>TEST1</td><td>.*PASS(.*)" content)]
-    [(,_ ,rest) (pregexp-match ".*<tr>[<td/>]*<td>TEST2</td><td>.*Exception: failed assertion #f at line 3(.*)" rest)]
-    [(,_) (pregexp-match ".*<tr>[<td/>]*<td>TEST3</td><td>.*Exception in cdr: 17 is not a pair" rest)])
+    [(,obj) (get-data content)]
+    [,test1-result (find-test "TEST1" obj)]
+    [,test2-result (find-test "TEST2" obj)]
+    [,test3-result (find-test "TEST3" obj)]
+    ["pass" (json:ref test1-result 'type #f)]
+    ["fail" (json:ref test2-result 'type #f)]
+    [(,_) (pregexp-match "Exception: failed assertion #f at line 3,.*" (json:ref test2-result 'message #f))]
+    ["fail" (json:ref test3-result 'type #f)]
+    ["Exception in cdr: 17 is not a pair" (json:ref test3-result 'message #f)])
    'ok)
   ;; check .mo results file
-  (match-let*
-   ([,mo-path (string-append test-file ".mo")]
-    [,results (load-results mo-path)])
-   (check results 'TEST1 'pass '(good) "")
-   (check results 'TEST2 'fail '(tag1 tag2)
-     (format "Exception: failed assertion #f at line 3, char 32 of ~a" test-file))
-   (check results 'TEST3 'fail '() "Exception in cdr: 17 is not a pair")
-   'ok)
+  (let ([mo-path (string-append test-file ".mo")])
+    (let ([results (mat-data-results (load-results mo-path))])
+      (check results 'TEST1 'pass '(good) "")
+      (check results 'TEST2 'fail '(tag1 tag2)
+        (format "Exception: failed assertion #f at line 3, char 32 of ~a" test-file))
+      (check results 'TEST3 'fail '() "Exception in cdr: 17 is not a pair")
+      'ok))
   ;; all pass, but some skipped so nonzero exit
   (nonzero-exit
    (swish-test "--progress none --tag good --report " report-file1 " " test-file)
@@ -481,7 +495,10 @@
   (match-let*
    ([#t (file-exists? report-file1)]
     [,content (utf8->string (read-file report-file1))]
-    [(,_) (pregexp-match (pregexp-quote "passed 1 tests (skipped 2)") content)])
+    [(,obj) (get-data content)]
+    [1 (length (results-of-type "pass" obj))]
+    [2 (length (results-of-type "skip" obj))]
+    [0 (length (results-of-type "fail" obj))])
    'ok)
   ;; all pass, some skipped, but test specified explicitly so zero exit
   (zero-exit
@@ -491,7 +508,10 @@
   (match-let*
    ([#t (file-exists? report-file2)]
     [,content (utf8->string (read-file report-file2))]
-    [(,_) (pregexp-match (pregexp-quote "PASSED all 1 tests") content)])
+    [(,obj) (get-data content)]
+    [1 (length (results-of-type "pass" obj))]
+    [0 (length (results-of-type "skip" obj))]
+    [0 (length (results-of-type "fail" obj))])
    'ok)
   ;; some skipped so nonzero exit, no results for test-file2
   (nonzero-exit
@@ -501,10 +521,15 @@
   (match-let*
    ([#t (file-exists? report-file3)]
     [,content (utf8->string (read-file report-file3))]
-    [(,_ ,rest)
-     (pregexp-match (string-append (pregexp-quote "passed 1 tests (skipped 2)") "(.*)") content)]
-    [(,_ ,rest) (pregexp-match ".*<tr>[<td/>]*<td>TEST1</td><td>.*PASS(.*)" rest)]
-    [(,_) (pregexp-match ".*<tr><td>.*test-report2.ms</td><td></td><td>.*no results" rest)])
+    [(,obj1 ,obj2) (get-data content)]
+    ["test-report.ms" (path-last (json:ref obj1 '(meta-data test-file) #f))]
+    ["test-report2.ms" (path-last (json:ref obj2 '(meta-data test-file) #f))]
+    [1 (length (results-of-type "pass" obj1))]
+    [2 (length (results-of-type "skip" obj1))]
+    [0 (length (results-of-type "fail" obj1))]
+    [,test1-result (find-test "TEST1" obj1)]
+    ["pass" (json:ref test1-result 'type #f)]
+    [() (json:ref obj2 'results #f)])
    'ok)
   ;; tests fail, some skipped
   (nonzero-exit
@@ -514,7 +539,10 @@
   (match-let*
    ([#t (file-exists? report-file4)]
     [,content (utf8->string (read-file report-file4))]
-    [(,_) (pregexp-match (pregexp-quote "Failed 2 of 2 tests (skipped 1)") content)])
+    [(,obj) (get-data content)]
+    [0 (length (results-of-type "pass" obj))]
+    [1 (length (results-of-type "skip" obj))]
+    [2 (length (results-of-type "fail" obj))])
    'ok)
   )
 

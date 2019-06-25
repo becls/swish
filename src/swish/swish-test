@@ -182,6 +182,48 @@
  )
 
 (define (html-report filename report-files)
+  (define (mat-data->json mat-data)
+    (json:make-object
+     [report-file (mat-data-report-file mat-data)]
+     [meta-data (meta-data->json (mat-data-meta-data mat-data))]
+     [results (results->json (mat-data-results mat-data))]))
+  (define (meta-data->json meta-data*)
+    (let ([obj (json:make-object)])
+      (for-each
+       (lambda (meta-data)
+         (let ([key (meta-data-key meta-data)])
+           (json:extend-object obj
+             [test-file (meta-data-test-file meta-data)]
+             [,key (prepare-meta-data key (meta-data-value meta-data))])))
+       meta-data*)
+      obj))
+  (define (prepare-meta-data key val)
+    (match key
+      [software-info (json:string->object val)]
+      [,_ val]))
+  (define (results->json result*)
+    (map
+     (lambda (x)
+       (json:make-object
+        [test-file (mat-result-test-file x)]
+        [test (symbol->string (mat-result-test x))]
+        [tags (map symbol->string (mat-result-tags x))]
+        [type (symbol->string (mat-result-type x))]
+        [message (mat-result-message x)]
+        [sstats
+         (let ([s (mat-result-sstats x)])
+           (json:make-object
+            [cpu (time-duration (sstats-cpu s))]
+            [real (time-duration (sstats-real s))]
+            [bytes (sstats-bytes s)]
+            [gc-count (sstats-gc-count s)]
+            [gc-cpu (time-duration (sstats-gc-cpu s))]
+            [gc-real (time-duration (sstats-gc-real s))]
+            [gc-bytes (sstats-gc-bytes s)]))]))
+     result*))
+  (define (time-duration t)
+    (+ (time-second t)
+       (/ (time-nanosecond t) 1000000000.0)))
   (define (stringify x)
     (if (string? x)
         x
@@ -198,38 +240,156 @@
   (define (results< x y)
     (define (get-name r) (symbol->string (mat-result-test r)))
       (string-ci<? (get-name x) (get-name y)))
-  (let ([op (open-file-to-replace filename)])
+  (let ([mat-data* (map load-results report-files)]
+        [op (open-file-to-replace filename)])
     (on-exit (close-port op)
       (html->string op
         `(html5
           (head (meta (@ (charset "UTF-8"))))
+          (script ;; separate script tag to help automated tests parse output
+           ,(format "var data = ~a;"
+              (json:object->string (map mat-data->json mat-data*))))
+          (script
+           "function escapeHtml(text) {var map = {'&': '&amp;','<': '&lt;','>': '&gt;','\"': '&quot;',\"'\": '&#039;'}; return text.replace(/[&<>\"']/g, function(m) { return map[m]; });}"
+           "function renderMeta(meta) {
+              var info = meta['software-info'];
+              if (!info) return '';
+              var keys = [];
+              for (key in info) keys.push(key);
+              keys.sort((a,b) => a > b);
+              return `<div class=\"suite-meta\">
+                       ${keys.map(key =>
+                           `<div class=\"product\">
+                              <span class=\"product-name\">${escapeHtml(info[key]['product-name'])}</span>
+                              <span class=\"version\">${escapeHtml(info[key]['version'])}</span>
+                              <div class=\"revision\">${escapeHtml(info[key]['revision'])}</div>
+                            </div>`).join('')}
+                     </div>`;
+            }"
+           "function renderSuite(suite) {
+             return `<div class=\"suite\">
+                <div class=\"suite-name\">
+                  ${escapeHtml(suite[\"meta-data\"][\"test-file\"])}
+                  ${renderMeta(suite[\"meta-data\"])}
+                </div>
+                <div class=\"suite-results\">${renderResults(suite[\"results\"])}</div>
+              </div>`;
+           }"
+           "var showStatistics;"
+           "var showAllResults;"
+           "function renderResults(results) {
+              results.sort((a, b) => a.test > b.test);
+              return results.filter(r => showAllResults.checked || r.type != 'pass')
+                .map(r => `<div class=\"result\">
+                            <div class=\"result-info\">
+                             <span class=\"result-name\">${escapeHtml(r.test)}</span>
+                             <span class=\"result-tags\">${r.tags.sort((a,b) => a > b).map(escapeHtml).join(', ')}</span>
+                            </div>
+                            ${renderType(r.type)}
+                            ${renderMessageOrStats(r)}
+                           </div>`).join('');
+            }"
+           "function renderMessageOrStats(r) {
+              return (r.message) ? `<div class=\"result-message\">${escapeHtml(r.message)}</div>` : renderSstats(r.sstats);
+            }"
+           "function renderType(type) { return `<div class=\"result-${type}\">${type}</div>`; }"
+           "let locale = new Intl.NumberFormat().resolvedOptions().locale;"
+           "let formatter = new Intl.NumberFormat(locale, { style: 'decimal', minimumFractionDigits: 3, maximumFractionDigits: 3 });"
+           "function renderDuration(duration) { return typeof(duration) == 'number' ? formatter.format(duration) : duration; }"
+           "function renderSstats(stats) {
+              return (showStatistics.checked) ?
+                `<div class=\"result-sstats\">
+                  <div class=\"result-sstats-cpu\">${renderDuration(stats.cpu)}</div>
+                  <div class=\"result-sstats-real\">${renderDuration(stats.real)}</div>
+                  <div class=\"result-sstats-bytes\">${stats.bytes}</div>
+                  <div class=\"result-sstats-gc-count\">${stats[\"gc-count\"]}</div>
+                  <div class=\"result-sstats-gc-cpu\">${renderDuration(stats[\"gc-cpu\"])}</div>
+                  <div class=\"result-sstats-gc-real\">${renderDuration(stats[\"gc-real\"])}</div>
+                  <div class=\"result-sstats-gc-bytes\">${stats[\"gc-bytes\"]}</div>
+               </div>` : '';
+            }"
+           "function renderSummary(data) {
+              var summary = { pass: 0, skip: 0, fail: 0 };
+              data.forEach(suite => suite.results.forEach(r => summary[r.type] += 1));
+              let skipped = summary.skip ? ` (skipped ${summary.skip})` : false;
+              if (summary.fail)
+                return `<div class=\"summary-fail\">Failed ${summary.fail} of ${summary.fail + summary.pass} tests${skipped||''}.</div>`;
+              if (skipped)
+                return `<div class=\"summary-pass\">passed ${summary.pass} tests${skipped}.</div>`;
+              return `<div class=\"summary-pass\">PASSED all ${summary.pass} tests.</div>`;
+            }"
+           ,(format "let headers = ~a;"
+              (json:object->string
+               (json:make-object
+                [meta-data (json:make-object [test-file "Suite"])]
+                [results
+                 (list
+                  (json:make-object
+                   [test "Name"]
+                   [tags '()]
+                   [type "Result"]
+                   [sstats
+                    (json:make-object
+                     [cpu "cpu"]
+                     [real "real"]
+                     [bytes "bytes"]
+                     [gc-count "# GC"]
+                     [gc-cpu "GC cpu"]
+                     [gc-real "GC real"]
+                     [gc-bytes "GC bytes"])]))])))
+           "function render(data) {
+              let summary = document.getElementById('summary');
+              let content = document.getElementById('content');
+              summary.innerHTML = renderSummary(data);
+              content.innerHTML = renderSuite(headers) + data.map(renderSuite).join('');
+            }"
+           "document.addEventListener('DOMContentLoaded', function(event) {
+             showStatistics = document.getElementById('showStatistics');
+             showStatistics.checked = false;
+             showStatistics.onclick = event => { render(data); };
+             showAllResults = document.getElementById('showAllResults')
+             showAllResults.checked = data.every(md => md.results.every(r => 'pass' == r.type || 'skip' == r.type));
+             showAllResults.onclick = event => { render(data); };
+             render(data);
+           });")
           (style
-            "table { table-layout: fixed; border-collapse: collapse; }"
-            "thead tr td:nth-child(1) { min-width: 15vw; }"
-            "thead tr td:nth-child(2) { min-width: 15vw; }"
-            "tr td:nth-child(3) { padding-left: 1ex; }")
+            ".header {background: lightgray; margin-bottom: .5ex; }"
+            "#summary {font-size: x-large; }"
+            ".summary-fail {color: red;}"
+            ".summary-pass {}"
+            "#controls { display: flex; align-items: center; }"
+            "#showStatistics {margin-left: 1em;}"
+            ".suite { display: flex; flex-direction: row; align-items: first baseline; border-bottom-color: lightgrey; border-bottom-style: solid; border-bottom-width: 1px; }"
+            ".suite-name { width: 20vw; position: relative; }"
+            ".suite-name .suite-meta { display: none; visibility: hidden; opacity: 0; }"
+            ".suite-name:hover .suite-meta { position: absolute; z-index: 1; display: block; visibility: visible; opacity: 1; padding: 10px; width: 300px; background: rgba(240,240,240,1); border-radius: 10px; }"
+            ".suite-results { }"
+            ".result { display: flex; flex-direction: row; }"
+            ".result-info { width: 20vw; }"
+            ".result-name { }"
+            ".result-tags { font-family: sans; font-size: x-small; margin-left: 1em;}"
+            ".result-pass { width: 4em; text-transform: uppercase; color: green;}"
+            ".result-skip { width: 4em; text-transform: uppercase; font-style: oblique;}"
+            ".result-fail { width: 4em; text-transform: uppercase; color: red;}"
+            ".result-message { width: 50vw; }"
+            ".result-Result { width: 4em; }"
+            ".result-sstats { display: flex; text-align: right;}"
+            ".result-sstats-cpu { width: 6em; }"
+            ".result-sstats-real { width: 6em; }"
+            ".result-sstats-bytes { width: 7em; }"
+            ".result-sstats-gc-count { width: 4em; }"
+            ".result-sstats-gc-cpu { width: 6em; }"
+            ".result-sstats-gc-real { width: 6em; }"
+            ".result-sstats-gc-bytes { width: 7em; }")
           (body (@ (style "font-family:monospace;"))
-            (h1 ,(let-values ([(pass fail skip) (summarize report-files)])
-                   (if (eq? fail 0)
-                       (if (eq? skip 0)
-                           (format "PASSED all ~a tests." pass)
-                           (format "passed ~a tests (skipped ~a)" pass skip))
-                       (format "Failed ~a of ~a tests~a." fail (+ fail pass)
-                         (if (eq? skip 0) "" (format " (skipped ~a)" skip))))))
-            (table
-             (thead ,(make-row "Suite" "Name" "Message"))
-             (tbody
-              ,@(map
-                 (lambda (in-file)
-                   (let-values ([(pass fail skip) (summarize (list in-file))])
-                     (unless (and (> skip 0) (= pass fail 0))
-                       (match (sort results< (load-results in-file))
-                         [() (make-row (path-root in-file) "" "<no results>")]
-                         [,sorted
-                         `(begin
-                            ,(make-row (mat-result-test-file (car sorted)) "" "")
-                            ,@(map make-result sorted))]))))
-                 report-files)))))))))
+            (div (@ (class "header"))
+              (div (@ (id "summary")))
+              (div (@ (id "controls"))
+                (input (@ (type "checkbox") (id "showAllResults")))
+                (label (@ (for "showAllResults")) "Show All")
+                (input (@ (type "checkbox") (id "showStatistics")))
+                (label (@ (for "showStatistics")) "Show Statistics")))
+            (div (@ (id "content")))))))))
 
 (define (console-summary report-files)
   (let-values ([(pass fail skip) (summarize report-files)])
