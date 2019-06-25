@@ -29,17 +29,18 @@
 (define-syntax make-ht
   (syntax-rules ()
     [(_ (key val) ...)
-     (let ([ht (make-hashtable string-hash string=?)])
-       (hashtable-set! ht key val)
+     (let ([ht (make-hashtable symbol-hash eq?)])
+       (hashtable-set! ht 'key val)
        ...
        ht)]))
 
 (define (dump x)
+  (define (symbol<? a b) (string<? (symbol->string a) (symbol->string b)))
   (cond
    [(hashtable? x)
     (vector-map
      (lambda (k) (cons k (dump (hashtable-ref x k #f))))
-     (vector-sort string<? (hashtable-keys x)))]
+     (vector-sort symbol<? (hashtable-keys x)))]
    [(pair? x) (map dump x)]
    [(procedure? x) (dump (x))]
    [else x]))
@@ -91,29 +92,29 @@
   (eval (read (open-input-string (format "(cli-specs ~{ ~a~})" ls)))))
 
 (mat cli-specs-macro ()
-  (assert-syntax-error (cli-specs ["name" -short bool ""])
+  (assert-syntax-error (cli-specs [name -short bool ""])
     "invalid -short in")
-  (assert-syntax-error (cli-specs ["name" -s boolean ""])
+  (assert-syntax-error (cli-specs [name -s boolean ""])
     "invalid boolean in")
-  (assert-syntax-error (cli-specs ["name" -s counter ""])
+  (assert-syntax-error (cli-specs [name -s counter ""])
     "invalid counter in")
-  (assert-syntax-error (cli-specs ["name" -s (string bad) ""])
+  (assert-syntax-error (cli-specs [name -s (string bad) ""])
     "invalid (string bad) in")
-  (assert-syntax-error (cli-specs ["name" -s (list bad) ""])
+  (assert-syntax-error (cli-specs [name -s (list bad) ""])
     "invalid (list bad) in")
-  (assert-syntax-error (cli-specs ["name" -i bool ""])
+  (assert-syntax-error (cli-specs [name -i bool ""])
     "use |-i| or |-I| in")
-  (assert-syntax-error (cli-specs ["name" -I bool ""])
+  (assert-syntax-error (cli-specs [name -I bool ""])
     "use |-i| or |-I| in")
-  (assert-syntax-error (cli-specs ["name" -s bool "" (usage)])
+  (assert-syntax-error (cli-specs [name -s bool "" (usage)])
     "invalid (usage) in")
-  (assert-syntax-error (cli-specs ["name" -s bool "" (usage flubber)])
+  (assert-syntax-error (cli-specs [name -s bool "" (usage flubber)])
     "invalid (usage flubber) in")
 
   (do ([i 0 (+ i 1)]) ((= i #xFF))
     (unless (<= #xD800 i #xDFFF)
       (let* ([c (integer->char i)]
-             [name (format "char:~a" i)]
+             [name (string->symbol (format "char:~a" i))]
              [r (catch (realize-specs
                         (list (gen-spec-macro name c #f 'bool "" #f))))]
              [tuple (list (<arg-spec> make
@@ -138,7 +139,7 @@
           (match r
             [(`(<arg-spec>))
              (unless (char=? c #\-) ; -- is actually a valid long option
-               (assert (equal? r tuple))
+               (match r [,@tuple 'ok])
                (parse-command-line-arguments tuple '()))])])))))
 
 (mat check-specs ()
@@ -170,7 +171,7 @@
   (define (partial specs)
     (try-specs specs #t))
   (match-let*
-   ([(,valid) (cli-specs ["name" -s --long bool "help"])]
+   ([(,valid) (cli-specs [name -s --long bool "help"])]
     [#(bad-spec name 12 ,_)
      (full (list (<arg-spec> copy valid [name 12])))]
     [#(bad-spec short 12 ,_)
@@ -195,26 +196,26 @@
      (full (list (<arg-spec> copy valid [usage '(flubber)])))]
     [#(bad-spec conflicts 12 ,_)
      (full (list (<arg-spec> copy valid [conflicts 12])))]
-    [#(bad-spec conflicts (flubber) ,_)
-     (full (list (<arg-spec> copy valid [conflicts '(flubber)])))]
+    [#(bad-spec conflicts ("flubber") ,_)
+     (full (list (<arg-spec> copy valid [conflicts '("flubber")])))]
     [#(bad-spec requires 12 ,_)
      (full (list (<arg-spec> copy valid [requires 12])))]
-    [#(bad-spec requires (flubber) ,_)
-     (full (list (<arg-spec> copy valid [requires '(flubber)])))]
-    [#(bad-spec duplicate-spec "name" ,_)
+    [#(bad-spec requires ("flubber") ,_)
+     (full (list (<arg-spec> copy valid [requires '("flubber")])))]
+    [#(bad-spec duplicate-spec name ,_)
      (full (list valid (<arg-spec> copy valid [short #\a])))]
-    [#(bad-spec missing-specs ("does-not-exist") ,_)
-     (partial (list (<arg-spec> copy valid [requires '("does-not-exist")])))]
-    [#(bad-spec missing-specs ("does-not-exist") ,_)
-     (partial (list (<arg-spec> copy valid [conflicts '("does-not-exist")])))]
+    [#(bad-spec missing-specs (does-not-exist) ,_)
+     (partial (list (<arg-spec> copy valid [requires '(does-not-exist)])))]
+    [#(bad-spec missing-specs (does-not-exist) ,_)
+     (partial (list (<arg-spec> copy valid [conflicts '(does-not-exist)])))]
     ;; Function Specific
     [#(EXIT #(bad-spec duplicate-option-spec #\s ,_))
      (catch (parse-command-line-arguments
-             (list valid (<arg-spec> copy valid [name "name2"]))
+             (list valid (<arg-spec> copy valid [name 'name2]))
              '()))]
     [#(EXIT #(bad-spec duplicate-option-spec "long" ,_))
      (catch (parse-command-line-arguments
-             (list valid (<arg-spec> copy valid [name "name2"] [short #\t]))
+             (list valid (<arg-spec> copy valid [name 'name2] [short #\t]))
              '()))])
    'ok))
 
@@ -253,10 +254,10 @@
 (mat misc ()
   (define simple
     (cli-specs
-     ["b" -b bool "boolean"]
-     ["c" -c count "count"]
-     ["l" -l --list (list "l" ...) "list"]
-     ["s" -s --string (string "s") "string"]))
+     [b -b bool "boolean"]
+     [c -c count "count"]
+     [l -l --list (list "l" ...) "list"]
+     [s -s --string (string "s") "string"]))
   (define ls '("-b" "-c" "-s" "foo" "-l" "item1" "item2"))
 
   (define usage "Usage: Whoa! [-bc] [-l l ...] [-s s]\n")
@@ -271,13 +272,13 @@
   (check (parameterize ([command-line-arguments ls])
            (parse-command-line-arguments simple))
     (make-ht
-     ["b" #t]
-     ["c" 1]
-     ["l" (list "item1" "item2")]
-     ["s" "foo"]))
+     [b #t]
+     [c 1]
+     [l (list "item1" "item2")]
+     [s "foo"]))
   (match-let*
    ([,opt (parse-command-line-arguments simple ls)]
-    [#(EXIT #(no-spec-with-name "invalid")) (catch (opt "invalid"))]
+    [#(EXIT #(no-spec-with-name invalid)) (catch (opt 'invalid))]
     [,@usage
      (let ([op (open-output-string)])
        (parameterize ([current-output-port op])
@@ -307,17 +308,17 @@
     [,opt (parse-command-line-arguments (cli-specs) '("pos") fail)]
     [(("too many arguments: ~s" ("pos"))) problems]
     [,_ (reset)]
-    [,opt (parse-command-line-arguments (cli-specs ["pos" (list "p1" "p2") ""])
+    [,opt (parse-command-line-arguments (cli-specs [pos (list "p1" "p2") ""])
             '("pos") fail)]
     [(("option expects value: ~a" "p1 p2")) problems]
 
     ;; take-named failures
     [,_ (reset)]
-    [,opt (parse-command-line-arguments (cli-specs ["s" -s (string "s1") ""])
+    [,opt (parse-command-line-arguments (cli-specs [s -s (string "s1") ""])
             '("-s") fail)]
     [(("option expects value: ~a ~a" "-s" "s1")) problems]
     [,_ (reset)]
-    [,opt (parse-command-line-arguments (cli-specs ["l" -l (list "l1" "l2") ""])
+    [,opt (parse-command-line-arguments (cli-specs [l -l (list "l1" "l2") ""])
             '("-l") fail)]
     [(("option expects value: ~a ~a" "-l" "l1 l2")) problems]
 
@@ -339,9 +340,9 @@
 (mat named-bool ()
   (define simple
     (cli-specs
-     ["simple-flag" -s bool "simple flag only allowed once"]))
+     [simple-flag -s bool "simple flag only allowed once"]))
   (check (parse-command-line-arguments simple '("-s"))
-    (make-ht ["simple-flag" #t]))
+    (make-ht [simple-flag #t]))
   (check-error (catch (parse-command-line-arguments simple '("-s" "-s")))
     "Exception: duplicate option -s.")
   (check-error (catch (parse-command-line-arguments simple '("-ss")))
@@ -350,196 +351,196 @@
 (mat named-count ()
   (define simple
     (cli-specs
-     ["counted-flag" -c count
+     [counted-flag -c count
       "flag that is counted when specified multiple times"]))
   (check (parse-command-line-arguments simple '("-c"))
-    (make-ht ["counted-flag" 1]))
+    (make-ht [counted-flag 1]))
   (check (parse-command-line-arguments simple '("-c" "-c"))
-    (make-ht ["counted-flag" 2]))
+    (make-ht [counted-flag 2]))
   (check (parse-command-line-arguments simple '("-cc"))
-    (make-ht ["counted-flag" 2]))
+    (make-ht [counted-flag 2]))
   (check (parse-command-line-arguments simple '("-c" "-c" "-c"))
-    (make-ht ["counted-flag" 3]))
+    (make-ht [counted-flag 3]))
   (check (parse-command-line-arguments simple '("-ccc"))
-    (make-ht ["counted-flag" 3])))
+    (make-ht [counted-flag 3])))
 
 (mat named-single ()
   (define simple
     (cli-specs
-     ["simple-value" -s (string "<val>") "simple value only allowed once"]))
+     [simple-value -s (string "<val>") "simple value only allowed once"]))
   (check-error (catch (parse-command-line-arguments simple '("-s")))
     "Exception: option expects value: -s <val>.")
   (check (parse-command-line-arguments simple '("-s" "here"))
-    (make-ht ["simple-value" "here"]))
+    (make-ht [simple-value "here"]))
   (check-error (catch (parse-command-line-arguments simple '("-s" "here" "-s" "there")))
     "Exception: duplicate option -s.")
   ;; The empty string is a valid value.
   (check (parse-command-line-arguments simple '("-s" ""))
-    (make-ht ["simple-value" ""])))
+    (make-ht [simple-value ""])))
 
 (mat positional-single ()
   (define simple
     (cli-specs
-     ["simple-value" (string "<val>") "simple value only allowed once"]))
+     [simple-value (string "<val>") "simple value only allowed once"]))
   (check (parse-command-line-arguments simple '("one"))
-    (make-ht ["simple-value" "one"]))
+    (make-ht [simple-value "one"]))
   (check-error (catch (parse-command-line-arguments simple '("one" "two")))
     "Exception: too many arguments: (\"one\" \"two\").")
   ;; The empty string is a valid value.
   (check (parse-command-line-arguments simple '(""))
-    (make-ht ["simple-value" ""])))
+    (make-ht [simple-value ""])))
 
 (mat named-list ()
   (define simple
     (cli-specs
-     ["multiple-value" -m (list "x")
+     [multiple-value -m (list "x")
       "value that is accumulated when specified multiple times"]))
   (check-error (catch (parse-command-line-arguments simple '("-m")))
     "Exception: option expects value: -m x.")
   (check (parse-command-line-arguments simple '("-m" "here"))
-    (make-ht ["multiple-value" (list "here")]))
+    (make-ht [multiple-value (list "here")]))
   (check (parse-command-line-arguments simple '("-m" "here" "-m" "there"))
-    (make-ht ["multiple-value" (list "here" "there")])))
+    (make-ht [multiple-value (list "here" "there")])))
 
 (mat named-list/many ()
   (define cli
     (cli-specs
-     ["many" --many (list "x" ...) "list of many things"]
-     ["simple-flag" -s bool "simple flag only allowed once"]))
+     [many --many (list "x" ...) "list of many things"]
+     [simple-flag -s bool "simple flag only allowed once"]))
   (check (parse-command-line-arguments cli '("--many" "one"))
-    (make-ht ["many" (list "one")]))
+    (make-ht [many (list "one")]))
   (check (parse-command-line-arguments cli '("--many" "one" "two"))
-    (make-ht ["many" (list "one" "two")]))
+    (make-ht [many (list "one" "two")]))
   (check (parse-command-line-arguments cli '("--many" "one" "two" "three"))
-    (make-ht ["many" (list "one" "two" "three")]))
+    (make-ht [many (list "one" "two" "three")]))
   (check (parse-command-line-arguments cli '("--many" "one" "two" "--many" "three"))
-    (make-ht ["many" (list "one" "two" "three")]))
+    (make-ht [many (list "one" "two" "three")]))
   (check (parse-command-line-arguments cli '("--many" "one" "two" "-s" "--many" "three"))
-    (make-ht ["many" (list "one" "two" "three")] ["simple-flag" #t])))
+    (make-ht [many (list "one" "two" "three")] [simple-flag #t])))
 
 (mat positional-list/many ()
   (define cli
     (cli-specs
-     ["many" (list "x" ...) "list of many things"]
-     ["simple-flag" -s bool "simple flag only allowed once"]))
+     [many (list "x" ...) "list of many things"]
+     [simple-flag -s bool "simple flag only allowed once"]))
   (check (parse-command-line-arguments cli '("one"))
-    (make-ht ["many" (list "one")]))
+    (make-ht [many (list "one")]))
   (check (parse-command-line-arguments cli '("one" "two"))
-    (make-ht ["many" (list "one" "two")]))
+    (make-ht [many (list "one" "two")]))
   (check (parse-command-line-arguments cli '("one" "two" "three"))
-    (make-ht ["many" (list "one" "two" "three")]))
+    (make-ht [many (list "one" "two" "three")]))
   (check (parse-command-line-arguments cli '("one" "two" "-s"))
-    (make-ht ["many" (list "one" "two")] ["simple-flag" #t])))
+    (make-ht [many (list "one" "two")] [simple-flag #t])))
 
 (mat named-list/pattern ()
   (define cli
     (cli-specs
-     ["two" --two (list "one" "two") "list of two things"]))
+     [two --two (list "one" "two") "list of two things"]))
   (check-error (catch (parse-command-line-arguments cli '("--two" "one")))
     "Exception: option expects value: --two one two.")
   (check (parse-command-line-arguments cli '("--two" "one" "two"))
-    (make-ht ["two" (list "one" "two")])))
+    (make-ht [two (list "one" "two")])))
 
 (mat named-list/pattern-rest ()
   (define simple
     (cli-specs
-     ["simple-value" -s (string "<val>") "simple value only allowed once"]
-     ["cmd" -c (list "a" "b" . "x") "all the rest"]))
+     [simple-value -s (string "<val>") "simple value only allowed once"]
+     [cmd -c (list "a" "b" . "x") "all the rest"]))
   (check-error (catch (parse-command-line-arguments simple '("-c" "one")))
     "Exception: option expects value: -c a b x ....")
   (check (parse-command-line-arguments simple '("-s" "thing1" "-c" "one" "two"))
     (make-ht
-     ["simple-value" "thing1"]
-     ["cmd" (list "one" "two")]))
+     [simple-value "thing1"]
+     [cmd (list "one" "two")]))
   (check (parse-command-line-arguments simple '("-s" "abc" "-c" "1" "2" "3" "4"))
     (make-ht
-     ["simple-value" "abc"]
-     ["cmd" (list "1" "2" "3" "4")])))
+     [simple-value "abc"]
+     [cmd (list "1" "2" "3" "4")])))
 
 (mat positional-list/pattern ()
   (define cli
     (cli-specs
-     ["two" (list "one" "two") "list of two things"]
-     ["one" (list "one") "list of one thing"]
-     ["three" (list "one" "two" "three") "list of three things"]))
+     [two (list "one" "two") "list of two things"]
+     [one (list "one") "list of one thing"]
+     [three (list "one" "two" "three") "list of three things"]))
   (check (parse-command-line-arguments cli '("1/2" "2/2" "1/1" "1/3" "2/3" "3/3"))
     (make-ht
-     ["one" (list "1/1")]
-     ["three" (list "1/3" "2/3" "3/3")]
-     ["two" (list "1/2" "2/2")]))
+     [one (list "1/1")]
+     [three (list "1/3" "2/3" "3/3")]
+     [two (list "1/2" "2/2")]))
   (check-error (catch (parse-command-line-arguments cli '("1/2" "2/2" "1/1" "1/3")))
     "Exception: option expects value: one two three.")
   (check (parse-command-line-arguments cli '("1/2" "2/2"))
-    (make-ht ["two" (list "1/2" "2/2")]))
+    (make-ht [two (list "1/2" "2/2")]))
   (check-error (catch (parse-command-line-arguments cli '("1/2")))
     "Exception: option expects value: one two."))
 
 (mat positional-list/rest ()
   (define simple
     (cli-specs
-     ["simple-value" -s (string "<val>") "simple value only allowed once"]
-     ["rest" (list . "x") "all the rest"]))
+     [simple-value -s (string "<val>") "simple value only allowed once"]
+     [rest (list . "x") "all the rest"]))
   (check (parse-command-line-arguments simple '("-s" "thing1"))
-    (make-ht ["simple-value" "thing1"]))
+    (make-ht [simple-value "thing1"]))
   (check (parse-command-line-arguments simple '("-s" "thing1" "thing2"))
-    (make-ht ["simple-value" "thing1"] ["rest" (list "thing2")]))
+    (make-ht [simple-value "thing1"] [rest (list "thing2")]))
   (check (parse-command-line-arguments simple '("thing2" "-s" "thing1"))
-    (make-ht ["rest" (list "thing2" "-s" "thing1")])))
+    (make-ht [rest (list "thing2" "-s" "thing1")])))
 
 (mat positional-list/pattern-rest ()
   (define simple
     (cli-specs
-     ["simple-value" -s (string "<val>") "simple value only allowed once"]
-     ["cmd" (list "a" "b" . "x") "all the rest"]))
+     [simple-value -s (string "<val>") "simple value only allowed once"]
+     [cmd (list "a" "b" . "x") "all the rest"]))
   (check-error (catch (parse-command-line-arguments simple '("one")))
     "Exception: option expects value: a b x ....")
   (check (parse-command-line-arguments simple '("-s" "thing1" "one" "two"))
     (make-ht
-     ["simple-value" "thing1"]
-     ["cmd" (list "one" "two")]))
+     [simple-value "thing1"]
+     [cmd (list "one" "two")]))
   (check (parse-command-line-arguments simple '("-s" "abc" "1" "2" "3" "4"))
     (make-ht
-     ["simple-value" "abc"]
-     ["cmd" (list "1" "2" "3" "4")])))
+     [simple-value "abc"]
+     [cmd (list "1" "2" "3" "4")])))
 
 (mat dashdash ()
   (define cli
     (cli-specs
-     ["simple-flag" -s bool "simple flag only allowed once"]
-     ["dash" -- (list . "x") "help for --"]))
+     [simple-flag -s bool "simple flag only allowed once"]
+     [dash -- (list . "x") "help for --"]))
   (check (parse-command-line-arguments cli '("--"))
-    (make-ht ["dash" '()]))
+    (make-ht [dash '()]))
   (check (parse-command-line-arguments cli '("--" "foo"))
-    (make-ht ["dash" '("foo")]))
+    (make-ht [dash '("foo")]))
   (check (parse-command-line-arguments cli '("-s" "--" "foo"))
-    (make-ht ["dash" '("foo")] ["simple-flag" #t]))
+    (make-ht [dash '("foo")] [simple-flag #t]))
   (check (parse-command-line-arguments cli '("--" "-s" "foo"))
-    (make-ht ["dash" '("-s" "foo")]))
+    (make-ht [dash '("-s" "foo")]))
   (check (parse-command-line-arguments cli '("--" "-s" "--" "foo"))
-    (make-ht ["dash" '("-s" "--" "foo")])))
+    (make-ht [dash '("-s" "--" "foo")])))
 
 (mat requires1 ()
   (define cli
     (cli-specs
-     ["profile" --profile (string "<file>") "update the specified profile"]
-     ["coverage" --coverage (string "<file>") "write coverage report to <file>"
-      (requires '("profile"))]))
+     [profile --profile (string "<file>") "update the specified profile"]
+     [coverage --coverage (string "<file>") "write coverage report to <file>"
+      (requires '(profile))]))
   (check-error (catch (parse-command-line-arguments cli '("--coverage" "coverage.html")))
     "Exception: --coverage requires --profile.")
   (check (parse-command-line-arguments cli '("--coverage" "coverage.html" "--profile" "profile.dat"))
     (make-ht
-     ["coverage" "coverage.html"]
-     ["profile" "profile.dat"])))
+     [coverage "coverage.html"]
+     [profile "profile.dat"])))
 
 (mat requires2 ()
   (define cli
     (cli-specs
-     ["a" -a bool "option A"]
-     ["b" -b bool "option B requires A" (requires '("a"))]
-     ["c" -c bool "option C requires B" (requires '("b"))]
-     ["d" -d bool "option D requires A and B" (requires '("a" "b"))]))
+     [a -a bool "option A"]
+     [b -b bool "option B requires A" (requires '(a))]
+     [c -c bool "option C requires B" (requires '(b))]
+     [d -d bool "option D requires A and B" (requires '(a b))]))
   (check (parse-command-line-arguments cli '("-a"))
-    (make-ht ["a" #t]))
+    (make-ht [a #t]))
   (check-error (catch (parse-command-line-arguments cli '("-b")))
     "Exception: -b requires -a.")
   ;; we don't compute transitive closure
@@ -549,19 +550,19 @@
     "Exception: -d requires -a, -b."
     "Exception: -d requires -b, -a.")
   (check (parse-command-line-arguments cli '("-abcd"))
-    (make-ht ["a" #t] ["b" #t] ["c" #t] ["d" #t])))
+    (make-ht [a #t] [b #t] [c #t] [d #t])))
 
 (mat conflicts1 ()
   (define cli
     (cli-specs
-     ["a" -a --a bool "option A does not work with option B"
-      (conflicts '("b"))]
-     ["b" -b --b bool "option B does not work with option A"
-      (conflicts '("a"))]))
+     [a -a --a bool "option A does not work with option B"
+      (conflicts '(b))]
+     [b -b --b bool "option B does not work with option A"
+      (conflicts '(a))]))
   (check (parse-command-line-arguments cli '("-a"))
-    (make-ht ["a" #t]))
+    (make-ht [a #t]))
   (check (parse-command-line-arguments cli '("-b"))
-    (make-ht ["b" #t]))
+    (make-ht [b #t]))
   (check-error-or (catch (parse-command-line-arguments cli '("-a" "-b")))
     "Exception: --b conflicts with --a."
     "Exception: --a conflicts with --b."))
@@ -569,23 +570,23 @@
 (mat conflicts2 ()
   (define cli
     (cli-specs
-     ["a" -a bool "option A does not work with option C"]
-     ["b" -b bool "option B does not work with option C"]
-     ["c" -c bool "option C does not work with option A or B"
-      (conflicts '("a" "b"))]))
+     [a -a bool "option A does not work with option C"]
+     [b -b bool "option B does not work with option C"]
+     [c -c bool "option C does not work with option A or B"
+      (conflicts '(a b))]))
   (check (parse-command-line-arguments cli '("-a"))
-    (make-ht ["a" #t]))
+    (make-ht [a #t]))
   (check (parse-command-line-arguments cli '("-b"))
-    (make-ht ["b" #t]))
+    (make-ht [b #t]))
   (check (parse-command-line-arguments cli '("-c"))
-    (make-ht ["c" #t]))
+    (make-ht [c #t]))
   (check-error-or (catch (parse-command-line-arguments cli '("-abc")))
     "Exception: -c conflicts with -a, -b."
     "Exception: -c conflicts with -b, -a."))
 
 (mat format-spec ()
   (match-let*
-   ([(,valid) (cli-specs ["name" -s --long bool "help"])]
+   ([(,valid) (cli-specs [name -s --long bool "help"])]
     ["-s" (format-spec valid 'short)]
     ["--long" (format-spec valid 'long)]
     [#f (format-spec (<arg-spec> copy valid [type 'bool]) 'args)]
@@ -602,13 +603,13 @@
     ["[-s]" (format-spec valid '(opt short))]
     ["[--long]" (format-spec valid '(opt long))]
 
-    [(,req) (cli-specs ["name" -s --long bool "help" (usage (req short))])]
+    [(,req) (cli-specs [name -s --long bool "help" (usage (req short))])]
     ["-s" (format-spec req)]
-    [(,req) (cli-specs ["name" -s --long bool "help" (usage (req long))])]
+    [(,req) (cli-specs [name -s --long bool "help" (usage (req long))])]
     ["--long" (format-spec req)]
-    [(,opt) (cli-specs ["name" -s --long bool "help" (usage (opt short))])]
+    [(,opt) (cli-specs [name -s --long bool "help" (usage (opt short))])]
     ["[-s]" (format-spec opt)]
-    [(,opt) (cli-specs ["name" -s --long bool "help" (usage (opt long))])]
+    [(,opt) (cli-specs [name -s --long bool "help" (usage (opt long))])]
     ["[--long]" (format-spec opt)]
     ["[-s]" (format-spec valid #f)]
     )
@@ -636,52 +637,52 @@
       "-h, --help\\s+display this help and exit"))
 
   ;; named booleans
-  (usage "[-n]" (cli-specs ["named" -n bool "a boolean"]))
-  (usage "[--named]" (cli-specs ["named" --named bool "a boolean"]))
-  (usage "[-n]" (cli-specs ["named" -n --named bool "a boolean"]))
+  (usage "[-n]" (cli-specs [named -n bool "a boolean"]))
+  (usage "[--named]" (cli-specs [named --named bool "a boolean"]))
+  (usage "[-n]" (cli-specs [named -n --named bool "a boolean"]))
 
   ;; named counts
-  (usage "[-n]" (cli-specs ["named" -n count "a count"]))
-  (usage "[--named]" (cli-specs ["named" --named count "a count"]))
-  (usage "[-n]" (cli-specs ["named" -n --named count "a count"]))
+  (usage "[-n]" (cli-specs [named -n count "a count"]))
+  (usage "[--named]" (cli-specs [named --named count "a count"]))
+  (usage "[-n]" (cli-specs [named -n --named count "a count"]))
 
   ;; named string
-  (usage "[-n <val>]" (cli-specs ["named" -n (string "<val>") "a value"]))
-  (usage "[--named <val>]" (cli-specs ["named" --named (string "<val>") "a value"]))
-  (usage "[-n <val>]" (cli-specs ["named" -n --named (string "<val>") "a value"]))
+  (usage "[-n <val>]" (cli-specs [named -n (string "<val>") "a value"]))
+  (usage "[--named <val>]" (cli-specs [named --named (string "<val>") "a value"]))
+  (usage "[-n <val>]" (cli-specs [named -n --named (string "<val>") "a value"]))
 
   ;; named list one
-  (usage "[-n <val>]" (cli-specs ["named" -n (list "<val>") "a value"]))
-  (usage "[--named <val>]" (cli-specs ["named" --named (list "<val>") "a value"]))
-  (usage "[-n <val>]" (cli-specs ["named" -n --named (list "<val>") "a value"]))
+  (usage "[-n <val>]" (cli-specs [named -n (list "<val>") "a value"]))
+  (usage "[--named <val>]" (cli-specs [named --named (list "<val>") "a value"]))
+  (usage "[-n <val>]" (cli-specs [named -n --named (list "<val>") "a value"]))
 
   ;; named list many
   (usage "[-n <val> ...]"
-    (cli-specs ["named" -n (list "<val>" ...) "many values"]))
+    (cli-specs [named -n (list "<val>" ...) "many values"]))
   (usage "[--named <val> ...]"
-    (cli-specs ["named" --named (list "<val>" ...) "many values"]))
+    (cli-specs [named --named (list "<val>" ...) "many values"]))
   (usage "[-n <val> ...]"
-    (cli-specs ["named" -n --named (list "<val>" ...) "many values"]))
+    (cli-specs [named -n --named (list "<val>" ...) "many values"]))
 
   ;; named list rest
   (usage "[-n <val> ...]"
-    (cli-specs ["named" -n (list . "<val>") "rest values"]))
+    (cli-specs [named -n (list . "<val>") "rest values"]))
   (usage "[--named <val> ...]"
-    (cli-specs ["named" --named (list . "<val>") "rest values"]))
+    (cli-specs [named --named (list . "<val>") "rest values"]))
   (usage "[-n <val> ...]"
-    (cli-specs ["named" -n --named (list . "<val>") "rest values"]))
+    (cli-specs [named -n --named (list . "<val>") "rest values"]))
 
   ;; positionals
-  (usage "<pos>" (cli-specs ["pos" (string "<pos>") "a string positional"]))
-  (usage "<pos> ..." (cli-specs ["pos" (list "<pos>" ...) "a many positional"]))
-  (usage "<pos> ..." (cli-specs ["pos" (list . "<pos>") "a rest positional"]))
+  (usage "<pos>" (cli-specs [pos (string "<pos>") "a string positional"]))
+  (usage "<pos> ..." (cli-specs [pos (list "<pos>" ...) "a many positional"]))
+  (usage "<pos> ..." (cli-specs [pos (list . "<pos>") "a rest positional"]))
 
   ;; help contains whitespace only should not indent at all
-  (test "help" (cli-specs ["named" -n bool " "]) #f '(seek "^  -n$"))
+  (test "help" (cli-specs [named -n bool " "]) #f '(seek "^  -n$"))
 
   ;; help ends in whitespace should not write trailing whitespace
   (test "help"
-    (cli-specs ["named" -n bool "named help   "])
+    (cli-specs [named -n bool "named help   "])
     #f
     '(seek "^  -n\\s{16}named help$"))
 
@@ -691,9 +692,9 @@
   ;; non-whitespace characters
   (test "help"
     (cli-specs
-     ["regexp-pass" -r (list "<type>" "<regexp>")
+     [regexp-pass -r (list "<type>" "<regexp>")
       "report <regexp> matches as <type>={info|warning|error}"])
-    (make-ht ["regexp-pass" (list "info" "Zonk:.*")])
+    (make-ht [regexp-pass (list "info" "Zonk:.*")])
     '(seek
       "^  -r <type> <regexp>$"
       "^\\s{20}report <regexp> matches as <type>=\\{info\\|warning\\|error\\}$"
@@ -703,11 +704,11 @@
   ;; non-word, non-whitespace characters.
   (test "help"
     (cli-specs
-     ["format" --format (string "<format>")
+     [format --format (string "<format>")
       '("format specifiers that include the following"
         "substitution strings:"
         "%file, %type, %line, %column, %bfp, %efp, %msg")])
-    (make-ht ["format" "%file:%type:%line:%msg"])
+    (make-ht [format "%file:%type:%line:%msg"])
     '(seek
       "^  --format <format> format specifiers that include the following substitution$"
       "^\\s{20}strings: %file, %type, %line, %column, %bfp, %efp, %msg$"
@@ -715,7 +716,7 @@
 
   ;; multi-line help
   (test "multi"
-    (cli-specs ["multi" -m --multi bool
+    (cli-specs [multi -m --multi bool
                 '("line one\n"
                   "line two\n"
                   "line three")])
@@ -727,11 +728,11 @@
 
   ;; multi-line help with arg
   (test "multi"
-    (cli-specs ["multi" -m --multi bool
+    (cli-specs [multi -m --multi bool
                 '("line one\n"
                   "line two\n"
                   "line three")])
-    (make-ht ["multi" "input"])
+    (make-ht [multi "input"])
     '(seek
       "^  -m, --multi       line one$"
       "^\\s{20}line two$"
@@ -739,7 +740,7 @@
 
   ;; custom formatting: multiple specified newlines
   (test "multi"
-    (cli-specs ["multi" -m --multi bool
+    (cli-specs [multi -m --multi bool
                 '("line one\n\n"
                   "line three")])
     #f
@@ -750,13 +751,27 @@
 
   ;; custom formatting: whitespace followed by explicit newline
   (test "multi"
-    (cli-specs ["multi" -m --multi bool
+    (cli-specs [multi -m --multi bool
                 '("line one \n"
                   "line two")])
     #f
     '(seek
       "^  -m, --multi       line one$"
-      "^\\s{20}line two$")))
+      "^\\s{20}line two$"))
+
+  ;; display-help uses generic hashtable-ref so we can supply json object as
+  ;; the optional args parameter
+  (test "json"
+    (cli-specs
+     [foo -f --foo (string "<dest>") "help 1"]
+     [bar -b (string "<filter>") "help 2"]
+     [jar -j (string "<ball>") "help 3"])
+    (json:make-object [foo "pocalypse"] [bar "none"])
+    '(seek
+      "^  -f, --foo <dest>  help 1 \\(pocalypse\\)"
+      "^  -b <filter>       help 2 \\(none\\)"
+      "^  -j <ball>         help 3$"))
+  )
 
 (mat usage ()
   (define (test prefix exe-name specs width regexps)
@@ -775,44 +790,44 @@
 
   (usage "" '() #f)
 
-  (let ([specs (cli-specs ["name" --named bool "help"])])
+  (let ([specs (cli-specs [name --named bool "help"])])
     (usage "[--named]" specs #f)
     (usage "[--named]" specs 22)
     (usage "[options]" specs 0))
 
-  (let ([specs (cli-specs ["name" --named bool "help"]
-                 ["name2" -m --named2 bool "help"]
-                 ["name3" -o bool "help" (usage show opt)])])
+  (let ([specs (cli-specs [name --named bool "help"]
+                 [name2 -m --named2 bool "help"]
+                 [name3 -o bool "help" (usage show opt)])])
     (usage "[-mo] [--named]" specs #f)
     (usage "[-mo] [--named]" specs 28)
     (usage "[-o] [options]" specs 0)
     (usage "[-o] [options]" specs 27))
 
-  (let ([specs (cli-specs ["name" --named (string "<s>") "help"]
-                 ["name3" -o bool "help" (usage show opt)])])
+  (let ([specs (cli-specs [name --named (string "<s>") "help"]
+                 [name3 -o bool "help" (usage show opt)])])
     (usage "[-o] [--named <s>]" specs #f)
     (usage "[-o] [--named <s>]" specs 31)
     (usage "[-o] [options]" specs 0)
     (usage "[-o] [options]" specs 30))
 
-  (let ([specs (cli-specs ["name" (string "pos") "help"])])
+  (let ([specs (cli-specs [name (string "pos") "help"])])
     (usage "pos" specs #f)
     (usage "pos" specs 16)
     (usage "pos" specs 0))
 
-  (let ([specs (cli-specs ["name" (string "pos") "help" (usage opt)])])
+  (let ([specs (cli-specs [name (string "pos") "help" (usage opt)])])
     (usage "[pos]" specs #f)
     (usage "[pos]" specs 18)
     (usage "[pos]" specs 0))
 
   (let ([specs
          (cli-specs
-          ["o" -o --opt bool "" (usage opt)]
-          ["r" -r --req count "" (usage (req short))]
-          ["y" -y --yes count "" (usage show)]
-          ["s" -s --short (string "<s>") "" (usage short)]
-          ["l" -l --long (list "<l>" ...) "" (usage long)]
-          ["p" (list "<p>" ...) ""])])
+          [o -o --opt bool "" (usage opt)]
+          [r -r --req count "" (usage (req short))]
+          [y -y --yes count "" (usage show)]
+          [s -s --short (string "<s>") "" (usage short)]
+          [l -l --long (list "<l>" ...) "" (usage long)]
+          [p (list "<p>" ...) ""])])
     (usage "[-oy] [-s <s>] [--long <l> ...] -r <p> ..." specs #f)
     (usage "[-y] [options] <p> ..." specs 0)
     (usage "[-y] [options] <p> ..." specs 35)
@@ -828,10 +843,10 @@
 
   (let ([specs
          (let ()
-           (define template (car (cli-specs ["a" -a bool ""])))
+           (define template (car (cli-specs [a -a bool ""])))
            (define (make-short i basis)
              (<arg-spec> copy template
-               [name (format "~a~a" basis i)]
+               [name (string->symbol (format "~a~a" basis i))]
                [short (integer->char (+ i (char->integer basis)))]))
            (do ([i 0 (+ i 1)]
                 [ls '() (cons (make-short i #\a) ls)])

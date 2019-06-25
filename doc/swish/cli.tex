@@ -70,17 +70,17 @@ which we can use to access the parsed command-line values. Finally, we use
 > (define example-cli
     (cli-specs
      default-help
-     ["verbose" -v count "indicates verbosity level"]
-     ["output" -o (string "<output>") "print output to an <output> file"]
-     ["repl" --repl bool "start a repl"]
-     ["files" (list "<file>" ...) "a list of input files"]))
+     [verbose -v count "indicates verbosity level"]
+     [output -o (string "<output>") "print output to an <output> file"]
+     [repl --repl bool "start a repl"]
+     [files (list "<file>" ...) "a list of input files"]))
 > (command-line-arguments '("-vvv" "-o" "file.out" "file.in"))
 > (define opt (parse-command-line-arguments example-cli))
-> (opt "verbose")
+> (opt 'verbose)
 3
-> (opt "output")
+> (opt 'output)
 "file.out"
-> (opt "files")
+> (opt 'files)
 ("file.in")
 > (display-help "sample" example-cli)
 Usage: sample [-hv] [-o <output>] [--repl] <file> ...
@@ -101,19 +101,19 @@ example albeit incomplete.
 (define example-cli
   (cli-specs
    default-help
-   ["verbose" -v count "indicates verbosity level"]
-   ["output" -o (string "<output>") "print output to an <output> file"]
-   ["repl" --repl bool "start a repl"]
-   ["files" (list "<file>" ...) "a list of input files"]))
+   [verbose -v count "indicates verbosity level"]
+   [output -o (string "<output>") "print output to an <output> file"]
+   [repl --repl bool "start a repl"]
+   [files (list "<file>" ...) "a list of input files"]))
 
 (let ([opt (parse-command-line-arguments example-cli)])
-  (when (opt "help")
+  (when (opt 'help)
     (display-help "sample" example-cli)
     (exit 0))
-  (let ([verbosity (or (opt "verbose") 0)])
+  (let ([verbosity (or (opt 'verbose) 0)])
     (when (> verbosity 0)
       (printf "showing verbosity level: ~a~n" verbosity)))
-  (when (opt "repl")
+  (when (opt 'repl)
     (new-cafe)))
 \codeend
 
@@ -140,7 +140,7 @@ uniquely identifies a specification, and is used to retrieve parsed
 argument values and check constraints.
 
 \begin{argtbl}
-  \argrow{name}{a string to identify the argument}
+  \argrow{name}{a symbol to identify the argument}
   \argrow{short}{a symbol of the form \sopt{x}, where \var{x} is a
     single character, see below}
   \argrow{long}{a symbol of the form \lopt{x}, where \var{x} is a string}
@@ -390,7 +390,7 @@ arguments. Providing a \var{fail} procedure allows a developer to
 accumulate parsing errors without necessarily generating exceptions.
 
 \begin{tupledef}{<arg-spec>}
-  \argrow{name}{a string to use as the key of the output hash table}
+  \argrow{name}{a symbol to use as the key of the output hash table}
   \argrow{type}{see Figure~\ref{fig:cli-types}}
   \argrow{short}{\code{\#f} $|$ a character}
   \argrow{long}{\code{\#f} $|$ a string }

@@ -30,47 +30,48 @@
 (define shared-cli
   (cli-specs
    ;; -L and -s are allowed in testing and REPL
-   ["libdirs" -L (list "<libdir>") "add <libdir> to library-directories"]
-   ["srcdirs" -s (list "<srcdir>") "add <srcdir> to source-directories"]
-   ["help" -h --help (list "[<section>]" ...)
+   [libdirs -L (list "<libdir>") "add <libdir> to library-directories"]
+   [srcdirs -s (list "<srcdir>") "add <srcdir> to source-directories"]
+   [help -h --help (list "[<section>]" ...)
     (format "display help, <section>={~{~a~^|~}}" help-sections)
     (usage hide)]
-   ["version" --version bool "print version information"]))
+   [version --version bool "print version information"]))
 
 (define test-only-cli
   (cli-specs
-   ["incl-tags" --tag (list "<tag>") "run only the tests with this tag"]
-   ["excl-tags" --not (list "<tag>") "exclude tests with this tag"]
-   ["progress" --progress (string "<mode>") "<mode>={test|suite|none}"]
-   ["specs" (list . "<spec>") "directory | suite [{test | -t test} ...]"]))
+   [incl-tags --tag (list "<tag>") "run only the tests with this tag"]
+   [excl-tags --not (list "<tag>") "exclude tests with this tag"]
+   [progress --progress (string "<mode>") "<mode>={test|suite|none}"]
+   [specs (list . "<spec>") "directory | suite [{test | -t test} ...]"]))
 
 (define test-and-report-cli
   (cli-specs
-   ["load-prof" --load-profile (list "<file>" "<file>" ...)
+   [load-prof --load-profile (list "<file>" "<file>" ...)
     "load the specified profile(s)"]
-   ["save-prof" --save-profile (string "<file>")
+   [save-prof --save-profile (string "<file>")
     "save profile data to specified file"]
-   ["report" --report (string "<file>") "write report to <file> in format determined by extension"]
-   ["coverage" --coverage (string "<file>") "write coverage report to <file>"]
-   ["exclude" --exclude (list "<glob>")
+   [report --report (string "<file>")
+    "write report to <file> in format determined by extension"]
+   [coverage --coverage (string "<file>") "write coverage report to <file>"]
+   [exclude --exclude (list "<glob>")
     "exclude these files from coverage report"]
-   ["include" --include (list "<glob>") "override exclude for coverage report"]))
+   [include --include (list "<glob>") "override exclude for coverage report"]))
 
 (define report-only-cli
   (cli-specs
-   ["harvest" --harvest (list "<from>" "<from>" ...)
+   [harvest --harvest (list "<from>" "<from>" ...)
     "load mat results from the specified files and directories"]
-   ["load-results" --load-results (string "<file>")
+   [load-results --load-results (string "<file>")
     "load harvested mat results from <file>"
-    (conflicts '("harvest"))]))
+    (conflicts '(harvest))]))
 
 (define testing-cli
   (append shared-cli test-only-cli test-and-report-cli))
 
 (define repl-cli
   (cli-specs
-   ["repl" --repl bool "start a repl" (usage show req)]
-   ["files" (list "<file>" ...) "load remaining arguments"]))
+   [repl --repl bool "start a repl" (usage show req)]
+   [files (list "<file>" ...) "load remaining arguments"]))
 
 (define any-cli (append testing-cli report-only-cli repl-cli))
 
@@ -148,7 +149,7 @@
      (display-usage "Usage:" who testing-cli)
      (display-usage "   or:" who (append shared-cli repl-cli))]
     [(all help)
-     (when ht (hashtable-delete! ht "help"))
+     (when ht (hashtable-delete! ht 'help))
      (display-options shared-cli ht)
      (printf "\n  Test-only options:\n")
      (display-options test-only-cli ht)
@@ -649,7 +650,7 @@
      (append repl-cli testing-cli) ;; ensure repl's 'files option comes before testing's 'specs option
      (command-line-arguments)
      (lambda x (unless problem (set! problem x)))))
-  (if (repl-opt "repl")
+  (if (repl-opt 'repl)
       (if problem
           (apply fail problem)
           repl-opt)
@@ -659,7 +660,7 @@
 (define opt (try-parse))
 
 (cond
- [(opt "srcdirs") =>
+ [(opt 'srcdirs) =>
   (lambda (srcdirs)
     (source-directories (append srcdirs (source-directories))))])
 
@@ -668,18 +669,18 @@
   (lambda (x acc)
     (append (parse-library x) acc))
   (library-directories)
-  (or (opt "libdirs") '())))
+  (or (opt 'libdirs) '())))
 
 (cond
  [(zero? (hashtable-size (opt))) (usage #t '() #f)]
- [(opt "help") =>
+ [(opt 'help) =>
   (lambda (sections)
     (usage #f (map string->symbol sections) (opt)))]
- [(opt "version")
+ [(opt 'version)
   (printf "~a Version ~a (~a)\n" who
     (software-version 'swish)
     (software-revision 'swish))]
- [(hashtable-ref (opt) "repl" #f)
+ [(hashtable-ref (opt) 'repl #f)
   (let ([ignored
          (remq #f
            (map (lambda (x)
@@ -689,46 +690,46 @@
              testing-cli))])
     (when (pair? ignored)
       (printf "~@[Ignoring ~{~a~^, ~} in ~a mode\n~]" ignored
-        (option-named "repl"))))
-  (apply (scheme-start) (cons "--" (or (opt "files") '())))]
+        (option-named 'repl))))
+  (apply (scheme-start) (cons "--" (or (opt 'files) '())))]
  [else
-  (let ([incl-tags (map string->symbol (or (opt "incl-tags") '()))]
-        [excl-tags (map string->symbol (or (opt "excl-tags") '()))]
-        [exclude (or (opt "exclude") '())]
-        [include (or (opt "include") '())]
-        [save-prof (opt "save-prof")]
-        [load-prof (opt "load-prof")]
-        [progress (string->symbol (or (opt "progress") "test"))]
-        [report (opt "report")]
-        [coverage (opt "coverage")]
+  (let ([incl-tags (map string->symbol (or (opt 'incl-tags) '()))]
+        [excl-tags (map string->symbol (or (opt 'excl-tags) '()))]
+        [exclude (or (opt 'exclude) '())]
+        [include (or (opt 'include) '())]
+        [save-prof (opt 'save-prof)]
+        [load-prof (opt 'load-prof)]
+        [progress (string->symbol (or (opt 'progress) "test"))]
+        [report (opt 'report)]
+        [coverage (opt 'coverage)]
         [suites (sort (lambda (s1 s2) (string<? (car s1) (car s2)))
-                  (extract-suites (or (opt "specs") '())))])
-    (check-report-format report "report")
+                  (extract-suites (or (opt 'specs) '())))])
+    (check-report-format report 'report)
     (cond
      [(and load-prof (not (or save-prof coverage)))
       (fail "~a requires ~a or ~a"
-        (option-named "load-prof")
-        (option-named "save-prof")
-        (option-named "coverage"))]
+        (option-named 'load-prof)
+        (option-named 'save-prof)
+        (option-named 'coverage))]
      [(and coverage (not (or load-prof save-prof)))
       (fail "~a requires ~a or ~a"
-        (option-named "coverage")
-        (option-named "load-prof")
-        (option-named "save-prof"))]
-     [(and report (not (or (opt "harvest") (opt "load-results") (pair? suites))))
+        (option-named 'coverage)
+        (option-named 'load-prof)
+        (option-named 'save-prof))]
+     [(and report (not (or (opt 'harvest) (opt 'load-results) (pair? suites))))
       (fail "~a requires ~a or ~a or ~a"
-        (option-named "report")
-        (option-named "harvest")
-        (option-named "load-results")
-        (option-named "files"))]
-     [(and (opt "harvest") (pair? suites))
+        (option-named 'report)
+        (option-named 'harvest)
+        (option-named 'load-results)
+        (option-named 'files))]
+     [(and (opt 'harvest) (pair? suites))
       (fail "~a conflicts with ~a"
-        (option-named "harvest")
-        (option-named "files"))]
-     [(and (opt "load-results") (pair? suites))
+        (option-named 'harvest)
+        (option-named 'files))]
+     [(and (opt 'load-results) (pair? suites))
       (fail "~a conflicts with ~a"
-        (option-named "load-results")
-        (option-named "files"))])
+        (option-named 'load-results)
+        (option-named 'files))])
     (let ([test-files (map car suites)]
           [uuid (uuid->string (osi_make_uuid))])
       (define report-files (map ->report-filename test-files))
@@ -739,13 +740,13 @@
          (lambda (load-fn)
            (match (catch (get-real-path load-fn))
              [#(EXIT ,reason)
-              (fail "~a ~a: file not found" (option-named "load-prof") load-fn)]
+              (fail "~a ~a: file not found" (option-named 'load-prof) load-fn)]
              [,full-load-fn full-load-fn]))
          (or load-prof '())))
       (define (truncate-profile)
         (match (catch (open-file-to-replace save-prof))
           [#(EXIT ,reason)
-           (fail "~a ~a failed (~a)" (option-named "save-prof") save-prof
+           (fail "~a ~a failed (~a)" (option-named 'save-prof) save-prof
              (exit-reason->english reason))]
           [,op (close-port op)]))
       (cond
@@ -791,14 +792,14 @@
             [no-tests (set! no-tests (cons suite no-tests))])))
       (let ([summary
              (cond
-              [(opt "load-results") =>
+              [(opt 'load-results) =>
                (lambda (filename)
                  (match (catch (json:bytevector->object (read-file filename)))
                    [#(EXIT ,reason)
                     (fail "cannot load results from ~a: ~a" filename
                       (exit-reason->english reason))]
                    [,results results]))]
-              [(opt "harvest") => harvest]
+              [(opt 'harvest) => harvest]
               [else (map load-results (filter file-exists? report-files))])])
         (when report
           (match (assoc (path-extension report) report-formats)
@@ -813,7 +814,7 @@
           (if (profile:dump-html (or save-prof load-prof) coverage include exclude)
               (printf "see ~a\n" (path->file-uri (get-real-path coverage)))
               (printf "no profile to dump\n")))
-        (console-summary summary (or report coverage (opt "load-results") (opt "harvest")))
+        (console-summary summary (or report coverage (opt 'load-results) (opt 'harvest)))
         (match (filter (lambda (fn) (string=? "ms" (path-extension fn))) no-tests)
           [() (exit status)]
           [,expected-tests

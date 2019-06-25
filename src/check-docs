@@ -24,16 +24,16 @@
 (define cli
   (cli-specs
    default-help
-   ["all" -a --all bool "Show all information."]
-   ["exclude" -e --exclude (list "<regexp>") "Exclude identifiers matching <regexp>."]
-   ["documented" -d --documented bool "Show documented entries."]
-   ["undocumented" -u --undocumented bool "Show entries that have no documentation."]
-   ["duplicated" -D --duplicated bool "Show with duplicate documentation."]
-   ["not-exported" -x --not-exported bool "Show unexported entries that have documentation."]
-   ["libraries" -L --library (list "<library>") "Use exports from <library>. Defaults to \"(swish imports)\"."]
-   ["debug-excluded" --debug-excluded bool "Show excluded entries."
-    (requires '("exclude"))]
-   ["repo-root" (string "<dir>") "The swish repository root to check."]))
+   [all -a --all bool "Show all information."]
+   [exclude -e --exclude (list "<regexp>") "Exclude identifiers matching <regexp>."]
+   [documented -d --documented bool "Show documented entries."]
+   [undocumented -u --undocumented bool "Show entries that have no documentation."]
+   [duplicated -D --duplicated bool "Show with duplicate documentation."]
+   [not-exported -x --not-exported bool "Show unexported entries that have documentation."]
+   [libraries -L --library (list "<library>") "Use exports from <library>. Defaults to \"(swish imports)\"."]
+   [debug-excluded --debug-excluded bool "Show excluded entries."
+    (requires '(exclude))]
+   [repo-root (string "<dir>") "The swish repository root to check."]))
 
 (define opt (parse-command-line-arguments cli))
 
@@ -57,7 +57,7 @@
 
 (define exclude?
   (cond
-   [(opt "exclude") =>
+   [(opt 'exclude) =>
     (lambda (ls)
       (let ([regexp (pregexp (format "~{~a~^|~}" ls))])
         (lambda (s)
@@ -116,7 +116,7 @@
 (define (dump dir)
   (let ([exports (make-hashtable symbol-hash eq?)])
     (for-each (add-exports! exports)
-      (or (opt "libraries") '("(swish imports)")))
+      (or (opt 'libraries) '("(swish imports)")))
     (for-each
      (lambda (fullname)
        (let ([file (path-last fullname)])
@@ -140,7 +140,7 @@
       (report-category 'undocumented partitions)
       (report-category 'not-exported partitions)
       (report-category 'duplicated partitions exports)
-      (when (opt "debug-excluded") ;; exclude from --all
+      (when (opt 'debug-excluded) ;; exclude from --all
         (report-category 'debug-excluded partitions)))))
 
 (define report-category
@@ -149,7 +149,7 @@
     (report-category category partitions #f)]
    [(category partitions exports)
     (let ([members (hashtable-ref partitions category #f)])
-      (when (and members (or (opt "all") (opt (symbol->string category))))
+      (when (and members (or (opt 'all) (opt category)))
         (let ([sorted (sort (lambda (a b) (string<? (symbol->string a) (symbol->string b))) members)])
           (printf "~a:\n~{  ~a\n~}" category
             (if exports
@@ -157,8 +157,8 @@
                 sorted)))))]))
 
 (cond
- [(opt "help") (display-help (app:name) cli)]
- [(not (find opt '("all" "documented" "undocumented" "duplicated" "not-exported" "debug-excluded")))
+ [(opt 'help) (display-help (app:name) cli)]
+ [(not (find opt '(all documented undocumented duplicated not-exported debug-excluded)))
   (display-usage "Usage:" (app:name) cli)]
- [(opt "repo-root") => dump]
+ [(opt 'repo-root) => dump]
  [else (dump (current-directory))])

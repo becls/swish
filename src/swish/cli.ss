@@ -42,7 +42,7 @@
    )
 
   (define-tuple <arg-spec>
-    name                            ; string that appears in output ht
+    name                            ; symbol that appears in output ht
     type                            ;
     short                           ; #f | character
     long                            ; #f | string
@@ -181,7 +181,7 @@
                          (not (null? (scdr usage-clause)))))
           (syntax-error spec (format "invalid ~a in" usage)))
         #`(<arg-spec> make
-            [name #,name]
+            [name '#,name]
             [type '#,type]
             [short #,short]
             [long #,long]
@@ -194,7 +194,7 @@
       (syntax-case spec ()
         [default-help
          (eq? (datum default-help) 'default-help)
-         (translate #'["help" -h --help bool "display this help and exit" (usage fit)])]
+         (translate #'[help -h --help bool "display this help and exit" (usage fit)])]
         [(name short long type help . optionals)
          (and (short? #'short) (long? #'long))
          (spec-maker spec #'name #'short #'long #'type #'help #'optionals)]
@@ -218,7 +218,7 @@
   (define (partial-check-specs specs) (check-specs-help specs #f))
 
   (define (check-specs-help specs check-missing?)
-    (let ([ht (make-hashtable string-hash string=?)])
+    (let ([ht (make-hashtable symbol-hash eq?)])
       (define (specs-missing ls)
         (fold-right
          (lambda (x acc)
@@ -230,7 +230,7 @@
       (for-each
        (lambda (s)
          (<arg-spec> open s [name type short long help usage])
-         (unless (string? name) (bad-spec 'name name s))
+         (unless (symbol? name) (bad-spec 'name name s))
          (unless (or (not short) (and (char? short) (valid-short-char? short)))
            (bad-spec 'short short s))
          (unless (or (not long) (string? long)) (bad-spec 'long long s))
@@ -247,14 +247,14 @@
        specs)
       (for-each
        (lambda (s)
-         (<arg-spec> open s [name conflicts requires])
-         (unless (and (list? conflicts) (for-all string? conflicts))
+         (<arg-spec> open s [conflicts requires])
+         (unless (and (list? conflicts) (for-all symbol? conflicts))
            (bad-spec 'conflicts conflicts s))
          (when check-missing?
            (let ([missing (specs-missing conflicts)])
              (unless (null? missing)
                (bad-spec 'missing-specs missing s))))
-         (unless (and (list? requires) (for-all string? requires))
+         (unless (and (list? requires) (for-all symbol? requires))
            (bad-spec 'requires requires s))
          (when check-missing?
            (let ([missing (specs-missing requires)])
@@ -304,7 +304,7 @@
         (or (starts-with? arg "--")
             (and (> (string-length arg) 0) (shortish? arg))))
 
-      (define ht (make-hashtable string-hash string=?))
+      (define ht (make-hashtable symbol-hash eq?))
 
       (define (update-list ht name value)
         (hashtable-update! ht name

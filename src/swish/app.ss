@@ -102,11 +102,11 @@
   (define cli
     (cli-specs
      default-help
-     ["verbose" --verbose bool "trace boot file search"]
-     ["version" --version bool "print version information"]
-     ["quiet" -q bool "suppress startup message and prompt string"]
-     ["args" -- (list . "arg") "remaining arguments are files to load"]
-     ["files" (list . "file") "execute file with remaining arguments"]))
+     [verbose --verbose bool "trace boot file search"]
+     [version --version bool "print version information"]
+     [quiet -q bool "suppress startup message and prompt string"]
+     [args -- (list . "arg") "remaining arguments are files to load"]
+     [files (list . "file") "execute file with remaining arguments"]))
 
   (define (try-import)
     ;; Try to import the available swish libraries, since that is convenient for
@@ -141,21 +141,21 @@
 
   (define (run)
     (let* ([opt (parse-command-line-arguments cli)]
-           [files (or (opt "files") '())])
+           [files (or (opt 'files) '())])
       (cond
-       [(opt "help")
+       [(opt 'help)
         (display-help (path-last (osi_get_executable_path)) cli (opt))
         (values)]
-       [(opt "version")
+       [(opt 'version)
         (print-banner (software-revision))
         (values)]
        [(null? files)                   ; repl
-        (let ([filenames (or (opt "args") '())])
-          (unless (opt "quiet")
+        (let ([filenames (or (opt 'args) '())])
+          (unless (opt 'quiet)
             (print-banner #f)
             (flush-output-port))
           (try-import)
-          (parameterize ([waiter-prompt-string (if (opt "quiet") "" ">")])
+          (parameterize ([waiter-prompt-string (if (opt 'quiet) "" ">")])
             (for-each load filenames)
             (new-cafe)))]
        [else                            ; script

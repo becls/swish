@@ -28,38 +28,38 @@
 
 (define escape-hatch
   (cli-specs
-   ["explicit-source" -- (list . "<source>") "source filename"]))
+   [explicit-source -- (list . "<source>") "source filename"]))
 
 (define shared-cli
   (cli-specs
-   ["verbose" -v count "show more compiler messages"]
-   ["output-file" -o (string "<output>") "write output to <output>"]
-   ["libdirs" -L (list "<libdir>") "add <libdir> to library-directories"]
-   ["srcdirs" -s (list "<srcdir>") "add <srcdir> to source-directories"]
-   ["rt-libs" --rtlib (list "<lib>" ...)
+   [verbose -v count "show more compiler messages"]
+   [output-file -o (string "<output>") "write output to <output>"]
+   [libdirs -L (list "<libdir>") "add <libdir> to library-directories"]
+   [srcdirs -s (list "<srcdir>") "add <srcdir> to source-directories"]
+   [rt-libs --rtlib (list "<lib>" ...)
     '("visit compiled libraries <lib> ... before compiling <source>;"
       "these libraries are added to <output> unless otherwise"
       "specified, in which case they must be provided at run time."
       "Look for <lib> ... in library-directories (-L) if not found.")]
-   ["help" -h --help (list "[<section>]" ...)
+   [help -h --help (list "[<section>]" ...)
     (format "display help, <section>={~{~a~^|~}}" help-sections)]
-   ["version" --version bool "print version information"]
+   [version --version bool "print version information"]
    ))
 
 (define library-cli
   (cli-specs
-   ["source-file" (string "<source>") "library source filename (or -- <source>)"]
-   ["as-library" --library bool "make a compiled library; <output> omits --rtlib libraries"
+   [source-file (string "<source>") "library source filename (or -- <source>)"]
+   [as-library --library bool "make a compiled library; <output> omits --rtlib libraries"
     (usage show req)]))
 
 (define app-cli
   (cli-specs
-   ["source-file" (string "<source>") "program source filename (or -- <source>)"]
-   ["component" -c bool "make component; <output> omits --rtlib libraries"
-    (conflicts '("boot-files"))]
-   ["boot-files" -b (list "<boot-file>")
+   [source-file (string "<source>") "program source filename (or -- <source>)"]
+   [component -c bool "make component; <output> omits --rtlib libraries"
+    (conflicts '(boot-files))]
+   [boot-files -b (list "<boot-file>")
     "make stand-alone program including <boot-file>"]
-   ["libs-visible" --libs-visible bool
+   [libs-visible --libs-visible bool
     "make imported libraries visible to eval"]))
 
 (define swish-lib?
@@ -164,7 +164,7 @@
      (display-usage "Usage:" who (append shared-cli app-cli))
      (display-usage "   or:" who (append shared-cli library-cli))]
     [(all help)
-     (when ht (hashtable-delete! ht "help"))
+     (when ht (hashtable-delete! ht 'help))
      (display-options shared-cli ht)
      (printf "\n  Program target options:\n")
      (display-options app-cli ht)
@@ -384,7 +384,7 @@
          (rename-path wpo-file (change-extension output-fn ".wpo"))
          missing)]
       [(component linked stand-alone)
-       (let ([missing (compile-whole-program wpo-file output-fn (opt "libs-visible"))])
+       (let ([missing (compile-whole-program wpo-file output-fn (opt 'libs-visible))])
          (rm-f wpo-file)
          missing)])))
 
@@ -535,7 +535,7 @@
      (append escape-hatch shared-cli library-cli)
      (command-line-arguments)
      (lambda x (unless problem (set! problem x)))))
-  (if (lib-opt "as-library")
+  (if (lib-opt 'as-library)
       (if problem
           (apply fail problem)
           lib-opt)
@@ -544,23 +544,23 @@
 (define opt (try-parse))
 
 (define (source-file)
-  (match (opt "explicit-source")
-    [#f (opt "source-file")]
-    [() (opt "source-file")]
-    [(,source-fn) (and (not (opt "source-file")) source-fn)]
+  (match (opt 'explicit-source)
+    [#f (opt 'source-file)]
+    [() (opt 'source-file)]
+    [(,source-fn) (and (not (opt 'source-file)) source-fn)]
     [,_ #f]))
 
 (cond
- [(opt "srcdirs") =>
+ [(opt 'srcdirs) =>
   (lambda (srcdirs)
     (source-directories (append srcdirs (source-directories))))])
 
 (cond
  [(zero? (hashtable-size (opt))) (usage #t '() #f)]
- [(opt "help") =>
+ [(opt 'help) =>
   (lambda (sections)
     (usage #f (map string->symbol sections) (opt)))]
- [(opt "version")
+ [(opt 'version)
   (printf "~a Version ~a (~a)\n" who
     (software-version 'swish)
     (software-revision 'swish))]
@@ -569,21 +569,21 @@
           (or (source-file)
               (fail "requires a single source filename"))]
          [output-fn
-          (or (opt "output-file")
+          (or (opt 'output-file)
               (fail "requires output filename"))]
          [target-type
           (cond
-           [(hashtable-ref (opt) "as-library" #f) 'library]
-           [(opt "boot-files") 'stand-alone]
-           [(opt "component") 'component]
+           [(hashtable-ref (opt) 'as-library #f) 'library]
+           [(opt 'boot-files) 'stand-alone]
+           [(opt 'component) 'component]
            [else 'linked])]
          [libdirs (fold-right
                    (lambda (x acc)
                      (append (parse-library x) acc))
                    (library-directories)
-                   (or (opt "libdirs") '()))]
-         [rt-libs (resolve-rt-libs (or (opt "rt-libs") '()) libdirs)])
-    (verbosity (or (opt "verbose") 0))
+                   (or (opt 'libdirs) '()))]
+         [rt-libs (resolve-rt-libs (or (opt 'rt-libs) '()) libdirs)])
+    (verbosity (or (opt 'verbose) 0))
     (import-notify (> (verbosity) 2))
     (target-case target-type
       [(library)
@@ -593,7 +593,7 @@
       [(stand-alone)
        ;; Add location of swish system .wpo files only if we're building a
        ;; stand-alone program (boot-files non-empty).
-       (let* ([boot-files (map resolve-boot-file (opt "boot-files"))]
+       (let* ([boot-files (map resolve-boot-file (opt 'boot-files))]
               [swish-wpo?
                (or (null? rt-libs)
                    ;; don't use wpo for swish library if we're including it as a
