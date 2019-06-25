@@ -29,6 +29,7 @@
 
 (define shared-cli
   (cli-specs
+   ;; -L and -s are allowed in testing and REPL
    ["libdirs" -L (list "<libdir>") "add <libdir> to library-directories"]
    ["srcdirs" -s (list "<srcdir>") "add <srcdir> to source-directories"]
    ["help" -h --help (list "[<section>]" ...)
@@ -36,32 +37,42 @@
     (usage hide)]
    ["version" --version bool "print version information"]))
 
-(define misc-cli
+(define test-only-cli
   (cli-specs
    ["incl-tags" --tag (list "<tag>") "run only the tests with this tag"]
    ["excl-tags" --not (list "<tag>") "exclude tests with this tag"]
+   ["progress" --progress (string "<mode>") "<mode>={test|suite|none}"]
+   ["specs" (list . "<spec>") "directory | suite [{test | -t test} ...]"]))
+
+(define test-and-report-cli
+  (cli-specs
    ["load-prof" --load-profile (list "<file>" "<file>" ...)
     "load the specified profile(s)"]
    ["save-prof" --save-profile (string "<file>")
     "save profile data to specified file"]
-   ["progress" --progress (string "<mode>") "<mode>={test|suite|none}"]
-   ["report" --report (string "<file>") "write HTML report to <file>"]
+   ["report" --report (string "<file>") "write report to <file> in format determined by extension"]
    ["coverage" --coverage (string "<file>") "write coverage report to <file>"]
    ["exclude" --exclude (list "<glob>")
     "exclude these files from coverage report"]
    ["include" --include (list "<glob>") "override exclude for coverage report"]))
 
+(define report-only-cli
+  (cli-specs
+   ["harvest" --harvest (list "<from>" "<from>" ...)
+    "load mat results from the specified files and directories"]
+   ["load-results" --load-results (string "<file>")
+    "load harvested mat results from <file>"
+    (conflicts '("harvest"))]))
+
 (define testing-cli
-  (append misc-cli
-    (cli-specs
-     ["specs" (list . "<spec>") "directory | suite [{test | -t test} ...]"])))
+  (append shared-cli test-only-cli test-and-report-cli))
 
 (define repl-cli
   (cli-specs
    ["repl" --repl bool "start a repl" (usage show req)]
    ["files" (list "<file>" ...) "load remaining arguments"]))
 
-(define any-cli (append shared-cli testing-cli repl-cli))
+(define any-cli (append testing-cli report-only-cli repl-cli))
 
 (define swish (osi_get_executable_path))
 (define swish-libdir (path-parent swish))
@@ -72,6 +83,23 @@
 (define (wrap indent . texts)
   (wrap-text (current-output-port)
     (- (help-wrap-width) indent) indent indent (join texts #\space)))
+
+(define report-formats '(("json" . json) ("html" . html) ("htm" . html)))
+
+(define (check-report-format report-fn key)
+  (when (and report-fn (not (assoc (path-extension report-fn) report-formats)))
+    (fail
+     (oxford-comma
+      "cannot determine output format from ~a ~a, expected ~{"
+      ".~a" " or " "~} extension")
+     (option-named key)
+     report-fn
+     (map car report-formats))))
+
+(define-syntax foreach
+  (syntax-rules ()
+    [(_ ([var ls] ...) body0 body1 ...)
+     (for-each (lambda (var ...) body0 body1 ...) ls ...)]))
 
 (define-syntax example
   (syntax-rules ()
@@ -100,25 +128,54 @@
      [(pair? sections) sections]
      [short? '(usage)]
      [else '(usage help)]))
+  (define supported-formats
+    (let ([ht (make-hashtable string-hash string=?)])
+      (foreach ([fmt report-formats])
+        (match fmt
+          [(,ext . ,type)
+           (hashtable-update! ht (symbol->string type)
+             (lambda (prev) (cons ext prev))
+             '())]))
+      (format "~@?." (oxford-comma "~a" " and ")
+        (map (lambda (fmt)
+               (format (oxford-comma "~{~a (~@{" "\".~a\"" " or " "~})~}")
+                 fmt))
+          (vector->list
+           (vector-sort (lambda (a b) (string<? (car a) (car b)))
+             (hashtable-cells ht)))))))
   (any-sections selected
     [(all usage)
-     (display-usage "Usage:" who (append shared-cli testing-cli))
+     (display-usage "Usage:" who testing-cli)
      (display-usage "   or:" who (append shared-cli repl-cli))]
     [(all help)
      (when ht (hashtable-delete! ht "help"))
      (display-options shared-cli ht)
-     (printf "\n  Testing options:\n")
-     (display-options testing-cli ht)
+     (printf "\n  Test-only options:\n")
+     (display-options test-only-cli ht)
+     (printf "\n  Test and report options:\n")
+     (display-options test-and-report-cli ht)
+     (printf "\n  Report-only options:\n")
+     (display-options report-only-cli ht)
      (printf "\n  REPL options:\n")
      (display-options repl-cli ht)]
     [(all details)
      (wrap 0
-       "By default, " who " runs all tests found by searching for *.ms files"
-       "in the current directory and its subdirectories. To run a limited set"
-       "of tests, specify a suite or a suite and test or use --tag or --not to"
-       "filter tests based on tags.\n"
+       "By default, " who " runs all tests in the specified test suites."
+       "To run a limited set of tests, specify a suite or a suite and test"
+       "or use --tag or --not to filter tests based on tags.\n"
        "\n"
-       "If --report <file> is specified, " who " writes an HTML report to that file."
+       "Test suites are files with a \".ms\" or \".ss\" extension listed"
+       "explicitly on the command line or found by recursively searching"
+       "the specified directories."
+       "Files with a \".ms\" extension are expected to contain tests,"
+       "called mats, defined via the mat macro or the add-mat procedure"
+       "exported by the (swish mat) library."
+       "Files with a \".ss\" extension may contain mats following the"
+       "\"#!eof mats\" tokens.\n"
+       "\n"
+       "If --report <file> is specified, " who " writes a test report to that file"
+       "in a format determined by the file extension."
+       "Supported formats for the report are:" supported-formats
        "If --coverage <file> is specified, " who " writes an HTML coverage report"
        "to that file."
        "The glob arguments to --include and --exclude should be quoted to prevent"
@@ -128,10 +185,19 @@
     [(all examples)
      (printf "Examples:\n")
      (newline)
-     (example (who "--progress suite --report result.html .")
+     (example (who "--progress suite --report results.html .")
        "Run all tests found in the current directory and its subdirectories."
        "Echo suite-level progress output to the console and write detailed results"
-       "to result.html.\n")
+       "to results.html, overwriting the file if it exists.\n")
+     (example (who "--progress suite --report results.json .")
+       "As above, but write results in JSON format rather than HTML.\n")
+     (example (who "--harvest src --report results.json")
+       "Harvest test results from \"*.mo\" files found under the src"
+       "directory and write the results to results.json in JSON format,"
+       "overwriting the file if it exists.\n")
+     (example (who "--load-results results.json --report results.html")
+       "Generate an HTML report form a JSON report file,"
+       "overwriting results.html if it exists.\n")
      (example (who "--save-profile prof.dat src")
        "Save profile data to prof.dat while running all tests found"
        "under the src directory, overwriting prof.dat if it exists.\n")
@@ -139,7 +205,7 @@
        "Load profile data from p1.dat and p2.dat and save to both.prof.\n")
      (example (who "-s src --load-profile p1 p2 --coverage ./cov/summary.html")
        "Load profile data from p1 and p2 and generate a coverage report"
-       "in ./cov/summary.html,adding \"src\" to the set of directories"
+       "in ./cov/summary.html, adding \"src\" to the set of directories"
        "searched for source files referenced in the profile.\n")
      (example (who "src/foo.ms")
        "run all tests in ./src/foo.ms\n")
@@ -201,9 +267,7 @@
                     (scan next dir c))))
             (substring s (scan #,bfp 1 #f) (scan #,efp -1 #f)))))))
 
-(define (html-report filename report-files)
-  (define mat-data* (map load-results report-files))
-  (define op (open-file-to-replace filename))
+(define (html-report filename mat-data*)
   (define js-code
     ((extract-block-comment
 #|
@@ -486,8 +550,8 @@
             (div (@ (class "vscroll"))
               (table (@ (id "content"))))))))))
 
-(define (console-summary report-files reporting?)
-  (let-values ([(pass fail skip completed attempted) (summarize report-files)])
+(define (console-summary mat-data* reporting?)
+  (let-values ([(pass fail skip completed attempted) (summarize-results mat-data*)])
     (when reporting?
       (printf "Tests run: ~s   Pass: ~s   Fail: ~s   Skip: ~s\n\n"
         (+ pass fail) pass fail skip))
@@ -512,11 +576,6 @@
 
 (define (->report-filename filename)
   (string-append filename ".mo"))
-
-(define-syntax foreach
-  (syntax-rules ()
-    [(_ ([var ls] ...) body0 body1 ...)
-     (for-each (lambda (var ...) body0 body1 ...) ls ...)]))
 
 (define (extract-suites specs)
   (let ([ht (make-hashtable string-hash string=?)])
@@ -562,24 +621,40 @@
        [else
         (fail "expected directory or suite: ~s" (car specs))]))))
 
+(define (harvest from*)
+  (let ([ht (make-hashtable string-hash string=?)])
+    (define (get-results from)
+      (match (catch (load-results from))
+        [#(EXIT ,reason)
+         (fail "cannot load mat results from ~a: ~a" from
+           (exit-reason->english reason))]
+        [,results results]))
+    (define (add! from)
+      (if (directory? from)
+          (for-each add! (find-files from "mo"))
+          (hashtable-set! ht from #t)))
+    (for-each add! from*)
+    (vector->list (vector-map get-results (hashtable-keys ht)))))
+
 (define (option-named name)
   (format-spec
    (or (find (lambda (x) (equal? name (<arg-spec> name x))) any-cli)
        (fail "[internal] no option named ~s" name))
-   '(or long short)))
+   '(or long short args)))
 
 (define (try-parse)
   (define problem #f)
   (define repl-opt
     (parse-command-line-arguments
-     (append shared-cli misc-cli repl-cli)
+     (append repl-cli testing-cli) ;; ensure repl's 'files option comes before testing's 'specs option
      (command-line-arguments)
      (lambda x (unless problem (set! problem x)))))
   (if (repl-opt "repl")
       (if problem
           (apply fail problem)
           repl-opt)
-      (parse-command-line-arguments (append shared-cli testing-cli))))
+      (parse-command-line-arguments
+       (append testing-cli report-only-cli))))
 
 (define opt (try-parse))
 
@@ -608,9 +683,10 @@
   (let ([ignored
          (remq #f
            (map (lambda (x)
-                  (and (opt (<arg-spec> name x))
+                  (and (not (memq x shared-cli))
+                       (opt (<arg-spec> name x))
                        (format-spec x '(or long short))))
-             misc-cli))])
+             testing-cli))])
     (when (pair? ignored)
       (printf "~@[Ignoring ~{~a~^, ~} in ~a mode\n~]" ignored
         (option-named "repl"))))
@@ -627,6 +703,7 @@
         [coverage (opt "coverage")]
         [suites (sort (lambda (s1 s2) (string<? (car s1) (car s2)))
                   (extract-suites (or (opt "specs") '())))])
+    (check-report-format report "report")
     (cond
      [(and load-prof (not (or save-prof coverage)))
       (fail "~a requires ~a or ~a"
@@ -637,7 +714,21 @@
       (fail "~a requires ~a or ~a"
         (option-named "coverage")
         (option-named "load-prof")
-        (option-named "save-prof"))])
+        (option-named "save-prof"))]
+     [(and report (not (or (opt "harvest") (opt "load-results") (pair? suites))))
+      (fail "~a requires ~a or ~a or ~a"
+        (option-named "report")
+        (option-named "harvest")
+        (option-named "load-results")
+        (option-named "files"))]
+     [(and (opt "harvest") (pair? suites))
+      (fail "~a conflicts with ~a"
+        (option-named "harvest")
+        (option-named "files"))]
+     [(and (opt "load-results") (pair? suites))
+      (fail "~a conflicts with ~a"
+        (option-named "load-results")
+        (option-named "files"))])
     (let ([test-files (map car suites)]
           [uuid (uuid->string (osi_make_uuid))])
       (define report-files (map ->report-filename test-files))
@@ -698,15 +789,31 @@
             [fail (set! status 1)]
             [skip (set! status 1)]
             [no-tests (set! no-tests (cons suite no-tests))])))
-      (let ([report-files (filter file-exists? report-files)])
+      (let ([summary
+             (cond
+              [(opt "load-results") =>
+               (lambda (filename)
+                 (match (catch (json:bytevector->object (read-file filename)))
+                   [#(EXIT ,reason)
+                    (fail "cannot load results from ~a: ~a" filename
+                      (exit-reason->english reason))]
+                   [,results results]))]
+              [(opt "harvest") => harvest]
+              [else (map load-results (filter file-exists? report-files))])])
         (when report
-          (html-report report report-files)
-          (printf "see ~a\n" (path->file-uri (get-real-path report))))
+          (match (assoc (path-extension report) report-formats)
+            [(,_ . json)
+             (let ([op (open-file-to-replace report)])
+               (on-exit (close-port op)
+                 (json:write op summary 0)))]
+            [(,_ . html)
+             (html-report report summary)
+             (printf "see ~a\n" (path->file-uri (get-real-path report)))]))
         (when coverage
           (if (profile:dump-html (or save-prof load-prof) coverage include exclude)
               (printf "see ~a\n" (path->file-uri (get-real-path coverage)))
               (printf "no profile to dump\n")))
-        (console-summary report-files (or report coverage))
+        (console-summary summary (or report coverage (opt "load-results") (opt "harvest")))
         (match (filter (lambda (fn) (string=? "ms" (path-extension fn))) no-tests)
           [() (exit status)]
           [,expected-tests

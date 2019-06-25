@@ -94,7 +94,13 @@
     '() "--coverage requires --load-profile or --save-profile")
   ;; check for required options before complaining about missing file
   (nonzero-exit (swish-test "--load-profile file-that-does-not-exist")
-    '() "--load-profile requires --save-profile or --coverage"))
+    '() "--load-profile requires --save-profile or --coverage")
+  (nonzero-exit (swish-test "--report foo.html")
+    '() "--report requires --harvest or --load-results or <file> ...")
+  (nonzero-exit (swish-test "--harvest . --progress none .")
+    '() "--harvest conflicts with <file> ...")
+  (nonzero-exit (swish-test "--load-results foo.json .")
+    '() "--load-results conflicts with <file> ..."))
 
 (isolate-mat load-this ()
   (write-test-file "test-load-this.ss"
@@ -205,7 +211,7 @@
         (profile:save)
         (exit)))
     `(seek
-      "Ignoring --tag, --not, --load-profile, --save-profile, --progress in --repl mode"
+      "Ignoring --tag, --not, --progress, --load-profile, --save-profile in --repl mode"
       seek
       "(\"luke\" \"\\.\")"))
   (when (whereis 'profiler)
@@ -364,7 +370,13 @@
    (list
     (format "~a *pass$" (pregexp-quote file1))
     (format "~a *pass$" (pregexp-quote file2))
-    (format "~a *fail$" (pregexp-quote file3)))))
+    (format "~a *fail$" (pregexp-quote file3))))
+  ;; test --harvest directory processing
+  (let ([combined.json (path-combine (output-dir) "combined.json")])
+    (zero-exit
+     (swish-test "--report " combined.json " --harvest "
+       (path-combine (output-dir) test-dir0))
+     '("Tests run: 7   Pass: 6   Fail: 1   Skip: 0"))))
 
 (isolate-mat spec-processing ()
   (define common-name-file
@@ -636,6 +648,83 @@
        (lambda () (summarize (list mo-path1 mo-path2)))
        list)])
    'ok)
+  (let ([aggregate.json (path-combine (output-dir) "aggregate.json")]
+        [aggregate.html (path-combine (output-dir) "aggregate.html")]
+        [alt.html (path-combine (output-dir) "alt.html")]
+        [summary-output
+         '("Tests run: 3   Pass: 1   Fail: 2   Skip: 1"
+           seek
+           "Some test suite did not complete")])
+    ;; re-run test-file for harvest tests, skipping 1
+    (nonzero-exit
+     (swish-test "--progress none --not tag1 " test-file)
+     '())
+    ;; --harvest alone prints summary and incomplete notice
+    (zero-exit
+     (swish-test "--harvest " mo-path1 " " mo-path2 " " mo-path3 " " incomplete)
+     summary-output)
+    ;; --harvest for report also prints summary and incomplete notice
+    (zero-exit
+     (swish-test
+      "--harvest " mo-path1 " " mo-path2 " " mo-path3 " " incomplete
+      " --report " aggregate.json)
+     summary-output)
+    ;; --load-results alone prints summary and incomplete notice
+    (zero-exit
+     (swish-test "--load-results " aggregate.json)
+     summary-output)
+    ;; --load-results and --report generating HTML output prints same summary
+    (zero-exit
+     (swish-test "--load-results " aggregate.json " --report " aggregate.html)
+     (cons "see file:.*aggregate.html" summary-output))
+    ;; can generate same HTML report via --harvest and --report
+    (zero-exit
+     (swish-test
+      "--harvest " mo-path1 " " mo-path2 " " mo-path3 " " incomplete
+      " --report " alt.html)
+     (cons "see file:.*alt.html" summary-output))
+    ;; check the HTML report output
+    (match-let*
+     ([,expected (read-file aggregate.html)]
+      [,_ ;; we get the same HTML output both ways
+       (assert (equal? expected (read-file alt.html)))]
+      [,content (utf8->string expected)]
+      [,mat-data* (get-data content)]
+      [,find-suite
+       (lambda (test-file)
+         (find (lambda (x)
+                 (equal? test-file (json:ref (mat-data-meta-data x) 'test-file #f)))
+           mat-data*))]
+      [,mo1 (find-suite test-file)]
+      [,test1-result (find-test 'TEST1 mo1)]
+      [,test2-result (find-test 'TEST2 mo1)]
+      [,test3-result (find-test 'TEST3 mo1)]
+      ["pass" (json:ref test1-result 'type #f)]
+      ["skip" (json:ref test2-result 'type #f)]
+      ["fail" (json:ref test3-result 'type #f)]
+      [,mo2 (find-suite test-file2)]
+      [() (mat-data-results mo2)]
+      [,mo3 (find-suite test-file3)]
+      [,zero-result (find-test 'zero mo3)]
+      ["fail" (json:ref zero-result 'type #f)]
+      ["Exception in bug: didn't handle zero" (json:ref zero-result 'message #f)]
+      [(,_)
+       (pregexp-match "continuation in bug.*at line 5, char 15"
+         (json:ref zero-result 'stack "no stack"))]
+      [,mo4 (find-suite "incomplete.ms")]
+      [#f (json:ref mo4 '(meta-data completed) "bupkis")]
+      [() (mat-data-results mo4)])
+     'ok))
+  ;; try harvesting from the wrong place
+  (nonzero-exit
+   (swish-test "--harvest " mo-path1 " " report-file1)
+   '()
+   "swish-test: cannot load mat results from.*report1.html: Unexpected input at position")
+  ;; try loading results from the wrong place
+  (nonzero-exit
+   (swish-test "--load-results " report-file1)
+   '()
+   "swish-test: cannot load results from.*report1.html: Unexpected input at position")
   )
 
 (isolate-mat incomplete ()
@@ -717,7 +806,12 @@
   (zero-exit
    ;; don't complain if non-.ms file contains no tests
    (swish-test source-file)
-   '()))
+   '())
+  (nonzero-exit
+   (swish-test "--report foobar")
+   '()
+   "cannot determine output format from --report foobar, expected .json, .html, or .htm extension")
+  )
 
 ;; We shut down the profiler temporarily in some places to avoid interfering
 ;; with the profile:start call in swish-test; this means the coverage report
