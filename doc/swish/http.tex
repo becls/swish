@@ -466,7 +466,7 @@ Scheme types:
   \var{string} & \var{string} \\
   \var{number} & \var{number} \\
   \var{array} & \var{list} \\
-  \var{object} & symbol hashtable mapping symbols to values \\
+  \var{object} & hashtable mapping symbols to values \\
 
   \hline
 \end{tabular}
@@ -480,8 +480,8 @@ JavaScript implementation can interpret the data.
 \end{syntax}
 
 The \code{json:extend-object} construct adds the \var{key} /
-\var{value} pairs to the symbol hashtable \var{ht} using
-\code{symbol-hashtable-set!}. Each \var{key} is a literal identifier
+\var{value} pairs to the hashtable \var{ht} using
+\code{hashtable-set!}. Each \var{key} is a literal identifier
 or an unquoted expression \code{,\var{e}} that evaluates to a
 symbol. The resulting expression returns \var{ht}.
 
@@ -491,7 +491,34 @@ symbol. The resulting expression returns \var{ht}.
 \end{syntax}
 
 The \code{json:make-object} construct expands into a call to
-\code{json:extend-object} with a new symbol hashtable.
+\code{json:extend-object} with a new hashtable.
+
+\defineentry{json:object?}
+\begin{procedure}
+  \code{(json:object? \var{x}}
+\end{procedure}
+\returns{} a boolean
+
+The \code{json:object?} procedure determines whether or not the datum
+\var{x} is an object created by \code{json:make-object}.
+
+\defineentry{json:cells}
+\begin{procedure}
+  \code{(json:cells \var{ht})}
+\end{procedure}
+\returns{} a vector
+
+The \code{json:cells} procedure returns a vector containing the
+cells of the underlying hashtable.
+
+\defineentry{json:size}
+\begin{procedure}
+  \code{(json:size \var{ht})}
+\end{procedure}
+\returns{} an integer
+
+The \code{json:size} procedure returns the number of cells
+in the underlying hashtable.
 
 \defineentry{json:delete!}
 \begin{procedure}
@@ -502,12 +529,12 @@ The \code{json:make-object} construct expands into a call to
 The \code{json:delete!} procedure expects \var{path} to be a symbol or
 a non-empty list of symbols.
 If \var{path} is a symbol, then \code{json:delete!} is equivalent
-to \code{symbol-hashtable-delete!}.
+to \code{hashtable-delete!}.
 Otherwise, \code{json:delete!} follows \var{path} as it descends into
 the nested hashtable \var{ht}, treating each element as a key into
 the hashtable reached by traversing the preceding elements.
 When \code{json:delete!} reaches the final key in \var{path},
-it calls \code{symbol-hashtable-delete!} to remove the association for
+it calls \code{hashtable-delete!} to remove the association for
 that key in the hashtable reached at that point.
 If any key along the way does not map to a hashtable,
 \code{json:delete!} has no effect.
@@ -522,16 +549,39 @@ If any key along the way does not map to a hashtable,
 The \code{json:ref} procedure expects \var{path} to be a symbol or
 a non-empty list of symbols.
 If \var{path} is a symbol, then \code{json:ref} is equivalent
-to \code{symbol-hashtable-ref}.
+to \code{hashtable-ref}.
 Otherwise, \code{json:ref} follows \var{path} as it descends into
 the nested hashtable \var{ht}, treating each element as a key into
 the hashtable reached by traversing the preceding elements.
 When \code{json:ref} reaches the final key in \var{path},
-it calls \code{symbol-hashtable-ref} to retrieve the value of that key
+it calls \code{hashtable-ref} to retrieve the value of that key
 in the hashtable reached at that point.
 If any key along the way does not map to a hashtable,
 or if the final hashtable does not contain the final key,
 \code{json:ref} returns \var{default}.
+
+\defineentry{json:set!}
+\begin{procedure}
+  \code{(json:set! \var{ht} \var{path} \var{value})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{json:set!} procedure expects \var{path} to be a symbol or
+a non-empty list of symbols.
+If \var{path} is a symbol, then \code{json:set!} is equivalent
+to \code{hashtable-set!}.
+Otherwise, \code{json:set!} follows \var{path} as it descends into
+the nested hashtable \var{ht}, treating each element as a key into
+the hashtable reached by traversing the preceding elements.
+When \code{json:set!} reaches the final key in \var{path},
+it calls \code{hashtable-set!} to set that key in the
+hashtable reached at that point.
+If any key along the way does not map to a hashtable,
+\code{json:set!} installs an empty hashtable at that key
+before proceding.
+If \var{path} is malformed at some point, \code{json:set!} may
+still mutate hashtables along the valid portion of the path
+before reporting an error.
 
 \defineentry{json:update!}
 \begin{procedure}
@@ -542,12 +592,12 @@ or if the final hashtable does not contain the final key,
 The \code{json:update!} procedure expects \var{path} to be a symbol or
 a non-empty list of symbols.
 If \var{path} is a symbol, then \code{json:update!} is equivalent
-to \code{symbol-hashtable-update!}.
+to \code{hashtable-update!}.
 Otherwise, \code{json:update!} follows \var{path} as it descends into
 the nested hashtable \var{ht}, treating each element as a key into
 the hashtable reached by traversing the preceding elements.
 When \code{json:update!} reaches the final key in \var{path},
-it calls \code{symbol-hashtable-update!} to update that key in the
+it calls \code{hashtable-update!} to update that key in the
 hashtable reached at that point.
 If any key along the way does not map to a hashtable,
 \code{json:update!} installs an empty hashtable at that key

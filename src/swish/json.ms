@@ -29,15 +29,15 @@
  (swish testing)
  )
 
-(define (symbol<? x y)
-  (string<? (symbol->string x) (symbol->string y)))
+(define (cell<? x y)
+  (string<? (symbol->string (car x)) (symbol->string (car y))))
 
 (define (dump x)
   (cond
-   [(symbol-hashtable? x)
+   [(json:object? x)
     (vector-map
-     (lambda (k) (cons k (dump (symbol-hashtable-ref x k #f))))
-     (vector-sort symbol<? (hashtable-keys x)))]
+     (lambda (cell) (cons (car cell) (dump (cdr cell))))
+     (vector-sort cell<? (hashtable-cells x)))]
    [(pair? x) (map dump x)]
    [else x]))
 
@@ -239,12 +239,12 @@
   (define-tuple <obj> a b c)
   (define dne (box #t))
   (define (must-ref ht key)
-    (let ([hit (symbol-hashtable-ref ht key dne)])
+    (let ([hit (json:ref ht key dne)])
       (if (eq? hit dne)
           (errorf 'must-ref "did not find ~s" key)
           hit)))
   (define (custom-inflate x)
-    (match (symbol-hashtable-ref x '_type_ #f)
+    (match (json:ref x '_type_ #f)
       ["<obj>"
        (<obj> make
          [a (must-ref x 'a)]
@@ -268,8 +268,7 @@
          [name (symbol->string x)])]
       [,_ #f]))
   (define (hashtable->alist ht)
-    (sort (lambda (a b) (symbol<? (car a) (car b)))
-      (vector->list (hashtable-cells ht))))
+    (sort cell<? (vector->list (hashtable-cells ht))))
   (define (compare x y)
     (cond
      [(eqv? x y) 'ok]
@@ -281,8 +280,8 @@
      [(vector? x)
       (and (vector? y)
            (compare (vector->list x) (vector->list y)))]
-     [(symbol-hashtable? x)
-      (and (symbol-hashtable? y)
+     [(json:object? x)
+      (and (json:object? y)
            (compare (hashtable->alist x) (hashtable->alist y)))]
      [else #f]))
   (define (nop-custom-inflate x) x)
@@ -311,6 +310,17 @@
     [ok (compare x (json:string->object string custom-inflate))]
     [,bv (json:object->bytevector x #f custom-write)]
     [ok (compare x (json:bytevector->object bv custom-inflate))])
+   'ok))
+
+(mat object ()
+  (match-let*
+   ([#t (json:object? (json:make-object))]
+    [#t (json:object? (json:make-object [foo '(1 2 3)]))]
+    [#f (json:object? 7)]
+    [#f (json:object? (make-hashtable string-hash string=?))]
+    [#t (json:object? (json:string->object "{}"))]
+    [#f (json:object? (json:string->object "[1,2,3]"))]
+    [#t (json:object? (json:string->object "{\"abc\":[3,4]}"))])
    'ok))
 
 (mat errors ()
@@ -391,7 +401,12 @@
      (let ([obj (json:make-object [tarry (json:make-object)])])
        (catch (json:delete! obj '(tarry "not"))))]
     [#(EXIT #(bad-arg json:delete! #\z))
-     (catch (json:delete! (json:make-object) #\z))])
+     (catch (json:delete! (json:make-object) #\z))]
+    [#(EXIT #(bad-arg json:size large))
+     (catch (json:size 'large))]
+    [#(EXIT #(bad-arg json:set! 1))
+     (catch (json:set! 1 2 3))]
+    )
    'ok))
 
 (mat stable-ordering ()
@@ -425,11 +440,15 @@
 (mat manipulate ()
   (match-let*
    ([,obj (json:make-object)]
+    [#() (json:cells obj)]
+    [0 (json:size obj)]
     [1 (json:ref obj 'not-found 1)]
     [2 (json:ref obj '(not-found) 2)]
     [3 (json:ref obj '(not-found "either") 3)]
     [,_ (json:update! obj 'count values 0)]
     [0 (json:ref obj 'count 'wrong)]
+    [#((count . 0)) (json:cells obj)]
+    [1 (json:size obj)]
     [,_ (json:update! obj 'count add1 9000)]
     [1 (json:ref obj 'count 'wrong)]
     [,_ (json:update! obj '(count) list 'wrong)]
@@ -437,11 +456,11 @@
     [,_ (json:update! obj 'new vector "init")]
     [#("init") (json:ref obj 'new 'wrong)]
     [,_ (json:update! obj '(new world) string-upcase "order")]
-    [#t (hashtable? (json:ref obj 'new 'wrong))]
+    [#t (json:object? (json:ref obj 'new 'wrong))]
     ["ORDER" (json:ref obj '(new world) 'wrong)]
     [other (json:ref obj '(New World) 'other)]
     [,_ (json:update! obj '(new)
-          (lambda (ht) (assert (symbol-hashtable? ht)) 123)
+          (lambda (ht) (assert (json:object? ht)) 123)
           'wrong)]
     [123 (json:ref obj 'new 'wrong)]
     [,_ (json:update! obj '(new deeper path a b c) values 'quarry)]
@@ -456,6 +475,7 @@
     ["okay" (json:ref obj '(new deeper path A B D) 'wrong)]
     [quarry (json:ref obj '(new deeper path a b c) 'wrong)]
     ["abcd" (json:ref obj '(new deeper path a b D) 'wrong)]
+    [2 (json:size obj)]
     [,_ (json:delete! obj '(new deeper path a b D))]
     [gone (json:ref obj '(new deeper path a b D) 'gone)]
     [,_ (json:update! obj '(new) hashtable? 7)]
@@ -466,6 +486,9 @@
     [#f (json:ref obj '(new) 'wrong)]
     [,_ (json:update! obj 'count car 'wrong)]
     [#((count . 1) (new . #f)) (dump obj)]
+    [,_ (json:set! obj '(count dracula) 13)]
+    [#((count . #((dracula . 13))) (new . #f)) (dump obj)]
+    [,_ (json:set! obj 'count 1)]
     [,_ (json:delete! obj '(count blessings))]
     [#((count . 1) (new . #f)) (dump obj)]
     [,_ (json:delete! obj 'not-found)]
@@ -475,7 +498,13 @@
     [,_ (json:delete! obj '(new))]
     [#() (dump obj)]
     [,_ (json:delete! obj '(new))]
-    [#() (dump obj)])
+    [#() (dump obj)]
+    [,ht (make-hashtable symbol-hash eq?)]
+    [#(EXIT #(bad-arg json:delete! ,@ht)) (catch (json:delete! ht 'foo))]
+    [#(EXIT #(bad-arg json:ref ,@ht)) (catch (json:ref ht 'foo #f))]
+    [#(EXIT #(bad-arg json:update! ,@ht))
+     (catch (json:update! ht 'foo values #f))]
+    )
    'ok)
   ;; - behavior of json:update! is unspecified if given invalid path
   ;;   such as (foo . bar)
