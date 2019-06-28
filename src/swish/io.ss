@@ -269,7 +269,7 @@
           (set-port-position! ip start)))
     (port-position ip))
 
-  (define (future-sorted-cells ht create-time cell->record cell->handle)
+  (define (sorted-cells ht create-time cell->record cell->handle)
     ;; cell is in ht iff its cell->handle is not #f
     (define (cell<? x1 x2)
       (let ([t1 (create-time (cell->record x1))] [t2 (create-time (cell->record x2))])
@@ -299,7 +299,7 @@
         (vector-for-each
          (lambda (x)
            (print-one op (cell->record x) (cell->handle x)))
-         (future-sorted-cells table get-create-time cell->record cell->handle))]))
+         (sorted-cells table get-create-time cell->record cell->handle))]))
     (hashtable-update! foreign-handle-reporters name
       (lambda (prev)
         (when prev (raise `#(type-already-registered ,name)))
@@ -387,9 +387,6 @@
         (fprintf op "  ~d: ~a opened ~d\n" handle
           (osi-port-name p)
           (osi-port-create-time p)))))
-
-  (define (sorted-cells ht create-time)
-    (future-sorted-cells ht create-time car cdr))
 
   (define osi-port-count (foreign-handle-count 'osi-ports))
   (define print-osi-ports (foreign-handle-print 'osi-ports))
@@ -764,41 +761,31 @@
      (immutable create-time)
      (mutable handle)))
 
-  (define listener-guardian (make-guardian))
-  (define listener-table (make-weak-eq-hashtable))
+  (define tcp-listeners
+    (make-foreign-handle-guardian 'tcp-listeners
+      listener-handle
+      listener-handle-set!
+      listener-create-time
+      (lambda (l) (close-tcp-listener l))
+      (lambda (op l handle)
+        (define (contains-period? s)
+          (let lp ([i 0] [n (string-length s)])
+            (and (< i n)
+                 (or (char=? (string-ref s i) #\.)
+                     (lp (+ i 1) n)))))
+        (fprintf op "  ~d: " handle)
+        (let ([addr (listener-address l)])
+          (if (contains-period? addr)
+              (display-string addr op)
+              (fprintf op "[~a]" addr))
+          (fprintf op ":~d opened ~d\n"
+            (listener-port-number l)
+            (listener-create-time l))))))
 
-  (define (tcp-listener-count) (hashtable-size listener-table))
-
-  (define print-tcp-listeners
-    (case-lambda
-     [() (print-tcp-listeners (current-output-port))]
-     [(op)
-      (vector-for-each
-       (lambda (x)
-         (define (contains-period? s)
-           (let lp ([i 0] [n (string-length s)])
-             (and (< i n)
-                  (or (char=? (string-ref s i) #\.)
-                      (lp (+ i 1) n)))))
-         (fprintf op "  ~d: " (cdr x))
-         (let* ([l (car x)]
-                [addr (listener-address l)])
-           (if (contains-period? addr)
-               (display-string addr op)
-               (fprintf op "[~a]" addr))
-           (fprintf op ":~d opened ~d\n"
-             (listener-port-number l)
-             (listener-create-time l))))
-       (sorted-cells listener-table listener-create-time))]))
+  (define tcp-listener-count (foreign-handle-count 'tcp-listeners))
+  (define print-tcp-listeners (foreign-handle-print 'tcp-listeners))
 
   (define (port-number? x) (and (fixnum? x) (fx<= 0 x 65535)))
-
-  (define (close-dead-listeners)
-    ;; This procedure runs in the finalizer process.
-    (let ([l (listener-guardian)])
-      (when l
-        (close-tcp-listener l)
-        (close-dead-listeners))))
 
   (define (accept-tcp name port)
     (define fp 0)
@@ -844,9 +831,7 @@
         (let ([l (make-listener address (osi_get_tcp_listener_port handle)
                    (erlang:now) handle)])
           (set-car! cell l)
-          (listener-guardian l)
-          (eq-hashtable-set! listener-table l handle)
-          l)])))
+          (tcp-listeners l handle))])))
 
   (define (close-tcp-listener listener)
     ;; This procedure may run in the finalizer process.
@@ -856,8 +841,7 @@
      (let ([handle (listener-handle listener)])
        (when handle
          (osi_close_tcp_listener handle)
-         (listener-handle-set! listener #f)
-         (eq-hashtable-delete! listener-table listener)))))
+         (tcp-listeners listener #f)))))
 
   (define (connect-tcp hostname port-spec)
     (define result
@@ -885,5 +869,4 @@
              (let ([name (osi-port-name port)])
                (values (make-iport name port #f) (make-oport name port)))]))])))
 
-  (add-finalizer close-dead-listeners)
   )

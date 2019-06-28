@@ -290,8 +290,9 @@ A \emph{path-watcher guardian}\index{path-watcher guardian}
 created by \code{make-foreign-handle-guardian} with type name \code{path-watchers}
 is used to identify and close inaccessible path
 watchers\index{path watcher}.  A \emph{listener
-  guardian}\index{listener guardian} and associated finalizer are used
-to identify and close inaccessible TCP listeners\index{TCP
+  guardian}\index{listener guardian}
+created by \code{make-foreign-handle-guardian} with type name \code{tcp-listeners}
+is used to identify and close inaccessible TCP listeners\index{TCP
   listener}. In all cases, interrupts are disabled around code that
 wraps handles and registers objects with guardians in order to prevent
 the current process from being killed during this critical time.
