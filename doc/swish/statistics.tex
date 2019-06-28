@@ -93,11 +93,7 @@ operating system interface.
     \code{osi\_get\_sqlite\_status}}
   \argrow{sqlite-memory-highwater}{SQLite memory highwater since
     last event from \code{osi\_get\_sqlite\_status}}
-  \argrow{databases}{number of open SQLite databases}
-  \argrow{statements}{number of allocated SQLite statements}
-  \argrow{listeners}{number of open TCP/IP listeners}
-  \argrow{ports}{number of open osi-ports}
-  \argrow{watchers}{number of open path watchers}
+  \argrow{foreign-handles}{JSON object with types and counts reported by \code{count-foreign-handles}}
   \argrow{cpu}{CPU time in seconds since last event}
   \argrow{real}{elapsed time in seconds since last event}
   \argrow{bytes}{Scheme heap bytes allocated since last event}
@@ -108,6 +104,16 @@ operating system interface.
     since last event}
   \argrow{gc-bytes}{Scheme heap bytes reclaimed since last event}
 \end{pubevent}
+
+The JSON object in the \code{foreign-handles} field contains at least the following entries:
+
+\begin{tabular}{ll}
+ \code{databases} & {number of open SQLite databases} \\
+ \code{osi-ports} & {number of open osi-ports} \\
+ \code{path-watchers} & {number of open path watchers} \\
+ \code{statements} & {number of allocated SQLite statements} \\
+ \code{tcp-listeners} & {number of open TCP/IP listeners} \\
+\end{tabular}
 
 This event is sent every five minutes while the \code{statistics}
 gen-server is running.

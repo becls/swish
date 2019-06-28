@@ -34,6 +34,7 @@
    (swish events)
    (swish gen-server)
    (swish io)
+   (swish json)
    (swish osi)
    )
 
@@ -94,11 +95,7 @@
          [osi-bytes-used (osi_get_bytes_used)]
          [sqlite-memory sqlite-memory]
          [sqlite-memory-highwater sqlite-memory-highwater]
-         [databases (database-count)]
-         [statements (statement-count)]
-         [listeners (tcp-listener-count)]
-         [ports (osi-port-count)]
-         [watchers (path-watcher-count)]
+         [foreign-handles (count-foreign-handles (json:make-object) json:set!)]
          [cpu (time-duration (sstats-cpu delta))]
          [real (time-duration (sstats-real delta))]
          [bytes (sstats-bytes delta)]

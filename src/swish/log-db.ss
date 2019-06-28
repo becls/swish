@@ -214,7 +214,7 @@
 
   (module (swish-event-logger)
     (define schema-name 'swish)
-    (define schema-version "2019-05-24")
+    (define schema-version "2019-06-26")
 
     (define-simple-events create-simple-tables log-simple-event
       (<child-end>
@@ -261,11 +261,7 @@
        (osi-bytes-used integer)
        (sqlite-memory integer)
        (sqlite-memory-highwater integer)
-       (databases integer)
-       (statements integer)
-       (listeners integer)
-       (ports integer)
-       (watchers integer)
+       (foreign-handles text)
        (cpu real)
        (real real)
        (bytes integer)
@@ -358,6 +354,13 @@
     (define (upgrade-db)
       (match (log-db:version schema-name)
         [,@schema-version (create-db)]
+        ["2019-05-24"
+         (execute "alter table statistics rename to statistics_orig")
+         (execute "create table statistics(timestamp integer, date text, reason text, bytes_allocated integer, osi_bytes_used integer, sqlite_memory integer, sqlite_memory_highwater integer, foreign_handles text, cpu real, real real, bytes integer, gc_count integer, gc_cpu real, gc_real real, gc_bytes integer)")
+         (execute "insert into statistics select timestamp, date, reason, bytes_allocated, osi_bytes_used, sqlite_memory, sqlite_memory_highwater,json_object('databases', databases, 'statements', statements, 'tcp-listeners', listeners, 'osi-ports', ports, 'path-watchers', watchers),cpu, real, bytes, gc_count, gc_cpu, gc_real, gc_bytes from statistics_orig order by rowid")
+         (execute "drop table statistics_orig")
+         (log-db:version schema-name "2019-06-26")
+         (upgrade-db)]
         ["2018-09-25"
          (execute "alter table system_attributes rename to system_attributes_orig")
          (execute "create table system_attributes (timestamp integer, date text, software_info text, machine_type text, computer_name text)")

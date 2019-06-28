@@ -82,11 +82,7 @@
     osi-bytes-used
     sqlite-memory
     sqlite-memory-highwater
-    databases
-    statements
-    listeners
-    ports
-    watchers
+    foreign-handles
     cpu
     real
     bytes

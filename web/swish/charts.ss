@@ -27,6 +27,13 @@
     ,(format "google.load('visualization', '1', {packages:[~a]})"
        (join (map (lambda (x) (format "'~a'" x)) names) #\,))))
 
+(define sanitize-column-name
+  (let ([regexp (pregexp "^json_extract\\(foreign_handles, '\\$.([^']*)'\\)")])
+    (lambda (col)
+      (match (pregexp-match regexp col)
+        [(,_ ,col) col]
+        [,col col]))))
+
 (define (make-annotated-time-line div-id columns rows)
   ;; packages: annotatedtimeline
   `(script
@@ -37,7 +44,7 @@
        (fprintf op "data.addColumn('datetime', 'Date');\n")
        (for-each
         (lambda (col)
-          (fprintf op "data.addColumn('number', '~a');\n" col))
+          (fprintf op "data.addColumn('number', '~a');\n" (sanitize-column-name col)))
         (cddr columns))
        (fprintf op "data.addRows([~a]);\n"
          (join
@@ -45,7 +52,7 @@
            (lambda (row)
              (let ([date (vector-ref row 0)]
                    [vals (cddr (vector->list row))])
-               (format "[new Date(~a)~{,~a~}]" date vals)))
+               (format "[new Date(~a)~{,~:[0~;~:*~a~]~}]" date vals)))
            rows)
           #\,))
        (fprintf op "var chart = new google.visualization.AnnotatedTimeLine(document.getElementById('~a'));\n" div-id)
@@ -91,17 +98,12 @@
         (vector->list (sqlite:columns stmt))
         (fill-gaps (sqlite:execute stmt (list limit)))))))
 
-(define valid-charts
+(define standard-charts
   '(("memory" "bytes_allocated" "osi_bytes_used")
     ("time" "cpu" "gc_real")
     ("sqlite" "sqlite_memory" "sqlite_memory_highwater")
     ("bytes_allocated" "bytes_allocated")
     ("osi_bytes_used" "osi_bytes_used")
-    ("databases" "databases")
-    ("statements" "statements")
-    ("listeners" "listeners")
-    ("ports" "ports")
-    ("watchers" "watchers")
     ("cpu" "cpu")
     ("real" "real")
     ("bytes" "bytes")
@@ -114,14 +116,23 @@
           (http:percent-encode chart)
           (http:percent-encode limit)) text))
 
-(let* ([chart (cond
-               [(find-param "c") => (lambda (x) x)]
-               [else (caar valid-charts)])]
-       [cols (cond
-              [(assoc chart valid-charts) => cdr]
-              [else (raise `#(invalid-chart ,chart))])]
-       [limit (or (find-param "limit") "-7 days")])
-  (with-db [db (log-file) SQLITE_OPEN_READONLY]
+(with-db [db (log-file) SQLITE_OPEN_READONLY]
+  (let* ([valid-charts
+          (append standard-charts
+            (map
+             (lambda (row)
+               (match row
+                 [#(,key)
+                  `(,key ,(format "json_extract(foreign_handles, '$.~a')" key))]))
+             (execute-sql db
+               "select key from (select distinct key from json_each(foreign_handles), (select distinct foreign_handles from statistics)) order by key")))]
+         [chart (cond
+                 [(find-param "c") => (lambda (x) x)]
+                 [else (caar valid-charts)])]
+         [cols (cond
+                [(assoc chart valid-charts) => cdr]
+                [else (raise `#(invalid-chart ,chart))])]
+         [limit (or (find-param "limit") "-7 days")])
     (hosted-page "Charts"
       (list
        (js-include "https://www.google.com/jsapi")
