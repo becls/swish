@@ -406,31 +406,6 @@
      (immutable create-time)
      (mutable handle)))
 
-  (define path-watcher-guardian (make-guardian))
-  (define path-watcher-table (make-weak-eq-hashtable))
-
-  (define (path-watcher-count) (hashtable-size path-watcher-table))
-
-  (define print-path-watchers
-    (case-lambda
-     [() (print-path-watchers (current-output-port))]
-     [(op)
-      (vector-for-each
-       (lambda (x)
-         (let ([p (car x)])
-           (fprintf op "  ~d: ~a opened ~d\n"
-             (cdr x)
-             (path-watcher-path p)
-             (path-watcher-create-time p))))
-       (sorted-cells path-watcher-table path-watcher-create-time))]))
-
-  (define (close-dead-path-watchers)
-    ;; This procedure runs in the finalizer process.
-    (let ([w (path-watcher-guardian)])
-      (when w
-        (close-path-watcher w)
-        (close-dead-path-watchers))))
-
   (define (close-path-watcher watcher)
     (unless (path-watcher? watcher)
       (bad-arg 'close-path-watcher watcher))
@@ -438,8 +413,21 @@
      (let ([handle (path-watcher-handle watcher)])
        (when handle
          (osi_close_path_watcher handle)
-         (path-watcher-handle-set! watcher #f)
-         (eq-hashtable-delete! path-watcher-table watcher)))))
+         (path-watchers watcher #f)))))
+
+  (define path-watchers
+    (make-foreign-handle-guardian 'path-watchers
+      path-watcher-handle
+      path-watcher-handle-set!
+      path-watcher-create-time
+      close-path-watcher
+      (lambda (op p handle)
+        (fprintf op "  ~d: ~a opened ~d\n" handle
+          (path-watcher-path p)
+          (path-watcher-create-time p)))))
+
+  (define path-watcher-count (foreign-handle-count 'path-watchers))
+  (define print-path-watchers (foreign-handle-print 'path-watchers))
 
   (define (watch-path path process)
     (unless (string? path)
@@ -457,10 +445,7 @@
                   `#(path-watcher-failed ,path ,errno))]))
        [(,who . ,errno) (io-error path who errno)]
        [,handle
-        (let ([w (make-path-watcher path (erlang:now) handle)])
-          (path-watcher-guardian w)
-          (eq-hashtable-set! path-watcher-table w handle)
-          w)])))
+        (path-watchers (make-path-watcher path (erlang:now) handle) handle)])))
 
   ;; Console Ports
 
@@ -900,6 +885,5 @@
              (let ([name (osi-port-name port)])
                (values (make-iport name port #f) (make-oport name port)))]))])))
 
-  (add-finalizer close-dead-path-watchers)
   (add-finalizer close-dead-listeners)
   )

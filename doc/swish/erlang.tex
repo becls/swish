@@ -286,8 +286,9 @@ is closed when the output port is closed.
 \emph{osi-port guardian}\index{osi-port guardian}
 created by \code{make-foreign-handle-guardian} with type name \code{osi-ports}
 is used to identify and close inaccessible osi-ports.
-A \emph{path-watcher guardian}\index{path-watcher guardian} and associated finalizer
-are used to identify and close inaccessible path
+A \emph{path-watcher guardian}\index{path-watcher guardian}
+created by \code{make-foreign-handle-guardian} with type name \code{path-watchers}
+is used to identify and close inaccessible path
 watchers\index{path watcher}.  A \emph{listener
   guardian}\index{listener guardian} and associated finalizer are used
 to identify and close inaccessible TCP listeners\index{TCP
