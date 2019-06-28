@@ -70,6 +70,7 @@
    (swish event-mgr)
    (swish events)
    (swish gen-server)
+   (swish io)
    (swish osi)
    (swish queue)
    (swish string-utils)
@@ -343,48 +344,6 @@
 
   ;; Low-level SQLite interface
 
-  (define database-guardian (make-guardian))
-  (define database-table (make-weak-eq-hashtable))
-
-  (define (database-count) (hashtable-size database-table))
-
-  (define (sorted-cells ht create-time)
-    (let ([v (with-interrupts-disabled (hashtable-cells ht))])
-      (vector-sort!
-       (lambda (x1 x2)
-         (let ([t1 (create-time (car x1))] [t2 (create-time (car x2))])
-           (cond
-            [(< t1 t2) #t]
-            [(> t1 t2) #f]
-            [else (< (cdr x1) (cdr x2))])))
-       v)
-      v))
-
-  (define print-databases
-    (case-lambda
-     [() (print-databases (current-output-port))]
-     [(op)
-      (vector-for-each
-       (lambda (x)
-         (let ([d (car x)])
-           (fprintf op "  ~d: ~a opened ~d\n"
-             (cdr x)
-             (database-filename d)
-             (database-create-time d))))
-       (sorted-cells database-table database-create-time))]))
-
-  (define (@make-database filename create-time handle)
-    (let ([db (make-database filename create-time handle)])
-      (database-guardian db)
-      (eq-hashtable-set! database-table db handle)
-      db))
-
-  (define (close-dead-databases)
-    (let ([db (database-guardian)])
-      (when db
-        (catch (sqlite:close db))
-        (close-dead-databases))))
-
   (define-record-type database
     (nongenerative)
     (fields
@@ -392,36 +351,24 @@
      (immutable create-time)
      (mutable handle)))
 
-  (define statement-guardian (make-guardian))
-  (define statement-table (make-weak-eq-hashtable))
+  (define databases
+    (make-foreign-handle-guardian 'databases
+      database-handle
+      database-handle-set!
+      database-create-time
+      (lambda (db) (sqlite:close db))
+      (lambda (op db handle)
+        (fprintf op "  ~d: ~a opened ~d\n"
+          handle
+          (database-filename db)
+          (database-create-time db)))))
 
-  (define (statement-count) (hashtable-size statement-table))
+  (define database-count (foreign-handle-count 'databases))
+  (define print-databases (foreign-handle-print 'databases))
 
-  (define print-statements
-    (case-lambda
-     [() (print-statements (current-output-port))]
-     [(op)
-      (vector-for-each
-       (lambda (x)
-         (let ([s (car x)])
-           (fprintf op "  ~d: ~d ~a prepared ~d\n"
-             (cdr x)
-             (database-handle (statement-database s))
-             (statement-sql s)
-             (statement-create-time s))))
-       (sorted-cells statement-table statement-create-time))]))
-
-  (define (@make-statement database sql create-time handle)
-    (let ([s (make-statement database sql create-time handle)])
-      (statement-guardian s)
-      (eq-hashtable-set! statement-table s handle)
-      s))
-
-  (define (close-dead-statements)
-    (let ([s (statement-guardian)])
-      (when s
-        (catch (sqlite:finalize s))
-        (close-dead-statements))))
+  (define (@make-database filename create-time handle)
+    (let ([db (make-database filename create-time handle)])
+      (databases db handle)))
 
   (define-record-type statement
     (nongenerative)
@@ -430,6 +377,26 @@
      (immutable sql)
      (immutable create-time)
      (mutable handle)))
+
+  (define statements
+    (make-foreign-handle-guardian 'statements
+      statement-handle
+      statement-handle-set!
+      statement-create-time
+      (lambda (s) (sqlite:finalize s))
+      (lambda (op s handle)
+        (fprintf op "  ~d: ~d ~a prepared ~d\n"
+          handle
+          (database-handle (statement-database s))
+          (statement-sql s)
+          (statement-create-time s)))))
+
+  (define statement-count (foreign-handle-count 'statements))
+  (define print-statements (foreign-handle-print 'statements))
+
+  (define (@make-statement database sql create-time handle)
+    (let ([s (make-statement database sql create-time handle)])
+      (statements s handle)))
 
   (define (db-error who error detail)
     (raise `#(db-error ,who ,error ,detail)))
@@ -468,16 +435,13 @@
                   (let ([p self])
                     (lambda (r)
                       (when (pair? r)
-                        (database-handle-set! db handle))
+                        (databases db handle))
                       (set! result r)
                       (complete-io p))))
            [#t
-            (database-handle-set! db #f)
-            (eq-hashtable-delete! database-table db)
+            (databases db #f)
             (wait-for-io (database-filename db))
             (when (pair? result)
-              (database-handle-set! db handle)
-              (eq-hashtable-set! database-table db handle)
               (db-error 'close result db))]
            [,error
             (db-error 'close error db)])))))
@@ -504,9 +468,7 @@
      (let ([handle (statement-handle stmt)])
        (when handle
          (match (osi_finalize_statement* handle)
-           [#t
-            (statement-handle-set! stmt #f)
-            (eq-hashtable-delete! statement-table stmt)]
+           [#t (statements stmt #f)]
            [,error (db-error 'finalize error stmt)])))))
 
   (define (sqlite:bind stmt bindings)
@@ -638,5 +600,4 @@
 
   (define SQLITE_STATUS_MEMORY_USED 0)
 
-  (add-finalizer close-dead-databases)
-  (add-finalizer close-dead-statements))
+)

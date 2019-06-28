@@ -84,7 +84,7 @@ with the total duration with a \code{<transaction-retry>} event.
 The \code{db} gen-server uses the operating system interface to
 interact with SQLite. To prevent memory leaks, each raw database and
 statement handle is wrapped in a Scheme record and registered with a
-guardian.
+guardian via \code{make-foreign-handle-guardian}.
 
 \paragraph* {state}\index{db!state}
 \code{(define-state-tuple <db-state> filename db cache queue worker)}
@@ -117,12 +117,12 @@ guardian.
     (immutable stmt) (mutable timestamp)))}\newline
 
   When a SQL string is not found in the cache,
-  \code{PrepareStatement} is used with the
+  \code{osi\_prepare\_statement} is used with the
   \code{current-database} to make a SQLite statement. The raw
   statement handle is stored in a Scheme record:\newline
   \code{(define-record-type statement (fields (immutable handle)
-    (immutable database)))}\newline The \code{statement} record is
-  not registered with a guardian. The statement is finalized using
+    (immutable database)))}\newline
+  The statement is finalized using
   \code{FinalizeStatement} when it is removed from the
   cache. \code{CloseDatabase} will finalize any remaining
   statements associated with the database.
@@ -144,9 +144,11 @@ guardian.
 \genserver{db}{init} The \code{init} procedure takes a filename and
 mode symbol and attempts to open that database, setting
 \code{journal\_mode} to ``wal'' if \var{mode} is
-\code{create}. The handle returned from \code{OpenDatabase} is
+\code{create}. The handle returned from \code{osi\_open\_database} is
 wrapped in a \var{database} record that is registered with a
-guardian. The garbage collector is hooked so that dead databases are
+foreign-handle guardian using the type name \code{databases}.
+The foreign-handle guardian hooks
+the garbage collector so that dead databases are
 closed even if the \code{db} gen-server fails to close them for any
 reason.
 
@@ -233,7 +235,7 @@ server, \code{\#f} may be specified.
 \var{filename} is the path to a SQLite database.
 
 \var{mode} is one of the following symbols used to pass SQLite flags
-to \code{OpenDatabase}:
+to \code{osi\_open\_database}:
 
 \antipar\begin{itemize}
 
@@ -368,7 +370,7 @@ a thunk
 provided to \code{db:transaction}.
 
 A new SQLite statement is created from \var{sql} using
-\code{PrepareStatement} so that the statement won't interfere with
+\code{osi\_prepare\_statement} so that the statement won't interfere with
 any other queries. The statement is added to the
 \code{lazy-statements} list of the \code{statement-cache} and is
 finalized when the transaction completes.  The \var{bindings} are then
@@ -487,6 +489,7 @@ database record instance \var{db}.
 
 The \code{database-count} procedure returns the number of open
 databases.
+This is the procedure returned by \code{(foreign-handle-count\ 'databases)}.
 
 \defineentry{print-databases}
 \begin{procedure}
@@ -497,6 +500,7 @@ databases.
 The \code{print-databases} procedure prints information about all open
 databases to textual output port \var{op}, which defaults to the
 current output port.
+This is the procedure returned by \code{(foreign-handle-print\ 'databases)}.
 
 \defineentry{statement?}
 \begin{procedure}
@@ -543,6 +547,7 @@ statement record instance \var{stmt}.
 
 The \code{statement-count} procedure returns the number of unfinalized
 statements.
+This is the procedure returned by \code{(foreign-handle-count\ 'statements)}.
 
 \defineentry{print-statements}
 \begin{procedure}
@@ -553,6 +558,7 @@ statements.
 The \code{print-statements} procedure prints information about all
 unfinalized statements to textual output port \var{op}, which defaults
 to the current output port.
+This is the procedure returned by \code{(foreign-handle-print\ 'statements)}.
 
 \defineentry{sqlite:bind}
 \begin{procedure}
@@ -655,6 +661,8 @@ The \code{sqlite:open} procedure opens the SQLite database in file
 \code{SQLITE\_OPEN\_CREATE}, \code{SQLITE\_OPEN\_READONLY}, and
 \code{SQLITE\_OPEN\_READWRITE} are exported from the \code{(swish db)}
 library.
+The \code{sqlite:open} procedure registers the database record
+with a foreign-handle guardian using the type name \code{databases}.\index{database guardian}
 
 \defineentry{sqlite:prepare}
 \begin{procedure}
@@ -665,6 +673,8 @@ library.
 The \code{sqlite:prepare} procedure returns a statement record
 instance for the \var{sql} statement in the database record instance
 \var{db}.
+The \code{sqlite:prepare} procedure registers the statement record
+with a foreign-handle guardian using the type name \code{statements}.\index{statement guardian}
 
 \defineentry{sqlite:sql}
 \begin{procedure}
