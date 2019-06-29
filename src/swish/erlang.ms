@@ -880,6 +880,109 @@
             (<should-be-a-point> make [x 1] [y 2])))
          (exit 0)))))
 
+;; single-clause match -> match-let*
+(mat t15 ()
+  (let ([x '(1 "two" #t #(x y z))])
+    (assert-bad-match x
+      ;; single body expression, no guard
+      (match x
+        [(,n ,s #t #(x ,v1 fails-here))
+         'not-reached]))
+    ;; multiple body expressions, no guard
+    (assert-bad-match x
+      (match x
+        [(,num ,str ((,bool)) ,vec)
+         (printf "no output here\n")
+         (raise 'not-reached)
+         'bad]))
+    (assert-bad-match x
+      ;; single body expression, guard rejects
+      (match x
+        [(,n ,s #t #(x ,v1 ,v2))
+         (guard (even? n))
+         'not-reached]))
+    ;; multiple body expressions, guard rejects
+    (assert-bad-match x
+      (match x
+        [(,num ,str ,bool ,vec)
+         (guard (string? bool))
+         (printf "won't happen\n")
+         (raise 'not-reached)
+         'bad])))
+  (match-let*
+   ([,x '(1 "two" #t #(x y z))]
+    ["two"
+     ;; single body expression, no guard
+     (match x
+       [(,n ,s #t #(x ,v1 ,v2)) s])]
+    [(z 3 y)
+     ;; single body expression, guard accepts
+     (match x
+       [(,n ,s #t #(x ,v1 ,v2))
+        (guard (odd? n))
+        `(,v2 ,(* n 3) ,v1)])]
+    [,reversed (reverse x)]
+    [,@reversed
+     ;; multiple body expressions, no guard
+     (let ([var '()])
+       (match x
+         [(,num ,str ,bool ,vec)
+          (set! var (cons num var))
+          (set! var (cons str var))
+          (set! var (cons bool var))
+          (set! var (cons vec var))
+          var]))]
+    [,@reversed
+     ;; multiple body expressions, guard accepts
+     (let ([var '()])
+       (match x
+         [(,num ,str ,bool ,vec)
+          (guard (and (number? num) (string? str) (boolean? bool) (vector? vec)))
+          (set! var (cons num var))
+          (set! var (cons str var))
+          (set! var (cons bool var))
+          (set! var (cons vec var))
+          var]))])
+   'ok)
+  ;; single-clause match expands as match-let*
+  (parameterize ([run-cp0 (lambda (f x) (f x))])
+    (match-let*
+     ([(begin
+         ,invoke
+         (let ([,v input])
+           (if ,_ (,vector-ref ,@v 0) ,reject)))
+       ;; single body expression, no guard
+       (expand/optimize '(match input [#(,x) x]))]
+      [(begin
+         ,invoke
+         (let ([,v input])
+           (if ,_
+               (let ([,x (,vector-ref ,@v 0)]) (foo) ,@x)
+               ,reject)))
+       ;; multiple body expressions, no guard
+       (expand/optimize '(match input [#(,x) (foo) x]))]
+      [(begin
+         ,invoke
+         (let ([,v input])
+           (if ,_
+               (let ([,x (,vector-ref ,@v 0)])
+                 (if (,even? ,@x) ,@x ,reject))
+               ,@reject)))
+       ;; single body expression, has guard
+       (expand/optimize '(match input [#(,x) (guard (even? x)) x]))]
+      [(begin
+         ,invoke
+         (let ([,v input])
+           (if ,_
+               (let ([,x (,vector-ref ,@v 0)])
+                 (if (,even? ,@x)
+                     (begin (foo) ,@x)
+                     ,reject))
+               ,@reject)))
+       (expand/optimize '(match input [#(,x) (guard (even? x)) (foo) x]))])
+     'ok))
+  )
+
 (mat record ()
                                         ; accessors
   (assert

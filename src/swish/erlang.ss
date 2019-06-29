@@ -896,6 +896,11 @@
 
   (define-syntax (match x)
     (syntax-case x ()
+      [(_ exp (pattern (guard g) b1 b2 ...))
+       (eq? (datum guard) 'guard)
+       #`(match-let* ([pattern (guard g) exp]) b1 b2 ...)]
+      [(_ exp (pattern b1 b2 ...))
+       #`(match-let* ([pattern exp]) b1 b2 ...)]
       [(_ exp (pattern b1 b2 ...) ...)
        #`(let ([v exp])
            ((match-or (match-pattern v pattern b1 b2 ...) ...
