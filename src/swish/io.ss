@@ -179,8 +179,7 @@
                       (#%$keep-live port)
                       (complete-io p))))
            [#t
-            (osi-port-handle-set! port #f)
-            (eq-hashtable-delete! osi-port-table port)
+            (osi-ports port #f)
             (wait-for-io (osi-port-name port))]
            [(,who . ,errno) (io-error (osi-port-name port) who errno)])))))
 
@@ -270,8 +269,6 @@
           (set-port-position! ip start)))
     (port-position ip))
 
-  (define osi-port-guardian (make-guardian))
-  (define osi-port-table (make-weak-eq-hashtable))
   (define (future-sorted-cells ht create-time cell->record cell->handle)
     ;; cell is in ht iff its cell->handle is not #f
     (define (cell<? x1 x2)
@@ -380,36 +377,25 @@
       (bad-arg 'osi-port-closed? p))
     (not (osi-port-handle p)))
 
-  (define (osi-port-count) (hashtable-size osi-port-table))
+  (define osi-ports
+    (make-foreign-handle-guardian 'osi-ports
+      osi-port-handle
+      osi-port-handle-set!
+      osi-port-create-time
+      close-osi-port
+      (lambda (op p handle)
+        (fprintf op "  ~d: ~a opened ~d\n" handle
+          (osi-port-name p)
+          (osi-port-create-time p)))))
 
   (define (sorted-cells ht create-time)
     (future-sorted-cells ht create-time car cdr))
 
-  (define print-osi-ports
-    (case-lambda
-     [() (print-osi-ports (current-output-port))]
-     [(op)
-      (vector-for-each
-       (lambda (x)
-         (let ([p (car x)])
-           (fprintf op "  ~d: ~a opened ~d\n"
-             (cdr x)
-             (osi-port-name p)
-             (osi-port-create-time p))))
-       (sorted-cells osi-port-table osi-port-create-time))]))
+  (define osi-port-count (foreign-handle-count 'osi-ports))
+  (define print-osi-ports (foreign-handle-print 'osi-ports))
 
   (define (@make-osi-port name handle)
-    (let ([port (make-osi-port name (erlang:now) handle)])
-      (osi-port-guardian port)
-      (eq-hashtable-set! osi-port-table port handle)
-      port))
-
-  (define (close-dead-osi-ports)
-    ;; This procedure runs in the finalizer process.
-    (let ([port (osi-port-guardian)])
-      (when port
-        (close-osi-port port)
-        (close-dead-osi-ports))))
+    (osi-ports (make-osi-port name (erlang:now) handle) handle))
 
   ;; Path watching
 
@@ -914,7 +900,6 @@
              (let ([name (osi-port-name port)])
                (values (make-iport name port #f) (make-oport name port)))]))])))
 
-  (add-finalizer close-dead-osi-ports)
   (add-finalizer close-dead-path-watchers)
   (add-finalizer close-dead-listeners)
   )

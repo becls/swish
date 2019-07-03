@@ -489,6 +489,18 @@
              (set-car! pr type)
              (set-cdr! pr count))))
        pr)]
+    [("" "osi-ports:" . ,_)
+     (begin
+       (parameterize ([current-output-port os])
+         (print-foreign-handles))
+       (match-regexps
+        ;; gensym g<nnn> will show up between databases and osi-ports
+        `("" "databases:" "" seek
+          ,(format "~a:" fakes-id)
+          "8000: info2 created 1"
+          "  6000: info4 created 2"
+          "  7000: info1 created 3")
+        (split (get-output-string os) #\newline)))]
     ;; finalize the rest
     [(""
       "(close-fake #(fake info1 3 7000))"
@@ -503,7 +515,9 @@
     ["" (parameterize ([current-output-port os]) (print-fakes) (get-output-string os))])
    'ok)
   (match-let*
-   ([#(EXIT #(bad-arg make-foreign-handle-guardian "foo"))
+   ([#(EXIT #(type-already-registered osi-ports))
+     (catch (make-foreign-handle-guardian 'osi-ports values values values values values))]
+    [#(EXIT #(bad-arg make-foreign-handle-guardian "foo"))
      (catch (make-foreign-handle-guardian "foo" values values values values values))]
     [#(EXIT #(bad-arg make-foreign-handle-guardian "bar"))
      (catch (make-foreign-handle-guardian 'foo "bar" values values values values))]
