@@ -2429,3 +2429,15 @@ comparisons.
 
 The \code{symbol-append} procedure returns the symbol formed by
 appending the symbols passed as arguments.
+
+% ----------------------------------------------------------------------------
+\defineentry{re}
+\begin{syntax}
+  \code{(re \var{regexp})}
+\end{syntax}
+\expandsto{}
+\code{(pregexp \var{regexp})}
+
+If \var{regexp} is a literal string, the \code{re} macro expands to the
+result of evaluating \code{(pregexp\ \var{regexp})} at expand time.
+Otherwise it expands into a run-time call to \code{pregexp}.

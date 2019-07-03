@@ -23,11 +23,28 @@
    pregexp-replace
    pregexp-replace*
    pregexp-split
+   re
    )
   (import
    (chezscheme)
    (swish erlang)
    )
+
+  ;; compile static regular expressions at expand time
+  (define-syntax re
+    (syntax-rules ()
+      [(_ e)
+       ;; work around out-of-phase identifier
+       (let-syntax ([re re-transformer])
+         (re e))]))
+
+  (define (re-transformer x)
+    (syntax-case x ()
+      [(re pat)
+       (let ([s (datum pat)])
+         (if (string? s)
+             #`(quote #,(datum->syntax #'re (pregexp s)))
+             #`(pregexp pat)))]))
 
   (define *pregexp-version* 20050502) ;;last change
 

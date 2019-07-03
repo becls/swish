@@ -418,3 +418,11 @@
   (:sub (:or (:seq (:one-of-chars #\a #\-))))
 
   )
+
+(mat re ()
+  (match-let*
+   ([,expected (pregexp "[0-9]")]
+    [,@expected (re "[0-9]")]
+    [(quote ,@expected) (expand '(re "[0-9]"))]
+    [,@expected (re (string-append "[" "0-9" "]"))])
+   'ok))

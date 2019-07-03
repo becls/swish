@@ -64,13 +64,6 @@
           (pregexp-match regexp (if (symbol? s) (symbol->string s) s)))))]
    [else (lambda (s) #f)]))
 
-;; compile static regular expressions at expand time
-(define-syntax (re x)
-  (syntax-case x ()
-    [(re str)
-     (string? (datum str))
-     #`(quote #,(datum->syntax #'re (pregexp (datum str))))]))
-
 (define (detex s)
   ;; won't have trailing } due to defineentry regexp
   (match (pregexp-match (re "\\\\code[{]([^}]*)") s)

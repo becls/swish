@@ -145,9 +145,8 @@
     (find-start s 0 (string-length s)))
 
   (define (extract text)
-    (define compiled (pregexp "[^ \\n]+| |\\n"))
     (let lp ([start 0] [acc '()])
-      (match (pregexp-match-positions compiled text start)
+      (match (pregexp-match-positions (re "[^ \\n]+| |\\n") text start)
         [#f (reverse acc)]
         [((,start . ,end))
          (let ([s (substring text start end)])
