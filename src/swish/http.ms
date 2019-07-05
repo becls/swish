@@ -492,7 +492,7 @@
     (on-exit (rename-path mime-types.bak mime-types)
       ;; no mime-types file; http-cache crashes; supervisor will restart
       (utf8->string (simple-get "/static/ok.html"))
-      (receive (after 1000 'timeout-waiting-for-cache-to-fail)
+      (receive (after 1000 (raise 'timeout-waiting-for-cache-to-fail))
         [`(<gen-server-terminating> [name http-cache]
             [reason #(io-error ,_ uv_fs_open ,_)])
          'ok])
@@ -503,7 +503,7 @@
           (invalid mime type expression)
           ("html" . "text/html")))
       (utf8->string (simple-get "/static/ok.html"))
-      (receive (after 1000 'timeout-waiting-for-cache-to-fail)
+      (receive (after 1000 (raise 'timeout-waiting-for-cache-to-fail))
         [`(<gen-server-terminating> [name http-cache]
             [reason #(invalid-mime-type (invalid mime type expression))])
          'ok])))
@@ -581,7 +581,7 @@
   (capture-events)
   (let ([path (web-dir)])
     (send 'http-cache `#(path-watcher-failed ,path -1234))
-    (receive (after 1000 'timeout-waiting-for-cache-to-fail)
+    (receive (after 1000 (raise 'timeout-waiting-for-cache-to-fail))
       [`(<gen-server-terminating> [name http-cache] ,reason)
        (match reason
          [#(bad-match #(path-watcher-failed ,@path -1234) ,_)

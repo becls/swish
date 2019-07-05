@@ -118,7 +118,20 @@
       'ok))
 
 (isolate-mat start ()
-  (process-trap-exit #t)
+  (define (with-monitor thunk)
+    (let ([m (monitor (spawn thunk))])
+      (receive (after 5000 (raise 'timeout))
+        [#(DOWN ,@m ,_ ,reason) reason])))
+  (define (init-does-not-return starter)
+    (with-monitor
+     (lambda ()
+       (define dog
+         (spawn&link
+          (lambda ()
+            (receive (after 4000 (raise 'tester-timeout))
+              [#(no-return ,from)
+               (kill from 'bark!)]))))
+       (raise (starter #f `#(no-return ,dog))))))
   (match-let*
    ;; anonymous
    ([#(ok ,pid) (start-server #f '())]
@@ -135,27 +148,17 @@
     ;; bad return value inside init
     [#(error #(bad-return-value bad-return)) (start-server #f 'bad-return)]
     ;; init does not return but we have the pid and can kill it.
-    [#(error bark!)
-     (let ([dog (spawn
-                 (lambda ()
-                   (receive (after 5000 'timeout)
-                     [#(no-return ,from)
-                      (kill from 'bark!)])))])
-       (start-server #f `#(no-return ,dog)))]
-    ;; init does not return & linked
-    [#(error bark!)
-     (let ([dog (spawn
-                 (lambda ()
-                   (receive (after 5000 'timeout)
-                     [#(no-return ,from)
-                      (kill from 'bark!)])))])
-       (start&link-server #f `#(no-return ,dog)))]
+    [#(error bark!) (init-does-not-return start-server)]
+    [bark! (init-does-not-return start&link-server)]
     ;; anonymous &linked
-    [#(ok ,pid) (start&link-server #f '())]
-    [ok (gen-server:call pid 'started?)]
-    [ok (gen-server:call pid 'stop)]
-    [ok (receive (after 5000 (raise 'not-stopped))
-          [#(EXIT ,@pid stopped) 'ok])]
+    [stopped
+     (with-monitor
+      (lambda ()
+        (match-let*
+         ([#(ok ,pid) (start&link-server #f '())]
+          [ok (gen-server:call pid 'started?)]
+          [ok (gen-server:call pid 'stop)])
+         (receive))))]
     ;; registered
     [#(ok ,pid) (start-server 'my-test-name '())]
     [ok (gen-server:call 'my-test-name 'started?)]
@@ -164,12 +167,15 @@
     [ok (busy-wait-for-process pid 600)]
     [#(EXIT #(stopped ,_)) (catch (gen-server:call pid 'started? 10))]
     ;; registered & linked
-    [#(ok ,pid) (start&link-server 'my-test-name '())]
-    [ok (gen-server:call 'my-test-name 'started?)]
-    [#(error #(name-already-registered ,@pid)) (start-server 'my-test-name '())]
-    [ok (gen-server:call 'my-test-name 'stop)]
-    [ok (receive (after 5000 (raise 'not-stopped))
-          [#(EXIT ,@pid stopped) 'ok])])
+    [stopped
+     (with-monitor
+      (lambda ()
+        (match-let*
+         ([#(ok ,pid) (start&link-server 'my-test-name '())]
+          [ok (gen-server:call 'my-test-name 'started?)]
+          [#(error #(name-already-registered ,@pid)) (start-server 'my-test-name '())]
+          [ok (gen-server:call 'my-test-name 'stop)])
+         (receive))))])
    'ok))
 
 (isolate-mat stop ()
