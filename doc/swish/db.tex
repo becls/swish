@@ -123,8 +123,8 @@ guardian via \code{make-foreign-handle-guardian}.
   \code{(define-record-type statement (fields (immutable handle)
     (immutable database)))}\newline
   The statement is finalized using
-  \code{FinalizeStatement} when it is removed from the
-  cache. \code{CloseDatabase} will finalize any remaining
+  \code{osi\_finalize\_statement} when it is removed from the
+  cache. \code{osi\_close\_database} will finalize any remaining
   statements associated with the database.
 
   When a SQL string is found in the cache, the entry's
@@ -351,9 +351,9 @@ provided to \code{db:transaction}.
 
 \var{sql} is mapped to a SQLite statement using the
 \code{statement-cache}. The \var{bindings} are then applied using
-\code{BindStatement}. The statement is then executed using
-\code{StepStatement}. The results are accumulated as a list, and the
-statement is reset using \code{ResetStatement} to prevent the
+\code{osi\_bind\_statement}. The statement is then executed using
+\code{osi\_step\_statement}. The results are accumulated as a list, and the
+statement is reset using \code{osi\_reset\_statement} to prevent the
 statement from locking parts of the database.
 
 This procedure may exit with reason \code{\#(db-error prepare
@@ -374,8 +374,8 @@ A new SQLite statement is created from \var{sql} using
 any other queries. The statement is added to the
 \code{lazy-statements} list of the \code{statement-cache} and is
 finalized when the transaction completes.  The \var{bindings} are then
-applied using \code{BindStatement}. A thunk is returned which, when
-called, executes the statement using \code{StepStatement}. The thunk
+applied using \code{osi\_bind\_statement}. A thunk is returned which, when
+called, executes the statement using \code{osi\_step\_statement}. The thunk
 returns one row of data or \code{\#f}.
 
 This procedure may exit with reason \code{\#(db-error prepare
@@ -408,7 +408,7 @@ provided to \code{db:transaction}.
 
 \var{sql} is mapped to a SQLite statement using the
 \code{statement-cache}. The statement columns are then retrieved
-using \code{GetStatementColumns}.
+using \code{osi\_get\_statement\_columns}.
 
 \defineentry{parse-sql}
 \begin{procedure}\code{(parse-sql \var{x} \opt{\var{symbol->sql}})}\end{procedure}

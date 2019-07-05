@@ -494,7 +494,7 @@
       (utf8->string (simple-get "/static/ok.html"))
       (receive (after 1000 'timeout-waiting-for-cache-to-fail)
         [`(<gen-server-terminating> [name http-cache]
-            [reason #(io-error ,_ CreateFileW 2)])
+            [reason #(io-error ,_ uv_fs_open ,_)])
          'ok])
 
       ;; invalid mime-types file; http-cache crashes; supervisor will restart
