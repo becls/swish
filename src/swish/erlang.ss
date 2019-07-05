@@ -79,7 +79,8 @@
                ;; count on arg-check indicates test coverage of bad-arg case
                (profile-me-as k)
                (bad-arg who arg)))
-           ...)]))
+           ...
+           (void))]))
 
   (define-syntax on-exit
     (syntax-rules ()

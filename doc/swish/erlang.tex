@@ -893,7 +893,8 @@ for each foreign-handle type registered with \code{make-foreign-handle-guardian}
     (unless (and (pred arg) \ldots)
       (profile-me-as arg-check)
       (bad-arg who arg)))
-    \ldots)\end{alltt}
+  \ldots
+  (void))\end{alltt}
 
 The \code{arg-check} macro raises a \code{bad-arg} exception if
 any \var{arg} fails any \var{pred} specified for that \var{arg}.
