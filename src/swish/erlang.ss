@@ -895,6 +895,11 @@
        (let ([matched-pattern e0]) ;; could we get actual source info for these?
          (if matched-pattern matched-pattern (match-or e1 ...)))]))
 
+  (meta define (guard? x)
+    (syntax-case x ()
+      [(guard g) (eq? (datum guard) 'guard) #t]
+      [else #f]))
+
   (define-syntax (match x)
     (syntax-case x ()
       [(_ exp (pattern (guard g) b1 b2 ...))
@@ -902,6 +907,12 @@
        #`(match-let* ([pattern (guard g) exp]) b1 b2 ...)]
       [(_ exp (pattern b1 b2 ...))
        #`(match-let* ([pattern exp]) b1 b2 ...)]
+      [(_ exp (pattern b1 b2 ...) (,var e1 e2 ...))
+       (and (identifier? #'var) (not (guard? #'b1)) (not (guard? #'e1)))
+       #`(let ([v exp])
+           (let-syntax ([fail-false
+                         (syntax-rules () [(_) (let ([var v]) e1 e2 ...)])])
+             (match-one v pattern fail-false (begin b1 b2 ...))))]
       [(_ exp (pattern b1 b2 ...) ...)
        #`(let ([v exp])
            ((match-or (match-pattern v pattern b1 b2 ...) ...
