@@ -88,8 +88,8 @@ is not thread safe and should be used from the main thread only.
 Swish can be used to build, test, and deploy stand-alone
 applications. A given application might load foreign code for image
 processing or USB access. Code that may block should use the API
-described in Section
-[2.3](https://becls.github.io/swish/swish.pdf#section.2.3) to
+described in the "Operating System Interface" chapter of the
+[documentation](https://becls.github.io/swish/swish.pdf) to
 integrate with Swish's I/O loop.
 
 ### Build
