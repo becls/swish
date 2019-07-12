@@ -719,7 +719,7 @@
         (option-named 'load-prof)
         (option-named 'save-prof))]
      [(and report (not (or (opt 'harvest) (opt 'load-results) (pair? suites))))
-      (fail "~a requires ~a or ~a or ~a"
+      (fail "~a requires ~a or ~a or a set of tests to run (~a)"
         (option-named 'report)
         (option-named 'harvest)
         (option-named 'load-results)

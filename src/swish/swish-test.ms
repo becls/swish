@@ -96,7 +96,10 @@
   (nonzero-exit (swish-test "--load-profile file-that-does-not-exist")
     '() "--load-profile requires --save-profile or --coverage")
   (nonzero-exit (swish-test "--report foo.html")
-    '() "--report requires --harvest or --load-results or <file> ...")
+    '()
+    (pregexp-quote
+     "--report requires --harvest or --load-results \
+      or a set of tests to run (<file> ...)"))
   (nonzero-exit (swish-test "--harvest . --progress none .")
     '() "--harvest conflicts with <file> ...")
   (nonzero-exit (swish-test "--load-results foo.json .")
