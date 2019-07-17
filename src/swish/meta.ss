@@ -24,7 +24,6 @@
 (library (swish meta)
   (export
    add-if-absent
-   bad-syntax
    collect-clauses
    compound-id
    find-clause
@@ -90,12 +89,6 @@
 
   (define (syntax-datum-eq? x y) (eq? (syntax->datum x) (syntax->datum y)))
 
-  (define (bad-syntax msg form subform)
-    (raise
-     (condition
-      (make-message-condition msg)
-      (make-syntax-violation form subform))))
-
   (define (collect-clauses form clauses valid-keys)
     (let lp ([clauses clauses] [seen '()])
       (if (snull? clauses)
@@ -103,9 +96,9 @@
           (let* ([clause (scar clauses)]
                  [key (syntax->datum (scar clause))])
             (unless (memq key valid-keys)
-              (bad-syntax "invalid clause" form clause))
+              (syntax-violation #f "invalid clause" form clause))
             (when (assq key seen)
-              (bad-syntax "duplicate clause" form clause))
+              (syntax-violation #f "duplicate clause" form clause))
             (lp (scdr clauses) (cons (cons key clause) seen))))))
 
   (define (find-clause key clauses)

@@ -1099,9 +1099,9 @@
                  (and (identifier? #'fn)
                       (let ([f (datum fn)])
                         (when (memq f '(make copy copy* is?))
-                          (bad-syntax "invalid field" x #'fn))
+                          (syntax-violation #f "invalid field" x #'fn))
                         (when (memq f seen)
-                          (bad-syntax "duplicate field" x #'fn))
+                          (syntax-violation #f "duplicate field" x #'fn))
                         (valid-fields? #'rest (cons f seen))))]
                 [() #t]
                 [_ #f])))
@@ -1146,9 +1146,9 @@
                     (identifier? #'fn)
                     (let ([f (datum fn)])
                       (when (memq f seen)
-                        (bad-syntax "duplicate field" x #'fn))
+                        (syntax-violation #f "duplicate field" x #'fn))
                       (unless (memq f '(field ...))
-                        (bad-syntax "unknown field" x #'fn))
+                        (syntax-violation #f "unknown field" x #'fn))
                       (valid? #'rest (cons f seen)))]
                    [() #t]
                    [_ #f])))
@@ -1234,10 +1234,10 @@
                ...
                [(name fn)
                 (identifier? #'fn)
-                (bad-syntax "unknown field" x #'fn)]
+                (syntax-violation #f "unknown field" x #'fn)]
                [(name fn expr)
                 (identifier? #'fn)
-                (bad-syntax "unknown field" x #'fn)]
+                (syntax-violation #f "unknown field" x #'fn)]
                ))
            (define-property name fields '(field ...)))]))
 
