@@ -352,12 +352,13 @@
     (let ([results (load-profiles)]
           [op (open-file-to-replace (make-directory-path output-fn))])
       (fprintf op "<html>\n")
+      (fprintf op "<head><meta charset=\"UTF-8\"></head>\n")
       (fprintf op "<body style='font-family:monospace;'>\n")
       (let-values ([(hits sites percentage) (summarize-coverage results)])
         (fprintf op
           "<h2>Overall ~a% coverage with ~a of ~a sites covered.\n</h2>"
           percentage hits sites))
-      (fprintf op "<table>\n")
+      (fprintf op "<table style=\"font-size: 1em;\">\n")
       (output-row op "filename" "hits" "sites" "coverage" "max-count")
       (parameterize ([source-directories (current-source-dirs)])
         (let ([root (path-parent (get-real-path output-fn))])
