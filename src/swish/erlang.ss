@@ -1154,6 +1154,9 @@
         [(e s fail body)
          (string? (datum s))
          (fresh-var v e (test (and (string? v) (#3%string=? v s)) body fail))]
+        [(e eof fail body)
+         (eof-object? (datum eof))
+         (fresh-var v e (test (eof-object? v) body fail))]
         [(e bv fail body)
          (bytevector? (datum bv))
          (fresh-var v e (test (and (bytevector? v) (#3%bytevector=? v bv)) body fail))]

@@ -827,7 +827,7 @@
        (list x y)))
    "invalid syntax")
   (assert-syntax-error (match 0 [`((ooh!)) x]) "invalid match pattern `((ooh!))")
-  (assert-syntax-error (match 0 [#!eof 0]) "invalid match pattern #!eof"))
+  )
 
 (mat t9 ()
   (assert
@@ -1010,6 +1010,23 @@
                ,@reject)))
        (expand/optimize '(match input [#(,x) (guard (even? x)) (foo) x]))])
      'ok))
+  )
+
+(mat match-eof ()
+  (match (read (open-input-string "")) [bad (raise 'wrong)] [#!eof 'ok])
+  (match-let* ([#!eof (read (open-input-string ""))]) 'ok)
+  (let ()
+    (match-define #!eof (read (open-input-string "")))
+    'ok)
+  (match (list (vector (eof-object)))
+    [#!eof (raise 'wrong)]
+    [#(#!eof) (raise 'wrong)]
+    [(#(#!eof)) 'ok])
+  (match-let* ([#((7 . #!eof)) (vector (cons 7 (eof-object)))]) 'ok)
+  (let ()
+    (match-define #(#(,(var <= #!eof)) (,@var))
+      (vector (vector (eof-object)) (list (eof-object))))
+    'ok)
   )
 
 (mat tuple ()
