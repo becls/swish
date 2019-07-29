@@ -78,6 +78,13 @@
   (pregexp-replace* "te" "liberte egalite fraternite" "ty")
   "liberty egality fratyrnity"
 
+  (pregexp-replace/transform* "te" "liberte egalite fraternite" string-upcase)
+  "liberTE egaliTE fraTErniTE"
+
+  (pregexp-replace/transform* "([a-z]+)-([a-z]+)" "syntax-rules syntax-case"
+    (lambda (_ a b) (string-append a (string-upcase b))))
+  "syntaxRULES syntaxCASE"
+
   (pregexp-match-positions "^contact" "first contact")
   #f
 

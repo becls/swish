@@ -22,6 +22,7 @@
    pregexp-quote
    pregexp-replace
    pregexp-replace*
+   pregexp-replace/transform*
    pregexp-split
    re
    )
@@ -737,9 +738,25 @@
     (lambda (pat str ins)
       ;;return str with every occurrence of pat
       ;;replaced by ins
+      (let ([ins-len (string-length ins)])
+        ($pregexp-replace/transform* pat str
+          (lambda (str pp)
+            (pregexp-replace-aux str ins ins-len pp))))))
+
+  (define pregexp-replace/transform*
+    (lambda (pat str tx)
+      ;;return str with every occurrence of pat
+      ;;replaced by (tx group0 group1 ...)
+      ($pregexp-replace/transform* pat str
+        (lambda (str pp)
+          (let* ([ins (apply tx (map (lambda (p) (substring str (car p) (cdr p))) pp))]
+                 [ins-len (string-length ins)])
+            (pregexp-replace-aux str ins ins-len pp))))))
+
+  (define $pregexp-replace/transform*
+    (lambda (pat str nxt)
       (let ((pat (if (string? pat) (pregexp pat) pat))
-            (n (string-length str))
-            (ins-len (string-length ins)))
+            (n (string-length str)))
         (let loop ((i 0) (r ""))
           ;;i = index in str to start replacing from
           ;;r = already calculated prefix of answer
@@ -759,7 +776,7 @@
                       (string-append
                        r
                        (substring str i (caar pp))
-                       (pregexp-replace-aux str ins ins-len pp))))))))))
+                       (nxt str pp))))))))))
 
   (define pregexp-quote
     (lambda (s)
