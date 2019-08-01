@@ -1078,22 +1078,57 @@
        (match-help (#3%vector-ref v i) pattern fail
          (match-vector v (fx+ i 1) rest fail body))]))
 
+  (meta define (valid-fields? x f* known-fields forbidden)
+    (let valid? ([f* f*] [seen '()])
+      (syntax-case f* ()
+        [(fn . rest)
+         (identifier? #'fn)
+         (let ([f (datum fn)])
+           (when (memq f seen)
+             (syntax-violation #f "duplicate field" x #'fn))
+           (when (memq f forbidden)
+             (syntax-violation #f "invalid field" x #'fn))
+           (unless (or (not known-fields) (memq f known-fields))
+             (syntax-violation #f "unknown field" x #'fn))
+           (valid? #'rest (cons f seen)))]
+        [() #t]
+        [_ #f])))
+
+  (meta define (generate-name prefix fn)
+    (if (not prefix) fn (compound-id fn prefix fn)))
+
+  (meta define (get-binding-names bindings)
+    (syntax-case bindings ()
+      [((fn fv) . rest)
+       (cons #'fn (get-binding-names #'rest))]
+      [() '()]))
+
+  (meta define (remove-binding f bindings)
+    (syntax-case bindings ()
+      [((fn fv) . rest)
+       (if (syntax-datum-eq? #'fn f)
+           #'rest
+           #`((fn fv) #,@(remove-binding f #'rest)))]))
+
+  (meta define (find-index fn fields index)
+    (let ([f (scar fields)])
+      (if (syntax-datum-eq? f fn)
+          index
+          (find-index fn (scdr fields) (+ index 1)))))
+
+  (meta define (find-binding f bindings)
+    (syntax-case bindings ()
+      [((fn fv) . rest)
+       (if (syntax-datum-eq? #'fn f)
+           #'fv
+           (find-binding f #'rest))]
+      [() #f]))
+
   (define-syntax (define-tuple x)
     (syntax-case x ()
       [(_ name field ...)
        (and (identifier? #'name)
-            (let valid-fields? ([fields #'(field ...)] [seen '()])
-              (syntax-case fields ()
-                [(fn . rest)
-                 (and (identifier? #'fn)
-                      (let ([f (datum fn)])
-                        (when (memq f '(make copy copy* is?))
-                          (syntax-violation #f "invalid field" x #'fn))
-                        (when (memq f seen)
-                          (syntax-violation #f "duplicate field" x #'fn))
-                        (valid-fields? #'rest (cons f seen))))]
-                [() #t]
-                [_ #f])))
+            (valid-fields? x #'(field ...) #f '(make copy copy* is?)))
        #'(begin
            (define-syntax (name x)
              (define (generate-name prefix fn)
@@ -1120,11 +1155,6 @@
                        [copy*
                         (handle-open x #'src #f (get-binding-names bindings))])
                    (vector 'name #,@(copy-tuple #'(field ...) 1 bindings))))
-             (define (get-binding-names bindings)
-               (syntax-case bindings ()
-                 [((fn fv) . rest)
-                  (cons #'fn (get-binding-names #'rest))]
-                 [() '()]))
              (define (valid-bindings? bindings)
                (valid-field-references?
                 (get-binding-names bindings)))
@@ -1161,24 +1191,7 @@
                                    (remove-binding f bindings)))
                          (cons #`(#3%vector-ref src #,(datum->syntax f index))
                            (copy-tuple (scdr fields) (+ index 1) bindings))))))
-             (define (find-binding f bindings)
-               (syntax-case bindings ()
-                 [((fn fv) . rest)
-                  (if (syntax-datum-eq? #'fn f)
-                      #'fv
-                      (find-binding f #'rest))]
-                 [() #f]))
-             (define (remove-binding f bindings)
-               (syntax-case bindings ()
-                 [((fn fv) . rest)
-                  (if (syntax-datum-eq? #'fn f)
-                      #'rest
-                      #`((fn fv) #,@(remove-binding f #'rest)))]))
-             (define (find-index fn fields index)
-               (let ([f (scar fields)])
-                 (if (syntax-datum-eq? f fn)
-                     index
-                     (find-index fn (scdr fields) (+ index 1)))))
+
              (syntax-case x ()
                [(_name make . bindings)
                 (and (eq? (datum make) 'make)
