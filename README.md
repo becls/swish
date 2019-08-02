@@ -18,9 +18,9 @@ is not thread safe and should be used from the main thread only.
 # Notes
 
 1. install the prerequisites (see Build System Requirements)
-2. `./configure` (see `./configure --help` for options)
-3. `make`
-4. `make test`
+1. `./configure` (see `./configure --help` for options)
+1. `make`
+1. `make test`
 
 - After `./configure`; you can also `cd src; ./go` to build and run the engine.
 - We disable the expression editor with --eedisable because Chez Scheme's
@@ -32,8 +32,10 @@ is not thread safe and should be used from the main thread only.
   and LDFLAGS to supply the header and library path. If the C compiler
   refuses unused arguments, you may need
   `CFLAGS="-Qunused-arguments"`. e.g.,
+
   ```
-  ./configure CPPFLAGS="-I/usr/local/opt/libiconv/include" CFLAGS="-Qunused-arguments" LDFLAGS="-L/usr/local/opt/libiconv/lib"
+  ./configure CPPFLAGS="-I/usr/local/opt/libiconv/include" \
+    CFLAGS="-Qunused-arguments" LDFLAGS="-L/usr/local/opt/libiconv/lib"
   ```
 
 # Build System Requirements
@@ -53,7 +55,8 @@ is not thread safe and should be used from the main thread only.
 - dot (can be installed through homebrew using `brew install graphviz --with-app`)
 - pdflatex (can be installed through homebrew using `brew cask install mactex`)
 - ginstall and realpath (can be installed through homebrew using `brew install coreutils`)
-- XCode and the command-line tools must be set (Xcode->Preferences->Locations->command line tools)
+- XCode and the command-line tools must be set
+  (Xcode->Preferences->Locations->command line tools)
 
 ## Windows
 
@@ -68,6 +71,7 @@ is not thread safe and should be used from the main thread only.
 
 - Install [Python 2.7](https://conda.io/miniconda.html)
 - Provide the path to the python2.7 executable as an argument to the configure script:
+
   ```
   ./configure --python=~/Miniconda2/python.exe
   ```
@@ -79,6 +83,7 @@ is not thread safe and should be used from the main thread only.
   `conda create -n py27 python=2.7 anaconda`
 
 - Provide the path to the python2.7 executable as an argument to the configure script:
+
   ```
   ./configure --python=~/Anaconda3/envs/py27/python.exe
   ```
@@ -92,17 +97,17 @@ described in the "Operating System Interface" chapter of the
 [documentation](https://becls.github.io/swish/swish.pdf) to
 integrate with Swish's I/O loop.
 
-### Build
+## Build
 
 For details about building a Swish application, see:
 `swish-build --help`
 
-### Test
+## Test
 
 For details about testing a Swish application, see:
 `swish-test --help`
 
-### Deploying a Stand-alone Application
+## Deploying a Stand-alone Application
 
 On Linux and macOS, you can deploy your application's executable and
 boot file.
