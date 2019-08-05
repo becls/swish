@@ -2785,6 +2785,24 @@ do not introduce line breaks in the output.
 \subsection{Macro Utilities}
 
 % ----------------------------------------------------------------------------
+\defineentry{pretty-syntax-violation}
+\begin{procedure}
+  \code{(pretty-syntax-violation \var{msg} \var{form} \opt{\var{subform} \opt{\var{who}}})}
+\end{procedure}
+\returns{} never
+
+The \code{pretty-syntax-violation} procedure raises a syntax violation.
+It differs from the native \code{syntax-violation} in that it formats
+\var{form} and \var{subform} using \code{pretty-format} abbreviations,
+and it does not attempt to infer a who condition when \var{who} is not
+provided, as this can produce confusing results in error messages
+involving match patterns.
+To provide more readable exception messages, it constructs the formatted
+message condition by calling \code{pretty-print} before raising the exception,
+and it prevents \code{display-condition} from formatting the \code{\&syntax}
+condition within the compound condition it constructs.
+
+% ----------------------------------------------------------------------------
 \defineentry{with-temporaries}
 \begin{syntax}
   \code{(with-temporaries (\var{id} ...) e0 e1 ...)}

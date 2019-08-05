@@ -978,7 +978,7 @@
     (define (reject-options options context)
       (syntax-case options ()
         [() (void)]
-        [_ (syntax-error context "bad pattern")]))
+        [_ (pretty-syntax-violation "invalid match pattern" context)]))
     (cond
      [(not (identifier? type)) 'bad-pattern]
      [(lookup type #'extensions) =>
@@ -1030,16 +1030,11 @@
     (define (bad-pattern x)
       (syntax-case x ()
         [(e pat . rest)
-         (syntax-error #'pat "invalid match pattern")]))
+         (pretty-syntax-violation "invalid match pattern" #'pat)]))
     (define (bad-syntax context msg detail)
-      (define (strip-who c)
-        (apply condition
-          (remp who-condition? (simple-conditions c))))
       (syntax-case context ()
         [(e pat . rest)
-         ;; syntax-violation infers a who if we pass in #f, but we do mean #f
-         (guard (c [else (raise (strip-who c))])
-           (syntax-violation #f msg #'pat detail))]))
+         (pretty-syntax-violation msg #'pat detail)]))
     (define reject-duplicate
       (let ([bound-vars '()])
         (define (duplicate? id)
@@ -1116,7 +1111,13 @@
                   (with-temporaries (tmp)
                     (do-field #'field #'tmp #'(option ...)
                       (convert #`(tmp pattern #,fail #,(match-extended-help #'rest)))))]
-                 [other (bad-pattern x)])))])))
+                 [other (bad-pattern x)])))]
+          [oops
+           (pretty-syntax-violation
+            (if object?
+                "invalid handle-object output"
+                "invalid handle-field output")
+            context #'oops 'define-match-extension)])))
     (define (convert x)
       (syntax-case x (unquote unquote-splicing quasiquote)
         [(e (unquote (v <= pattern)) fail body)

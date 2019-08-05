@@ -725,7 +725,7 @@
     '(2 3 2))))
 
 (mat t8 ()
-  (assert-syntax-error (match-let* ([,@12 12]) 12) "invalid match pattern")
+  (assert-syntax-error (match-let* ([,@12 12]) 12) "invalid match pattern ,@12")
   (assert-syntax-error (match-let* ([(,x ,x) (list 3 4)]) x)
     "duplicate pattern variable")
   (assert-syntax-error
@@ -734,8 +734,8 @@
      (match 0 [`(<point> ,x ,x) x]))
    "duplicate pattern variable")
   (assert-syntax-error (match-let* ([`(no-record-type) 12]) 12)
-    "unknown type")
-  (assert-syntax-error (match 0 [,() 0]) "invalid match pattern")
+    "unknown type no-record-type in `(no-record-type)")
+  (assert-syntax-error (match 0 [,() 0]) "invalid match pattern ,()")
   (assert-syntax-error
    ;; we won't be able to use #[foo] record syntax for patterns, since the
    ;; record type might not accept patterns as field values, so use record
@@ -746,7 +746,7 @@
        (lambda () (record-reader 'foo (record-type-descriptor foo)))
        (lambda () (eval (read (open-input-string "(match 3 [#[foo] 4])"))))
        (lambda () (record-reader 'foo orig))))
-   "invalid match pattern")
+   "invalid match pattern #[foo]")
   (assert-syntax-error (define-tuple <point> (x y)) "invalid syntax")
   (assert-syntax-error (define-tuple <point> make) "invalid field")
   (assert-syntax-error (define-tuple <point> copy) "invalid field")
@@ -812,12 +812,12 @@
    (let ()
      (define-tuple <point> x y)
      (match 0 [`(<point> ,z) z]))
-   "unknown field")
+   "unknown field z in `(<point> ,z)")
   (assert-syntax-error
    (let ()
      (define-tuple <point> x y)
      (match 0 [`(<point> [z ,z]) z]))
-   "unknown field")
+   "unknown field z in `(<point> (z ,z))")
   (assert-syntax-error
    (let ()
      (define-tuple <point> x y)
@@ -826,8 +826,8 @@
        (set! x 11) ;; open disallows set!
        (list x y)))
    "invalid syntax")
-  (assert-syntax-error (match 0 [`((ooh!)) x]) "invalid match pattern")
-  (assert-syntax-error (match 0 [#!eof 0]) "invalid match pattern"))
+  (assert-syntax-error (match 0 [`((ooh!)) x]) "invalid match pattern `((ooh!))")
+  (assert-syntax-error (match 0 [#!eof 0]) "invalid match pattern #!eof"))
 
 (mat t9 ()
   (assert
@@ -1372,11 +1372,11 @@
         (match-define `(foo ,a ,b) 27)
         (list a b)))]
     [#(EXIT ,reason)
-     (guard (check-err reason "Exception: unknown type foo in (quasiquote (foo (unquote bogus)))"))
+     (guard (check-err reason "Exception: unknown type foo in `(foo ,bogus)"))
      ;; local foo isn't visible at top-level
      (catch (expand '(match-define `(foo ,bogus) x)))]
     [#(EXIT ,reason)
-     (guard (check-err reason "Exception: unknown field bogus in (quasiquote (foo (unquote bogus)))"))
+     (guard (check-err reason "Exception: unknown field bogus in `(foo ,bogus)"))
      (catch
       (expand
        '(let ()
@@ -1443,11 +1443,11 @@
         (match-define `(sand ,x ,y) 27)
         (list x y)))]
     [#(EXIT ,reason)
-     (guard (check-err reason "Exception: unknown type sand in (quasiquote (sand (unquote storm)))"))
+     (guard (check-err reason "Exception: unknown type sand in `(sand ,storm)"))
      ;; local foo isn't visible at top-level
      (catch (expand '(match-define `(sand ,storm) x)))]
     [#(EXIT ,reason)
-     (guard (check-err reason "Exception: unknown field bogus in (quasiquote (foo (unquote bogus)))"))
+     (guard (check-err reason "Exception: unknown field bogus in `(foo ,bogus)"))
      (catch
       (expand
        '(let ()
@@ -1463,7 +1463,7 @@
         (define (f x) (match-define `(foo ,x) x) x)
         (f (make-foo "X" "Y"))))]
     [#(EXIT ,reason)
-     (guard (check-err reason "Exception: bad pattern (quasiquote (foo (a 1 opt)))"))
+     (guard (check-err reason "Exception: invalid match pattern `(foo (a 1 opt))"))
      (catch
       (expand
        '(lambda (x)
@@ -1509,11 +1509,11 @@
          (match-define `(<foo> ,a ,b) 27)
          (list a b)))]
      [#(EXIT ,reason)
-      (guard (check-err reason "Exception: unknown type <foo> in (quasiquote (<foo> (unquote bogus)))"))
+      (guard (check-err reason "Exception: unknown type <foo> in `(<foo> ,bogus)"))
       ;; local foo isn't visible at top-level
       (catch (expand '(match-define `(<foo> ,bogus) x)))]
      [#(EXIT ,reason)
-      (guard (check-err reason "Exception: unknown field bogus in (quasiquote (<foo> (unquote bogus)))"))
+      (guard (check-err reason "Exception: unknown field bogus in `(<foo> ,bogus)"))
       (catch
        (expand
         '(let ()
@@ -1529,7 +1529,7 @@
          (define (f x) (match-define `(<foo> ,x) x) x)
          (f (<foo> make [x "X"] [y "Y"]))))]
      [#(EXIT ,reason)
-      (guard (check-err reason "Exception: bad pattern (quasiquote (<foo> (a 1 opt)))"))
+      (guard (check-err reason "Exception: invalid match pattern `(<foo> (a 1 opt))"))
       (catch
        (expand
         '(lambda (x)
@@ -1633,19 +1633,23 @@
      ;; done
      (send pid 'quit))
    ;; syntax-errors in receive
-   (assert-syntax-error (receive [`(great-unknown) 404]) "unknown type")
-   (assert-syntax-error (receive (after 100 'ok) [`(great-unknown) 404]) "unknown type")
+   (assert-syntax-error
+    (receive [`(great-unknown) 404])
+    "unknown type great-unknown in `(great-unknown)")
+   (assert-syntax-error
+    (receive (after 100 'ok) [`(great-unknown) 404])
+    "unknown type great-unknown in `(great-unknown)")
    (assert-syntax-error
     (let ()
       (define-record-type moo (nongenerative) (fields grass straw))
       (receive [`(moo ,hay) 123]))
-    "unknown field")
+    "unknown field hay in `(moo ,hay)")
    (assert-syntax-error
     (let ()
       (define-record-type moo (nongenerative) (fields grass straw))
       (define-record-type goo (nongenerative) (parent moo) (fields gai pan))
       (receive [`(moo ,pan) 123]))
-    "unknown field")
+    "unknown field pan in `(moo ,pan)")
    ;; using pattern bindings in lieu of generalized prefix
    (let ()
      (define-record-type zip (nongenerative) (fields))
@@ -1750,17 +1754,17 @@
     (let ()
       (define-syntax zor (make-compile-time-value '(a b c d)))
       (match-let* ([`(zor) "blatt"]) 'ok))
-    "unknown type")
+    "unknown type zor in `(zor)")
    (assert-syntax-error
     (let ()
       (define-syntax zor (make-compile-time-value '(17)))
       (match-let* ([`(zor) "blatt"]) 'ok))
-    "unknown type")
+    "unknown type zor in `(zor)")
    (assert-syntax-error
     (let ()
       (define-syntax zor (make-compile-time-value 404))
       (match-let* ([`(zor) "blatt"]) 'ok))
-    "unknown type")
+    "unknown type zor in `(zor)")
    ;; unquote-splicing with field reference
    (let ()
      (define-tuple <foo> a b)
@@ -1784,14 +1788,14 @@
       (match-let* ([,stack 'hay]
                    [`(<bar> ,@stack) (<bar> make [none 'such])])
         'ok))
-    "unknown field")
+    "unknown field stack in `(<bar> ,@stack)")
    (assert-syntax-error
     (let ()
       (define-record-type skate (nongenerative) (fields fins tail))
       (match-let* ([,board 'plank]
                    [`(skate ,@board) (make-stake '(dorsal pectoral) 'whiplike)])
         'ok))
-    "unknown field"))
+    "unknown field board in `(skate ,@board)"))
   )
 
 (isolate-mat match-extension ()
@@ -1823,14 +1827,14 @@
       (define-match-extension foo
         (lambda (v pattern) '#(wrong)))
       (match 3 [`(foo) 'ok]))
-    "invalid syntax")
+    "invalid handle-object output #(wrong) in `(foo)")
    ;; return #f from handle-object to reject pattern
    (assert-syntax-error
     (let ()
       (define-match-extension reject
         (lambda (v pattern) #f))
       (match 3 [`(reject ,this) 'ok]))
-    "invalid match pattern")
+    "invalid match pattern `(reject ,this)")
    ;; field specs must be ,id ,@id or [id pat opt ...]
    ;;  - ,x where x not identifier
    (assert-syntax-error
@@ -1843,7 +1847,7 @@
         (lambda (input fld var options context)
           #`((bind #,var #t))))
       (match 3 [`(any ,3) 'ok]))
-    "invalid match pattern")
+    "invalid match pattern `(any ,3)")
    ;; field specs must be ,id ,@id or [id pat opt ...]
    ;;  - ,@x where x not identifier
    (assert-syntax-error
@@ -1856,7 +1860,7 @@
         (lambda (input fld var options context)
           #`((bind #,var #t))))
       (match 3 [`(any ,@(thing)) 'ok]))
-    "invalid match pattern")
+    "invalid match pattern `(any ,@(thing))")
    ;; field specs must be ,id ,@id or [id pat opt ...]
    ;;  - none of the above
    (assert-syntax-error
@@ -1869,7 +1873,7 @@
         (lambda (input fld var options context)
           #`((bind #,var #t))))
       (match 3 [`(any #(1 home)) 'ok]))
-    "invalid match pattern")
+    "invalid match pattern `(any #(1 home))")
    ;; check that handle-object gets the expected pattern
    (let ()
      (meta define expected #'`(pat ,f1 ,@f2 [f3 3]))
@@ -2047,7 +2051,7 @@
       (match 3
         [`(goo) 7] ;; okay
         [`(goo fed) 8]))
-    "invalid match pattern")
+    "invalid match pattern `(goo fed)")
    ;; specify only handle-object
    ;; - handle-object returns handle-fields and tries to convert viable fields
    ;;   but we didn't provide a handle-field procedure
@@ -2151,7 +2155,7 @@
         (lambda (v pattern)
           #'(bind var 3)))
       (match 123 [`(bad) 7]))
-    "invalid syntax")
+    "invalid handle-object output (bind var 3) in `(bad)")
    ;; invalid output in handle-field: sub-match
    (assert-syntax-error
     (let ()
@@ -2163,7 +2167,7 @@
              (guard (is fine))
              (sub-match #,input 404))))
       (match 123 [`(worse) 7]))
-    "invalid syntax")
+    "invalid handle-field output ((sub-match #,input 404)) in `(worse)")
    ;; invalid output in handle-field: handle-fields
    (assert-syntax-error
     (let ()
@@ -2175,7 +2179,7 @@
              (guard (is fine))
              (handle-fields #,input ,disallowed))))
       (match 123 [`(worse) 7]))
-    "invalid syntax")
+    "invalid handle-field output ((handle-fields #,input ,disallowed)) in `(worse)")
    ;; handle-fields is not final clause in handle-object
    (assert-syntax-error
     (let ()
@@ -2184,7 +2188,7 @@
           #`((handle-fields #,v ,x)
              (bind var something))))
       (match 123 [`(worse) 7]))
-    "invalid syntax")
+    (re "invalid handle-object output [(][(]handle-fields #[{][^}]*[}] ,x[)] [(]bind var something[)][)] in `[(]worse[)]"))
    ;; sub-match is not final clause in handle-object
    (assert-syntax-error
     (let ()
@@ -2193,7 +2197,7 @@
           #`((sub-match #,v 7)
              (guard door))))
       (match 123 [`(worse) 7]))
-    "invalid syntax")
+    (re "invalid handle-object output [(][(]sub-match #[{][^}]*[}] 7[)] [(]guard door[)][)] in `[(]worse[)]"))
    ;; return #f from handle-field to indicate invalid field
    (assert-syntax-error
     (let ()
@@ -2203,7 +2207,7 @@
         (lambda (input fld var options context)
           #f))
       (match 3 [`(bad-field anything here) 7]))
-    "unknown field")
+    "unknown field secret in `(bad-field anything here)")
    ;; fail with syntax-case error in handle-field
    (assert-syntax-error
     (let ()

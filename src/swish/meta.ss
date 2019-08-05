@@ -29,6 +29,7 @@
    find-clause
    find-source
    get-clause
+   pretty-syntax-violation
    profile-me
    profile-me-as
    profile-omit
@@ -171,5 +172,50 @@
       [(_ (tmp ...) e0 e1 ...)
        (with-syntax ([(tmp ...) (generate-temporaries '(tmp ...))])
          e0 e1 ...)]))
+
+  ;; This procedure is an alternative to syntax-violation.
+  ;; Unlike syntax-violation, it:
+  ;;   1. uses pretty-format abbreviations for readability and
+  ;;   2. does not attempt to infer a who condition, since
+  ;;      that yields confusing results in error messages
+  ;;      about match patterns, e.g., attributing the error
+  ;;      to quasiquote if given #'(quasiquote (<type> ,field)).
+  (define pretty-syntax-violation
+    (case-lambda
+     [(msg form) (pretty-syntax-violation msg form #f)]
+     [(msg form subform) (pretty-syntax-violation msg form subform #f)]
+     [(msg form subform who)
+      (call/cc
+       (lambda (where)
+         (raise
+          (condition
+           (make-who-condition who)
+           (make-continuation-condition where)
+           (make-syntax-violation form subform)
+           (let-values ([(src start?) (#%$syntax->src form)])
+             ;; add an explicit $&src condition to prevent display-condition
+             ;; from formatting the syntax-violation as it looks for source
+             (#%$make-src-condition src start?))
+           (make-message-condition
+            (parameterize ([print-level 3]
+                           [print-length 6]
+                           [pretty-line-length (most-positive-fixnum)]
+                           [pretty-one-line-limit (most-positive-fixnum)]
+                           [pretty-initial-indent 0])
+              (let ([os (open-output-string)])
+                (define (pretty x os)
+                  (pretty-print x os)
+                  ;; omit newline
+                  (set-port-output-index! os
+                    (- (port-output-index os) 1)))
+                (display msg os)
+                (when subform
+                  (display " " os)
+                  (pretty (syntax->datum subform) os)
+                  (when form (display " in" os)))
+                (when form
+                  (display " " os)
+                  (pretty (syntax->datum form) os))
+                (get-output-string os))))))))]))
 
   )
