@@ -711,7 +711,8 @@
 (mat t5 ()
   (assert (= (match-let* ([(2 3) (list 2 3)]) 1) 1))
   (assert-bad-match '(1 2) (match-let* ([(,x) '(1 2)]) x))
-  (assert-bad-match '(1 2) (match-let* ([,x (guard #f) '(1 2)]) x)))
+  (assert-bad-match '(1 2) (match-let* ([,x (guard #f) '(1 2)]) x))
+  (assert-bad-match '(1 2) (match-let* ([(,z) (guard (integer? z)) '(1 2)]) z)))
 (mat t6 ()
   (assert (equal? (match-let* ([(,x ,y) (list 2 3)]) (list x y)) '(2 3))))
 (mat t7 ()
@@ -735,6 +736,17 @@
   (assert-syntax-error (match-let* ([`(no-record-type) 12]) 12)
     "unknown tuple type in pattern")
   (assert-syntax-error (match 0 [,() 0]) "invalid match pattern")
+  (assert-syntax-error
+   ;; we won't be able to use #[foo] record syntax for patterns, since the
+   ;; record type might not accept patterns as field values, so use record
+   ;; here to cover the "invalid match pattern" fall-through case
+   (let ([orig (record-reader 'foo)])
+     (define-record-type foo (nongenerative) (fields))
+     (dynamic-wind
+       (lambda () (record-reader 'foo (record-type-descriptor foo)))
+       (lambda () (eval (read (open-input-string "(match 3 [#[foo] 4])"))))
+       (lambda () (record-reader 'foo orig))))
+   "invalid match pattern")
   (assert-syntax-error (define-tuple <point> (x y)) "invalid syntax")
   (assert-syntax-error (define-tuple <point> make) "invalid field")
   (assert-syntax-error (define-tuple <point> copy) "invalid field")
@@ -806,6 +818,14 @@
      (define-tuple <point> x y)
      (match 0 [`(<point> [z ,z]) z]))
    "unknown field z in pattern")
+  (assert-syntax-error
+   (let ()
+     (define-tuple <point> x y)
+     (lambda (p)
+       (<point> open p [x y])
+       (set! x 11) ;; open disallows set!
+       (list x y)))
+   "invalid syntax")
   (assert-syntax-error (match 0 [`((ooh!)) x]) "invalid match pattern")
   (assert-syntax-error (match 0 [#!eof 0]) "invalid match pattern"))
 
