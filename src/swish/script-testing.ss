@@ -71,7 +71,7 @@
         [,_ #f]))
     (define (copy-file in out)
       (let* ([bv (read-file in)]
-             [op (open-file out (+ O_WRONLY O_CREAT) #o777 'binary-output)])
+             [op (open-binary-file-to-replace out)])
         (on-exit (close-port op)
           (put-bytevector op bv))))
     (when (memq (machine-type) '(a6nt i3nt ta6nt ti3nt))

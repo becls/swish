@@ -1754,6 +1754,8 @@ is determined by \var{type}:
 \begin{itemize}
   \item \code{binary-input}: a binary input port
   \item \code{binary-output}: a binary output port
+  \item \code{binary-append}: a binary output port.
+    Each write appends to the file by specifying position $-1$.
   \item \code{input}: a textual input port wrapping a binary input
     port with \code{binary->utf8}
   \item \code{output}: a textual output port wrapping a binary
@@ -1822,6 +1824,47 @@ If \code{osi\_open\_file} fails with error pair \code{(\var{who}
   \var{errno})} is raised.
 
 % ----------------------------------------------------------------------------
+\defineentry{open-binary-file-to-append}
+\begin{procedure}
+  \code{(open-binary-file-to-append \var{name})}
+\end{procedure}
+\returns{} a binary file port
+
+The \code{open-binary-file-to-append} procedure calls\\
+\code{(open-file \var{name} (+ O\_WRONLY O\_CREAT O\_APPEND) \#o666 'binary-append)}.
+
+% ----------------------------------------------------------------------------
+\defineentry{open-binary-file-to-read}
+\begin{procedure}
+  \code{(open-binary-file-to-read \var{name})}
+\end{procedure}
+\returns{} a binary file port
+
+The \code{open-binary-file-to-read} procedure calls \code{(open-file
+  \var{name} O\_RDONLY 0 'binary-input)}.
+
+% ----------------------------------------------------------------------------
+\defineentry{open-binary-file-to-replace}
+\begin{procedure}
+  \code{(open-binary-file-to-replace \var{name})}
+\end{procedure}
+\returns{} a binary file port
+
+The \code{open-binary-file-to-replace} procedure calls\\
+\code{(open-file \var{name} (+ O\_WRONLY O\_CREAT O\_TRUNC) \#o666 'binary-output)}.
+
+% ----------------------------------------------------------------------------
+\defineentry{open-binary-file-to-write}
+\begin{procedure}
+  \code{(open-binary-file-to-write \var{name})}
+\end{procedure}
+\returns{} a binary file port
+
+The \code{open-binary-file-to-write} procedure calls\\
+\code{(open-file \var{name} (+ O\_WRONLY O\_CREAT O\_EXCL) \#o666 'binary-output)}.
+
+
+% ----------------------------------------------------------------------------
 \defineentry{open-file-to-append}
 \begin{procedure}
   \code{(open-file-to-append \var{name})}
@@ -1829,7 +1872,7 @@ If \code{osi\_open\_file} fails with error pair \code{(\var{who}
 \returns{} a textual file port
 
 The \code{open-file-to-append} procedure calls\\
-\code{(open-file \var{name} (+ O\_WRONLY O\_CREAT O\_APPEND) \#o777 'append)}.
+\code{(open-file \var{name} (+ O\_WRONLY O\_CREAT O\_APPEND) \#o666 'append)}.
 
 % ----------------------------------------------------------------------------
 \defineentry{open-file-to-read}
@@ -1849,17 +1892,17 @@ The \code{open-file-to-read} procedure calls \code{(open-file
 \returns{} a textual file port
 
 The \code{open-file-to-replace} procedure calls\\
-\code{(open-file \var{name} (+ O\_WRONLY O\_CREAT O\_TRUNC) \#o777 'output)}.
+\code{(open-file \var{name} (+ O\_WRONLY O\_CREAT O\_TRUNC) \#o666 'output)}.
 
 % ----------------------------------------------------------------------------
 \defineentry{open-file-to-write}
 \begin{procedure}
   \code{(open-file-to-write \var{name})}
 \end{procedure}
-\returns{} a custom file port
+\returns{} a textual file port
 
 The \code{open-file-to-write} procedure calls\\
-\code{(open-file \var{name} (+ O\_WRONLY O\_CREAT O\_EXCL) \#o777 'output)}.
+\code{(open-file \var{name} (+ O\_WRONLY O\_CREAT O\_EXCL) \#o666 'output)}.
 
 % ----------------------------------------------------------------------------
 \defineentry{open-utf8-bytevector}

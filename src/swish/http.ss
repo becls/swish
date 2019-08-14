@@ -704,7 +704,7 @@
                     (format "~36r.tmp"
                       (bytevector-uint-ref (osi_make_uuid) 0 'little 16))))]
              [op (parameterize ([custom-port-buffer-size (ash 1 16)])
-                   (open-file fn (+ O_WRONLY O_CREAT) #o666 'binary-output))])
+                   (open-binary-file-to-write fn))])
         (match (catch
                 (copy-until-match ip op #f)
                 (close-port op)

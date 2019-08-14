@@ -296,16 +296,15 @@
         (cp)))))
 
 (define (copy-file input-fn output-fn)
-  ;; open-file applies mode #o777 only when creating the file, so first remove
-  (rm-f output-fn)
-  (let ([op (open-file output-fn (+ O_WRONLY O_CREAT) #o777 'binary-output)])
-    (on-exit (close-port op)
+  (let ([op (open-binary-file-to-replace output-fn)]
+        [mode (bitwise-and #o777 (<stat> mode (get-stat input-fn)))])
+    (on-exit (begin (close-port op) (set-file-mode output-fn mode))
       (copy-to-port op (list input-fn)))))
 
 (define (copy-to-port op input-fn*)
   (for-each
    (lambda (input-fn)
-     (let ([ip (open-file input-fn O_RDONLY 0 'binary-input)])
+     (let ([ip (open-binary-file-to-read input-fn)])
        (on-exit (close-port ip)
          (copy ip op))))
    input-fn*))
@@ -619,7 +618,7 @@
                    (do-compile source-fn output-fn swish-wpo? target-type)))]
               [app-boot (change-extension output-fn ".boot")]
               [compiled-code
-               (let ([ip (open-file output-fn O_RDONLY 0 'binary-input)])
+               (let ([ip (open-binary-file-to-read output-fn)])
                  (on-exit (close-port ip)
                    (get-bytevector-all ip)))])
          (show-files target-type app-boot boot-files rt-libs other-libs source-fn)
@@ -654,15 +653,15 @@
                  (resolve-missing-libs 'linked rt-libs missing))]
               [ns-rt-libs (remp swish-library-file? rt-libs)]
               [hashbang
-               (let ([ip (open-file source-fn O_RDONLY 0 'binary-input)])
+               (let ([ip (open-binary-file-to-read source-fn)])
                  (on-exit (close-port ip)
                    (let ([end (get-source-offset ip)])
                      (and (> end 0)
                           (begin (file-position ip 0) #t)
                           (get-bytevector-n ip end)))))]
               [tmp (tmp-filename output-fn)]
-              [ip (open-file output-fn O_RDONLY 0 'binary-input)]
-              [op (open-file tmp (+ O_WRONLY O_CREAT O_APPEND) #o777 'binary-output)])
+              [ip (open-binary-file-to-read output-fn)]
+              [op (open-binary-file-to-append tmp)])
          (define (cleanup) (close-port ip) (close-port op))
          (match (catch
                  (show-files target-type #f #f ns-rt-libs ns-other-libs source-fn)

@@ -53,6 +53,10 @@
    make-osi-input-port
    make-osi-output-port
    make-utf8-transcoder
+   open-binary-file-to-append
+   open-binary-file-to-read
+   open-binary-file-to-replace
+   open-binary-file-to-write
    open-fd-port
    open-file
    open-file-port
@@ -672,7 +676,7 @@
   (include "io-constants.ss")
 
   (define (open-file name flags mode type)
-    (unless (memq type '(binary-input binary-output input output append))
+    (unless (memq type '(binary-input binary-output binary-append input output append))
       (bad-arg 'open-file type))
     (let ([port (open-file-port name flags mode)])
       (define fp 0)
@@ -689,32 +693,41 @@
       (define (gp) fp)
       (define (sp! pos) (set! fp pos))
       (define (close) (close-osi-port port))
-      (case type
-        [(binary-input)
-         (make-custom-binary-input-port name r! gp sp! close)]
-        [(binary-output)
-         (make-custom-binary-output-port name w! gp sp! close)]
-        [(input)
-         (binary->utf8
-          (make-custom-binary-input-port name r! gp sp! close))]
-        [(output)
-         (binary->utf8
-          (make-custom-binary-output-port name w! gp sp! close))]
-        [(append)
-         (binary->utf8
-          (make-custom-binary-output-port name a! #f #f close))])))
+      (let open ([type type])
+        (case type
+          [(binary-input)
+           (make-custom-binary-input-port name r! gp sp! close)]
+          [(binary-output)
+           (make-custom-binary-output-port name w! gp sp! close)]
+          [(binary-append)
+           (make-custom-binary-output-port name a! #f #f close)]
+          [(input) (binary->utf8 (open 'binary-input))]
+          [(output) (binary->utf8 (open 'binary-output))]
+          [(append) (binary->utf8 (open 'binary-append))]))))
 
   (define (open-file-to-read name)
     (open-file name O_RDONLY 0 'input))
 
+  (define (open-binary-file-to-read name)
+    (open-file name O_RDONLY 0 'binary-input))
+
   (define (open-file-to-write name)
-    (open-file name (+ O_WRONLY O_CREAT O_EXCL) #o777 'output))
+    (open-file name (+ O_WRONLY O_CREAT O_EXCL) #o666 'output))
+
+  (define (open-binary-file-to-write name)
+    (open-file name (+ O_WRONLY O_CREAT O_EXCL) #o666 'binary-output))
 
   (define (open-file-to-append name)
-    (open-file name (+ O_WRONLY O_CREAT O_APPEND) #o777 'append))
+    (open-file name (+ O_WRONLY O_CREAT O_APPEND) #o666 'append))
+
+  (define (open-binary-file-to-append name)
+    (open-file name (+ O_WRONLY O_CREAT O_APPEND) #o666 'binary-append))
 
   (define (open-file-to-replace name)
-    (open-file name (+ O_WRONLY O_CREAT O_TRUNC) #o777 'output))
+    (open-file name (+ O_WRONLY O_CREAT O_TRUNC) #o666 'output))
+
+  (define (open-binary-file-to-replace name)
+    (open-file name (+ O_WRONLY O_CREAT O_TRUNC) #o666 'binary-output))
 
   (define (read-file name)
     (let ([port (open-file-port name O_RDONLY 0)])

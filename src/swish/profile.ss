@@ -184,7 +184,7 @@
     ht)
 
   (define ($profile-load filename add!)
-    (let ([ip (open-file filename O_RDONLY #o777 'binary-input)])
+    (let ([ip (open-binary-file-to-read filename)])
       (on-exit (close-port ip)
         (let lp ()
           (let ([x (fasl-read ip)])
@@ -207,8 +207,7 @@
                ls))))))
 
   (define (profile-save filename context sfd-table)
-    (let ([op (open-file (make-directory-path filename)
-                (+ O_WRONLY O_CREAT O_TRUNC) #o777 'binary-output)])
+    (let ([op (open-binary-file-to-replace (make-directory-path filename))])
       (on-exit (close-port op)
         (fasl-write (current-profile-config) op)
         (let-values ([(keys vals) (hashtable-entries sfd-table)])
