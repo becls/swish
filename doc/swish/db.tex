@@ -50,8 +50,8 @@ transaction. In order to allow other processes access to the database,
 lazy transactions should be closed occasionally. To support this, it
 tracks a count of entries in the current transaction. A transaction is
 committed when the threshold of 10,000 is reached, the message queue
-of the \code{db} is empty, or when a direct transaction is
-requested.  Each database is created with write-ahead logging enabled
+of the \code{db} is empty, or when a direct transaction is requested.
+By default, each database is created with write-ahead logging enabled
 to prevent write operations from blocking on queries made from another
 connection.
 
@@ -141,16 +141,14 @@ guardian via \code{make-foreign-handle-guardian}.
 
 \end{itemize}
 
-\genserver{db}{init} The \code{init} procedure takes a filename and
-mode symbol and attempts to open that database, setting
-\code{journal\_mode} to ``wal'' if \var{mode} is
-\code{create}. The handle returned from \code{osi\_open\_database} is
-wrapped in a \var{database} record that is registered with a
-foreign-handle guardian using the type name \code{databases}.
-The foreign-handle guardian hooks
-the garbage collector so that dead databases are
-closed even if the \code{db} gen-server fails to close them for any
-reason.
+\genserver{db}{init} The \code{init} procedure takes a filename, mode
+symbol, and an initialization procedure and attempts to open that
+database and invoke the initialization procedure.  The handle returned
+from \code{osi\_open\_database} is wrapped in a \var{database} record
+that is registered with a foreign-handle guardian using the type name
+\code{databases}.  The foreign-handle guardian hooks the garbage
+collector so that dead databases are closed even if the \code{db}
+gen-server fails to close them for any reason.
 
 The gen-server traps exits so that it can close the database in its
 \code{terminate} procedure.
@@ -220,7 +218,7 @@ queries in less than one second.
 
 \defineentry{db:start\&link}
 \begin{procedure}
-  \code{(db:start\&link \var{name} \var{filename} \var{mode})}
+  \code{(db:start\&link \var{name} \var{filename} \var{mode} \opt{\var{db-init}})}
 \end{procedure}
 \returns{}
 \code{\#(ok \var{pid})} $|$
@@ -248,6 +246,12 @@ to \code{osi\_open\_database}:
 \item \code{create} combines the SQLite flags \code{(logor
   SQLITE\_OPEN\_READWRITE \code{SQLITE\_OPEN\_CREATE})}.
 \end{itemize}
+
+\var{db-init} is a procedure that takes one argument, a database
+record instance. The return value is ignored. When the \var{mode} is
+\code{create} and \var{filename} is not a special SQLite filename, the
+default procedure sets \code{journal\_mode} to ``wal''; otherwise, no
+additional initialization occurs.
 
 The SQLite constants can be found in \texttt{sqlite3.h} or
 online~\cite{sqlite}.

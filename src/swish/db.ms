@@ -31,8 +31,6 @@
  (swish testing)
  )
 
-(define filename (path-combine (data-dir) "test-db.db3"))
-
 (define-syntax (echo-sql x)
   (syntax-case x ()
     [(k sql)
@@ -151,8 +149,7 @@
   (define goodies
     (append '(#f) (make-integers 63) (make-doubles) (make-strings)
       (make-blobs)))
-  (catch (remove-file filename))
-  (match-let* ([#(ok ,db) (db:start&link #f filename 'create)])
+  (match-let* ([#(ok ,db) (db:start&link #f ":memory:" 'create)])
     (transaction db
       (execute "create table data(x)")
       (for-each (lambda (x) (execute "insert into data(x) values(?)" x))
@@ -167,14 +164,12 @@
          (check x (execute "select x from data where rowid=?" id))
          (+ id 1))
        1 goodies))
-    (db:stop db)
-    (catch (remove-file filename))))
+    (db:stop db)))
 
 (isolate-mat m1 ()
-  (catch (remove-file filename))
   (match-let*
-   ([#(ok ,db) (db:start&link #f filename 'create)]
-    [,@filename (db:filename db)]
+   ([#(ok ,db) (db:start&link #f ":memory:" 'create)]
+    [":memory:" (db:filename db)]
     [created-tables
      (transaction db
        (execute "CREATE TABLE table1 (col1, col2, col3)")
@@ -216,8 +211,7 @@
         (columns "SELECT col1,col2,col3 AS Column3 FROM table1"))]
      [#(EXIT failed-transaction)
       (catch (transaction db (raise 'failed-transaction)))])
-    (db:stop db)
-    (catch (remove-file filename)))))
+    (db:stop db))))
 
 (mat errors ()
   (match-let*
@@ -312,7 +306,32 @@
 
 (isolate-mat db-guardian ()
   (let ([g (make-guardian)])
-    (g (sqlite:open filename (+ SQLITE_OPEN_READWRITE SQLITE_OPEN_CREATE)))
+    (g (sqlite:open ":memory:" (+ SQLITE_OPEN_READWRITE SQLITE_OPEN_CREATE)))
     (gc)
-    (assert (handle-gone? (g))))
-  (catch (remove-file filename)))
+    (assert (handle-gone? (g)))))
+
+(isolate-mat db-open ()
+  (match-let*
+   ([,filename (path-combine (data-dir) "test-db.db3")]
+    [#(ok ,file) (db:start&link #f filename 'create)]
+    [#(ok ,tmp) (db:start&link #f "" 'create)]
+    [#(ok ,mem) (db:start&link #f ":memory:" 'create)]
+    [#(ok ,shared1) (db:start&link #f "file::memory:?cache=shared" 'create)]
+    [#(ok ,shared2) (db:start&link #f "file::memory:?cache=shared" 'create)]
+    [#(ok ,init)
+     (db:start&link #f ":memory:" 'create
+       (let ([me self])
+         (lambda (db)
+           (send me `#(init ,(execute-sql db "pragma journal_mode"))))))]
+    [#(init (#("memory"))) (receive (after 1000 (raise 'timeout)) [,x x])])
+
+   ;; Verify in-memory using shared cache connects to same data
+   (transaction shared1
+     (execute "CREATE TABLE table1 (col1, col2, col3)")
+     (execute "INSERT INTO table1 (col1, col2, col3) VALUES(?,?,?)" 1 2 3))
+   (match-let*
+    ([(#(1 2 3))
+      (transaction shared2 (execute "SELECT col1, col2, col3 FROM table1"))])
+
+    (db:stop file)
+    (catch (remove-file filename)))))

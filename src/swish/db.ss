@@ -76,8 +76,26 @@
    (swish string-utils)
    )
 
-  (define (db:start&link name filename mode)
-    (gen-server:start&link name filename mode))
+  (define (special-filename? filename)
+    (or (= (string-length filename) 0)
+        (char=? (string-ref filename 0) #\:)
+        (starts-with? filename "file:")))
+
+  (define (init-wal db)
+    (match (execute-sql db "pragma journal_mode=wal")
+      [(#("wal")) 'ok]
+      [(#(,mode)) (raise `#(bad-journal-mode ,mode))]))
+
+  (define db:start&link
+    (case-lambda
+     [(name filename mode)
+      (db:start&link name filename mode
+        (if (and (eq? mode 'create)
+                 (not (special-filename? filename)))
+            init-wal
+            values))]
+     [(name filename mode db-init)
+      (gen-server:start&link name filename mode db-init)]))
 
   (define (db:stop who)
     (gen-server:call who 'stop 'infinity))
@@ -126,22 +144,18 @@
   (define SQLITE_OPEN_READWRITE 2)
   (define SQLITE_OPEN_CREATE 4)
 
-  (define (init filename mode)
+  (define (init filename mode db-init)
     (process-trap-exit #t)
     (let ([db (sqlite:open filename
                 (match mode
                   [open SQLITE_OPEN_READWRITE]
                   [create
                    (logor SQLITE_OPEN_READWRITE SQLITE_OPEN_CREATE)]))])
-      (when (eq? mode 'create)
-        (match (catch (execute-sql db "pragma journal_mode=wal"))
-          [(#("wal")) 'ok]
-          [(#(,mode))
-           (sqlite:close db)
-           (raise `#(bad-journal-mode ,mode))]
-          [#(EXIT ,reason)
-           (sqlite:close db)
-           (raise reason)]))
+      (match (catch (db-init db))
+        [#(EXIT ,reason)
+         (sqlite:close db)
+         (raise reason)]
+        [,_ (void)])
       `#(ok ,(<db-state> make
                [filename filename]
                [db db]
