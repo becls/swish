@@ -3,9 +3,15 @@ Coulter, Inc. It is released under the terms of the MIT license.
 
 This product also includes separately licensed:
 
+* Chez Scheme by Cisco Systems, Inc.
+
 * jQuery by the jQuery Foundation
+
+* libuv
 
 * Portable Regular Expressions for Scheme and Common Lisp (pregexp) by
   Dorai Sitaram
+
+* Secure Hash Algorithm SHA-1 by IETF Trust (RFC 6234)
 
 * SQLite in the public domain
