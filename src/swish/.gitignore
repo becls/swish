@@ -18,6 +18,7 @@
 /sha1.o
 /sha1.obj
 /shlibtest.dll
+/shlibtest.dylib
 /shlibtest.exp
 /shlibtest.ilk
 /shlibtest.lib
