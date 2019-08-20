@@ -38,6 +38,7 @@
    (swish app-io)
    (swish erlang)
    (swish gen-server)
+   (swish html)
    (swish io)
    (swish meta)
    (swish pregexp)
@@ -350,8 +351,15 @@
     (unless (list-of-strings? exclude-globs) (bad-arg 'profile:dump-html exclude-globs))
     (let ([results (load-profiles)]
           [op (open-file-to-replace (make-directory-path output-fn))])
+      (fprintf op "<!DOCTYPE html>\n")
       (fprintf op "<html>\n")
-      (fprintf op "<head><meta charset=\"UTF-8\"></head>\n")
+      (html->string op
+        `(head
+          (meta (@ (charset "UTF-8")))
+          (title "Test Coverage")
+          (style
+            "td { text-align: right; }"
+            "td:first-child { text-align: left; }")))
       (fprintf op "<body style='font-family:monospace;'>\n")
       (let-values ([(hits sites percentage) (summarize-coverage results)])
         (fprintf op
@@ -494,7 +502,7 @@ SPAN
       (html-encode (stringify c3))
       (cond
        [(fixnum? c4)
-        (format "<p style='color:~a'>~d%</p>"
+        (format "<span style='color:~a'>~d%</span>"
           (cond
            [(<= c4 50) "#FF0000"]
            [(< c4 80) "#FF8800"]
