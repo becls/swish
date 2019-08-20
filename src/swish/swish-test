@@ -367,7 +367,7 @@
             <\/td>`;
   }
   function renderName(r) {
-    if (!r.test) return `<td></td>`;
+    if (!r.test) return `<td><\/td>`;
     return `<td>
               <div class="result-info">
                 <span class="result-name">${escapeHtml(r.test)}<\/span>
