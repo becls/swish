@@ -11,3 +11,4 @@ make test || {
     echo 'travis_fold:end:failures'
     exit $rc
 }
+make coverage
