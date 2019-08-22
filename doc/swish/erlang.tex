@@ -88,8 +88,9 @@ process receives it.
 A \emph{process} is an instance of \code{pcb}, a Scheme record type
 that extends \code{q} with an immutable \code{id} field, the process's
 unique positive exact integer, an immutable \code{create-time} field,
-the process's create time from \code{erlang:now}, and the following
-mutable fields:
+the process's create time from \code{erlang:now}, an immutable
+\code{parameters} field, the process's weak eq-hashtable mapping
+process parameters to values, and the following mutable fields:
 \begin{itemize}
 \item \code{name}: registered name or \code{\#f}
 \item \code{cont}: one-shot continuation if live and not currently
@@ -1105,14 +1106,15 @@ the number of milliseconds in UTC since the UNIX epoch January 1,
 \returns{} a process-parameter procedure
 
 The \code{make-process-parameter} procedure creates a parameter
-procedure $p$ that provides per-process, mutable storage using a weak
-eq-hashtable mapping processes to values. Calling $p$ with no
-arguments returns the current value of the parameter for the calling
-process, and calling $p$ with one argument sets the value of the
-parameter for the calling process. The \var{filter}, if present, is a
-procedure of one argument that is applied to the \var{initial} and all
-subsequent values. If \var{filter} is not a procedure, exception
-\code{\#(bad-arg make-process-parameter \var{filter})} is raised.
+procedure $p$ that provides per-process, mutable storage via the
+\code{parameters} weak eq-hashtable of each process. Calling $p$ with
+no arguments returns the current value of the parameter for the
+calling process, and calling $p$ with one argument sets the value of
+the parameter for the calling process. The \var{filter}, if present,
+is a procedure of one argument that is applied to the \var{initial}
+and all subsequent values. If \var{filter} is not a procedure,
+exception \code{\#(bad-arg make-process-parameter \var{filter})} is
+raised.
 
 The following system parameters are not process safe and have
 been redefined to use \code{make-process-parameter}:

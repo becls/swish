@@ -663,12 +663,13 @@
         [,_ (set! p #f)]
         [,_ (inherited-parameters '())]
         [,_ (gc)]
-        [(#f "xyz" ,x) (list(g1) (g2) (g3))]
+        [(#f #f ,x) (list (g1) (g2) (g3))]
         [#t (procedure? x)]
+        [,_ (gc)]
         [,_ (send pid 'go)]
         [ok (receive (after 1000 'timeout) ["abc" 'ok])]
         [,_ (gc)]
-        [("abc" #f #f) (list (g1) (g2) (g3))])
+        [("abc" "xyz" #f) (list (g1) (g2) (g3))])
        'ok))))
 
 (isolate-mat monitor ()

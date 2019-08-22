@@ -160,6 +160,7 @@
     (fields
      (immutable id)
      (immutable create-time)
+     (immutable parameters)
      (mutable name)
      (mutable cont)
      (mutable sic)
@@ -176,7 +177,8 @@
     (protocol
      (lambda (new)
        (lambda (id cont)
-         ((new) id (erlang:now) #f cont 0 '() #f (make-queue) 0 0 '() '() #f)))))
+         ((new) id (erlang:now) (make-weak-eq-hashtable)
+          #f cont 0 '() #f (make-queue) 0 0 '() '() #f)))))
 
   (define (pcb-sleeping? p)
     (fxlogbit? 0 (pcb-flags p)))
@@ -854,20 +856,20 @@
      [(initial filter)
       (unless (procedure? filter)
         (bad-arg 'make-process-parameter filter))
-      (let ([ht (make-weak-eq-hashtable)]
-            [initial (filter initial)])
+      (let ([initial (filter initial)])
         (rec process-parameter
           (case-lambda
-           [() (no-interrupts (eq-hashtable-ref ht self initial))]
-           [(u)
-            (let ([v (filter u)])
-              (no-interrupts (eq-hashtable-set! ht self v)))])))]
+           [() (#3%eq-hashtable-ref (pcb-parameters self)
+                 process-parameter initial)]
+           [(u) (#3%eq-hashtable-set! (pcb-parameters self)
+                  process-parameter (filter u))])))]
      [(initial)
-      (let ([ht (make-weak-eq-hashtable)])
-        (rec process-parameter
-          (case-lambda
-           [() (no-interrupts (eq-hashtable-ref ht self initial))]
-           [(u) (no-interrupts (eq-hashtable-set! ht self u))])))]))
+      (rec process-parameter
+        (case-lambda
+         [() (#3%eq-hashtable-ref (pcb-parameters self)
+               process-parameter initial)]
+         [(u) (#3%eq-hashtable-set! (pcb-parameters self)
+                process-parameter u)]))]))
 
   (define inherited-parameters
     (make-parameter '()
