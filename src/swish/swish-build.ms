@@ -155,6 +155,15 @@
   (build-example "fat3" '("-b" "scheme"))
   (run-fat "fat3" '() '("Hello, World!")))
 
+(isolate-mat fat-ext ()
+  ;; fat with petite, where output filename contains an extension
+  (write-example "fat.extension" hello-fat)
+  (build-example "fat.extension" '("-b" "petite"))
+  (run-fat "fat.extension" '() '("Hello, World!"))
+  (write-example "fat.exe" hello-fat)
+  (build-example "fat.exe" '("-b" "petite"))
+  (run-fat "fat.exe" '() '("Hello, World!")))
+
 (isolate-mat thin ()
   (write-example "thin"
     `((import

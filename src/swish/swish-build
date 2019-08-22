@@ -276,6 +276,18 @@
 (define (change-extension fn new-ext)
   (string-append (path-root fn) new-ext))
 
+(define (platform-boot-file output-fn)
+  (string-append
+    (case (machine-type)
+      [(a6nt i3nt ta6nt ti3nt)
+       ;; On WIN32, Swish strips the .exe extension when looking for the boot
+       ;; file, as Chez Scheme does, so we strip .exe when creating the file.
+       (if (string-ci=? "exe" (path-extension output-fn))
+           (path-root output-fn)
+           output-fn)]
+      [else output-fn])
+    ".boot"))
+
 ;; to handle things like ".chezscheme.sls" -> ".chezscheme.so"
 (define (change-suffix filename old-ext new-ext)
   (and (ends-with? filename old-ext)
@@ -616,7 +628,7 @@
                (parameterize ([compile-compressed #f])
                  (resolve-missing-libs 'stand-alone rt-libs
                    (do-compile source-fn output-fn swish-wpo? target-type)))]
-              [app-boot (change-extension output-fn ".boot")]
+              [app-boot (platform-boot-file output-fn)]
               [compiled-code
                (let ([ip (open-binary-file-to-read output-fn)])
                  (on-exit (close-port ip)
