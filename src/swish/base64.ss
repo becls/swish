@@ -21,7 +21,7 @@
 ;; CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 ;; SOFTWARE.
 (library (swish base64)
- (export
+  (export
    base64-decode-bytevector
    base64-encode-bytevector
    base64url-decode-bytevector
@@ -197,6 +197,4 @@
                 (write-encoded base in)]
                [else
                 (write-padded base (get-bits in) (- next input-size))])))
-          out)))
-
-)
+          out))))

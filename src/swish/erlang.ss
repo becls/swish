@@ -423,7 +423,8 @@
   (define dump-stack
     (let ()
       (define (source-path obj)
-        (call-with-values (lambda () (obj 'source-path))
+        (call-with-values
+          (lambda () (obj 'source-path))
           (case-lambda
            [() #f]
            [(path char)

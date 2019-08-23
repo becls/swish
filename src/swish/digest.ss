@@ -63,7 +63,8 @@
       [close procedure?])
     ($make-digest-provider name open hash! get close))
 
-  (define-record-type digest (parent digest-provider)
+  (define-record-type digest
+    (parent digest-provider)
     (nongenerative)
     (fields
      (mutable ctx)
@@ -250,7 +251,7 @@
         [bv bytevector?]
         [block-size (lambda (x) (and (fixnum? x) (fx> x 0)))])
       (let ([md (open-digest* 'bytevector->hex-string algorithm #f
-                 (current-digest-provider))])
+                  (current-digest-provider))])
         (on-exit (close-digest md)
           (let ([len (bytevector-length bv)])
             (do ([i 0 (#3%fx+ i block-size)]) ((#3%fx>= i len))

@@ -612,6 +612,4 @@
            #\space)
           (collect-args #'(where ...)))])]))
 
-  (define SQLITE_STATUS_MEMORY_USED 0)
-
-)
+  (define SQLITE_STATUS_MEMORY_USED 0))

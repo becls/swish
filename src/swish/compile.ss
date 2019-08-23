@@ -69,14 +69,14 @@
   (cond
    [must-rebuild?
     (printf "compiling ~a\n" (path-last dest-file))
-    (unless
-     (verify-excluded-wpo
-      (parameterize ([library-extensions '((".ss" . ".so"))])
-        (compile-whole-library
-         (string-append lib-dir "/" (path-root src-file) ".wpo")
-         dest-file)))
-     (delete-file dest-file)
-     (abort))]
+    (let ([missing
+           (parameterize ([library-extensions '((".ss" . ".so"))])
+             (compile-whole-library
+              (string-append lib-dir "/" (path-root src-file) ".wpo")
+              dest-file))])
+      (unless (verify-excluded-wpo missing)
+        (delete-file dest-file)
+        (abort)))]
    [else (printf "~a is up to date\n" (path-last dest-file))]))
 
 ;; The custom library-search-handler here serves two purposes:

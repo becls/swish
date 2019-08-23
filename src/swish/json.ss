@@ -189,7 +189,7 @@
                  [(<= #xDC00 x #xDFFF) (raise 'invalid-surrogate-pair)]
                  [else (write-char (integer->char x) op)]))]
              [else (unexpected-input c ip)]))
-           (read-string ip op)]
+         (read-string ip op)]
         [else (write-char c op) (read-string ip op)])))
 
   (define (read-4hexdig ip)
