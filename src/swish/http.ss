@@ -24,7 +24,10 @@
 (library (swish http)
   (export
    <request>
+   http-content-limit
+   http-header-limit
    http-port-number
+   http-request-limit
    http-sup:start&link
    http:find-header
    http:find-param
@@ -57,10 +60,33 @@
    (swish watcher)
    )
 
-  (define request-limit 4096)
-  (define header-limit 1048576)
-  (define content-limit 4194304)
-  (define http-port-number (make-parameter #f))
+  (define http-port-number
+    (make-parameter #f
+      (lambda (x)
+        (unless (or (not x) (and (fixnum? x) (fx<= 0 x 65535)))
+          (bad-arg 'http-port-number x))
+        x)))
+
+  (define http-request-limit
+    (make-parameter 4096
+      (lambda (x)
+        (unless (and (fixnum? x) (fx> x 0))
+          (bad-arg 'http-request-limit x))
+        x)))
+
+  (define http-header-limit
+    (make-parameter 1048576
+      (lambda (x)
+        (unless (and (fixnum? x) (fx> x 0))
+          (bad-arg 'http-header-limit x))
+        x)))
+
+  (define http-content-limit
+    (make-parameter 4194304
+      (lambda (x)
+        (unless (and (fixnum? x) (fx> x 0))
+          (bad-arg 'http-content-limit x))
+        x)))
 
   (define (http-sup:start&link)
     (if (not (http-port-number))
@@ -413,7 +439,7 @@
             [(,_ ,boundary) ;; multipart/form-data
              (parse-multipart/form-data ip (string-append "--" boundary))]
             [#f
-             (when (> len content-limit)
+             (when (> len (http-content-limit))
                (raise 'content-limit-exceeded))
              (let* ([content (make-bytevector len)]
                     [n (get-bytevector-n! ip content 0 len)])
@@ -425,14 +451,14 @@
      [else '()]))
 
   (define (http:handle-input ip op)
-    (let ([x (read-line ip request-limit)])
+    (let ([x (read-line ip (http-request-limit))])
       (cond
        [(eof-object? x) (raise 'normal)]
        [(http:parse-request x) =>
         (lambda (request)
           (match request
             [`(<request> ,query)
-             (let* ([header (http:read-header ip header-limit)]
+             (let* ([header (http:read-header ip (http-header-limit))]
                     [params (http:get-content-params ip header)])
                (on-exit (delete-tmp-files params)
                  (http:file-handler ip op request header
@@ -685,7 +711,7 @@
           '()]
          [else (raise 'invalid-multipart-boundary)])))
     (define (parse-next limit)
-      (define header (http:read-header ip header-limit))
+      (define header (http:read-header ip (http-header-limit)))
       (define data
         (parse-form-data-disposition
          (http:get-header "Content-Disposition" header)))
@@ -719,7 +745,7 @@
         [(= i (bytevector-length bv))]
       (unless (eqv? (next-u8 ip) (bytevector-u8-ref bv i))
         (raise 'invalid-multipart-boundary)))
-    (parse-end content-limit))
+    (parse-end (http-content-limit)))
 
   (define form-data-regexp (pregexp "^form-data;\\s*(.*)$"))
   (define key-value-regexp (pregexp "^([^=]+)=\"([^\"]*)\"(?:;\\s*(.*))?$"))

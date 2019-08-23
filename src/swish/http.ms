@@ -394,7 +394,15 @@
   (define header '(("Content-Length" . "bar") ("Content-Type" . "foo")))
   (define params '(("query" . "lookup") ("val" . "1")))
   (match-let*
-   ([#f (http:find-header "None" header)]
+   ([#(EXIT #(bad-arg http-port-number a)) (catch (http-port-number 'a))]
+    [#(EXIT #(bad-arg http-port-number -1)) (catch (http-port-number -1))]
+    [#(EXIT #(bad-arg http-request-limit a)) (catch (http-request-limit 'a))]
+    [#(EXIT #(bad-arg http-request-limit 0)) (catch (http-request-limit 0))]
+    [#(EXIT #(bad-arg http-header-limit a)) (catch (http-header-limit 'a))]
+    [#(EXIT #(bad-arg http-header-limit 0)) (catch (http-header-limit 0))]
+    [#(EXIT #(bad-arg http-content-limit a)) (catch (http-content-limit 'a))]
+    [#(EXIT #(bad-arg http-content-limit 0)) (catch (http-content-limit 0))]
+    [#f (http:find-header "None" header)]
     [#(EXIT #(bad-arg http:find-header None))
      (catch (http:find-header 'None header))]
     ["foo" (http:find-header "Content-Type" header)]

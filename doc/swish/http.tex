@@ -94,9 +94,7 @@ A URL which directs the system away from \code{(web-dir)} using
 explicitly checks for relative paths.
 
 The HTTP interface limits incoming data to protect against large
-memory allocation which may crash the system. URL requests are limited
-to 4,096 bytes. Headers are limited to 1,048,576 bytes. Posted content
-is limited to 4,194,304 bytes, not including uploaded files.
+memory allocation which may crash the system.
 
 The HTTP interface does not limit incoming file uploads. If the disk
 runs out of space, the handler process will exit with an I/O error.
@@ -171,6 +169,34 @@ directory of the current file.
 The \code{http-port-number} parameter specifies whether or not
 \code{http-sup:start\&link} should start the HTTP server and,
 if started, on what port that server should listen for connections.
+
+\defineentry{http-request-limit}
+\begin{parameter}
+  \code{http-request-limit}
+\end{parameter}
+\hasvalue{} a positive fixnum
+
+The \code{http-request-limit} parameter specifies the maximum length
+in bytes of the first line of an HTTP request. It defaults to 4,096.
+
+\defineentry{http-header-limit}
+\begin{parameter}
+  \code{http-header-limit}
+\end{parameter}
+\hasvalue{} a positive fixnum
+
+The \code{http-header-limit} parameter specifies the maximum length in
+bytes of the HTTP request headers. It defaults to 1,048,576.
+
+\defineentry{http-content-limit}
+\begin{parameter}
+  \code{http-content-limit}
+\end{parameter}
+\hasvalue{} a positive fixnum
+
+The \code{http-content-limit} parameter specifies the maximum length
+in bytes of the HTTP request content excluding uploaded files. It
+defaults to 4,194,304.
 
 \defineentry{http-sup:start\&link}
 \begin{procedure}
