@@ -198,18 +198,6 @@
   (define (io-error name who errno)
     (raise `#(io-error ,name ,who ,errno)))
 
-  (define (make-r! port)
-    (lambda (bv start n)
-      (read-osi-port port bv start n -1)))
-
-  (define (make-w! port)
-    (lambda (bv start n)
-      (write-osi-port port bv start n -1)))
-
-  (define (make-close port)
-    (lambda ()
-      (close-osi-port port)))
-
   (define (make-utf8-transcoder)
     (make-transcoder (utf-8-codec)
       (eol-style none)
@@ -219,8 +207,14 @@
     (transcoded-port bp (make-utf8-transcoder)))
 
   (define (make-iport name port close?)
-    (make-custom-binary-input-port name (make-r! port) #f #f
-      (and close? (make-close port))))
+    (define fp 0)
+    (define (r! bv start n)
+      (let ([count (read-osi-port port bv start n -1)])
+        (set! fp (+ fp count))
+        count))
+    (define (gp) fp)
+    (make-custom-binary-input-port name r! gp #f
+      (and close? (lambda () (close-osi-port port)))))
 
   (define (make-osi-input-port p)
     (unless (osi-port? p)
@@ -228,8 +222,14 @@
     (make-iport (osi-port-name p) p #t))
 
   (define (make-oport name port)
-    (make-custom-binary-output-port name (make-w! port) #f #f
-      (make-close port)))
+    (define fp 0)
+    (define (w! bv start n)
+      (let ([count (write-osi-port port bv start n -1)])
+        (set! fp (+ fp count))
+        count))
+    (define (gp) fp)
+    (define (close) (close-osi-port port))
+    (make-custom-binary-output-port name w! gp #f close))
 
   (define (make-osi-output-port p)
     (unless (osi-port? p)
@@ -681,10 +681,9 @@
     (let ([port (open-file-port name flags mode)])
       (define fp 0)
       (define (r! bv start n)
-        (let ([x (read-osi-port port bv start n fp)])
-          (unless (eof-object? x)
-            (set! fp (+ fp x)))
-          x))
+        (let ([count (read-osi-port port bv start n fp)])
+          (set! fp (+ fp count))
+          count))
       (define (w! bv start n)
         (let ([count (write-osi-port port bv start n fp)])
           (set! fp (+ fp count))
@@ -800,18 +799,6 @@
 
   (define (port-number? x) (and (fixnum? x) (fx<= 0 x 65535)))
 
-  (define (accept-tcp name port)
-    (define fp 0)
-    (define w! (make-w! port))
-    (define (counting-w! bv start n)
-      (let ([count (w! bv start n)])
-        (set! fp (+ fp count))
-        count))
-    (define (gp) fp)
-    (values (make-iport name port #f)
-      (make-custom-binary-output-port name counting-w! gp #f
-        (make-close port))))
-
   (define (listen-tcp address port-number process)
     ;; Keep a weak reference to the listener in cell so that the
     ;; callback can use it.
@@ -833,9 +820,9 @@
                             `#(accept-tcp-failed ,listener ,(car r) ,(cdr r)))
                           (let* ([name (osi_get_ip_address r)]
                                  [port (@make-osi-port name r)])
-                            (let-values ([(ip op) (accept-tcp name port)])
-                              (send process
-                                `#(accept-tcp ,listener ,ip ,op)))))
+                            (send process
+                              `#(accept-tcp ,listener ,(make-iport name port #f)
+                                  ,(make-oport name port)))))
                       (unless (pair? r)
                         (osi_close_port* r 0))))))
        [(,who . ,errno)
