@@ -1423,10 +1423,9 @@ is established or fails to be established.  The \var{port-spec} may be
 a port number or a string service name such as ``http''. The procedure
 returns a custom binary input port that reads from the new connection
 and a custom binary output port that writes to the new
-connection. These ports do not track or report position, and the
-underlying osi-ports are registered with the osi-port
-guardian\index{osi-port guardian}.
-
+connection. These ports support \code{port-position} but not
+\code{set-port-position!}, and the underlying osi-ports are registered
+with the osi-port guardian\index{osi-port guardian}.
 
 If \code{osi\_connect\_tcp} fails with error pair \code{(\var{who}
   . \var{errno})}, exception \code{\#(io-error
@@ -1599,8 +1598,9 @@ guardian\index{listener guardian}.
 
 For each accepted connection, the message \code{\#(accept-tcp
   \var{listener} \var{ip} \var{op})} is sent to \var{process}, where
-\var{ip} is the binary input port and \var{op} is the binary output
-port.
+\var{ip} is the custom binary input port and \var{op} is the custom
+binary output port. Both ports support \code{port-position} but not
+\code{set-port-position!}.
 
 For each failed connection, the message \code{\#(accept-tcp-failed
   \var{listener} \var{who} \var{errno})} is sent to \var{process},
@@ -1699,9 +1699,9 @@ for the file \var{path} using \var{mode}, which defaults to
 \returns{} a binary input port
 
 The \code{make-osi-input-port} procedure returns a custom binary input
-port that reads from osi-port \var{p}. It does not track
-position. Closing the input port closes the underlying osi-port
-\var{p}.
+port that reads from osi-port \var{p} and supports
+\code{port-position} but not \code{set-port-position!}. Closing the
+input port closes the underlying osi-port \var{p}.
 
 % ----------------------------------------------------------------------------
 \defineentry{make-osi-output-port}
@@ -1711,9 +1711,9 @@ position. Closing the input port closes the underlying osi-port
 \returns{} a binary output port
 
 The \code{make-osi-output-port} procedure returns a custom binary
-output port that writes to osi-port \var{p}. It does not track
-position. Closing the output port closes the underlying osi-port
-\var{p}.
+output port that writes to osi-port \var{p} and supports
+\code{port-position} but not \code{set-port-position!}. Closing the
+output port closes the underlying osi-port \var{p}.
 
 % ----------------------------------------------------------------------------
 \defineentry{make-utf8-transcoder}
@@ -2174,9 +2174,10 @@ string-valued \var{args}. It returns a custom binary output port
 \var{to-stdin} that writes to the standard input of the process,
 custom binary input ports \var{from-stdout} and \var{from-stderr} that
 read from the standard output and standard error of the process,
-respectively, and a process identifier \var{os-pid}. These ports do
-not track or report position, and the underlying osi-ports are
-registered with the osi-port guardian\index{osi-port guardian}.
+respectively, and a process identifier \var{os-pid}. These ports
+support \code{port-position} but not \code{set-port-position!}, and
+the underlying osi-ports are registered with the osi-port
+guardian\index{osi-port guardian}.
 
 When the spawned process terminates, \code{\#(process-terminated
   \var{os-pid} \var{exit-status} \var{term-signal})} is sent to
