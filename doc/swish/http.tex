@@ -50,14 +50,14 @@ Each handler reads from its input port until a CR LF
 occurs. Well-formed input is converted to a \code{<request>} tuple,
 and the HTTP request header and any content parameters are read.
 
-When \code{Content-Length} appears in the header, the content bytes
-are read. If the \code{Content-Type} is \code{multipart/form-data}
-or \code{application/x-www-form-urlencoded}, the content is
-converted to an association list. Otherwise, parameter
-\code{"unhandled-content"} is included with the value of the raw
-bytevector of data. Each uploaded file is stored in
-\code{(tmp-dir)}, and the association list value is
-\code{\#(<file> \var{filename})}.
+When \code{Content-Length} appears in the header and
+\code{Content-Type} is \code{multipart/form-data} or
+\code{application/x-www-form-urlencoded}, the content is read and
+converted to an association list. Otherwise, the handler is
+responsible for reading the content. Any unread content as determined
+by \code{Content-Length} is ignored. Each uploaded file is stored in
+\code{(tmp-dir)}, and the association list value is \code{\#(<file>
+  \var{filename})}.
 
 \code{http:file-handler} is then called combining the
 \code{<request>} query parameters and content
@@ -68,8 +68,10 @@ page handler from the \code{http-cache}, and invokes it. A
 request. The output port is flushed after the page handler returns.
 
 After a request is processed, all uploaded files are deleted, and the
-current process and connection can be reused. The system reads another
-request from the input port.
+current process and connection can be reused. Unless the
+\code{Connection} header specifies \code{close}, the system reads
+another request from the input port after skipping any unread content
+from the current request.
 
 The \code{http-cache} is a gen-server that stores page handlers and
 provides a mapping from file extension to content type. It creates a
@@ -195,8 +197,13 @@ bytes of the HTTP request headers. It defaults to 1,048,576.
 \hasvalue{} a positive fixnum
 
 The \code{http-content-limit} parameter specifies the maximum length
-in bytes of the HTTP request content excluding uploaded files. It
-defaults to 4,194,304.
+in bytes of HTTP request content read by the system handlers when
+\code{Content-Type} is \code{multipart/form-data} or
+\code{application/x-www-form-urlencoded}. It defaults to
+4,194,304. The limit does not include uploaded files, because they are
+not stored in memory. For all other content types, the handler is
+responsible for enforcing appropriate limits. The system ignores any
+content unread by the handler.
 
 \defineentry{http-sup:start\&link}
 \begin{procedure}
@@ -230,9 +237,10 @@ the server is listening on.
 \returns{} a string \alt{} \code{\#f}
 
 The \code{http:find-header} procedure returns the value associated
-with \var{name} in \var{header}. Header comparisons are
-case-insensitive. If \var{name} is not a string, exception
-\code{\#(bad-arg http:find-header \var{name})} is raised.
+with \var{name} in \var{header} if present and \code{\#f}
+otherwise. Header comparisons are case-insensitive. If \var{name} is
+not a string, exception \code{\#(bad-arg http:find-header \var{name})}
+is raised.
 
 \defineentry{http:get-header}
 \begin{procedure}
@@ -240,11 +248,23 @@ case-insensitive. If \var{name} is not a string, exception
 \end{procedure}
 \returns{} a string
 
-The \code{http:get-header} procedure returns the value assocated
-with \var{name} in \var{header} or exits with reason
-\code{\#(invalid-header \var{name} \var{header})}. Header
+The \code{http:get-header} procedure returns the value associated with
+\var{name} in \var{header} if present and raises exception
+\code{\#(invalid-header \var{name} \var{header})} otherwise. Header
 comparisons are case-insensitive. If \var{name} is not a string,
 exception \code{\#(bad-arg http:get-header \var{name})} is raised.
+
+\defineentry{http:get-content-length}
+\begin{procedure}
+  \code{(http:get-content-length \var{header})}
+\end{procedure}
+\returns{} an unsigned integer \alt{} \code{\#f}
+
+The \code{http:get-content-length} procedure returns the unsigned
+integer value associated with \code{Content-Length} in \var{header} if
+present and \code{\#f} otherwise. It raises exception
+\code{\#(invalid-content-length \var{value})} if the \var{value}
+string does not represent an unsigned integer.
 
 \defineentry{http:find-param}
 \begin{procedure}
@@ -252,10 +272,11 @@ exception \code{\#(bad-arg http:get-header \var{name})} is raised.
 \end{procedure}
 \returns{} a string \alt{} \code{\#f}
 
-The \code{http:find-param} procedure returns the value associated
-with \var{name} in \var{params}. Parameter comparisons are
-case-sensitive. If \var{name} is not a string, exception
-\code{\#(bad-arg http:find-param \var{name})} is raised.
+The \code{http:find-param} procedure returns the value associated with
+\var{name} in \var{params} if present and \code{\#f}
+otherwise. Parameter comparisons are case-sensitive. If \var{name} is
+not a string, exception \code{\#(bad-arg http:find-param \var{name})}
+is raised.
 
 \defineentry{http:get-param}
 \begin{procedure}
@@ -263,9 +284,9 @@ case-sensitive. If \var{name} is not a string, exception
 \end{procedure}
 \returns{} a string
 
-The \code{http:get-param} procedure returns the value associated
-with \var{name} in \var{params} or exits with reason
-\code{\#(invalid-param \var{name} \var{params})}. Parameter
+The \code{http:get-param} procedure returns the value associated with
+\var{name} in \var{params} if present and raises exception
+\code{\#(invalid-param \var{name} \var{params})} otherwise. Parameter
 comparisons are case-sensitive. If \var{name} is not a string,
 exception \code{\#(bad-arg http:get-param \var{name})} is raised.
 
@@ -282,11 +303,11 @@ An association list is created by making a string from the characters
 before the first colon as the key. Non-linear white space is skipped,
 and the remaining characters are converted to a string value.
 
-Reading beyond \var{limit} will result in exiting with reason
+Reading beyond \var{limit} raises exception
 \code{input-limit-exceeded}.
 
-Failure to find a colon on any given line will result in exiting with
-reason \code{invalid-header}.
+Failure to find a colon on any given line raises exception
+\code{invalid-header}.
 
 \defineentry{http:read-status}
 \begin{procedure}
@@ -297,7 +318,7 @@ reason \code{invalid-header}.
 The \code{http:read-status} procedure reads the HTTP response status
 line from the binary input port \var{op} and returns the number if
 well formed and \code{\#f} otherwise. Reading beyond \var{limit}
-will result in exiting with reason \code{input-limit-exceeded}.
+raises exception \code{input-limit-exceeded}.
 
 \defineentry{http:write-status}
 \begin{procedure}

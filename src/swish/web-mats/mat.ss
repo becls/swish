@@ -15,7 +15,11 @@
                 [#(<file> ,filename) (get-param "file")])
      (my-respond (read-file filename)))]
   ["echo unhandled"
-   (my-respond (get-param "unhandled-content"))]
+   (my-respond
+    (get-bytevector-n ip
+      (string->number
+       (or (find-param "count")
+           (http:get-header "Content-Length" header)))))]
   ["bad arg"
    (my-respond (get-param "bad"))]
   ["file-headers"
@@ -27,4 +31,9 @@
     [(find-param "partial") =>
      (lambda (x) (put-bytevector op (string->utf8 x)))])
    (raise 'internal-error)]
+  ["bad read"
+   ;; consume input, but don't respond or error
+   (do ([n (string->number (get-param "count")) (- n 1)])
+       ((= n 0))
+     (get-u8 ip))]
   )
