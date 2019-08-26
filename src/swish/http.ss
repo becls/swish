@@ -31,6 +31,7 @@
    http-sup:start&link
    http:find-header
    http:find-param
+   http:get-content-length
    http:get-header
    http:get-param
    http:get-port-number
@@ -425,30 +426,57 @@
             (http:read-header ip (fx- limit (bytevector-length line))))]
          [,_ (raise 'invalid-header)])]))
 
-  (define multipart/form-data-regexp
-    (pregexp "^multipart/form-data;\\s*boundary=(.+)$"))
+  (define (multipart/form-data-boundary type)
+    (match (pregexp-match (re "^multipart/form-data;\\s*boundary=(.+)$") type)
+      [(,_ ,boundary) boundary]
+      [#f #f]))
 
-  (define (http:get-content-params ip header)
+  (define (get-chunk! ip bv n)
+    (let ([count (get-bytevector-n! ip bv 0 n)])
+      (when (or (eof-object? count) (not (= count n)))
+        (raise 'unexpected-eof))))
+
+  (define (advance! ip ipos op opos)
+    (when ipos
+      (let ([remaining (- ipos (port-position ip))])
+        (when (< remaining 0)
+          (when (= opos (port-position op))
+            (internal-server-error op))
+          (raise 'http-violation))
+        (do ([n remaining (fx- n 1)] [b #f (get-u8 ip)])
+            ((fx= n 0)
+             (when (eof-object? b)
+               (raise 'unexpected-eof)))))))
+
+  (define (http:get-content-length header)
     (cond
      [(http:find-header "Content-Length" header) =>
       (lambda (x)
-        (let ([len (or (string->number x)
-                       (raise `#(invalid-content-length ,x)))]
-              [type (or (http:find-header "Content-Type" header) "none")])
-          (match (pregexp-match multipart/form-data-regexp type)
-            [(,_ ,boundary) ;; multipart/form-data
-             (parse-multipart/form-data ip (string-append "--" boundary))]
-            [#f
-             (when (> len (http-content-limit))
-               (raise 'content-limit-exceeded))
-             (let* ([content (make-bytevector len)]
-                    [n (get-bytevector-n! ip content 0 len)])
-               (when (or (eof-object? n) (not (= n len)))
-                 (raise 'unexpected-eof))
-               (if (starts-with? type "application/x-www-form-urlencoded")
-                   (parse-encoded-kv content 0 len)
-                   `(("unhandled-content" . ,content))))])))]
-     [else '()]))
+        (unless (pregexp-match (re "^[0-9]+$") x)
+          (raise `#(invalid-content-length ,x)))
+        (string->number x))]
+     [else #f]))
+
+  (define (http:get-content-params&pos ip header)
+    (cond
+     [(http:get-content-length header) =>
+      (lambda (len)
+        (let ([type (or (http:find-header "Content-Type" header) "none")]
+              [pos (+ (port-position ip) len)])
+          (cond
+           [(multipart/form-data-boundary type) =>
+            (lambda (boundary)
+              (values
+               (parse-multipart/form-data ip (string-append "--" boundary))
+               pos))]
+           [(starts-with? type "application/x-www-form-urlencoded")
+            (when (> len (http-content-limit))
+              (raise 'content-limit-exceeded))
+            (let ([content (make-bytevector len)])
+              (get-chunk! ip content len)
+              (values (parse-encoded-kv content 0 len) pos))]
+           [else (values '() pos)])))]
+     [else (values '() #f)]))
 
   (define (http:handle-input ip op)
     (let ([x (read-line ip (http-request-limit))])
@@ -458,12 +486,15 @@
         (lambda (request)
           (match request
             [`(<request> ,query)
-             (let* ([header (http:read-header ip (http-header-limit))]
-                    [params (http:get-content-params ip header)])
+             (define header (http:read-header ip (http-header-limit)))
+             (let-values ([(params ipos)
+                           (http:get-content-params&pos ip header)])
+               (define opos (port-position op))
                (on-exit (delete-tmp-files params)
                  (http:file-handler ip op request header
                    (append query params)))
                (when (keep-alive? header)
+                 (advance! ip ipos op opos)
                  (http:handle-input ip op)))]))]
        [else
         (raise `#(unhandled-input ,x))])))
@@ -747,15 +778,13 @@
         (raise 'invalid-multipart-boundary)))
     (parse-end (http-content-limit)))
 
-  (define form-data-regexp (pregexp "^form-data;\\s*(.*)$"))
-  (define key-value-regexp (pregexp "^([^=]+)=\"([^\"]*)\"(?:;\\s*(.*))?$"))
-
   (define (parse-form-data-disposition d)
-    (match (pregexp-match form-data-regexp d)
+    (match (pregexp-match (re "^form-data;\\s*(.*)$") d)
       [(,_ ,params)
        (let lp ([params params])
          (if params
-             (match (pregexp-match key-value-regexp params)
+             (match (pregexp-match (re "^([^=]+)=\"([^\"]*)\"(?:;\\s*(.*))?$")
+                      params)
                [(,_ ,key ,val ,params)
                 (cons (cons key val) (lp params))]
                [#f (raise `#(invalid-content-disposition ,d))])
@@ -816,5 +845,4 @@
                       (fxvector-set! partial pos (fxvector-ref partial cnd))
                       (fxvector-set! partial pos cnd))
                   (build (fx+ pos 1) cnd))))
-          copy-until-match)))
-  )
+          copy-until-match))))
