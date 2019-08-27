@@ -76,7 +76,7 @@
            [else (stringify v)])))
 
   (define (remove-limit-offset str)
-    (stringify (match (pregexp-match "^(.*?) limit \\d+ offset \\d+$" str)
+    (stringify (match (pregexp-match "^((?:.|\\n)*?) limit \\d+ offset \\d+$" str)
                  [(,full ,match) match]
                  [(,no-limit) no-limit])))
 
