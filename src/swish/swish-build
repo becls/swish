@@ -443,7 +443,7 @@
           (if (eof-object? line)
               als
               (lp
-               (match (pregexp-match "^trying (.*)\\.\\.\\.opened\r?$" line)
+               (match (pregexp-match (re "^trying (.*)\\.\\.\\.opened\r?$") line)
                  [(,_ ,fn)
                   (cons (cons (path-last fn) fn) als)]
                  [,_ als]))))))))

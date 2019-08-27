@@ -572,7 +572,7 @@
       (<arg-spec> open s [type short long usage])
       (define flag-char
         (and short
-             (pregexp-match "\\[-.\\]" (format-spec s))
+             (pregexp-match (re "\\[-.\\]") (format-spec s))
              short))
       (cons (and (memq 'show usage) #t)
         (or flag-char (format-spec s))))

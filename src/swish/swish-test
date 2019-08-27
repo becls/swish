@@ -572,8 +572,8 @@
 
 (define (path->file-uri path)
   (define (sanitize path)
-    (join (map http:percent-encode (pregexp-split "[\\\\/]" path)) "/"))
-  (match (pregexp-match "^([a-zA-Z]:)[\\\\/](.*)" path)
+    (join (map http:percent-encode (pregexp-split (re "[\\\\/]") path)) "/"))
+  (match (pregexp-match (re "^([a-zA-Z]:)[\\\\/](.*)") path)
     [(,_ ,anchor ,rest) (string-append "file://" anchor "/" (sanitize rest))]
     [#f (string-append "file://" (sanitize path))]))
 

@@ -28,7 +28,7 @@
        (join (map (lambda (x) (format "'~a'" x)) names) #\,))))
 
 (define sanitize-column-name
-  (let ([regexp (pregexp "^json_extract\\(foreign_handles, '\\$.([^']*)'\\)")])
+  (let ([regexp (re "^json_extract\\(foreign_handles, '\\$.([^']*)'\\)")])
     (lambda (col)
       (match (pregexp-match regexp col)
         [(,_ ,col) col]

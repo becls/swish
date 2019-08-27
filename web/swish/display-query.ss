@@ -76,9 +76,10 @@
            [else (stringify v)])))
 
   (define (remove-limit-offset str)
-    (stringify (match (pregexp-match "^((?:.|\\n)*?) limit \\d+ offset \\d+$" str)
-                 [(,full ,match) match]
-                 [(,no-limit) no-limit])))
+    (stringify
+     (match (pregexp-match (re "^((?:.|\\n)*?) limit \\d+ offset \\d+$") str)
+       [(,full ,match) match]
+       [(,no-limit) no-limit])))
 
   (let ([stmt (sqlite:prepare db (format "~a limit ? offset ?" sql))])
     (on-exit (sqlite:finalize stmt)
