@@ -673,7 +673,7 @@
                           (get-bytevector-n ip end)))))]
               [tmp (tmp-filename output-fn)]
               [ip (open-binary-file-to-read output-fn)]
-              [op (open-binary-file-to-append tmp)])
+              [op (open-file tmp (+ O_WRONLY O_CREAT O_TRUNC) #o777 'binary-output)])
          (define (cleanup) (close-port ip) (close-port op))
          (match (catch
                  (show-files target-type #f #f ns-rt-libs ns-other-libs source-fn)
