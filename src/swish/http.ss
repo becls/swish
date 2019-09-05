@@ -161,17 +161,17 @@
           state
           (let ([state (load-watchers state)])
             ($state copy [mime-types (read-mime-types)]))))
-    (define (url->abs-paths path)
-      (map
-       (lambda (x) (path-combine (web-dir) x))
-       (cond
-        [(char=? (string-ref path (- (string-length path) 1)) #\/)
-         (list (string-append path "index.ss"))]
-        [(string=? (path-extension path) "")
-         (list path
-           (string-append path ".ss")
-           (path-combine path "index.ss"))]
-        [else (list path)])))
+    (define (url->abs-paths path) ;; path starts with "/"
+      (let ([path (path-combine (web-dir)
+                    (substring path 1 (string-length path)))])
+        (cond
+         [(directory-separator? (string-ref path (- (string-length path) 1)))
+          (list (string-append path "index.ss"))]
+         [(string=? (path-extension path) "")
+          (list path
+            (string-append path ".ss")
+            (path-combine path "index.ss"))]
+         [else (list path)])))
     (define (lookup-handler pages paths)
       (exists (lambda (path) (ht:ref pages path #f)) paths))
     (define (make-static-file-handler path)
@@ -643,11 +643,13 @@
         ,(wrap-3D-include path exprs))))
 
   (define (validate-path path)
-    (let ([first (path-first path)])
-      (cond
-       [(string=? first "") #t]
-       [(string=? first "..") #f]
-       [else (validate-path (path-rest path))])))
+    (and (string=? (path-first path) "/")
+         (let lp ([path (path-rest path)])
+           (let ([first (path-first path)])
+             (cond
+              [(string=? first "") #t]
+              [(string=? first "..") #f]
+              [else (lp (path-rest path))])))))
 
   (define (not-found op)
     (http:respond op 404 '()

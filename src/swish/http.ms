@@ -137,6 +137,8 @@
                    "0123")))]
     [#(EXIT #(invalid-http-path "/.."))
      (catch (test "GET /.. HTTP/1.1\r\n\r\n"))]
+    [#(EXIT #(invalid-http-path "foo"))
+     (catch (test "GET foo HTTP/1.1\r\n\r\n"))]
     [#(EXIT #(bad-arg http:respond "foo"))
      (catch (test "GET /mat?cmd=bad+arg&bad=foo HTTP/1.1\r\n\r\n"))]
     [#(EXIT #(invalid-content-length "none"))
