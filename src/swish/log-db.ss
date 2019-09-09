@@ -188,21 +188,22 @@
      [(process? x) (process->child-id x)]
      [(date? x) (format-rfc2822 x)]
      [(condition? x)
-      (let ([op (open-output-string)])
-        (display-condition x op)
-        (write-char #\. op)
-        (let ([reason-string (get-output-string op)]
-              [stack-string
-               (and (continuation-condition? x)
-                    (let ([op (open-output-string)])
-                      (dump-stack (condition-continuation x) op 'default)
-                      (get-output-string op)))])
-          (format "~s"
-            (if stack-string
-                `#(error ,reason-string ,stack-string)
-                `#(error ,reason-string)))))]
+      (parameterize ([print-graph #t])
+        (let ([op (open-output-string)])
+          (display-condition x op)
+          (write-char #\. op)
+          (let ([reason-string (get-output-string op)]
+                [stack-string
+                 (and (continuation-condition? x)
+                      (let ([op (open-output-string)])
+                        (dump-stack (condition-continuation x) op 'default)
+                        (get-output-string op)))])
+            (format "~s"
+              (if stack-string
+                  `#(error ,reason-string ,stack-string)
+                  `#(error ,reason-string))))))]
      [(json:object? x) (json:object->string x)]
-     [else (format "~s" x)]))
+     [else (parameterize ([print-graph #t]) (format "~s" x))]))
 
   (define-syntax (log-sql x)
     (syntax-case x ()
