@@ -98,4 +98,5 @@
       (with-db [db (log-file) SQLITE_OPEN_READONLY]
         (do-query db sql limit offset type func)))))
 
+(print-graph #t)
 (dispatch)
