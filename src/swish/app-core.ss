@@ -103,6 +103,7 @@
   (profile-omit ;; profiler won't have a chance to save data for these due to osi_exit
 
    (define (exit-process exit-code)
+     (trap-signals #f)
      (catch (flush-output-port (console-output-port)))
      (catch (flush-output-port (console-error-port)))
      (let ([p (#%$top-level-value '$console-input-port)])
@@ -129,15 +130,15 @@
   (define (handle-signal n)
     (spawn application:shutdown))
 
-  (define (trap-signals)
+  (define (trap-signals handler)
     (meta-cond
      [(memq (machine-type) '(i3nt ti3nt a6nt ta6nt))
-      (signal-handler SIGBREAK handle-signal)
-      (signal-handler SIGHUP handle-signal)
-      (signal-handler SIGINT handle-signal)]
+      (signal-handler SIGBREAK handler)
+      (signal-handler SIGHUP handler)
+      (signal-handler SIGINT handler)]
      [else
-      (signal-handler SIGINT handle-signal)
-      (signal-handler SIGTERM handle-signal)]))
+      (signal-handler SIGINT handler)
+      (signal-handler SIGTERM handler)]))
 
   (define started? #f)
   (define ($swish-start stand-alone? args run)
@@ -160,7 +161,7 @@
              (when stand-alone?
                (app:name who)
                (app:path who))
-             (trap-signals)
+             (trap-signals handle-signal)
              (call-with-values run exit)))
           (receive)]))))
   )

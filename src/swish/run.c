@@ -166,5 +166,8 @@ static int swish_start(int argc, const char* argv[]) {
 // initialization during Sbuild_heap.
 int swish_run(int argc, const char* argv[], void (*custom_init)(void)) {
   scheme_init(argc, argv, custom_init);
-  return swish_start(argc, argv);
+  int rc = swish_start(argc, argv);
+  if (g_exit.force)
+    _exit(rc);
+  return rc;
 }

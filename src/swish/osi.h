@@ -47,6 +47,7 @@ typedef struct {
   jmp_buf buf;
   int initialized;
   int status;
+  int force;
 } jmp_t;
 
 EXPORT jmp_t g_exit;

@@ -714,11 +714,17 @@ ptr osi_make_uuid(void) {
   return r;
 }
 
+static uv_timer_t g_timer;
+
 void osi_exit(int status) {
   uv_cond_destroy(&g_send_request.cond);
   uv_mutex_destroy(&g_send_request.mutex);
+  uv_timer_stop(&g_timer);
+  uv_close((uv_handle_t*)&g_timer, NULL);
   uv_close((uv_handle_t*)&g_send_request.async, NULL);
-  uv_loop_close(osi_loop);
+  uv_run(osi_loop, UV_RUN_NOWAIT);
+  // force _exit if loop is still busy, since exit() may block
+  g_exit.force = uv_loop_close(osi_loop);
   if (g_exit.initialized) {
     g_exit.status = status;
     longjmp(g_exit.buf, -1);
@@ -1151,8 +1157,6 @@ ptr osi_read_port(uptr port, ptr buffer, size_t start_index, uint32_t size, int6
     return osi_make_error_pair("osi_read_port", UV_EINVAL);
   return (*(osi_port_vtable_t**)port)->read(port, buffer, start_index, size, offset, callback);
 }
-
-static uv_timer_t g_timer;
 
 static void get_callbacks_timer_cb(uv_timer_t* handle) {
   handle->data = handle;

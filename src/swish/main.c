@@ -27,7 +27,7 @@
 int swish_run(int argc, const char* argv[], void (*custom_init)(void));
 
 int main(int argc, const char* argv[]) {
-  _exit(swish_run(argc, argv, 0));
+  return swish_run(argc, argv, 0);
 }
 #else
 // Windows
