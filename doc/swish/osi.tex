@@ -205,15 +205,42 @@ The \code{swish\_run} function:
 \item returns the status provided by \code{osi\_exit}.
 \end{enumerate}
 
-\defineentry{swish\_service}
+\defineentry{swish\_service}\label{swishservice}
 \begin{function}
   \codebegin
+#if defined(\_\_linux\_\_)
+int swish\_service(int \var{argc}, const char* \var{argv}[]);
+#elif defined(\_WIN32)
 int swish\_service(const wchar\_t* \var{service\_name}, const wchar\_t* \var{logfile},
                   int \var{argc}, const char* \var{argv}[]);
+#endif
   \codeend
 \end{function}
 
-Available on Windows only, the \code{swish\_service} function:
+On Linux, the \code{swish\_service} function:
+\begin{enumerate} % keep in sync with swish_run
+\item resolves the boot file based on
+  \code{\var{argv}[0]} by replacing the extension, if any, with
+  \code{.boot},
+\item initializes Scheme by calling \code{Sscheme\_init},
+  \code{Sregister\_boot\_file}, and \code{Sbuild\_heap},
+\item initializes the operating system interface by calling \code{osi\_init},
+\item adds a handler to listen for messages from
+  \code{systemd-logind} on the D-Bus system bus,
+\item establishes a context for \code{osi\_exit},
+\item starts the application by invoking the value of the \code{scheme-start} parameter,
+\item tears down the handler on exit, and
+\item returns the status provided to \code{osi\_exit}.
+\end{enumerate}
+
+If the handler receives a \code{PrepareForShutdown} message with the argument
+true, it calls \code{\$shutdown}.
+If it receives a \code{PrepareForSleep} message, it calls
+\code{\$suspend} if the argument is true
+and \code{\$resume} if the argument is false.
+See Figure~\ref{fig:service-callbacks} for information on these callbacks.
+
+On Windows, the \code{swish\_service} function:
 \begin{enumerate}
 \item redirects stdout and stderr to \var{logfile} and stdin from NUL,
 \item connects to the Service Control Manager, establishing a
@@ -238,7 +265,9 @@ message, the control handler calls the \code{\$shutdown} top-level
 procedure.  For a suspend power event or resume power event, the
 control handler calls \code{\$suspend} or \code{\$resume}
 respectively.
+See Figure~\ref{fig:service-callbacks} for information on these callbacks.
 
+\begin{figure}[H]
 \begin{tabular}{lll}
   symbol & default top-level value & with statistics gen-server~(Chapter \ref{chap:stats}) \\
   \hline
@@ -247,6 +276,8 @@ respectively.
   \code{\$resume} & \code{void} & \code{statistics:resume} \\
   \hline
 \end{tabular}
+\caption{Service callbacks. \label{fig:service-callbacks}}
+\end{figure}
 
 \subsection {System Functions}
 

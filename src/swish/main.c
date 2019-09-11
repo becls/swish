@@ -22,11 +22,25 @@
 
 #ifndef _WIN32
 // Unix-like systems
-#include <unistd.h>
-
-int swish_run(int argc, const char* argv[], void (*custom_init)(void));
+#include <stdlib.h>
+#include <string.h>
+#include "swish.h"
 
 int main(int argc, const char* argv[]) {
+#ifdef __linux__
+  if (argc > 1 && strcmp(argv[1], "/SERVICE") == 0) {
+    int new_argc = argc - 1;
+    const char** new_argv = (const char**)malloc(new_argc * sizeof(char*));
+    if (!new_argv) {
+      exit(1);
+    }
+    new_argv[0] = argv[0];
+    for (int i = 1; i < new_argc; i++) {
+      new_argv[i] = argv[i+1];
+    }
+    return swish_service(new_argc, new_argv);
+  }
+#endif
   return swish_run(argc, argv, 0);
 }
 #else

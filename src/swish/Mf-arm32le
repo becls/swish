@@ -1,6 +1,6 @@
 C = ${CC} -std=gnu99 -fPIC -Wall -Wextra -Werror -O2 ${CPPFLAGS} ${CFLAGS} ${LDFLAGS}
 OsiObj=osi.o sha1.o sqlite.o sqlite3.o
-SystemLibs=-lm -ldl -lncurses -luuid -lpthread
+SystemLibs=-lm -ldl -lncurses -luuid -lpthread -lsystemd
 SwishLibs := ../../${BUILD}/bin/libosi.so ../../${BUILD}/lib/swish_kernel.o
 
 ../../${BUILD}/bin/swish: main.o ../../${BUILD}/lib/swish_kernel.o

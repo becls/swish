@@ -132,7 +132,12 @@
     ;; calls exit-process.
     (spawn application:shutdown))
 
-  (define (handle-signal n) (quit))
+  (define (handle-signal signo)
+    (match signo
+      [,@SIGHUP
+       ;; LSB 3.1.1: return 3 for unimplemented feature, e.g., SIGHUP to reload
+       (spawn (lambda () (application:shutdown 3)))]
+      [,_ (quit)]))
 
   (define (trap-signals handler)
     (meta-cond
@@ -141,6 +146,7 @@
       (signal-handler SIGHUP handler)
       (signal-handler SIGINT handler)]
      [else
+      (signal-handler SIGHUP handler)
       (signal-handler SIGINT handler)
       (signal-handler SIGTERM handler)]))
 
@@ -153,6 +159,7 @@
          [started? (run)]
          [else
           (set! started? #t)
+          (reset-handler (lambda () (application:shutdown application-exit-code)))
           (base-exception-handler app-exception-handler)
           (random-seed (+ (remainder (erlang:now) (- (ash 1 32) 1)) 1))
           (hook-console-input)

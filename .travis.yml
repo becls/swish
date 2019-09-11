@@ -16,6 +16,7 @@ matrix:
             - gcc-multilib
             - g++-multilib
             - lib32ncurses5-dev
+            - libsystemd-dev:i386
             - libx32ncurses5-dev
             - uuid-dev:i386
       before_script:
@@ -28,16 +29,25 @@ matrix:
             - gcc-multilib
             - g++-multilib
             - lib32ncurses5-dev
+            - libsystemd-dev:i386
             - libx32ncurses5-dev
             - uuid-dev:i386
       before_script:
         - sudo sysctl net.ipv6.conf.all.disable_ipv6=0
     - env: TARGET_MACHINE=a6le
       os: linux
+      addons:
+        apt:
+          packages:
+            - libsystemd-dev
       before_script:
         - sudo sysctl net.ipv6.conf.all.disable_ipv6=0
     - env: TARGET_MACHINE=ta6le
       os: linux
+      addons:
+        apt:
+          packages:
+            - libsystemd-dev
       before_script:
         - sudo sysctl net.ipv6.conf.all.disable_ipv6=0
 

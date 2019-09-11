@@ -611,7 +611,7 @@
            [(memq (machine-type) '(i3nt ti3nt a6nt ta6nt))
             (list SIGBREAK SIGHUP SIGINT)]
            [else
-            (list SIGINT SIGTERM)])))]
+            (list SIGHUP SIGINT SIGTERM)])))]
     [ok (and (andmap procedure? (map signal-handler trapped-signals)) 'ok)]
     [,@trapped-signals
       (let ([os (open-output-string)])
