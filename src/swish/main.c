@@ -59,6 +59,13 @@ static HMODULE load_library(const wchar_t* name) {
   return lib;
 }
 
+#define ResolveProc(name) \
+  name##_func name = (name##_func)GetProcAddress(osi_lib, #name);   \
+  if (##name == NULL) { \
+    fwprintf(stderr, L"Failed to find the" L#name L"entry point\n"); \
+    exit(3); \
+  }
+
 #define DLL(x) L#x ".dll"
 #define XDLL(x) DLL(x)
 
@@ -97,11 +104,16 @@ int wmain(int argc, wchar_t* argv[], wchar_t* envp[]) {
   wcscpy(filepart, DLL(osi));
   HMODULE osi_lib = load_library(name);
 
-  swish_run_func swish_run = (swish_run_func)GetProcAddress(osi_lib, "swish_run");
-  if (swish_run == NULL) {
-    fwprintf(stderr, L"Failed to find the swish_run entry point\n");
-    exit(3);
+  if (argc >= 4 && strcmp(argv8[1], "/SERVICE") == 0) {
+    int new_argc = argc - 3;
+    char** new_argv = (char**)malloc(new_argc * sizeof(char*));
+    new_argv[0] = argv8[0];
+    for (int i = 4; i < argc; i++) new_argv[i - 3] = argv8[i];
+    ResolveProc(swish_service);
+    return swish_service(argv[2], argv[3], new_argc, new_argv);
+  } else {
+    ResolveProc(swish_run);
+    return swish_run(argc, argv8, 0);
   }
-  return swish_run(argc, argv8, 0);
 }
 #endif

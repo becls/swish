@@ -127,8 +127,12 @@
           (kill p 'shutdown))]
        [else (exit-process exit-code)])]))
 
-  (define (handle-signal n)
+  (define (quit)
+    ;; Spawn a process to avoid deadlock when application:shutdown
+    ;; calls exit-process.
     (spawn application:shutdown))
+
+  (define (handle-signal n) (quit))
 
   (define (trap-signals handler)
     (meta-cond
@@ -164,6 +168,11 @@
              (trap-signals handle-signal)
              (call-with-values run exit)))
           (receive)]))))
+
+  ;; External entry points are run from the event-loop process
+  (set-top-level-value! '$shutdown quit)
+  (set-top-level-value! '$suspend void)
+  (set-top-level-value! '$resume void)
   )
 
 #!eof mats

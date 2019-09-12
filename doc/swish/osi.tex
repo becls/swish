@@ -193,14 +193,60 @@ nul is written to \code{*\var{utf8\_len}}. It returns NULL if
 \end{function}
 
 The \code{swish\_run} function:
-\begin{enumerate}
+\begin{enumerate} % keep in sync with swish_service
 \item resolves the boot file based on
   \code{\var{argv}[0]} by replacing the extension, if any, with
   \code{.boot},
+\item initializes Scheme by calling \code{Sscheme\_init},
+  \code{Sregister\_boot\_file}, and \code{Sbuild\_heap},
 \item initializes the operating system interface by calling \code{osi\_init},
-\item establishes a context for \code{osi\_exit}, and
+\item establishes a context for \code{osi\_exit},
+\item starts the application by invoking the value of the \code{scheme-start} parameter, and
 \item returns the status provided by \code{osi\_exit}.
 \end{enumerate}
+
+\defineentry{swish\_service}
+\begin{function}
+  \codebegin
+int swish\_service(const wchar\_t* \var{service\_name}, const wchar\_t* \var{logfile},
+                  int \var{argc}, const char* \var{argv}[]);
+  \codeend
+\end{function}
+
+Available on Windows only, the \code{swish\_service} function:
+\begin{enumerate}
+\item redirects stdout and stderr to \var{logfile} and stdin from NUL,
+\item connects to the Service Control Manager, establishing a
+  new thread of execution to:
+  \begin{enumerate} % keep in sync with swish_run
+    \item resolve the boot file based on \code{\var{argv}[0]} by
+      replacing the extension, if any, with \code{.boot},
+    \item initialize Scheme by calling \code{Sscheme\_init},
+      \code{Sregister\_boot\_file}, and \code{Sbuild\_heap},
+    \item initialize the operating system interface by calling \code{osi\_init},
+    \item register a control handler with the Service Control Manager,
+    \item establish a context for \code{osi\_exit}, and
+    \item start the application by invoking the value of the
+      \code{scheme-start} parameter
+  \end{enumerate}
+\item sets the service status to the status provided by \code{osi\_exit}.
+\end{enumerate}
+
+Once running as a service, the Service Control Manager may send
+control messages to the process via the control handler. For a stop
+message, the control handler calls the \code{\$shutdown} top-level
+procedure.  For a suspend power event or resume power event, the
+control handler calls \code{\$suspend} or \code{\$resume}
+respectively.
+
+\begin{tabular}{lll}
+  symbol & default top-level value & with statistics gen-server~(Chapter \ref{chap:stats}) \\
+  \hline
+  \code{\$shutdown} & \code{application:shutdown} & \code{application:shutdown} \\
+  \code{\$suspend} & \code{void} & \code{statistics:suspend} \\
+  \code{\$resume} & \code{void} & \code{statistics:resume} \\
+  \hline
+\end{tabular}
 
 \subsection {System Functions}
 
@@ -414,7 +460,7 @@ successful and a negative error code otherwise.
 \end{function}
 
 The \code{osi\_exit} function returns \var{status} to the context
-established by \code{swish\_run}, if any.
+established by \code{swish\_run} or \code{swish\_service}, if any.
 Otherwise it calls the \code{\_exit} function to terminate the current
 process with the given exit \var{status}. It does not return. The
 \code{exit} function is not used because on Unix systems it blocks if

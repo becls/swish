@@ -25,6 +25,12 @@
 #include <string.h>
 #include <stdlib.h>
 
+#ifdef _WIN32 // Windows Service
+#include <io.h>
+#include <time.h>
+#include <wchar.h>
+#endif
+
 static void (* g_aux_init)(void) = NULL;
 
 static void swish_init(void) {
@@ -171,3 +177,124 @@ int swish_run(int argc, const char* argv[], void (*custom_init)(void)) {
     _exit(rc);
   return rc;
 }
+
+
+#ifdef _WIN32
+//
+//
+// Windows Service
+//
+//
+
+SERVICE_STATUS g_service_status = {0};
+SERVICE_STATUS_HANDLE g_service_status_handle = NULL;
+const wchar_t* g_service_name = NULL;
+int g_argc = 0;
+char** g_argv = NULL;
+
+static void console_event_handler(const char* event) {
+  // This function mirrors console-event-handler in erlang.ss.
+  time_t now;
+  time(&now);
+  struct tm now_tm;
+  localtime_s(&now_tm, &now);
+  char now_s[26];
+  asctime_s(now_s, sizeof(now_s), &now_tm);
+  fprintf(stderr, "\r\nDate: %.24s\r\n", now_s);
+  fprintf(stderr, "Timestamp: %I64u\r\n", osi_get_time());
+  fprintf(stderr, "Event: %s\r\n\r\n", event);
+  fflush(stderr);
+}
+
+static void fatal_last_error(const char* who) {
+  char msg[80];
+  sprintf_s(msg, sizeof(msg), "#(fatal-error %s %u)", who, GetLastError());
+  console_event_handler(msg);
+  exit(4);
+}
+
+static void request_call(char* arg) {
+  ptr callback = Stop_level_value(Sstring_to_symbol(arg));
+  osi_add_callback_list(callback, Snil);
+}
+
+static DWORD WINAPI service_control_handler(DWORD dwControl, DWORD dwEventType, LPVOID lpEventData, LPVOID lpContext) {
+  switch (dwControl) {
+  case SERVICE_CONTROL_INTERROGATE:
+    return NO_ERROR;
+  case SERVICE_CONTROL_SHUTDOWN:
+  case SERVICE_CONTROL_STOP:
+    g_service_status.dwCurrentState = SERVICE_STOP_PENDING;
+    g_service_status.dwWaitHint = 60000;
+    SetServiceStatus(g_service_status_handle, &g_service_status);
+    osi_send_request((handle_request_func)request_call, "$shutdown");
+    return NO_ERROR;
+  case SERVICE_CONTROL_POWEREVENT:
+    if (PBT_APMSUSPEND == dwEventType)
+      osi_send_request((handle_request_func)request_call, "$suspend");
+    else if (PBT_APMRESUMEAUTOMATIC == dwEventType)
+      osi_send_request((handle_request_func)request_call, "$resume");
+    return ERROR_CALL_NOT_IMPLEMENTED;
+  default:
+    return ERROR_CALL_NOT_IMPLEMENTED;
+  }
+}
+
+static void WINAPI service_run(DWORD _argc, wchar_t* _argv[]) {
+  scheme_init(g_argc, g_argv, 0);
+  g_service_status_handle = RegisterServiceCtrlHandlerExW(g_service_name, service_control_handler, NULL);
+  if (NULL == g_service_status_handle)
+    fatal_last_error("RegisterServiceCtrlHandlerEx");
+  g_service_status.dwServiceType = SERVICE_WIN32_OWN_PROCESS;
+  g_service_status.dwCurrentState = SERVICE_RUNNING;
+  g_service_status.dwControlsAccepted = SERVICE_ACCEPT_STOP | SERVICE_ACCEPT_SHUTDOWN | SERVICE_ACCEPT_POWEREVENT;
+  SetServiceStatus(g_service_status_handle, &g_service_status);
+
+  int status = swish_start(g_argc, g_argv);
+
+  char msg[80];
+  sprintf_s(msg, sizeof(msg), "#(osi_exit %u)", status);
+  console_event_handler(msg);
+  g_service_status.dwWin32ExitCode = status;
+  g_service_status.dwCurrentState = SERVICE_STOPPED;
+  SetServiceStatus(g_service_status_handle, &g_service_status);
+}
+
+int swish_service(const wchar_t* service_name, const wchar_t* logfile, int argc, const char* argv[]) {
+  // Redirect stdout and stderr to the specified file.
+  int flog;
+  if (_wsopen_s(&flog, logfile, _O_APPEND | _O_BINARY | _O_CREAT | _O_WRONLY, _SH_DENYNO, _S_IREAD | _S_IWRITE))
+    return 1;
+
+  // Scheme refers to file handles 1 and 2 directly. We simply need to
+  // redirect them to the log file.  Additional linked C code may
+  // refer to the stdout and stderr file pointers. Reopen them to get
+  // valid handles, then redirect them to the log file. Stdin is
+  // redirected to NUL.
+  _dup2(flog, 1);
+  _dup2(flog, 2);
+
+  FILE* so;
+  _wfreopen_s(&so, L"NUL", L"a", stdout);
+  _dup2(flog, _fileno(stdout));
+
+  FILE* se;
+  _wfreopen_s(&se, L"NUL", L"a", stderr);
+  _dup2(flog, _fileno(stderr));
+
+  _close(flog);
+
+  FILE* si;
+  _wfreopen_s(&si, L"NUL", L"r", stdin);
+  _dup2(_fileno(stdin), 0);
+
+  console_event_handler("service-starting");
+  g_service_name = service_name;
+  g_argc = argc;
+  g_argv = (char**)argv;
+  SERVICE_TABLE_ENTRYW dispatchTable[] = {{(LPWSTR)service_name, service_run}, {NULL, NULL}};
+  if (!StartServiceCtrlDispatcherW(dispatchTable))
+    fatal_last_error("StartServiceCtrlDispatcher");
+  return 0;
+}
+#endif // Windows Service

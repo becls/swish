@@ -65,9 +65,9 @@ then posts a \code{<statistics>} event with \code{reason} =
 
 The \code{statistics:resume} procedure casts a message to the
 \code{statistics} gen-server that causes it to publish a
-\code{<statistics>} event with \code{reason} =
-\code{resume}. This procedure is aliased to \code{app:resume} and
-called from the operating system interface.
+\code{<statistics>} event with \code{reason} = \code{resume}. This
+procedure is called from the operating system interface via the
+top-level-value \code{\$resume}.
 
 \defineentry{statistics:suspend}
 \begin{procedure}
@@ -76,9 +76,9 @@ called from the operating system interface.
 
 The \code{statistics:suspend} procedure casts a message to the
 \code{statistics} gen-server that causes it to publish a
-\code{<statistics>} event with \code{reason} = \code{suspend}.
-This procedure is aliased to \code{app:suspend} and called from the
-operating system interface.
+\code{<statistics>} event with \code{reason} = \code{suspend}.  This
+procedure is called from the operating system interface via the
+top-level-value \code{\$suspend}.
 
 \section {Published Events}
 

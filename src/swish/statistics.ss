@@ -104,4 +104,8 @@
          [gc-real (time-duration (sstats-gc-real delta))]
          [gc-bytes (sstats-gc-bytes delta)])
        stats)))
+
+  ;; External entry points are run from the event-loop process.
+  (set-top-level-value! '$suspend statistics:suspend)
+  (set-top-level-value! '$resume statistics:resume)
   )

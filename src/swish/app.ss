@@ -25,10 +25,8 @@
   (export
    $init-main-sup
    app-sup-spec
-   app:resume
    app:shutdown
    app:start
-   app:suspend
    make-swish-sup-spec
    swish-start
    )
@@ -55,10 +53,6 @@
   (define (app:start) (application:start $init-main-sup))
 
   (alias app:shutdown application:shutdown)
-
-  (alias app:suspend statistics:suspend)
-
-  (alias app:resume statistics:resume)
 
   (define ($init-main-sup)
     ;; When one process at this level crashes, we want the supervisor

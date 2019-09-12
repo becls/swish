@@ -1331,6 +1331,8 @@ int osi_send_request(handle_request_func code, void* payload) {
   return 0;
 }
 
+// Cannot use exports of scheme.h here; the Scheme heap may not have
+// been initialized.
 void osi_init(void) {
   if (osi_loop)
     return;

@@ -471,13 +471,6 @@ The initial value of \code{app-sup-spec} is constructed by calling
 \code{make-swish-sup-spec} with \code{swish-event-logger} as the
 sole logger.
 
-\defineentry{app:resume}
-\begin{syntax}
-  \code{(app:resume)}
-\end{syntax}
-
-This is an alias for \code{statistics:resume}.
-
 \defineentry{app:shutdown}
 \begin{syntax}
   \code{(app:shutdown \opt{\var{exit-code}})}
@@ -494,13 +487,6 @@ This is an alias for \code{application:shutdown}.
 The \code{app:start} procedure calls \code{application:start}
 with a \var{starter} thunk that calls \code{supervisor:start\&link}
 with the value of the \code{app-sup-spec} parameter.
-
-\defineentry{app:suspend}
-\begin{syntax}
-  \code{(app:suspend)}
-\end{syntax}
-
-This is an alias for \code{statistics:suspend}.
 
 \defineentry{make-swish-sup-spec}
 \begin{procedure}

@@ -75,3 +75,7 @@ EXPORT int swish_run(int argc, const char* argv[], void (*custom_init)(void));
 
 typedef void (*handle_request_func)(void*);
 EXPORT int osi_send_request(handle_request_func, void* payload);
+
+#ifdef _WIN32
+EXPORT int swish_service(const wchar_t* service_name, const wchar_t* logfile, int argc, const char* argv[]);
+#endif
