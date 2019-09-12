@@ -88,6 +88,8 @@ typedef struct {
 
 uv_loop_t* osi_loop;
 
+jmp_t g_exit;
+
 static uint64_t g_threshold;
 static ptr g_callbacks;
 
@@ -717,6 +719,10 @@ void osi_exit(int status) {
   uv_mutex_destroy(&g_send_request.mutex);
   uv_close((uv_handle_t*)&g_send_request.async, NULL);
   uv_loop_close(osi_loop);
+  if (g_exit.initialized) {
+    g_exit.status = status;
+    longjmp(g_exit.buf, -1);
+  }
   _exit(status);
 }
 

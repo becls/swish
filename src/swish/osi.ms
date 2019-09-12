@@ -25,6 +25,14 @@
  (swish script-testing)
  (swish testing))
 
+(isolate-mat exit-with-pending-read ()
+  ;; On Unix systems exit blocks if there is an outstanding read on
+  ;; stdin. Swish uses _exit, this test ensures it gets called despite
+  ;; a pending read on the repl.
+  (test-os-process swish-exe '()
+    "(spawn (lambda () (receive (after 100 (osi_exit 0)))))"
+    '()))
+
 (isolate-mat submit-request ()
   (define test-request
     (write-test-file "test-request.ss"

@@ -37,7 +37,7 @@ libraries. Please refer to Chapter~4 of the \emph{Chez Scheme Version
   9 User's Guide}~\cite{chez-scheme-users-guide} for information on
 the foreign function interface. C++ is not used because C++
 destructors may interact badly with setjmp/longjmp, used by Chez
-Scheme.
+Scheme and Swish.
 
 The single-threaded version of Chez Scheme is used because of its
 simplicity. All Scheme code runs in the main thread, and all C code
@@ -186,6 +186,21 @@ freshly allocated nul-terminated string representing the Scheme string
 nul is written to \code{*\var{utf8\_len}}. It returns NULL if
 \code{malloc} fails. It is the caller's responsibility to call
 \code{free} when this memory is no longer needed.
+
+\defineentry{swish\_run}
+\begin{function}
+  \code{int swish\_run(int \var{argc}, const char* \var{argv}[], void (*\var{custom\_init})(void));}
+\end{function}
+
+The \code{swish\_run} function:
+\begin{enumerate}
+\item resolves the boot file based on
+  \code{\var{argv}[0]} by replacing the extension, if any, with
+  \code{.boot},
+\item initializes the operating system interface by calling \code{osi\_init},
+\item establishes a context for \code{osi\_exit}, and
+\item returns the status provided by \code{osi\_exit}.
+\end{enumerate}
 
 \subsection {System Functions}
 
@@ -398,10 +413,12 @@ successful and a negative error code otherwise.
   \code{void osi\_exit(int \var{status});}
 \end{function}
 
-The \code{osi\_exit} function calls the \code{\_exit} function to
-terminate the current process with the given exit \var{status}. It
-does not return. The \code{exit} function is not used because on Unix
-systems it blocks if there is an outstanding read on stdin.
+The \code{osi\_exit} function returns \var{status} to the context
+established by \code{swish\_run}, if any.
+Otherwise it calls the \code{\_exit} function to terminate the current
+process with the given exit \var{status}. It does not return. The
+\code{exit} function is not used because on Unix systems it blocks if
+there is an outstanding read on stdin.
 
 \defineentry{osi\_spawn}
 \begin{function}

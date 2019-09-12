@@ -31,6 +31,7 @@
 #else
 #include <malloc.h>
 #endif
+#include <setjmp.h>
 #include <string.h>
 #include "sha.h"
 #include "sqlite3.h"
@@ -40,6 +41,15 @@ typedef struct {
   ptr (*read)(uptr port, ptr buffer, size_t start_index, uint32_t size, int64_t offset, ptr callback);
   ptr (*write)(uptr port, ptr buffer, size_t start_index, uint32_t size, int64_t offset, ptr callback);
 } osi_port_vtable_t;
+
+// Internal
+typedef struct {
+  jmp_buf buf;
+  int initialized;
+  int status;
+} jmp_t;
+
+EXPORT jmp_t g_exit;
 
 // System
 EXPORT ptr osi_get_argv(void);

@@ -22,11 +22,12 @@
 
 #ifndef _WIN32
 // Unix-like systems
+#include <unistd.h>
 
 int swish_run(int argc, const char* argv[], void (*custom_init)(void));
 
 int main(int argc, const char* argv[]) {
-  return swish_run(argc, argv, 0);
+  _exit(swish_run(argc, argv, 0));
 }
 #else
 // Windows
@@ -36,6 +37,7 @@ int main(int argc, const char* argv[]) {
 #include <windows.h>
 
 typedef int (*swish_run_func)(int argc, const char* argv[], void (*custom_init)(void));
+typedef int (*swish_service_func)(const wchar_t* service_name, const wchar_t* logfile, int argc, const char* argv[]);
 
 static char* to_utf8(wchar_t* arg) {
   int len = WideCharToMultiByte(CP_UTF8, 0, arg, -1, NULL, 0, NULL, NULL);

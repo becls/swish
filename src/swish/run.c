@@ -154,9 +154,12 @@ static void scheme_init(int argc, const char* argv[], void (*custom_init)(void))
 }
 
 static int swish_start(int argc, const char* argv[]) {
-  int status = Sscheme_start(argc, argv);
+  if (setjmp(g_exit.buf) == 0) {
+    g_exit.initialized = 1;
+    g_exit.status = Sscheme_start(argc, argv);
+  }
   Sscheme_deinit();
-  return status;
+  return g_exit.status;
 }
 
 // custom_init may be NULL or a pointer to a function that performs application-specific
