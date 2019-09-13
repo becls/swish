@@ -149,6 +149,7 @@
           (try-import)
           (parameterize ([waiter-prompt-string (if (opt 'quiet) "" ">")]
                          [repl-level (+ (repl-level) 1)])
+            (hook-interactive)
             (for-each load filenames)
             (new-cafe)))]
        [else                            ; script
@@ -170,4 +171,104 @@
   (define (swish-start . args)
     ($swish-start #f args run))
 
-  )
+  (module (hook-interactive)
+    ;; Provide CTRL-C for the repl with a custom binary input port
+    ;; that can be interrupted by CTRL-C to call the
+    ;; keyboard-interrupt-handler and then retry the read just as Chez
+    ;; Scheme does.
+    (define (hook-interactive)
+      (when ok-to-hook?
+        (let ([ip (make-console-input)]
+              [old-ip (#%$top-level-value '$console-input-port)])
+          ;; Chez Scheme uses $console-input-port to do smart flushing
+          ;; of console I/O.
+          (#%$set-top-level-value! '$console-input-port ip)
+          (console-input-port ip)
+          (current-input-port ip)
+          (close-port old-ip))
+        (trap-CTRL-C (let ([p self]) (lambda (n) (keyboard-interrupt p))))
+        (set! ok-to-hook? #f)))
+    (define ok-to-hook? (interactive?))
+    (meta define windows? (memq (machine-type) '(i3nt ti3nt a6nt ta6nt)))
+    (define (trap-CTRL-C handler)
+      (meta-cond
+       [windows?
+        (signal-handler SIGBREAK handler)
+        (signal-handler SIGINT handler)]
+       [else
+        (signal-handler SIGINT handler)]))
+    (define (make-console-input)
+      (define osip (open-fd-port "stdin-nb" 0 #f))
+      (define fp 0)
+      (define (r! bv start n)
+        (match (with-interrupts-disabled (@r! bv start n))
+          [,count
+           (guard (fixnum? count))
+           (set! fp (+ fp count))
+           count]
+          [interrupt
+           ((keyboard-interrupt-handler))
+           (r! bv start n)]
+          [`(catch ,r) (throw r)]))
+      (define (gp) fp)
+      (define (close) (close-osi-port osip))
+      (meta-cond
+       [windows?
+        ;; When CTRL-C or CTRL-BREAK is pressed in Windows, the read
+        ;; returns 0 immediately, and later the signal is processed.
+        ;; libuv could return UV_EINTR in this case, but it doesn't.
+        (define (@r! bv start n)
+          (match (try (read-osi-port osip bv start n -1))
+            [0 (call/1cc
+                (lambda (return)
+                  ;; Give Windows time to deliver the signal before we
+                  ;; close the input port.
+                  (parameterize ([keyboard-interrupt-handler
+                                  (lambda () (return 'interrupt))])
+                    (receive (after 200 0)))))]
+            [,r r]))]
+       [else
+        ;; When CTRL-C is pressed in Unix-like systems, the read
+        ;; returns EINTR, and libuv automatically retries. As a
+        ;; result, we spawn a separate reader process so that we can
+        ;; interrupt the read.
+        (define reader
+          (spawn
+           (lambda ()
+             (disable-interrupts)
+             (@read-loop #f))))
+        ;; cell: (pid . active?) is used to keep the reader process from
+        ;; responding to an interrupted read request.
+        (alias pid car)
+        (alias active? cdr)
+        (alias active?-set! set-cdr!)
+        (define (@read-loop r)
+          ;; r: result of read-osi-port or #f
+          (receive
+           [#(,bv ,start ,n ,cell)
+            (let ([r (or r (try (read-osi-port osip bv start n -1)))])
+              (cond
+               [(active? cell)
+                (active?-set! cell #f)
+                (send (pid cell) `#(,self ,r))
+                (@read-loop #f)]
+               [else
+                ;; We assume the next call will have the same bv,
+                ;; start & n, which the Chez Scheme transcoded-port
+                ;; appears to do.
+                (@read-loop r)]))]))
+        (define (@r! bv start n)
+          (define cell (cons self #t))
+          (send reader `#(,bv ,start ,n ,cell))
+          (call/1cc
+           (lambda (return)
+             (parameterize
+                 ([keyboard-interrupt-handler
+                   (lambda ()
+                     ;; Ignore when the reader has already responded.
+                     (when (active? cell)
+                       (active?-set! cell #f)
+                       (return 'interrupt)))])
+               (receive [#(,@reader ,r) r])))))])
+      (binary->utf8
+       (make-custom-binary-input-port "stdin-nb*" r! gp #f close)))))

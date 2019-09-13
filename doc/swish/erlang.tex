@@ -105,8 +105,9 @@ process parameters to values, and the following mutable fields:
   dead
 \item \code{precedence}: wake time if sleeping or 0 if ready to run
 \item \code{flags}: fixnum with bit 0 set when sleeping, bit 1 set
-  when the process traps exits, and bit 2 set when the process is
-  blocked for I/O
+  when the process traps exits, bit 2 set when the process is
+  blocked for I/O, and bit 3 set when the process is pending a
+  keyboard interrupt
 \item \code{links}: list of linked processes
 \item \code{monitors}: list of monitors
 \item \code{src}: source location \code{\#(at \var{char-offset}
@@ -1367,6 +1368,7 @@ been redefined to use \code{make-process-parameter}:
 \code{command-line-arguments},
 \code{custom-port-buffer-size},
 \code{exit-handler},
+\code{keyboard-interrupt-handler}.
 \code{pretty-initial-indent},
 \code{pretty-line-length},
 \code{pretty-maximum-lines},
@@ -1413,6 +1415,16 @@ The \code{make-inherited-parameter} procedure calls
 \code{make-process-parameter} to create a per-process
 parameter procedure \var{p} and adds \var{p} to the
 \code{inherited-parameters} list before returning \var{p}.
+
+% -------------------------------------------------------------------------
+\defineentry{keyboard-interrupt}
+\begin{procedure}
+  \code{(keyboard-interrupt \var{process})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{keyboard-interrupt} procedure causes \var{process} to call
+\code{((keyboard-interrupt-handler))} as soon as possible.
 
 % -------------------------------------------------------------------------
 \defineentry{on-exit}

@@ -40,6 +40,7 @@
    erlang:now
    get-registered
    inherited-parameters
+   keyboard-interrupt
    kill
    limit-stack
    limit-stack?
@@ -225,6 +226,15 @@
           (fxlogbit1 2 (pcb-flags p))
           (fxlogbit0 2 (pcb-flags p)))))
 
+  (define (pcb-interrupt? p)
+    (fxlogbit? 3 (pcb-flags p)))
+
+  (define (pcb-interrupt?-set! p x)
+    (pcb-flags-set! p
+      (if x
+          (fxlogbit1 3 (pcb-flags p))
+          (fxlogbit0 3 (pcb-flags p)))))
+
   (define erlang:now osi_get_time)
 
   (define (panic event)
@@ -348,6 +358,22 @@
        (unless (alive? self)
          (yield #f 0))))
     #t)
+
+  (define (keyboard-interrupt p)
+    (unless (pcb? p)
+      (bad-arg 'interrupt p))
+    (if (eq? p self)
+        ((keyboard-interrupt-handler))
+        (no-interrupts
+         (when (alive? p)
+           (pcb-interrupt?-set! p #t)
+           (cond
+            [(pcb-sleeping? p)
+             (pcb-sleeping?-set! p #f)
+             (@enqueue p run-queue 0)]
+            [(pcb-blocked-io? p) (void)]
+            [(enqueued? p) (void)]
+            [else (@enqueue p run-queue 0)])))))
 
   (define process-trap-exit
     (case-lambda
@@ -736,36 +762,50 @@
      [else (throw `#(timeout-value ,time ,src))]))
 
   (define ($receive matcher src waketime timeout-handler)
-    (disable-interrupts)
-    (let find ([prev (pcb-inbox self)])
-      (let ([msg (q-next prev)])
-        (cond
-         [(eq? (pcb-inbox self) msg)
-          (cond
-           [(not waketime)
-            (pcb-src-set! self src)
-            (yield #f 0)
-            (pcb-src-set! self #f)
-            (find prev)]
-           [(< (erlang:now) waketime)
-            (pcb-src-set! self src)
-            (pcb-sleeping?-set! self #t)
-            (yield sleep-queue waketime)
-            (pcb-src-set! self #f)
-            (find prev)]
-           [else
-            (enable-interrupts)
-            (timeout-handler)])]
-         [else
-          (enable-interrupts)
-          (cond
-           [(matcher (msg-contents msg)) =>
-            (lambda (run)
-              (remove-q msg)
-              (run))]
-           [else
-            (disable-interrupts)
-            (find msg)])]))))
+    ;; We need to maintain the interrupt count even when yield invokes a
+    ;; continuation.
+    (define interrupts-enabled? #t)
+    (define (disable)
+      (when interrupts-enabled?
+        (disable-interrupts)
+        (set! interrupts-enabled? #f)))
+    (define (enable)
+      (when (not interrupts-enabled?)
+        (set! interrupts-enabled? #t)
+        (enable-interrupts)))
+    (dynamic-wind
+      disable
+      (lambda ()
+        (let find ([prev (pcb-inbox self)])
+          (let ([msg (q-next prev)])
+            (cond
+             [(eq? (pcb-inbox self) msg)
+              (cond
+               [(not waketime)
+                (pcb-src-set! self src)
+                (yield #f 0)
+                (pcb-src-set! self #f)
+                (find prev)]
+               [(< (erlang:now) waketime)
+                (pcb-src-set! self src)
+                (pcb-sleeping?-set! self #t)
+                (yield sleep-queue waketime)
+                (pcb-src-set! self #f)
+                (find prev)]
+               [else
+                (enable)
+                (timeout-handler)])]
+             [else
+              (enable)
+              (cond
+               [(matcher (msg-contents msg)) =>
+                (lambda (run)
+                  (remove-q msg)
+                  (run))]
+               [else
+                (disable)
+                (find msg)])]))))
+      enable))
 
   (define process-default-ticks 1000)
 
@@ -854,7 +894,12 @@
     (pcb-exception-state-set! self #f) ;; drop ref
     (osi_set_quantum quantum-nanoseconds)
     (set-timer process-default-ticks)
-    (enable-interrupts))
+    (if (pcb-interrupt? self)
+        (begin
+          (pcb-interrupt?-set! self #f)
+          (enable-interrupts)
+          ((keyboard-interrupt-handler)))
+        (enable-interrupts)))
 
   (define @thunk->cont
     (let ([return #f])
@@ -881,6 +926,7 @@
                                  (case-lambda
                                   [() (raise 'normal)]
                                   [(x . args) (throw x)]))
+                                (reset-handler (lambda () (done 'normal)))
                                 (thunk)
                                 'normal))])
                         ;; Process finished
@@ -1691,6 +1737,12 @@
       (lambda (x)
         (unless (procedure? x)
           (bad-arg 'exit-handler x))
+        x)))
+  (redefine keyboard-interrupt-handler
+    (make-process-parameter (keyboard-interrupt-handler)
+      (lambda (x)
+        (unless (procedure? x)
+          (bad-arg 'keyboard-interrupt-handler x))
         x)))
   (redefine pretty-initial-indent
     (make-process-parameter 0
