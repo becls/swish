@@ -31,6 +31,10 @@
 #pragma comment(lib, "userenv.lib")
 #pragma comment(lib, "winmm.lib")
 #pragma comment(lib, "ws2_32.lib")
+typedef DWORD osi_thread_t;
+#else
+#include <pthread.h>
+typedef pthread_t osi_thread_t;
 #endif
 
 typedef struct {
@@ -94,7 +98,7 @@ static uint64_t g_threshold;
 static ptr g_callbacks;
 
 static send_request_t g_send_request;
-static uv_key_t g_scheme_thread_key;
+static osi_thread_t g_scheme_thread;
 
 void osi_add_callback_list(ptr callback, ptr args) {
   g_callbacks = Scons(Scons(callback, args), g_callbacks);
@@ -1297,10 +1301,17 @@ static void send_request_async_cb(uv_async_t* handle) {
   uv_mutex_unlock(&g_send_request.mutex);
 }
 
+static osi_thread_t thread_self() {
+#ifdef _WIN32
+  return GetCurrentThreadId();
+#else
+  return pthread_self();
+#endif
+}
+
 int osi_send_request(handle_request_func code, void* payload) {
   if (!code) return UV_EINVAL;
-  void* is_scheme = uv_key_get(&g_scheme_thread_key);
-  if (is_scheme) {
+  if (thread_self() == g_scheme_thread) {
     code(payload);
     return 0;
   }
@@ -1342,12 +1353,11 @@ void osi_init(void) {
   osi_loop = &g_loop;
   uv_timer_init(osi_loop, &g_timer);
   g_callbacks = Snil;
-  uv_key_create(&g_scheme_thread_key);
-  uv_key_set(&g_scheme_thread_key, (void*)1);
-#ifdef _WIN32
-  timeBeginPeriod(1); // Set timer resolution to 1 ms.
-#endif
+  g_scheme_thread = thread_self();
   uv_async_init(osi_loop, &g_send_request.async, send_request_async_cb);
   uv_mutex_init(&g_send_request.mutex);
   uv_cond_init(&g_send_request.cond);
+#ifdef _WIN32
+  timeBeginPeriod(1); // Set timer resolution to 1 ms.
+#endif
 }
