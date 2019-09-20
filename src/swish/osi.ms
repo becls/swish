@@ -59,11 +59,11 @@
                     #t]
                    [else #f]))))
             (define (run n)
-              (define call-now (foreign-procedure "call_now" (int) int))
+              (define call-now (foreign-procedure "call_now" () int))
               (define start (foreign-procedure "create_threads" () ptr))
               (define stop (foreign-procedure "join_threads" () void))
               (define (expected-reps thread-no) (iota (+ n 1)))
-              (assert (= (call-now 12345) 12345))
+              (assert (= (call-now) UV_EPERM))
               (assert (> n 0))
               (hashtable-clear! actual-reps)
               (printf "add-work\n")

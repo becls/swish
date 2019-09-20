@@ -121,8 +121,10 @@ called.
 \end{function}
 
 The \code{osi\_add\_callback\_list} function adds the callback list
-\code{(\var{callback} . \var{args})} to the list of callbacks. This
-function must be called on the main thread only.
+\code{(\var{callback} . \var{args})} to the list of callbacks.
+This function must be called only on the main thread and only within the
+context of the event-loop's call to \code{osi\_get\_callbacks}, e.g., within a
+libuv callback such as \code{uv\_async\_cb}.
 
 \defineentry{osi\_add\_callback1}
 \begin{function}
@@ -130,8 +132,10 @@ function must be called on the main thread only.
 \end{function}
 
 The \code{osi\_add\_callback1} function adds the callback list
-\code{(\var{callback} \var{arg})} to the list of callbacks. This
-function must be called on the main thread only.
+\code{(\var{callback} \var{arg})} to the list of callbacks.
+This function must be called only on the main thread and only within the
+context of the event-loop's call to \code{osi\_get\_callbacks}, e.g., within a
+libuv callback such as \code{uv\_async\_cb}.
 
 \defineentry{osi\_add\_callback2}
 \begin{function}
@@ -141,7 +145,10 @@ function must be called on the main thread only.
 
 The \code{osi\_add\_callback2} function adds the callback list
 \code{(\var{callback} \var{arg1} \var{arg2})} to the list of
-callbacks. This function must be called on the main thread only.
+callbacks.
+This function must be called only on the main thread and only within the
+context of the event-loop's call to \code{osi\_get\_callbacks}, e.g., within a
+libuv callback such as \code{uv\_async\_cb}.
 
 \defineentry{osi\_add\_callback3}
 \begin{function}
@@ -151,7 +158,10 @@ callbacks. This function must be called on the main thread only.
 
 The \code{osi\_add\_callback3} function adds the callback list
 \code{(\var{callback} \var{arg1} \var{arg2} \var{arg3})} to the list
-of callbacks. This function must be called on the main thread only.
+of callbacks.
+This function must be called only on the main thread and only within the
+context of the event-loop's call to \code{osi\_get\_callbacks}, e.g., within a
+libuv callback such as \code{uv\_async\_cb}.
 
 \defineentry{osi\_make\_error\_pair}
 \begin{function}
@@ -168,12 +178,13 @@ main thread only.
 \end{function}
 
 The \code{osi\_send\_request} function blocks the calling thread until
-the main thread returns from calling \code{\var{handler}(\var{payload})}.
-The \var{handler} function must execute quickly to avoid blocking the
-event loop.
-Typical handlers call \code{osi\_add\_callback\_list} or one of its variants.
-\code{osi\_send\_request} returns zero if successful.
-Otherwise it returns a libuv error code.
+the main thread returns from calling
+\code{\var{handler}(\var{payload})} within \code{osi\_get\_callbacks}.
+The \var{handler} function should execute quickly to avoid blocking
+the event loop. Typical handlers call \code{osi\_add\_callback\_list}
+or one of its variants. \code{osi\_send\_request} returns zero if
+successful.  Otherwise, it returns a libuv error code. Calling it from
+the main thread returns \code{UV\_EPERM}.
 
 \defineentry{osi\_string\_to\_utf8}
 \begin{function}

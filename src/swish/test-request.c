@@ -64,14 +64,11 @@ static test_thread_t thread[MAX_THREADS];
 static int thread_count = 0;
 
 static void handle_call_now(void* arg) {
-  payload_t* payload = (payload_t*)arg;
-  payload->who = payload->rep;
+  (void)arg;
 }
 
-EXPORT int call_now(int n) {
-  payload_t payload = { .rep = n, .who = 0 };
-  osi_send_request(handle_call_now, &payload);
-  return payload.who;
+EXPORT int call_now() {
+  return osi_send_request(handle_call_now, NULL);
 }
 
 static char* copy_string(const char* s) {

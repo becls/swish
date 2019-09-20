@@ -1311,10 +1311,7 @@ static osi_thread_t thread_self() {
 
 int osi_send_request(handle_request_func code, void* payload) {
   if (!code) return UV_EINVAL;
-  if (thread_self() == g_scheme_thread) {
-    code(payload);
-    return 0;
-  }
+  if (thread_self() == g_scheme_thread) return UV_EPERM;
   uv_mutex_lock(&g_send_request.mutex);
   // wait our turn, guarding against spurious wakeup
   while (g_send_request.sender) {
