@@ -30,7 +30,7 @@ int main(int argc, const char* argv[]) {
 #ifdef __linux__
   if (argc > 1 && strcmp(argv[1], "/SERVICE") == 0) {
     int new_argc = argc - 1;
-    const char** new_argv = (const char**)malloc(new_argc * sizeof(char*));
+    const char** new_argv = (const char**)malloc((new_argc + 1) * sizeof(char*));
     if (!new_argv) {
       exit(1);
     }
@@ -38,6 +38,7 @@ int main(int argc, const char* argv[]) {
     for (int i = 1; i < new_argc; i++) {
       new_argv[i] = argv[i+1];
     }
+    new_argv[new_argc] = NULL;
     return swish_service(new_argc, new_argv);
   }
 #endif
@@ -120,9 +121,10 @@ int wmain(int argc, wchar_t* argv[], wchar_t* envp[]) {
 
   if (argc >= 4 && strcmp(argv8[1], "/SERVICE") == 0) {
     int new_argc = argc - 3;
-    char** new_argv = (char**)malloc(new_argc * sizeof(char*));
+    char** new_argv = (char**)malloc((new_argc + 1) * sizeof(char*));
     new_argv[0] = argv8[0];
     for (int i = 4; i < argc; i++) new_argv[i - 3] = argv8[i];
+    new_argv[new_argc] = NULL;
     ResolveProc(swish_service);
     return swish_service(argv[2], argv[3], new_argc, new_argv);
   } else {
