@@ -48,8 +48,6 @@
                   (lambda (prev) (cons rep prev))
                   #f)
                 (when (zero? rep) (send main 'done)))
-              (lock-object cb-name)
-              (lock-object proc)
               (set-top-level-value! (string->symbol cb-name) proc))
             (define add-work!
               (let ([fp (foreign-procedure "add_work" (int string) ptr)])
@@ -61,9 +59,11 @@
                     #t]
                    [else #f]))))
             (define (run n)
+              (define call-now (foreign-procedure "call_now" (int) int))
               (define start (foreign-procedure "create_threads" () ptr))
               (define stop (foreign-procedure "join_threads" () void))
               (define (expected-reps thread-no) (iota (+ n 1)))
+              (assert (= (call-now 12345) 12345))
               (assert (> n 0))
               (hashtable-clear! actual-reps)
               (printf "add-work\n")
