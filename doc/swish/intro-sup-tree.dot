@@ -1,6 +1,6 @@
 digraph G {
   graph [margin=0,rankdir=LR];
-  node [shape=box,fontname="Courier",fontsize=11];
+  node [shape=box,fontname="Courier",fontsize=10];
   application [label="application"];
   mainsup [label="main-sup",shape=ellipse];
   eventmgr [label="event-mgr"];
