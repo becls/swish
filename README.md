@@ -47,7 +47,7 @@ is not thread safe and should be used from the main thread only.
 - GNU C++ compiler for libuv
 - GNU make
 - Python 2.7 for libuv
-- uuid-dev package
+- libsystemd-dev and uuid-dev packages
 
 ## Mac
 
