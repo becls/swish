@@ -30,7 +30,7 @@ all: ready ${CORE} ${AUXLIB} ${REMINDERS}
 	fi
 
 git.tmp-revision:
-	@git describe --always --exclude='*' --abbrev=40 --dirty > "$@"
+	@git describe --always --match none --abbrev=40 --dirty > "$@"
 
 chezscheme.tmp-revision:
 	@if [ ! -f "${SCHEME_REVISION_PATH}/revision" ]; then \
