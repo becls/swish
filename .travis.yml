@@ -4,6 +4,8 @@ matrix:
     # macOS
     - env: TARGET_MACHINE=a6osx
       os: osx
+    - env: TARGET_MACHINE=a6osx CHEZ_BRANCH=master
+      os: osx
     - env: TARGET_MACHINE=ta6osx
       os: osx
 
@@ -42,6 +44,14 @@ matrix:
             - libsystemd-dev
       before_script:
         - sudo sysctl net.ipv6.conf.all.disable_ipv6=0
+    - env: TARGET_MACHINE=a6le CHEZ_BRANCH=master
+      os: linux
+      addons:
+        apt:
+          packages:
+            - libsystemd-dev
+      before_script:
+        - sudo sysctl net.ipv6.conf.all.disable_ipv6=0
     - env: TARGET_MACHINE=ta6le
       os: linux
       addons:
@@ -65,6 +75,12 @@ matrix:
         - choco install make -y
         - choco install python2 -y
     - env: TARGET_MACHINE=a6nt
+      os: windows
+      before_script:
+        - git config core.autocrlf false; rm .git/index; git reset --hard
+        - choco install make -y
+        - choco install python2 -y
+    - env: TARGET_MACHINE=a6nt CHEZ_BRANCH=master
       os: windows
       before_script:
         - git config core.autocrlf false; rm .git/index; git reset --hard
