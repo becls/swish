@@ -996,6 +996,7 @@
       "^import: found object file \".*miss\\.so\""
       seek
       "^import: loading object file \".*miss\\.so\""
+      seek ;; skip new "attempting to 'revisit' previously 'visited' ..." message
       ,(pregexp-quote (format "~s" '("PDQ" "Bach")))))
   ;; now delete miss.so so using compiled library fails
   (assert (delete-file compiled))
