@@ -57,6 +57,7 @@ is not thread safe and should be used from the main thread only.
 - ginstall and realpath (can be installed through homebrew using `brew install coreutils`)
 - XCode and the command-line tools must be set
   (Xcode->Preferences->Locations->command line tools)
+- Latin Modern fonts from LaTeX (can be installed with Font Book from a location like `/usr/local/texlive/2019/texmf-dist/fonts/opentype/public/lm`)
 
 ## Windows
 

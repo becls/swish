@@ -17,5 +17,6 @@
 *.thm
 *.toc
 /c-coding-standard.pdf
+/font.conf
 /scheme-coding-standard.pdf
 /swish.pdf

@@ -1,11 +1,11 @@
 digraph G {
   graph [margin=0];
-  node [shape=box,fontname="Courier",fontsize=11];
+  node [shape=box,fontname="Latin Modern Mono",fontsize=10];
   supervisor [label="http-sup",shape=ellipse];
   listener [label="http-listener"];
   cache [label="http-cache"];
-  hc1 [label="http-connection 1",fontname="Times-Roman"];
-  hc2 [label="http-connection 2",fontname="Times-Roman"];
+  hc1 [label="http-connection 1",fontname="Latin Modern Roman,"];
+  hc2 [label="http-connection 2",fontname="Latin Modern Roman,"];
   supervisor -> listener;
   supervisor -> cache;
   supervisor -> hc1;

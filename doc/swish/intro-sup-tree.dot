@@ -1,6 +1,6 @@
 digraph G {
   graph [margin=0,rankdir=LR];
-  node [shape=box,fontname="Courier",fontsize=10];
+  node [shape=box,fontname="Latin Modern Mono",fontsize=10];
   application [label="application"];
   mainsup [label="main-sup",shape=ellipse];
   eventmgr [label="event-mgr"];
@@ -11,8 +11,8 @@ digraph G {
   httpsup [label="http-sup",shape=ellipse];
   httpd [label="http-listener"];
   httpcache [label="http-cache"];
-  hc1 [label="http-connection 1",fontname="Times-Roman"];
-  hc2 [label="http-connection 2",fontname="Times-Roman"];
+  hc1 [label="http-connection 1",fontname="Latin Modern Roman,"];
+  hc2 [label="http-connection 2",fontname="Latin Modern Roman,"];
   application -> mainsup;
   mainsup -> application;
   mainsup -> eventmgr;
