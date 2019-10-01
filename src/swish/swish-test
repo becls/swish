@@ -57,7 +57,8 @@
    [coverage --coverage (string "<file>") "write coverage report to <file>"]
    [exclude --exclude (list "<glob>")
     "exclude these files from coverage report"]
-   [include --include (list "<glob>") "override exclude for coverage report"]))
+   [include --include (list "<glob>") "override exclude for coverage report"]
+   [info --info bool "summarize software-info meta-data from test results"]))
 
 (define report-only-cli
   (cli-specs
@@ -125,6 +126,11 @@
          (display sep)
          ((car ps))))]))
 
+(define (sorted-cells ht key<?)
+  (vector->list
+   (vector-sort (lambda (a b) (key<? (car a) (car b)))
+     (hashtable-cells ht))))
+
 (define (usage short? sections ht)
   (define selected
     (cond
@@ -143,9 +149,7 @@
         (map (lambda (fmt)
                (format (oxford-comma "~{~a (~@{" "\".~a\"" " or " "~})~}")
                  fmt))
-          (vector->list
-           (vector-sort (lambda (a b) (string<? (car a) (car b)))
-             (hashtable-cells ht)))))))
+          (sorted-cells ht string<?)))))
   (any-sections selected
     [(all usage)
      (display-usage "Usage:" who testing-cli)
@@ -826,6 +830,25 @@
               (printf "see ~a\n" (path->file-uri (get-real-path coverage)))
               (printf "no profile to dump\n")))
         (console-summary summary (or report coverage (opt 'load-results) (opt 'harvest)))
+        (when (opt 'info)
+          (let ([ht (make-eq-hashtable)])
+            (define (sym<? a b) (string<? (symbol->string a) (symbol->string b)))
+            (foreach ([mat-data summary])
+              (let ([info (json:ref mat-data '(meta-data software-info) (json:make-object))])
+                (foreach ([entry (vector->list (json:cells info))])
+                  (hashtable-update! ht (car entry)
+                    (lambda (prev)
+                      (let ([tbl (or prev (make-hashtable string-hash string=?))])
+                        (hashtable-set! tbl (json:object->string (cdr entry)) #t)
+                        tbl))
+                    #f))))
+            (foreach ([entry (sorted-cells ht sym<?)])
+              (foreach ([elt (sorted-cells (cdr entry) string<?)])
+                (let ([obj (json:string->object (car elt))])
+                  (fprintf (console-output-port) "~a ~a (~a)\n"
+                    (json:ref obj 'product-name "?")
+                    (json:ref obj 'version "?")
+                    (json:ref obj 'revision "?")))))))
         (match (filter (lambda (fn) (string=? "ms" (path-extension fn))) no-tests)
           [() (exit status)]
           [,expected-tests

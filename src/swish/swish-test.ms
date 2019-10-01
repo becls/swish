@@ -704,6 +704,54 @@
       "--harvest " mo-path1 " " mo-path2 " " mo-path3 " " incomplete
       " --report " alt.html)
      (cons "see file:.*alt.html" summary-output))
+    ;; test --info with --harvest
+    (let* ([data (load-results mo-path2)] ;; get actual info
+           [info (json:ref data '(meta-data software-info) 'oops)]
+           [fake-file (string-append mo-path2 ".fake")]
+           [fake-info #f])
+      (define (fmt info key)
+        (pregexp-quote
+         (format "~a ~a (~a)"
+           (json:ref info `(,key product-name) "?")
+           (json:ref info `(,key version) "?")
+           (json:ref info `(,key revision) "?"))))
+      ;; add fake info as if test results generated w/ multiple software
+      ;; revisions; base it on test-report2 which contains no results so
+      ;; it doesn't change expected summary-output
+      (let ([ip (open-file-to-read mo-path2)]
+            [op (open-file-to-replace fake-file)])
+        (on-exit (begin (close-port ip) (close-port op))
+          (let f ()
+            (let ([x (json:read ip)])
+              (unless (eof-object? x)
+                (cond
+                 [(equal? "software-info" (json:ref x 'key #f))
+                  (set! fake-info (json:ref x 'value #f))
+                  (json:set! fake-info '(chezscheme revision) (make-string 40 #\0))
+                  (json:set! fake-info '(swish revision) (make-string 40 #\f))
+                  (json:write op x 0)]
+                 [else (json:write op x 0)])
+                (f))))))
+      (on-exit (delete-file fake-file)
+        (zero-exit
+         (swish-test
+          "--harvest " mo-path1 " " mo-path2 " " mo-path3 " " incomplete
+          " --info")
+         `(,@summary-output
+           "^$"
+           ,(fmt info 'chezscheme)
+           ,(fmt info 'swish)))
+        (zero-exit
+         (swish-test
+          "--harvest " mo-path1 " " mo-path2 " " mo-path3 " " incomplete
+          " " fake-file
+          " --info")
+         `(,@summary-output
+           "^$"
+           ,(fmt fake-info 'chezscheme)
+           ,(fmt info 'chezscheme)
+           ,(fmt info 'swish)
+           ,(fmt fake-info 'swish)))))
     ;; check the HTML report output
     (match-let*
      ([,expected (read-file aggregate.html)]
