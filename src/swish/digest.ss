@@ -66,6 +66,7 @@
   (define-record-type digest
     (parent digest-provider)
     (nongenerative)
+    (sealed #t)
     (fields
      (mutable ctx)
      (immutable algorithm)

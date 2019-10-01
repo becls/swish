@@ -141,6 +141,7 @@
 
   (define-record-type msg
     (nongenerative)
+    (sealed #t)
     (fields
      (immutable contents))
     (parent q)
@@ -151,12 +152,14 @@
 
   (define-record-type mon
     (nongenerative)
+    (sealed #t)
     (fields
      (immutable origin)
      (immutable target)))
 
   (define-record-type pcb
     (nongenerative)
+    (sealed #t)
     (fields
      (immutable id)
      (immutable create-time)

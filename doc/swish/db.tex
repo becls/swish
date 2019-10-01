@@ -101,31 +101,50 @@ guardian via \code{make-foreign-handle-guardian}.
 \paragraph* {dictionary parameters}\index{db!parameters}
 \begin{itemize}
 
-\item \code{current-database} stores a Scheme record:\newline
-  \code{(define-record-type database (fields (mutable
-    handle)))}\newline The \code{handle} is set to \code{\#f} when
-  the database is closed.
+\item \code{current-database} stores a Scheme record:
+  \begin{alltt}
+(define-record-type database
+  (fields
+   (immutable filename)
+   (immutable create-time)
+   (mutable handle)))
+  \end{alltt}\antipar
+  The \code{handle} is set to \code{\#f} when the database is closed.
 
-\item \code{statement-cache} stores a Scheme record:\newline
-  \code{(define-record-type cache (fields (immutable ht) (mutable
-    waketime) (mutable lazy-statements)))}\newline
+\item \code{statement-cache} stores a Scheme record:
+  \begin{alltt}
+(define-record-type cache
+  (fields
+   (immutable ht)
+   (mutable waketime)
+   (mutable lazy-statements)))
+  \end{alltt}\antipar
   The \code{waketime} is the next time the cache will attempt to
   remove dead entries.
 
-  The hash table, \code{ht}, maps SQL strings to a Scheme
-  record:\newline \code{(define-record-type entry (fields
-    (immutable stmt) (mutable timestamp)))}\newline
+  The hash table, \code{ht}, maps SQL strings to a Scheme record:
+  \begin{alltt}
+(define-record-type entry
+  (fields
+   (immutable stmt)
+   (mutable timestamp)))
+  \end{alltt}\antipar
 
   When a SQL string is not found in the cache,
   \code{osi\_prepare\_statement} is used with the
   \code{current-database} to make a SQLite statement. The raw
-  statement handle is stored in a Scheme record:\newline
-  \code{(define-record-type statement (fields (immutable handle)
-    (immutable database)))}\newline
-  The statement is finalized using
-  \code{osi\_finalize\_statement} when it is removed from the
-  cache. \code{osi\_close\_database} will finalize any remaining
-  statements associated with the database.
+  statement handle is stored in a Scheme record:
+  \begin{alltt}
+(define-record-type statement
+  (fields
+   (immutable database)
+   (immutable sql)
+   (immutable create-time)
+   (mutable handle)))
+  \end{alltt}\antipar
+  The statement is finalized using \code{osi\_finalize\_statement}
+  when it is removed from the cache. \code{osi\_close\_database} will
+  finalize any remaining statements associated with the database.
 
   When a SQL string is found in the cache, the entry's
   \code{timestamp} is updated. Entries older than 5 minutes will

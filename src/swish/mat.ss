@@ -58,6 +58,7 @@
 
   (define-record-type (%mat make-mat mat?)
     (nongenerative)
+    (sealed #t)
     (fields
      (immutable name)
      (immutable tags)

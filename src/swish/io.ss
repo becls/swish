@@ -126,6 +126,7 @@
 
   (define-record-type osi-port
     (nongenerative)
+    (sealed #t)
     (fields
      (immutable name)
      (immutable create-time)
@@ -290,6 +291,7 @@
 
   (define-record-type %type-reporter
     (nongenerative)
+    (sealed #t)
     (fields
      (immutable name)
      (immutable count)
@@ -405,6 +407,7 @@
 
   (define-record-type path-watcher
     (nongenerative)
+    (sealed #t)
     (fields
      (immutable path)
      (immutable create-time)
@@ -770,6 +773,7 @@
 
   (define-record-type listener
     (nongenerative)
+    (sealed #t)
     (fields
      (immutable address)
      (immutable port-number)
@@ -874,6 +878,7 @@
 
   (define-record-type sighandler
     (nongenerative)
+    (sealed #t)
     (fields
      (immutable signum)
      (immutable create-time)

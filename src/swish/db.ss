@@ -301,6 +301,7 @@
 
   (define-record-type cache
     (nongenerative)
+    (sealed #t)
     (fields
      (immutable ht)
      (mutable waketime)
@@ -312,6 +313,7 @@
 
   (define-record-type entry
     (nongenerative)
+    (sealed #t)
     (fields
      (immutable stmt)
      (mutable timestamp))
@@ -360,6 +362,7 @@
 
   (define-record-type database
     (nongenerative)
+    (sealed #t)
     (fields
      (immutable filename)
      (immutable create-time)
@@ -386,6 +389,7 @@
 
   (define-record-type statement
     (nongenerative)
+    (sealed #t)
     (fields
      (immutable database)
      (immutable sql)
