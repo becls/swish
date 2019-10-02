@@ -1,12 +1,13 @@
 #!/bin/sh -e
 
-if [ $# != 1 ] && [ $# != 2 ]; then
-  echo "Usage: $0 suite"
-  echo "   or: $0 suite test"
+if [ $# = 0 ]; then
+  echo "Usage: $0 suite [test ...]"
   echo ""
   echo " For example:"
   echo "   $0 swish/json"
-  echo " or"
+  echo "   $0 swish/json read errors"
+  echo "   $0 swish/json.ms"
+  echo "   $0 swish/profile.ss"
   echo "   $0 swish/erlang chain-reaction"
   exit
 fi
@@ -16,12 +17,29 @@ rm -f ../data/server.profile
 rm -f ../data/TestLog.db3
 make -s -C swish
 
+FILENAME="$1"
+if [ ! -f "${FILENAME}" ]; then
+  FILENAME="$1.ms"
+fi
+
+shift
+
 ./go -q <<EOF
 (reset-handler abort)
 (import (swish mat) (swish profile) (swish testing))
 (cd "..")
-(source-directories '("src" "."))
-(library-directories '("src" "."))
-(load "$1.ms")
-(run-mats $2)
+(\$run-test-spec
+  (<test-spec> make
+    [test-file "src/${FILENAME}"]
+    [test-run (osi_make_uuid)]
+    [report-file "src/${FILENAME}.mo"]
+    [tests
+     (let ([tests (map string->symbol (remq "" (split "$@" #\space)))])
+       (and (pair? tests) tests))]
+    [incl-tags '()]
+    [excl-tags '()]
+    [profile #f]
+    [progress 'test]
+    [lib-dirs '("src" ".")]
+    [src-dirs '("src" ".")]))
 EOF
