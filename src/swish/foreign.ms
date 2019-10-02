@@ -79,7 +79,10 @@
     (parameterize ([cd (path-combine (base-dir) "src" "swish")])
       (match (find (lambda (fn) (equal? fn shlib))
                (map car (list-directory (cd))))
-        [,fn (guard (string? fn)) (get-real-path fn)]))))
+        [,fn (guard (string? fn)) (get-real-path fn)]
+        [,_
+         (errorf #f "could not find ~s; run 'make -C swish mat-prereq' first"
+           shlib)]))))
 
 (define (config-file-name app-name)
   (string-append (path-root (path-last app-name)) ".config"))

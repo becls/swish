@@ -41,7 +41,8 @@
   ;; Check that the naming convention expected by (try-import) in app.ss
   ;; is compatible with (import (swish imports)).
   (for-each check-library-path
-    (library-requirements '(swish imports))))
+    (library-requirements '(swish imports)
+      (library-requirements-options import))))
 
 ;; make sure we review changes to the set of libraries in swish-core.library
 (mat core-library ()
