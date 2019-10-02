@@ -196,6 +196,10 @@
       (for-each pretty-print
         '((define (loaded? L) (and (member L (library-list)) #t))
           (assert (andmap loaded? '((swish mat) (swish profile) (swish testing))))
+          (assert (not (app:name)))
+          (assert (not (app:path)))
+          (match (path-last (app:config-filename))
+            [".config" 'ok])
           (printf "okay\n")))))
   (with-output-to-file tmp-prof void 'replace)
   (script-test swish-test-src `("--repl" ,(path-combine (output-dir) "test-repl.ss"))

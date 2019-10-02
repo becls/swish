@@ -697,7 +697,9 @@
     (when (pair? ignored)
       (printf "~@[Ignoring ~{~a~^, ~} in ~a mode\n~]" ignored
         (option-named 'repl))))
-  (apply (scheme-start) (cons "--" (or (opt 'files) '())))]
+  ;; reset app:config etc. to values observed via run-test-spec
+  (parameterize ([app:name #f] [app:path #f] [app:config #f])
+    (apply swish-start "--" (or (opt 'files) '())))]
  [else
   (let ([incl-tags (map string->symbol (or (opt 'incl-tags) '()))]
         [excl-tags (map string->symbol (or (opt 'excl-tags) '()))]
