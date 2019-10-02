@@ -210,6 +210,8 @@
   (match-let*
    ([#(EXIT #(bad-arg open-file bad-type))
      (catch (open-file "foo.bar" 0 0 'bad-type))]
+    [#(EXIT #(bad-arg open-file not-a-string))
+     (catch (open-file 'not-a-string 0 0 'input))]
     [#(EXIT #(bad-arg close-path-watcher #f))
      (catch (close-path-watcher #f))]
     [#(EXIT #(io-error "*" uv_fs_realpath ,_))

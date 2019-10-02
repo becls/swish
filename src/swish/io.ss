@@ -682,6 +682,7 @@
   (include "io-constants.ss")
 
   (define (open-file name flags mode type)
+    (arg-check 'open-file [name string?])
     (unless (memq type '(binary-input binary-output binary-append input output append))
       (bad-arg 'open-file type))
     (let ([port (open-file-port name flags mode)])
