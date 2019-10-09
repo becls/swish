@@ -52,7 +52,7 @@ is not thread safe and should be used from the main thread only.
 ## Mac
 
 - Chez Scheme 9.5.2 or later
-- dot (can be installed through homebrew using `brew install graphviz --with-app`)
+- dot (can be installed through homebrew using `brew install graphviz`)
 - pdflatex (can be installed through homebrew using `brew cask install mactex`)
 - ginstall and realpath (can be installed through homebrew using `brew install coreutils`)
 - XCode and the command-line tools must be set
