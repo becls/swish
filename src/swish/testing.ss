@@ -93,6 +93,7 @@
   (define (sleep-ms t) (receive (after t 'ok)))
 
   (define (gc)
+    (debug-condition #f) ;; in case we've stashed a continuation condition
     (collect (collect-maximum-generation))
     (sleep-ms 10))
 

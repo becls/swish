@@ -122,6 +122,8 @@
       "{\"#{foo lish}\":789,\"#{bar unique-name}\":456}")
     #(,(json:make-object [,(string->symbol "#{foo not-gensym") 123])
       "{\"#{foo not-gensym\":123}")
+    #(,(json:make-object [,(string->symbol "#{looks more like gensym}") 123])
+      "{\"#{looks more like gensym}\":123}")
     ))
 
 (mat read ()
@@ -454,6 +456,8 @@
      (catch (json:size 'large))]
     [#(EXIT #(bad-arg json:set! 1))
      (catch (json:set! 1 2 3))]
+    [#(EXIT #(bad-arg json:cells apoptosis))
+     (catch (json:cells 'apoptosis))]
     )
    'ok))
 

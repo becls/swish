@@ -211,16 +211,28 @@
         (columns "SELECT col1,col2,col3 AS Column3 FROM table1"))]
      [#(EXIT failed-transaction)
       (catch (transaction db (raise 'failed-transaction)))])
+    ;; trigger the handle-info timeout path
+    (send db 'timeout)
     (db:stop db))))
 
-(mat errors ()
+(isolate-mat errors ()
+  (process-trap-exit #t)
   (match-let*
    ([#(EXIT #(invalid-context lazy-execute)) (catch (lazy-execute "SELECT 1"))]
     [#(EXIT #(invalid-context execute)) (catch (execute "SELECT 1"))]
     [#(EXIT #(invalid-context columns)) (catch (columns "SELECT 1"))]
     [#(EXIT #(db-error open ,_ "*"))
-     (catch (sqlite:open "*" SQLITE_OPEN_READWRITE))])
-   'ok))
+     (catch (sqlite:open "*" SQLITE_OPEN_READWRITE))]
+    [,name (gensym)]
+    [,_
+     (db:start&link name ":memory:" 'open
+       (lambda (db)
+         (assert (database? db))
+         (raise 'make-db-init-fail)))]
+    [#f (whereis name)])
+   (receive (after 1000 (raise 'timeout))
+     [#(EXIT ,pid make-db-init-fail)
+      'ok])))
 
 (mat statements ()
   (let ([db (sqlite:open ":memory:" SQLITE_OPEN_READWRITE)])

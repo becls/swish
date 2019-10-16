@@ -60,6 +60,8 @@
     (reported e3)
     (event-mgr:notify e4)
     (reported e4)
+    (event-mgr:unregister)
+    (assert (not (whereis 'event-mgr)))
     'ok))
 
 (isolate-mat buffering ()
@@ -173,14 +175,23 @@
         [("" "" . ,_) 'ok]))))
 
 (isolate-mat handler-error ()
-  (stop-event-mgr)
-  (event-mgr:start&link)
-  (event-mgr:flush-buffer)
-  (match-let*
-   ([#(error #(invalid-procedure foo)) (event-mgr:add-handler 'foo)]
-    [#(error #(invalid-owner bar)) (event-mgr:add-handler (lambda (x) x) 'bar)]
-    [#(error #(invalid-procedure foo)) (event-mgr:set-log-handler 'foo self)]
-    [#(error #(invalid-owner bar)) (event-mgr:set-log-handler (lambda (x) x) 'bar)]
-    [ok (event-mgr:set-log-handler (lambda (x) x) self)]
-    [#(error log-handler-already-set) (event-mgr:set-log-handler (lambda (x) x) self)])
-   'ok))
+  (define op (open-output-string))
+  (parameterize ([console-error-port op])
+    (stop-event-mgr)
+    (event-mgr:start&link)
+    (event-mgr:flush-buffer)
+    (process-trap-exit #t)
+    (match-let*
+     ([#(error #(invalid-procedure foo)) (event-mgr:add-handler 'foo)]
+      [#(error #(invalid-owner bar)) (event-mgr:add-handler (lambda (x) x) 'bar)]
+      [#(error #(invalid-procedure foo)) (event-mgr:set-log-handler 'foo self)]
+      [#(error #(invalid-owner bar)) (event-mgr:set-log-handler (lambda (x) x) 'bar)]
+      [,pid (spawn&link (lambda () (receive)))]
+      [ok (event-mgr:set-log-handler (lambda (x) (raise x)) pid)]
+      [#(error log-handler-already-set) (event-mgr:set-log-handler (lambda (x) x) self)])
+     (event-mgr:notify 'crash)
+     (receive (after 1000 (raise 'timeout))
+       [#(EXIT ,@pid crash) 'ok])
+     (match-regexps '(seek "^Date: " "^Timestamp: " "^Event: crash")
+       (split (get-output-string op) #\newline))
+     'ok)))

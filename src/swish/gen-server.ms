@@ -41,11 +41,18 @@
        (send from `#(no-return ,self))
        (receive)]
       [crash (raise 'crashed)]
+      [native-exception (cdr 7)]
       [process-trap-exit
        (process-trap-exit #t)
        `#(ok ())]
-      [#(state ,state) `#(ok ,state)]))
+      [#(state ,state) `#(ok ,state)]
+      [(kill ,pid ,reason ,block?)
+       (kill pid reason) (if block? (receive) `#(ok ()))]))
   (define (terminate reason state)
+    (match state
+      [#(,from report-termination)
+       (send from `#(,self terminated ,reason))]
+      [,_ (void)])
     (match reason
       [#(,from stopped)
        (send from `#(,self stopped))]
@@ -62,17 +69,19 @@
       [#(delayed-answer ,t) `#(no-reply #(reply-to ,from) ,t)]
       [indirect-reply
        (gen-server:reply from 'indirect-reply)
-       `#(no-reply ())]
+       `#(no-reply ,state)]
       [#(call-within ,t) `#(reply ok call-within ,t)]
       [next-call
        (match state
-         [call-within `#(reply ok ())]
-         [,_ `#(reply #f ())])]
+         [call-within `#(reply ok call-within-next-call)]
+         [,_ `#(reply #f other-next-call)])]
       [bad-return 'bad-return]
       [stop `#(stop stopped ok ,state)]
       [crash (raise 'crashed)]
+      [native-exception (car 'apple)]
       [crash-terminate `#(stop crash-terminate ok ,state)]
-      [shutdown-reason (raise `#(shutdown reason))]))
+      [shutdown-reason (raise `#(shutdown reason))]
+      [shutdown-during-call '#(stop shutdown ,state)]))
   (define (handle-cast msg state)
     (match msg
       [#(,from handle-cast)
@@ -88,22 +97,30 @@
        (match state
          [#(reply-to ,from)
           (gen-server:reply from 'delayed)
-          `#(no-reply ())]
+          `#(no-reply ,state)]
          [call-within
-          `#(no-reply ())]
+          `#(no-reply call-within-hit-info)]
          [#(delayed-cast ,from)
           (send from `#(,self delayed))
-          `#(no-reply ())]
+          `#(no-reply ,state)]
          [#(delayed-info ,from)
           (send from `#(,self delayed-info))
-          `#(no-reply ())])]
+          `#(no-reply ,state)])]
       [#(,from handle-info)
        (send from `#(,self handled-info))
-       `#(no-reply ())]
+       `#(no-reply ,state)]
       [#(,from delayed-info ,t)
        `#(no-reply #(delayed-info ,from) ,t)]
       [#(,from stop)
        `#(stop #(,from stopped-info) ,state)]
+      [#(,from raise ,what)
+       (send from `#(,self raising ,what))
+       (raise what)]
+      [#(,from native-exception)
+       (send from `#(,self causing-native-exception))
+       (cdr 11)]
+      [#(set-state ,new-state)
+       `#(no-reply ,new-state)]
       [,_
        `#(no-reply ,state)]))
   (define (start-server name arg)
@@ -145,6 +162,13 @@
     [#(error stopped) (start-server #f 'stop)]
     ;; crash init
     [#(error crashed) (start-server #f 'crash)]
+    ;; crash with native exception
+    [#(error ,c)
+     (guard
+      (and (condition? c)
+           (string=? (exit-reason->english c)
+             "Exception in cdr: 7 is not a pair.")))
+     (start-server #f 'native-exception)]
     ;; bad return value inside init
     [#(error #(bad-return-value bad-return)) (start-server #f 'bad-return)]
     ;; init does not return but we have the pid and can kill it.
@@ -232,6 +256,39 @@
      [,other (raise `#(unexpected-event ,other))])
    'ok))
 
+(isolate-mat crash4 ()
+  (process-trap-exit #t)
+  (capture-events)
+  (match-let*
+   ([#(error coverage1) (start&link-server #f `(kill ,self coverage1 #t))]
+    [#(error coverage2) (start&link-server #f `(kill ,self coverage2 #f))]
+    [ok (receive (after 100 'ok) [,x `(bad: got ,x)])])
+   'ok))
+
+(isolate-mat crash5 ()
+  (capture-events)
+  (process-trap-exit #f)
+  (match-let*
+   ([#(ok ,pid) (start-server #f `#(state ignorance))]
+    [#(EXIT #(,c #(gen-server call (,@pid native-exception))))
+     (guard
+      (and (condition? c)
+           (string=? "Exception in car: apple is not a pair."
+             (exit-reason->english c))))
+     (catch (gen-server:call pid 'native-exception))])
+
+   (receive
+    [`(<gen-server-terminating> [name ,@pid]
+        [last-message native-exception]
+        [state ignorance]
+        [reason ,@c])
+     (void)]
+    [,other (throw `#(unexpected-event ,other))])
+
+   (receive (after 500 (void))
+     [,other (throw `#(unexpected-event ,other))])
+   'ok))
+
 (isolate-mat call ()
   (process-trap-exit #t)
   (match-let*
@@ -261,7 +318,19 @@
 
     ;; no-process call
     [#(EXIT #(no-process #(gen-server call ,_)))
-     (catch (gen-server:call 'non-existent-server 'started?))])
+     (catch (gen-server:call 'non-existent-server 'started?))]
+
+    ;; shutdown during call (with timeout)
+    [#(ok ,pid) (start&link-server 'my-test-name '())]
+    [ok (gen-server:call 'my-test-name 'started?)]
+    [#(EXIT #(shutdown #(gen-server call (my-test-name shutdown-during-call 10))))
+     (catch (gen-server:call 'my-test-name 'shutdown-during-call 10))]
+
+    ;; shutdown during call (no timeout)
+    [#(ok ,pid) (start&link-server 'my-test-name '())]
+    [ok (gen-server:call 'my-test-name 'started?)]
+    [#(EXIT #(shutdown #(gen-server call (my-test-name shutdown-during-call))))
+     (catch (gen-server:call 'my-test-name 'shutdown-during-call))])
    'ok))
 
 (isolate-mat cast ()
@@ -295,9 +364,54 @@
     [ok (receive (after 1000 (raise 'delayed-info))
           [#(,@pid delayed-info) 'ok])]
 
+    [,_ (send 'my-test-name `#(set-state #(,self report-termination)))]
     [,_ (send 'my-test-name `#(,self stop))]
     [ok (receive (after 1000 (raise 'stop))
-          [#(,@pid stopped-info) 'ok])])
+          [#(,@pid stopped-info) 'ok])]
+    [ok (receive (after 1000 (raise 'bad-termination-reason))
+          [#(,@pid terminated #(,@self stopped-info)) 'ok])])
+   'ok))
+
+(isolate-mat terminate1 ()
+  (capture-events)
+  (match-let*
+   ([#(ok ,pid)
+     (start-server #f `#(state #(,self report-termination)))]
+    [ok (gen-server:call pid 'started?)]
+    [,_ (send pid `#(,self raise objection))]
+    [ok (receive (after 100 (raise 'no-objection))
+          [#(,@pid raising objection) 'ok])]
+    [ok (receive (after 100 (raise 'no-termination))
+          [#(,@pid terminated objection) 'ok])])
+   (receive (after 1000 (raise 'no-event))
+     [`(<gen-server-terminating>
+        [name ,@pid]
+        [last-message #(,@self raise objection)]
+        [state #(,@self report-termination)]
+        [reason objection]) 'ok])
+   'ok))
+
+(isolate-mat terminate2 ()
+  (capture-events)
+  (match-let*
+   ([#(ok ,pid)
+     (start-server #f `#(state #(,self report-termination)))]
+    [ok (gen-server:call pid 'started?)]
+    [,_ (send pid `#(,self native-exception))]
+    [ok (receive (after 100 (raise 'no-exception))
+          [#(,@pid causing-native-exception) 'ok])]
+    [,c (receive (after 100 (raise 'no-termination))
+          [#(,@pid terminated ,c)
+           (guard (condition? c))
+           c])]
+    ["Exception in cdr: 11 is not a pair."
+     (exit-reason->english c)])
+   (receive (after 1000 (raise 'no-event))
+     [`(<gen-server-terminating>
+        [name ,@pid]
+        [last-message #(,@self native-exception)]
+        [state #(,@self report-termination)]
+        [reason ,@c]) 'ok])
    'ok))
 
 (isolate-mat debug ()

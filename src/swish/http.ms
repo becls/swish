@@ -552,13 +552,14 @@
          (raise `#(unexpected ,x)))])
     (close-port op))
 
-  ;; fake an exit message, as if accept failed
+  ;; fake a message indicating that accept failed
   (process-trap-exit #t)
-  (let ([http (whereis 'http-listener)])
+  (let ([http (whereis 'http-listener)]
+        [fail-msg `#(accept-tcp-failed "listener" "who" "errno")])
     (link http)
-    (send http `#(EXIT ,self accept-failed))
+    (send http fail-msg)
     (receive (after 100 (raise 'timeout))
-      [#(EXIT ,@http ,_) 'ok])))
+      [#(EXIT ,@http ,@fail-msg) 'ok])))
 
 (http-mat mime-types ()
   (capture-events)

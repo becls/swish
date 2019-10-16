@@ -84,7 +84,10 @@
            [pid (spawn&link thunk)])
       (receive
        [#(ack ,@pid ,reply) reply]
-       [#(EXIT ,@pid ,reason) `#(error ,reason)])))
+       [#(EXIT ,@pid ,reason)
+        (receive (until 0 (void))
+          [#(ack ,@pid ,reply) (void)])
+        `#(error ,reason)])))
 
   (define (make-starter name iface init-args)
     (lambda (reply parent)

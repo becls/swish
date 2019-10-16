@@ -144,11 +144,10 @@
     (let* ([listener (listen-tcp "::" 0 self)]
            [test-port (listener-port-number listener)])
       (on-exit (close-tcp-listener listener)
-        (let ([op (open-output-string)]
-              [l2 (listen-tcp "::" 0 self)])
+        (let ([l2 (listen-tcp hostname 0 self)])
           (on-exit (close-tcp-listener l2)
             (match-let* ([2 (tcp-listener-count)])
-              (print-tcp-listeners op))))
+              'ok)))
         (match (catch (listen-tcp "::" test-port self))
           [#(EXIT #(listen-tcp-failed "::" ,@test-port uv_listen ,_)) 'ok])
         (receive (after 10 (close-tcp-listener listener)))
@@ -157,6 +156,24 @@
            'ok]))))
   (run "127.0.0.1")
   (run "::1"))
+
+(isolate-mat print-tcp-listeners ()
+  (let ([op (open-output-string)]
+        [l1 (listen-tcp "127.0.0.1" 0 self)])
+    (on-exit (close-tcp-listener l1)
+      (receive (after 1 'ok)) ;; make listener creation times differ
+      (let ([l2 (listen-tcp "::1" 0 self)])
+        (on-exit (close-tcp-listener l2)
+          (print-tcp-listeners op)
+          (match-let*
+           ([2 (tcp-listener-count)]
+            [(,line1 ,line2 "") (split (get-output-string op) #\newline)]
+            [,pat (re "^ +[0-9]+: (\\S+) opened [0-9]+")]
+            [,socket1 (format "127.0.0.1:~a" (listener-port-number l1))]
+            [,socket2 (format "[::1]:~a" (listener-port-number l2))]
+            [(,_ ,@socket1) (pregexp-match pat line1)]
+            [(,_ ,@socket2) (pregexp-match pat line2)])
+           'ok))))))
 
 (isolate-mat process-bad ()
   (match-let*

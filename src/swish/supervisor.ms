@@ -45,6 +45,7 @@
     (match msg
       [die `#(stop died ,state)]
       [stop `#(stop normal ,state)]
+      [(raise ,reason) (raise reason)]
       [#(sleep ,t)
        (sleep-ms t)
        `#(no-reply ,state)]
@@ -99,6 +100,10 @@
           [#(EXIT ,@pid shutdown) 'ok]
           [#(EXIT ,@pid ,reason) (raise `#(bad-exit-reason ,reason))])))]))
 
+(define (get-events timeout)
+  (receive (after timeout '())
+    [,x (cons x (get-events timeout))]))
+
 (define-syntax supervisor-mat
   (syntax-rules ()
     [(_ name tags e1 e2 ...)
@@ -152,8 +157,23 @@
 (supervisor-mat bad-child ()
   (define child1 `#(child1 ,supervisor-1:start-child permanent 1000 worker))
   (define child2 `#(child2 ,bad-child:start&link permanent 1000 worker))
+  (capture-events)
   (match-let*
-   ([#(error shutdown) (start 'one-for-one 2 3600 (list child1 child2))])
+   ([#(error shutdown) (start 'one-for-one 2 3600 (list child1 child2))]
+    [(`(<child-start> ,supervisor
+         [pid ,pid1]
+         [name child1]
+         [restart-type permanent]
+         [shutdown 1000]
+         [type worker])
+      `(<supervisor-error> ,@supervisor
+         [error-context start-error]
+         [reason crash]
+         [child-pid #f]
+         [child-name child2])
+      #(EXIT ,@supervisor shutdown)
+      `(<child-end> [pid ,@pid1] [killed 1] [reason shutdown]))
+     (get-events 0)])
    'ok))
 
 (supervisor-mat bad-child2 ()
@@ -217,7 +237,79 @@
 
    (receive
     (after 0 (raise 'timeout-waiting-for-error-report))
-    [#(<supervisor-error> ,_ ,_ start-error #(duplicate-process ,_) #f child2) 'ok])))
+    [`(<supervisor-error>
+       [timestamp ,_]
+       [supervisor ,_]
+       [error-context start-error]
+       [reason #(duplicate-process ,_)]
+       [child-pid #f]
+       [child-name child2])
+     'ok])))
+
+(supervisor-mat event-order ()
+  (define child1 `#(child1 ,supervisor-1:start-child permanent 1000 worker))
+  (capture-events)
+  (match-let*
+   ([#(ok ,supervisor) (start 'one-for-one 2 3600 (list child1))]
+    [(`(<child-start> ,@supervisor
+         [pid ,pid1]
+         [name child1]
+         [restart-type permanent]
+         [shutdown 1000]
+         [type worker]))
+     (get-events 0)]
+    [ok (supervisor:terminate-child supervisor 'child1)]
+    [(`(<child-end> [pid ,@pid1] [killed 1] [reason shutdown])) (get-events 0)]
+    [#(ok ,pid2) (supervisor:restart-child supervisor 'child1)]
+    [(`(<child-start> ,@supervisor [pid ,@pid2]
+         [name child1]
+         [restart-type permanent]
+         [shutdown 1000]
+         [type worker]))
+     (get-events 0)]
+    [,_ (send pid2 `(raise ruckus))]
+    [(`(<gen-server-terminating>
+        [name ,@pid2]
+        [last-message (raise ruckus)]
+        [state ()]
+        [reason ruckus])
+      `(<child-end> [pid ,@pid2] [killed 0] [reason ruckus])
+      `(<child-start> ,@supervisor
+         [pid ,pid3]
+         [name child1]
+         [restart-type permanent]
+         [shutdown 1000]
+         [type worker]))
+     (get-events 100)]
+    [,_ (supervisor-mat-cleanup)]
+    [(`(<child-end> [pid ,@pid3] [killed 1] [reason shutdown]))
+     (get-events 0)])
+   'ok)
+  ;; now with low tolerance for restart to trigger supervisor-error
+  (match-let*
+   ([#(ok ,supervisor) (start 'one-for-one 0 1 (list child1))]
+    [(`(<child-start> ,@supervisor
+         [pid ,pid1]
+         [name child1]
+         [restart-type permanent]
+         [shutdown 1000]
+         [type worker]))
+     (get-events 0)]
+    [,_ (send pid1 `(raise objection))]
+    [(`(<gen-server-terminating>
+        [name ,@pid1]
+        [last-message (raise objection)]
+        [state ()]
+        [reason objection])
+      #(EXIT ,@supervisor shutdown)
+      `(<child-end> [pid ,@pid1] [killed 0] [reason objection])
+      `(<supervisor-error> ,@supervisor
+         [error-context shutdown]
+         [reason reached-max-restart-intensity]
+         [child-pid ,@pid1]
+         [child-name child1]))
+     (get-events 100)])
+   'ok))
 
 (supervisor-mat start-error ()
   (match-let* ([#(error ,(reason <= #(invalid-strategy foo)))
@@ -625,6 +717,7 @@
   (define child1 `#(child1 ,(lambda () (supervisor-1:start-child 'error))
                      permanent 1000 worker))
   (define child2 `#(child2 ,supervisor-1:start-child permanent 1000 worker))
+  (capture-events)
   (match-let*
    ([#(ok ,pid) (start 'one-for-one 4 3600 '())]
     [#(ok ,cpid1) (supervisor:start-child 'sup-test child1)]
@@ -641,7 +734,21 @@
     [#(EXIT ,@pid ,_) 'ok])
    (receive
     (after 4000 (raise 'all-not-terminated))
-    [#(EXIT ,@cpid2 ,_) 'ok])))
+    [#(EXIT ,@cpid2 ,_) 'ok])
+   (do ([i 0 (+ i 1)]) ((= i 4))
+     (receive (after 0 (raise `(no-event ,i)))
+       [`(<supervisor-error>
+          [supervisor ,@pid]
+          [error-context start-error]
+          [child-pid ,@cpid1]
+          [child-name child1])
+        'ok]))
+   (receive (after 0 (raise 'no-max-restart))
+     [`(<supervisor-error>
+        [supervisor ,@pid]
+        [error-context shutdown]
+        [reason reached-max-restart-intensity])
+      'ok])))
 
 (supervisor-mat one-for-all ()
   (define child1 `#(child1 ,supervisor-1:start-child permanent 1000 worker))

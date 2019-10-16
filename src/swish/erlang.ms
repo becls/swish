@@ -29,6 +29,7 @@
  (swish io)
  (swish mat)
  (swish osi)
+ (swish script-testing)
  (swish string-utils)
  (swish testing)
  )
@@ -162,6 +163,67 @@
        (after 10 (raise 'timeout))
        [#(EXIT ,@pid2 link-no-fail) 'ok]))))
 
+(isolate-mat kill-normal ()
+  (let ([pid (spawn&link (lambda () (receive [(word-from ,p) (send p 'roger)])))])
+    (kill pid 'normal)
+    (send pid `(word-from ,self))
+    (receive (after 1000 (raise 'normal-should-not-kill))
+      [roger 'ok])))
+
+(isolate-mat link-native ()
+  (define (assert-expected e)
+    (match (and (condition? e) (exit-reason->english e))
+      ["Exception in cdr: 7 is not a pair." 'ok]))
+  (process-trap-exit #t)
+  (let ([pid (spawn&link (lambda () (cdr 7)))])
+    (receive
+     (after 1000 (raise 'timeout))
+     [#(EXIT ,@pid ,c) (assert-expected c)])
+    ;; link to a dead process should immediately give EXIT message
+    (link pid)
+    (receive
+     (after 0 (raise 'no-exit-from-link))
+     [#(EXIT ,@pid ,c) (assert-expected c)])
+    ;; link to a dead process without trap-exit should die
+    (let ([pid2 (spawn&link (lambda () (link pid) (raise 'link-no-fail)))])
+      (receive
+       (after 10 (raise 'no-exit-from-link))
+       [#(EXIT ,@pid2 ,c) (assert-expected c)]))))
+
+(isolate-mat link-raise ()
+  (process-trap-exit #t)
+  (let ([pid (spawn&link (lambda () (raise 'commotion)))])
+    (receive
+     (after 1000 (raise 'timeout))
+     [#(EXIT ,@pid commotion) 'ok])
+    ;; link to a dead process should immediately give EXIT message
+    (link pid)
+    (receive
+     (after 0 (raise 'no-exit-from-link))
+     [#(EXIT ,@pid commotion) 'ok])
+    ;; link to a dead process without trap-exit should die
+    (let ([pid2 (spawn&link (lambda () (link pid) (raise 'link-no-fail)))])
+      (receive
+       (after 10 (raise 'no-exit-from-link))
+       [#(EXIT ,@pid2 commotion)
+        'ok]))))
+
+;; like suicide-normal, but with raise in place of kill
+(isolate-mat link-raise-normal ()
+  (process-trap-exit #t)
+  (let ([pid0 (spawn&link (lambda () (raise 'normal)))])
+    (receive
+     (after 1000 (raise 'timeout))
+     [#(EXIT ,@pid0 normal) 'ok])
+    (let ([pid1
+           (spawn&link
+            (lambda ()
+              (link pid0)
+              (raise 'awareness)))])
+      (receive
+       (after 100 (raise 'wrong-exit-reason))
+       [#(EXIT ,@pid1 awareness) 'ok]))))
+
 (isolate-mat default-parameters ()
   (match-let*
    ([#f (process-trap-exit)]
@@ -172,6 +234,10 @@
 (isolate-mat bad-args ()
   (match-let*
    ([#(EXIT #(bad-arg add-finalizer 12)) (catch (add-finalizer 12))]
+    [#(EXIT #(bad-arg command-line "abc")) (catch (command-line "abc"))]
+    [#(EXIT #(bad-arg command-line-arguments "xyz"))
+     (catch (command-line-arguments "xyz"))]
+    [#(EXIT #(bad-arg complete-io breakfast)) (catch (complete-io 'breakfast))]
     [#(EXIT #(bad-arg custom-port-buffer-size -1))
      (catch (custom-port-buffer-size -1))]
     [#(EXIT #(bad-arg demonitor 12)) (catch (demonitor 12))]
@@ -179,6 +245,8 @@
     [#(EXIT #(bad-arg uuid->string #f)) (catch (uuid->string #f))]
     [#(EXIT #(bad-arg uuid->string #vu8(1 2 3)))
      (catch (uuid->string #vu8(1 2 3)))]
+    [#(EXIT #(bad-arg inherited-parameters 12))
+     (catch (inherited-parameters 12))]
     [#(EXIT #(bad-arg kill 12)) (catch (kill 12 'crash))]
     [#(EXIT #(bad-arg link 12)) (catch (link 12))]
     [#(EXIT #(bad-arg make-process-parameter 12))
@@ -197,6 +265,7 @@
     [#(EXIT #(bad-arg print-length -1)) (catch (print-length -1))]
     [#(EXIT #(bad-arg print-level -1)) (catch (print-level -1))]
     [#(EXIT #(bad-arg print-precision #t)) (catch (print-precision #t))]
+    [#(EXIT #(bad-arg print-precision -3)) (catch (print-precision -3))]
     [#(EXIT #(bad-arg print-radix 1)) (catch (print-radix 1))]
     [#(EXIT #(bad-arg process-id 12)) (catch (process-id 12))]
     [#(EXIT #(bad-arg register 12)) (catch (register (gensym) 12))]
@@ -224,6 +293,8 @@
     [#(EXIT #(bad-arg unregister 12)) (catch (unregister 12))]
     [#(EXIT #(bad-arg waiter-prompt-and-read 12))
      (catch (waiter-prompt-and-read 12))]
+    [#(EXIT #(bad-arg waiter-prompt-string 12))
+     (catch (waiter-prompt-string 12))]
     [#(EXIT #(bad-arg whereis 12)) (catch (whereis 12))]
     [#(EXIT #(bad-arg who arg)) (catch (bad-arg 'who 'arg))])
    (print-char-name #t)
@@ -686,20 +757,70 @@
      [#(DOWN ,@m ,@pid success!) 'ok])))
 
 (isolate-mat pps ()
-  (let-values ([(p get) (open-string-output-port)])
-    (parameterize ([current-output-port p])
-      (let ([dead (spawn (lambda () (car 12)))]
-            [no-src (spawn (lambda () (eval '(receive (after 10 'ok)))))]
-            [forever (spawn&link (lambda () (receive (until 'infinity 'ok))))])
-        (register 'named self)
+  (parameterize ([collect-request-handler void])
+    (define (check-output patterns with-port)
+      (let-values ([(p get) (open-string-output-port)])
+        (with-port p)
+        (match-regexps patterns (split (get) #\newline))))
+    (define (test patterns)
+      (check-output patterns (lambda (p) (pps p)))
+      (check-output patterns
+        (lambda (p)
+          (parameterize ([current-output-port p])
+            (pps)))))
+    (define (test-spawn thunk pattern-suffix)
+      (define pid (and thunk (spawn thunk)))
+      (on-exit (when pid (kill pid 'kill))
+        (define id (process-id (or pid self)))
+        (define pattern (format " +~a: ~a" id pattern-suffix))
         (sleep-ms 1)
-        (pps)))
-    (let ([lines (split (get) #\newline)])
-      (match-prefix lines "Processes:")))
-  (let-values ([(p get) (open-string-output-port)])
-    (pps p)
-    (let ([lines (split (get) #\newline)])
-      (match-prefix lines "Processes:"))))
+        (test `("Processes:" seek ,pattern ""))))
+    (define parent self)
+    (test
+     `("Processes:"
+       " +1: waiting for up to [.0-9]+s at char [0-9]+ of .*testing.ss, spawned [0-9]+"
+       " +2: ready to run, spawned [0-9]+"
+       " +3: waiting indefinitely at char [0-9]+ of .*[/\\\\]erlang.ss, spawned [0-9]+"))
+    (test-spawn #f "running, spawned [0-9]+")
+    ;; named
+    (register 'named self)
+    (test-spawn #f "named running, spawned [0-9]+")
+    ;; dead
+    (test-spawn (lambda () (car 12))
+      "exited with reason #<compound condition: Exception in car: 12 is not a pair>, spawned [0-9]+")
+    ;; no-src
+    (test-spawn (lambda () (eval '(receive (after 10 'ok))))
+      "waiting for up to [.0-9]+s, spawned [0-9]+")
+    ;; normal; covers a case in @thunk->cont
+    (test-spawn exit
+      "exited with reason normal, spawned [0-9]+")
+    ;; forever
+    (process-trap-exit #t)
+    (test-spawn (lambda () (link parent) (receive (until 'infinity 'ok)))
+      "waiting indefinitely at char [0-9]+ of .*[/\\\\]erlang.ms, spawned [0-9]+")
+    ;; waiting for io
+    (let ([pid (spawn
+                (lambda ()
+                  (link parent)
+                  (wait-for-io 'godot)
+                  (receive (after 0 (raise 'bad))
+                    [for-coverage (send parent 'ok)])
+                  (receive)))])
+      (sleep-ms 1)
+      (test
+       `("Processes:" seek
+         ,(format " +~a: waiting for godot, spawned [0-9]+"
+            (process-id pid))))
+      ;; covers case in @send
+      (send pid 'for-coverage)
+      (complete-io pid)
+      (receive (after 10 (raise 'failed))
+        [ok 'ok])
+      (kill pid 'abandoned)
+      (test
+       `("Processes:" seek
+         ,(format " +~a: exited with reason abandoned, spawned [0-9]+"
+            (process-id pid)))))))
 
 (mat t1 ()
   (assert (= (match 5 (,x x)) 5)))
@@ -772,6 +893,11 @@
   (assert-syntax-error
    (let ()
      (define-tuple <point> x y)
+     (<point> copy* (<point> make [x 0] [y 0]) [bogus 1] [x 2]))
+   "unknown field")
+  (assert-syntax-error
+   (let ()
+     (define-tuple <point> x y)
      (<point> open (<point> make [x 1] [y 2]) (x x))
      x)
    "duplicate field")
@@ -828,6 +954,12 @@
        (list x y)))
    "invalid syntax")
   (assert-syntax-error (match 0 [`((ooh!)) x]) "invalid match pattern `((ooh!))")
+  (assert-syntax-error
+   (lambda (p)
+     (define-tuple <point> x y)
+     (<point> open p [51 mustang])
+     p)
+   "invalid syntax")
   )
 
 (mat t9 ()
@@ -2431,10 +2563,20 @@
     "Timestamp: "
     "Event: "))
 
+;; generate predictable source annotations for stack dump tests
+(define (compile-and-load file i? s?)
+  (parameterize ([generate-inspector-information i?]
+                 [generate-procedure-source-information s?])
+    (compile-file file)
+    (load (string-append (path-root file) ".so"))))
+
 (mat dump-stack ()
   (define (assert-depth s n)
     (let ([lines (split-n s #\newline (+ n 2))])
       (assert (string=? (list-ref lines n) (format "Stack dump truncated due to max-depth = ~s." n)))))
+  (define (assert-not-truncated s)
+    (match (catch (match-prefix (split s #\newline) "Stack dump truncated due to max-depth ="))
+      [#(EXIT #(pattern-not-found ,_)) 'ok]))
   (let-values ([(p get) (open-string-output-port)])
     (define (wrap n thunk)
       (if (= n 0)
@@ -2445,14 +2587,140 @@
     (assert-depth (get) 10)
     (wrap 100 (lambda () (call/cc (lambda (k) (dump-stack k p 4)))))
     (assert-depth (get) 4)
+    (wrap 100 (lambda () (call/cc (lambda (k) (dump-stack k p 1)))))
+    (assert-depth (get) 1)
+    (match-let* ([,void-object (void)]
+                 [(,@void-object)
+                  (wrap 1
+                    (lambda ()
+                      (call/cc
+                       (lambda (k)
+                         (dump-stack k p #f)))))])
+      (assert-not-truncated (get)))
     (wrap 100 (lambda () (call/cc (lambda (k) (dump-stack k p #f)))))
-    (match (catch (match-prefix (split (get) #\newline) "Stack dump truncated due to max-depth ="))
-      [#(EXIT #(pattern-not-found ,_)) 'ok])
+    (assert-not-truncated (get))
     (match-let*
      ([#(EXIT #(bad-arg dump-stack tofu)) (catch (dump-stack 'tofu))]
       [#(EXIT #(bad-arg dump-stack tofu)) (catch (call/cc (lambda (k) (dump-stack k p 'tofu))))]
       [#(EXIT #(bad-arg dump-stack 2.3)) (catch (call/cc (lambda (k) (dump-stack k p 2.3))))]
       [#(EXIT #(bad-arg dump-stack -2)) (catch (call/cc (lambda (k) (dump-stack k p -2))))]
+      [#(EXIT #(bad-arg dump-stack 0)) (catch (call/cc (lambda (k) (dump-stack k p 0))))]
       [,bignum (+ (most-positive-fixnum) 1)]
       [#(EXIT #(bad-arg dump-stack ,@bignum)) (catch (call/cc (lambda (k) (dump-stack k p bignum))))])
      'ok)))
+
+(isolate-mat record-writers ()
+  ;; pcb
+  (match-let*
+   ([,pid (spawn&link (lambda () (receive)))]
+    [,expected0 (format "#<process ~a>" (process-id pid))]
+    [,@expected0 (format "~s" pid)]
+    [#t (register 'coverage pid)]
+    [,expected1 (format "#<process ~a coverage>" (process-id pid))]
+    [,@expected1 (format "~s" pid)]
+    [#t (unregister 'coverage)]
+    [,@expected0 (format "~s" pid)])
+   'ok)
+  ;; console-event-handler treatment of native exceptions
+  (let ([os (open-output-string)])
+    (define test-file
+      (write-test-file "make-exception.ss"
+        (lambda ()
+          (printf ";; explicit line breaks for predictable source information\n")
+          (printf "(define (fail-nontail n)\n")
+          (printf "  (if (zero? n)\n")
+          (printf "      (cdr n)\n")
+          (printf "      (+ n (fail-nontail (- n 1)))))\n"))))
+    (define common
+      '(""
+        "Date:"
+        "Timestamp: [0-9]+"
+        "Event: #<compound condition: Exception in cdr: 0 is not a pair>"))
+    (define stack-info
+      '("Condition: Exception in cdr: 0 is not a pair"
+        "Stack:"
+        "#<continuation in fail-nontail> at line 5, char 12 of"
+        "  n: 1"
+        "#<continuation in fail-nontail> at line 5, char 12 of"
+        "  n: 2"
+        "#<continuation in fail-nontail> at line 5, char 12 of"
+        "  n: 3"))
+    (parameterize ([compile-file-message #f])
+      (compile-and-load test-file #t #f))
+    (parameterize ([console-error-port os])
+      (let ([c (guard (c [else c]) (fail-nontail 3))])
+        ;; first call gets stack since we've not seen it yet
+        (console-event-handler c)
+        (fprintf os "=== second call to console-event-handler\n")
+        ;; second call omits stack since we've seen it already
+        (console-event-handler c)
+        (fprintf os "=== after reset-console-event-handler\n")
+        (reset-console-event-handler)
+        ;; stack is back after reset
+        (console-event-handler c)))
+    (match-regexps
+     `(,@common
+       ,@stack-info
+       seek
+       "=== second call to console-event-handler"
+       ,@common
+       ""
+       "=== after reset-console-event-handler"
+       ,@common
+       ,@stack-info)
+     (split (get-output-string os) #\newline))))
+
+(isolate-mat dbg ()
+  (script-test #f '()
+    (format "~{~s\n~}"
+      '((define (fail who)
+          (fprintf (console-error-port) "Failed for ~s\n" who)
+          (exit 1))
+        (printf ";; nothing spawned, so nothing to debug\n")
+        (dbg)
+        (printf ";; no process 404, so nothing to debug\n")
+        (dbg 404)
+        (printf ";; no continuation condition for spawned process, so nothing to debug\n")
+        (define pid0 (spawn (lambda () (printf "started\n") (raise 'issue))))
+        (define m (monitor pid0))
+        (receive (after 100 (fail 'pid0))
+          [#(DOWN ,_ ,@pid0 ,_) (dbg)])
+        (printf ";; now have a continuation condition, so something to dbg\n")
+        (define pid1 (spawn (lambda () (cdr 123))))
+        (define m (monitor pid1))
+        (receive (after 100 (fail 'pid1))
+          [#(DOWN ,_ ,@pid1 ,_) (dbg)])
+        (printf ";; add another one\n")
+        (define pid2 (spawn (lambda () (list (cdr (reverse 'transcriptase))))))
+        (define m (monitor pid2))
+        (receive (after 100 (fail 'pid2))
+          [#(DOWN ,_ ,@pid2 ,_) (dbg)])
+        (printf "debug pid2\n")
+        (parameterize ([console-input-port (open-input-string "s i show-frames 2\nq\n")])
+          (dbg (process-id pid2)))
+        (printf "debug pid1\n")
+        (parameterize ([console-input-port (open-input-string "s i show-frames 1\nq\n")])
+          (dbg (process-id pid1)))
+        (printf "done\n")
+        (exit)))
+    '(";; nothing spawned, so nothing to debug"
+      ";; no process 404, so nothing to debug"
+      "Nothing to debug."
+      ";; no continuation condition for spawned process, so nothing to debug"
+      "started"
+      ";; now have a continuation condition, so something to dbg"
+      "^ *[0-9]+: exited with reason #<compound condition: Exception in cdr: 123 is not a pair>, spawned [0-9]+"
+      ";; add another one"
+      "^ *[0-9]+: exited with reason #<compound condition: Exception in cdr: 123 is not a pair>, spawned [0-9]+"
+      "^ *[0-9]+: exited with reason #<compound condition: Exception in reverse: transcriptase is not a proper list>, spawned [0-9]+"
+      "^debug pid2"
+      "^debug>.*Exception in reverse: transcriptase is not a proper list"
+      "^debug>.*#<system continuation in reverse> +: +0: #<system continuation in reverse>"
+      " +1: #<continuation>"
+      seek
+      "^debug pid1"
+      "^debug>.*Exception in cdr: 123 is not a pair"
+      "^debug>.*#<continuation> +: +0: #<continuation>"
+      "^#<continuation> +: "
+      "^debug> "
+      "done")))
