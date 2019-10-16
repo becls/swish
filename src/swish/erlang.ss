@@ -67,6 +67,7 @@
    )
   (import
    (chezscheme)
+   (swish internal)
    (swish meta)
    (swish osi)
    )

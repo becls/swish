@@ -62,6 +62,7 @@
             (swish app-core)
             (swish erlang)
             (swish errors)
+            (swish internal)
             (swish io)
             (swish osi)
             (swish meta))))
