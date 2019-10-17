@@ -471,7 +471,7 @@
         [#f
          (log-db:version schema-name schema-version)
          (create-db)]
-        [,version (raise `#(unsupported-db-version ,schema-name ,version))]))
+        [,version (throw `#(unsupported-db-version ,schema-name ,version))]))
 
     (define swish-event-logger
       (<event-logger> make [setup upgrade-db] [log log-simple-event]))

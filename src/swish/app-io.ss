@@ -40,7 +40,7 @@
    )
 
   (define (reject config-file reason)
-    (raise `#(invalid-config-file ,config-file ,reason)))
+    (throw `#(invalid-config-file ,config-file ,reason)))
 
   (define config (make-process-parameter #f))
 
@@ -103,6 +103,6 @@
            (tmp-dir (path-combine (data-dir) "tmp"))
            (web-dir (path-combine base "web"))
            base]
-          [#(EXIT ,reason) (raise reason)]
+          [#(EXIT ,reason) (throw reason)]
           [#f (errorf 'base-dir "no directory ~s" base)]))))
   )

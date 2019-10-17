@@ -316,7 +316,7 @@
   ($import-internal throw)
 
   (define (bad-arg who arg)
-    (raise `#(bad-arg ,who ,arg)))
+    (throw `#(bad-arg ,who ,arg)))
 
   (define (kill p raw-reason)
     (unless (pcb? p)
@@ -671,14 +671,14 @@
      [(and (or (fixnum? timeout) (bignum? timeout)) (>= timeout 0))
       ($receive matcher src (+ (erlang:now) timeout) timeout-handler)]
      [(eq? timeout 'infinity) ($receive matcher src #f #f)]
-     [else (raise `#(timeout-value ,timeout ,src))]))
+     [else (throw `#(timeout-value ,timeout ,src))]))
 
   (define (receive-until matcher src time timeout-handler)
     (cond
      [(and (or (fixnum? time) (bignum? time)) (>= time 0))
       ($receive matcher src time timeout-handler)]
      [(eq? time 'infinity) ($receive matcher src #f #f)]
-     [else (raise `#(timeout-value ,time ,src))]))
+     [else (throw `#(timeout-value ,time ,src))]))
 
   (define ($receive matcher src waketime timeout-handler)
     (disable-interrupts)
@@ -825,7 +825,7 @@
                                 (exit-handler
                                  (case-lambda
                                   [() (raise 'normal)]
-                                  [(x . args) (raise x)]))
+                                  [(x . args) (throw x)]))
                                 (thunk)
                                 'normal))])
                         ;; Process finished
@@ -860,11 +860,11 @@
       (bad-arg 'register p))
     (with-interrupts-disabled
      (cond
-      [(not (alive? p)) (raise `#(process-dead ,p))]
+      [(not (alive? p)) (throw `#(process-dead ,p))]
       [(pcb-name p) =>
-       (lambda (name) (raise `#(process-already-registered ,name)))]
+       (lambda (name) (throw `#(process-already-registered ,name)))]
       [(eq-hashtable-ref registrar name #f) =>
-       (lambda (pid) (raise `#(name-already-registered ,pid)))]
+       (lambda (pid) (throw `#(name-already-registered ,pid)))]
       [else
        (pcb-name-set! p name)
        (eq-hashtable-set! registrar name p)
@@ -1060,7 +1060,7 @@
       [(_) #f]))
 
   (define (bad-match v src)
-    (raise `#(bad-match ,v ,src)))
+    (throw `#(bad-match ,v ,src)))
 
   (define extension)
   (define extensions)
@@ -1380,7 +1380,7 @@
                        (define tmp
                          (let ([val #,expr])
                            (unless (name is? val)
-                             (raise `#(bad-tuple name ,val ,#,(find-source x))))
+                             (throw `#(bad-tuple name ,val ,#,(find-source x))))
                            val))
                        #,@(map make-accessor (syntax->list field-names)))))
              (define (handle-copy x e bindings mode)
@@ -1388,7 +1388,7 @@
                    #,(case mode
                        [copy
                         #`(unless (name is? src)
-                            (raise `#(bad-tuple name ,src ,#,(find-source x))))]
+                            (throw `#(bad-tuple name ,src ,#,(find-source x))))]
                        [copy*
                         (handle-open x #'src #f (get-binding-names bindings))])
                    (vector 'name #,@(copy-tuple #'(field ...) 1 bindings))))
@@ -1449,7 +1449,7 @@
                 (syntax-datum-eq? #'fn #'field)
                 #`(lambda (x)
                     (unless (name is? x)
-                      (raise `#(bad-tuple name ,x ,#,(find-source x))))
+                      (throw `#(bad-tuple name ,x ,#,(find-source x))))
                     (#3%vector-ref x #,(find-index #'fn #'(field ...) 1)))]
                ...
                [(name no-check fn e)

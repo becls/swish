@@ -131,15 +131,15 @@
 
   (define (unexpected-input c ip)
     (if (eof-object? c)
-        (raise 'unexpected-eof)
-        (raise `#(unexpected-input ,c
+        (throw 'unexpected-eof)
+        (throw `#(unexpected-input ,c
                    ,(and (port-has-port-position? ip)
                          (- (port-position ip) 1))))))
 
   (define (next-char ip)
     (let ([x (read-char ip)])
       (if (eof-object? x)
-          (raise 'unexpected-eof)
+          (throw 'unexpected-eof)
           x)))
 
   (define (ws? x)
@@ -179,14 +179,14 @@
                   (expect-char #\u ip)
                   (let ([y (read-4hexdig ip)])
                     (unless (<= #xDC00 y #xDFFF)
-                      (raise 'invalid-surrogate-pair))
+                      (throw 'invalid-surrogate-pair))
                     (write-char
                      (integer->char
                       (+ (ash (bitwise-and x #x3FF) 10)
                          (bitwise-and y #x3FF)
                          #x10000))
                      op))]
-                 [(<= #xDC00 x #xDFFF) (raise 'invalid-surrogate-pair)]
+                 [(<= #xDC00 x #xDFFF) (throw 'invalid-surrogate-pair)]
                  [else (write-char (integer->char x) op)]))]
              [else (unexpected-input c ip)]))
          (read-string ip op)]
@@ -450,7 +450,7 @@
                       (json:write-structural-char #\: indent op)
                       (wr op (cdr p) indent))))
                 (json:write-structural-char #\} indent op)))]
-         [else (raise `#(invalid-datum ,x))]))
+         [else (throw `#(invalid-datum ,x))]))
       (when (and indent (or (not (fixnum? indent)) (negative? indent)))
         (bad-arg 'json:write indent))
       (wr op x indent)

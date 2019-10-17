@@ -355,7 +355,7 @@ this is a list of rows as returned by a \code{SELECT} query.
 \expandsto{} \antipar\begin{alltt}
 (match (db:transaction \var{db} (lambda () \var{body} \etc))
   [#(ok ,result) result]
-  [#(error ,reason) (raise reason)])
+  [#(error ,reason) (throw reason)])
 \end{alltt}
 
 The \code{transaction} macro runs the body in a transaction and

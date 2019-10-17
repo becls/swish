@@ -60,7 +60,7 @@
 
   (define-syntax pregexp-error
     (syntax-rules ()
-      [(_ e1 e2 ...) (raise `#(pregexp-error ,e1 ,e2 ...))]))
+      [(_ e1 e2 ...) (throw `#(pregexp-error ,e1 ,e2 ...))]))
 
   (define pregexp-read-pattern
     (lambda (s i n)

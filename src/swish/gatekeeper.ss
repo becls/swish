@@ -40,13 +40,13 @@
     (let ([e (gen-server:call 'gatekeeper `#(enter ,resource) timeout)])
       (if (eq? e 'ok)
           'ok
-          (raise e))))
+          (throw e))))
 
   (define (gatekeeper:leave resource)
     (match (catch (gen-server:call 'gatekeeper `#(leave ,resource)))
       [ok 'ok]
       [#(EXIT ,_) 'ok]
-      [,r (raise r)]))
+      [,r (throw r)]))
 
   (define-syntax (with-gatekeeper-mutex x)
     (syntax-case x ()

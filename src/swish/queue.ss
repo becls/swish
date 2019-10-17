@@ -49,13 +49,13 @@
       [(,in . ,out) `(,in . (,x . ,out))]))
 
   (define (queue:get q)
-    (when (queue:empty? q) (raise 'empty))
+    (when (queue:empty? q) (throw 'empty))
     (match q
       [(,_ . (,h . ,_)) h]
       [((,h) . ()) h]))
 
   (define (queue:drop q)
-    (when (queue:empty? q) (raise 'empty))
+    (when (queue:empty? q) (throw 'empty))
     (match q
       [((,_) . ()) (profile-me) queue:empty]
       [(,r . (,_)) (profile-me) (r2f r)]

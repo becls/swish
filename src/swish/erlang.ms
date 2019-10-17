@@ -3147,7 +3147,7 @@
       [crash (cdr x)]))
   (define (effective origin)
     (match origin
-      [out 'raise]   ;; right now bad-match calls raise
+      [out 'throw]
       [crash 'raise] ;; native error calls raise
       [,_ origin]))
   (define (check origin same?)

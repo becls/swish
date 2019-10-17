@@ -84,7 +84,7 @@
   (define (init-wal db)
     (match (execute-sql db "pragma journal_mode=wal")
       [(#("wal")) 'ok]
-      [(#(,mode)) (raise `#(bad-journal-mode ,mode))]))
+      [(#(,mode)) (throw `#(bad-journal-mode ,mode))]))
 
   (define db:start&link
     (case-lambda
@@ -111,17 +111,17 @@
 
   (define (lazy-execute sql . bindings)
     (unless (statement-cache)
-      (raise `#(invalid-context lazy-execute)))
+      (throw `#(invalid-context lazy-execute)))
     ($lazy-execute sql bindings))
 
   (define (execute sql . bindings)
     (unless (statement-cache)
-      (raise `#(invalid-context execute)))
+      (throw `#(invalid-context execute)))
     ($execute sql bindings))
 
   (define (columns sql)
     (unless (statement-cache)
-      (raise `#(invalid-context columns)))
+      (throw `#(invalid-context columns)))
     (sqlite:columns (get-statement sql)))
 
   (define-syntax transaction
@@ -131,7 +131,7 @@
   (define ($transaction db thunk)
     (match (db:transaction db thunk)
       [#(ok ,result) result]
-      [#(error ,reason) (raise reason)]))
+      [#(error ,reason) (throw reason)]))
 
   (define commit-threshold 10000)
 
@@ -154,7 +154,7 @@
       (match (catch (db-init db))
         [#(EXIT ,reason)
          (sqlite:close db)
-         (raise reason)]
+         (throw reason)]
         [,_ (void)])
       `#(ok ,(<db-state> make
                [filename filename]
@@ -277,7 +277,7 @@
     (define (bits-set? rc bits) (equal? bits (bitwise-and rc bits)))
     (define (attempt stmt count sleep-times)
       (unless (< count 500)
-        (raise `#(db-retry-failed ,sql ,count)))
+        (throw `#(db-retry-failed ,sql ,count)))
       (match (catch (sqlite:execute stmt '()))
         [#(EXIT #(db-error ,_ (,_ ,sqlite_rc . ,_) ,_))
          (guard
@@ -287,7 +287,7 @@
          (match sleep-times
            [(,t . ,rest)
             (receive (after t (attempt stmt (+ count 1) rest)))])]
-        [#(EXIT ,reason) (raise reason)]
+        [#(EXIT ,reason) (throw reason)]
         [,_ count]))
     (let* ([stmt (get-statement sql)]
            [start-time (erlang:now)]
@@ -424,7 +424,7 @@
       (statements s handle)))
 
   (define (db-error who error detail)
-    (raise `#(db-error ,who ,error ,detail)))
+    (throw `#(db-error ,who ,error ,detail)))
 
   (define-syntax with-db
     (syntax-rules ()

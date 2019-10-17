@@ -65,9 +65,9 @@
       (let* ([dict (json:ref (app:config) (so-path so-name) #f)]
              [file (and (hashtable? dict) (hashtable-ref dict 'file #f))])
         (unless (string? file)
-          (raise `#(unknown-shared-object ,so-name)))
+          (throw `#(unknown-shared-object ,so-name)))
         (match (catch (handler (resolve file) so-name dict))
-          [#(EXIT ,reason) (raise `#(cannot-load-shared-object ,so-name ,reason))]
+          [#(EXIT ,reason) (throw `#(cannot-load-shared-object ,so-name ,reason))]
           [,_ (void)]))]))
 
   (define (resolve path)

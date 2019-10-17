@@ -96,7 +96,7 @@
     (match (run-os-process command args write-stdin 10000 '())
       [`(<os-result> ,stdout ,stderr ,exit-status)
        (unless (eqv? exit-status 0)
-         (raise
+         (throw
           (<os-process-failed> make
             [command command]
             [args args]

@@ -246,7 +246,7 @@
   (define (unwrap x)
     (match x
       [#(ok ,result) result]
-      [#(error ,reason) (raise reason)]))
+      [#(error ,reason) (throw reason)]))
 
   (define (init input-fn output-fn force-start?)
     (cond
@@ -290,7 +290,7 @@
           (no-reply ($state copy [waketime (next-waketime)]))]
          [#(EXIT #(io-error ,_ ,_ ,_))
           (no-reply ($state copy [waketime (+ (erlang:now) 1000)]))]
-         [#(EXIT ,reason) (raise reason)])]))
+         [#(EXIT ,reason) (throw reason)])]))
   (define (default-filename) (path-combine (data-dir) "server.profile"))
   (define (profile:start&link input-fn output-fn force-start?)
     (gen-server:start&link 'profiler input-fn output-fn force-start?))

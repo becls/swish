@@ -90,7 +90,7 @@
      (make-swish-sup-spec (list swish-event-logger))
      (lambda (x)
        (let ([reason (supervisor:validate-start-specs x)])
-         (when reason (raise reason)))
+         (when reason (throw reason)))
        x)))
 
   (define cli

@@ -212,7 +212,7 @@
        #`(list #,@(map translate #'(spec ...)))]))
 
   (define (bad-spec who what spec)
-    (raise `#(bad-spec ,who ,what ,spec)))
+    (throw `#(bad-spec ,who ,what ,spec)))
 
   (define (check-specs specs) (check-specs-help specs #t))
   (define (partial-check-specs specs) (check-specs-help specs #f))
@@ -463,7 +463,7 @@
          [() ht]
          [(name)
           (unless (hashtable-ref name->spec name #f)
-            (raise `#(no-spec-with-name ,name)))
+            (throw `#(no-spec-with-name ,name)))
           (hashtable-ref ht name #f)]))))
 
   (define parse-command-line-arguments

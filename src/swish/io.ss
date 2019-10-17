@@ -136,7 +136,7 @@
     (unless (osi-port? p)
       (bad-arg who p))
     (or (osi-port-handle p)
-        (raise `#(osi-port-closed ,who ,p))))
+        (throw `#(osi-port-closed ,who ,p))))
 
   (define (read-osi-port port bv start n fp)
     (define result)
@@ -200,7 +200,7 @@
         [,_ (void)])))
 
   (define (io-error name who errno)
-    (raise `#(io-error ,name ,who ,errno)))
+    (throw `#(io-error ,name ,who ,errno)))
 
   (define (make-utf8-transcoder)
     (make-transcoder (utf-8-codec)
@@ -311,7 +311,7 @@
          (sorted-cells table get-create-time cell->record cell->handle))]))
     (hashtable-update! foreign-handle-reporters name
       (lambda (prev)
-        (when prev (raise `#(type-already-registered ,name)))
+        (when prev (throw `#(type-already-registered ,name)))
         (make-%type-reporter name get-count print))
       #f))
 
@@ -743,7 +743,7 @@
               (let* ([bv (make-bytevector n)]
                      [count (read-osi-port port bv 0 n 0)])
                 (unless (eqv? count n)
-                  (raise `#(unexpected-eof ,name)))
+                  (throw `#(unexpected-eof ,name)))
                 bv)
               #vu8())))))
 
@@ -836,7 +836,7 @@
                       (unless (pair? r)
                         (osi_close_port* r 0))))))
        [(,who . ,errno)
-        (raise `#(listen-tcp-failed ,address ,port-number ,who ,errno))]
+        (throw `#(listen-tcp-failed ,address ,port-number ,who ,errno))]
        [,handle
         (let ([l (make-listener address (osi_get_tcp_listener_port handle)
                    (erlang:now) handle)])

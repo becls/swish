@@ -30,7 +30,7 @@
    (cond
     [(find-param "partial") =>
      (lambda (x) (put-bytevector op (string->utf8 x)))])
-   (raise 'internal-error)]
+   (throw 'internal-error)]
   ["bad read"
    ;; consume input, but don't respond or error
    (do ([n (string->number (get-param "count")) (- n 1)])
