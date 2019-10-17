@@ -235,8 +235,11 @@
            [#(ok ,pid ,child)
             (lp rest (cons child new-children))]
            [#(error ,reason)
-            (report-error 'start-error reason child)
             `#(error ,(append (reverse rest) (cons child new-children)))])])))
+
+  (define (report-start-error reason child)
+    (report-error 'start-error reason child)
+    `#(error ,reason))
 
   (define (do-start-child child children)
     (match (catch ((<child> thunk child)))
@@ -244,7 +247,7 @@
        (cond
         [(find-pid pid children)
          (profile-me)
-         `#(error #(duplicate-process ,pid))]
+         (report-start-error `#(duplicate-process ,pid) child)]
         [else
          (link pid)
          (let ([child (<child> copy child [pid pid])])
@@ -255,13 +258,13 @@
        `#(ok #f ,child)]
       [#(error ,reason)
        (profile-me)
-       `#(error ,reason)]
+       (report-start-error reason child)]
       [#(EXIT ,reason)
        (profile-me)
-       `#(error ,reason)]
+       (report-start-error reason child)]
       [,other
        (profile-me)
-       `#(error #(bad-return-value ,other))]))
+       (report-start-error `#(bad-return-value ,other) child)]))
 
   (define (handle-start-child child state)
     (match (state-find-child (<child> name child) state)
@@ -318,7 +321,6 @@
          [#(ok ,pid ,child)
           `#(ok ,(state-replace-child child state))]
          [#(error ,reason)
-          (report-error 'start-error reason child)
           (restart child state)])]
       [one-for-all
        (match (start-children
