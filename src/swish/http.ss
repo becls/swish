@@ -121,7 +121,7 @@
                             (http:handle-input ip op)))))))])
           `#(no-reply ,state))]
         [#(accept-tcp-failed ,l ,who ,errno)
-         (raise `#(accept-tcp-failed ,l ,who ,errno))]))
+         `#(stop ,msg ,state)]))
     (gen-server:start&link 'http-listener))
 
   (define (http-cache:get-content-type extension)
