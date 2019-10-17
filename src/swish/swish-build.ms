@@ -129,7 +129,7 @@
   (delete-file wpo-file)
   (build-example "fat1" '("-b" "petite"))
   (match (get-stat wpo-file)
-    [`(<stat>) (raise "wpo file remains")]
+    [`(<stat>) (throw "wpo file remains")]
     [,_ 'ok])
   (run-fat "fat1" '() '("Hello, World!"))
   ;; run fat app via PATH search, not via relative or absolute path

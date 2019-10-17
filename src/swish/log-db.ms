@@ -103,7 +103,7 @@
                     (when (eq? x 'fail)
                       (raise 'bad-logger)))])))])
        (event-mgr:notify 'fail)
-       (receive (after 1000 (raise 'timeout))
+       (receive (after 1000 (throw 'timeout))
          [#(EXIT ,@log-db bad-logger)
           'ok])))))
 

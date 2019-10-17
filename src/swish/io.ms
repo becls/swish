@@ -44,7 +44,7 @@
 (define (start-watchdog timeout reason)
   (spawn&link
    (lambda ()
-     (receive (after timeout (raise reason))))))
+     (receive (after timeout (throw reason))))))
 
 (define (stop-watchdog x) (unlink x))
 
@@ -109,12 +109,12 @@
         (let-values ([(cip cop) (connect-tcp hostname test-port)])
           (on-exit
            (begin (close-input-port cip) (force-close-output-port cop))
-           (receive (after 5000 (raise 'timeout-connecting-tcp))
+           (receive (after 5000 (throw 'timeout-connecting-tcp))
              [#(accept-tcp ,@listener ,sip ,sop)
               (on-exit (force-close-output-port sop)
                 (check-loopback sip cop)
                 (check-loopback cip sop))]
-             [,(msg <= #(accept-tcp-failed ,_ ,_ ,_)) (raise msg)]))))))
+             [,(msg <= #(accept-tcp-failed ,_ ,_ ,_)) (throw msg)]))))))
   (run "0.0.0.0" "127.0.0.1")
   (run "127.0.0.1" "127.0.0.1")
   (run "::1" "::1")
@@ -204,7 +204,7 @@
       (receive
        (after 500
          (unless (and (null? renames-tbd) (null? updates-tbd))
-           (raise `#(path-changed-missing ,who ,renames-tbd ,updates-tbd))))
+           (throw `#(path-changed-missing ,who ,renames-tbd ,updates-tbd))))
        [#(path-changed ,@test-dir ,filename 1)
         (cond
          [(member filename renames-tbd)
@@ -213,7 +213,7 @@
          [(member filename renames-seen)
           (lp renames-tbd renames-seen updates-tbd updates-seen)]
          [else
-          (raise `#(unexpected-path-rename ,who ,filename ,renames))])]
+          (throw `#(unexpected-path-rename ,who ,filename ,renames))])]
        [#(path-changed ,@test-dir ,filename 2)
         (cond
          [(member filename updates-tbd)
@@ -222,7 +222,7 @@
          [(member filename updates-seen)
           (lp renames-tbd renames-seen updates-tbd updates-seen)]
          [else
-          (raise `#(unexpected-path-updated ,who ,filename ,updates))])])))
+          (throw `#(unexpected-path-updated ,who ,filename ,updates))])])))
   (define bullet "\x2022;")
   (define test-dir (string-append bullet "files-test" bullet "/"))
   (match-let*
@@ -375,7 +375,7 @@
       (do ([n #x110000 (- n 1)]) ((= n 0))
         (let ([c1 (read-char ip)] [c2 (stream)])
           (unless (eqv? c1 c2)
-            (raise `#(wrong-char ,n ,(char->integer c1) ,(char->integer c2))))))))
+            (throw `#(wrong-char ,n ,(char->integer c1) ,(char->integer c2))))))))
   (let ([op (open-file-to-replace fn)])
     (on-exit (force-close-output-port op)
       (display "nothing here" op)))
@@ -700,7 +700,7 @@
                    (osi_kill ,parent-pid SIGINT)
                    (receive))))
               (flush-output-port to-stdin)
-              (receive (after 2000 (raise 'fail))
+              (receive (after 2000 (throw 'fail))
                 [#(process-terminated ,',@os-pid ,',exit-status ,',@SIGTERM)
                  'ok])
               (printf "child-output:\n")

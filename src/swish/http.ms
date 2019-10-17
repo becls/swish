@@ -54,7 +54,7 @@
    [(whereis 'http-sup) =>
     (lambda (pid)
       (monitor pid)
-      (receive (after 60000 (raise 'http-sup-still-running))
+      (receive (after 60000 (throw 'http-sup-still-running))
         [#(DOWN ,_ ,@pid ,_) 'ok]))]))
 
 (define-syntax http-mat
@@ -69,9 +69,9 @@
                    (thunk))))]
          [m (monitor pid)])
     (on-exit (shutdown-http)
-      (receive (after 300000 (kill pid 'shutdown) (raise 'timeout))
+      (receive (after 300000 (kill pid 'shutdown) (throw 'timeout))
         [#(DOWN ,_ ,@pid normal) 'ok]
-        [#(DOWN ,_ ,@pid ,reason) (raise reason)]))))
+        [#(DOWN ,_ ,@pid ,reason) (throw reason)]))))
 
 (define (simple-tcp x)
   (let-values ([(ip op) (connect-tcp "127.0.0.1" test-port)])
@@ -527,7 +527,7 @@
   (let-values ([(ip op) (connect-tcp "127.0.0.1" test-port)])
     (put-bytevector op (string->utf8 "Malformed Request\r\n\r\n"))
     (flush-output-port op)
-    (receive (after 10 (raise 'no-child-log))
+    (receive (after 10 (throw 'no-child-log))
       [`(<child-end> [reason #(unhandled-input ,x)])
        (assert (string=? (utf8->string x) "Malformed Request"))])
     (close-port op))
@@ -543,13 +543,13 @@
       (spawn&link
        (lambda ()
          (send me `#(read ,(utf8->string (get-bytevector-all ip)))))))
-    (receive (after 100 (raise 'timeout))
+    (receive (after 100 (throw 'timeout))
       [#(read ,x)
        (unless (string=? x
                  (string-append
                   "HTTP/1.1 200 \r\nContent-Length: 1\r\nCache-Control: no-cache\r\n\r\n1"
                   "HTTP/1.1 200 \r\nContent-Length: 1\r\nCache-Control: no-cache\r\n\r\n2"))
-         (raise `#(unexpected ,x)))])
+         (throw `#(unexpected ,x)))])
     (close-port op))
 
   ;; fake a message indicating that accept failed
@@ -558,7 +558,7 @@
         [fail-msg `#(accept-tcp-failed "listener" "who" "errno")])
     (link http)
     (send http fail-msg)
-    (receive (after 100 (raise 'timeout))
+    (receive (after 100 (throw 'timeout))
       [#(EXIT ,@http ,@fail-msg) 'ok])))
 
 (http-mat mime-types ()
@@ -569,7 +569,7 @@
     (on-exit (rename-path mime-types.bak mime-types)
       ;; no mime-types file; http-cache crashes; supervisor will restart
       (utf8->string (simple-get "/static/ok.html"))
-      (receive (after 1000 (raise 'timeout-waiting-for-cache-to-fail))
+      (receive (after 1000 (throw 'timeout-waiting-for-cache-to-fail))
         [`(<gen-server-terminating> [name http-cache]
             [reason #(io-error ,_ uv_fs_open ,_)])
          'ok])
@@ -580,7 +580,7 @@
           (invalid mime type expression)
           ("html" . "text/html")))
       (utf8->string (simple-get "/static/ok.html"))
-      (receive (after 1000 (raise 'timeout-waiting-for-cache-to-fail))
+      (receive (after 1000 (throw 'timeout-waiting-for-cache-to-fail))
         [`(<gen-server-terminating> [name http-cache]
             [reason #(invalid-mime-type (invalid mime type expression))])
          'ok])))
@@ -608,7 +608,7 @@
                       (string-length s) s)]
           [actual (utf8->string (simple-get (string-append "/" file1)))])
       (or (string=? expected actual)
-          (raise `#(unexpected ,expected ,actual)))))
+          (throw `#(unexpected ,expected ,actual)))))
 
   ;; cache unrelated file which uses include (coverage)
   (simple-get "/include/mat?cmd=echo&echo=1")
@@ -658,7 +658,7 @@
   (capture-events)
   (let ([path (web-dir)])
     (send 'http-cache `#(path-watcher-failed ,path -1234))
-    (receive (after 1000 (raise 'timeout-waiting-for-cache-to-fail))
+    (receive (after 1000 (throw 'timeout-waiting-for-cache-to-fail))
       [`(<gen-server-terminating> [name http-cache] ,reason)
        (match reason
          [#(bad-match #(path-watcher-failed ,@path -1234) ,_)

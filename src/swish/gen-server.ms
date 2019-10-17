@@ -41,6 +41,7 @@
        (send from `#(no-return ,self))
        (receive)]
       [crash (raise 'crashed)]
+      [throw (throw 'fit)]
       [native-exception (cdr 7)]
       [process-trap-exit
        (process-trap-exit #t)
@@ -60,6 +61,8 @@
        (send from `#(,self stopped-info))]
       [crash-terminate
        (raise 'crashed)]
+      [throw-terminate
+       (throw 'terminated)]
       [,_ (void)])
     'ok)
   (define (handle-call msg from state)
@@ -78,8 +81,10 @@
       [bad-return 'bad-return]
       [stop `#(stop stopped ok ,state)]
       [crash (raise 'crashed)]
+      [throw (throw 'fit)]
       [native-exception (car 'apple)]
       [crash-terminate `#(stop crash-terminate ok ,state)]
+      [throw-terminate `#(stop throw-terminate ok ,state)]
       [shutdown-reason (raise `#(shutdown reason))]
       [shutdown-during-call '#(stop shutdown ,state)]))
   (define (handle-cast msg state)
@@ -116,6 +121,9 @@
       [#(,from raise ,what)
        (send from `#(,self raising ,what))
        (raise what)]
+      [#(,from throw ,what)
+       (send from `#(,self throwing ,what))
+       (throw what)]
       [#(,from native-exception)
        (send from `#(,self causing-native-exception))
        (cdr 11)]
@@ -131,13 +139,13 @@
 
 (define (busy-wait-for-process pid n)
   (if (process-alive? pid n)
-      (raise `#(process-still-alive ,pid))
+      (throw `#(process-still-alive ,pid))
       'ok))
 
 (isolate-mat start ()
   (define (with-monitor thunk)
     (let ([m (monitor (spawn thunk))])
-      (receive (after 5000 (raise 'timeout))
+      (receive (after 5000 (throw 'timeout))
         [#(DOWN ,@m ,_ ,reason) reason])))
   (define (init-does-not-return starter)
     (with-monitor
@@ -145,10 +153,10 @@
        (define dog
          (spawn&link
           (lambda ()
-            (receive (after 4000 (raise 'tester-timeout))
+            (receive (after 4000 (throw 'tester-timeout))
               [#(no-return ,from)
                (kill from 'bark!)]))))
-       (raise (starter #f `#(no-return ,dog))))))
+       (throw (starter #f `#(no-return ,dog))))))
   (match-let*
    ;; anonymous
    ([#(ok ,pid) (start-server #f '())]
@@ -162,6 +170,7 @@
     [#(error stopped) (start-server #f 'stop)]
     ;; crash init
     [#(error crashed) (start-server #f 'crash)]
+    [#(error fit) (start-server #f 'throw)]
     ;; crash with native exception
     [#(error ,c)
      (guard
@@ -207,7 +216,7 @@
   (match-let*
    ([#(ok ,pid) (start&link-server #f 'process-trap-exit)])
    (kill pid 'shutdown)
-   (receive (after 5000 (raise 'not-stopped))
+   (receive (after 5000 (throw 'not-stopped))
      [#(EXIT ,@pid shutdown) 'ok])))
 
 (isolate-mat crash ()
@@ -232,10 +241,10 @@
         [state crash-state]
         [reason crashed])
      (void)]
-    [,other (raise `#(unexpected-event ,other))])
+    [,other (throw `#(unexpected-event ,other))])
 
    (receive (after 500 (void))
-     [,other (raise `#(unexpected-event ,other))])
+     [,other (throw `#(unexpected-event ,other))])
    'ok))
 
 (isolate-mat crash3 ()
@@ -250,10 +259,10 @@
         [state crash-state]
         [reason crashed])
      (void)]
-    [,other (raise `#(unexpected-event ,other))])
+    [,other (throw `#(unexpected-event ,other))])
 
    (receive (after 500 (void))
-     [,other (raise `#(unexpected-event ,other))])
+     [,other (throw `#(unexpected-event ,other))])
    'ok))
 
 (isolate-mat crash4 ()
@@ -282,6 +291,44 @@
         [last-message native-exception]
         [state ignorance]
         [reason ,@c])
+     (void)]
+    [,other (throw `#(unexpected-event ,other))])
+
+   (receive (after 500 (void))
+     [,other (throw `#(unexpected-event ,other))])
+   'ok))
+
+(isolate-mat crash6 ()
+  (capture-events)
+  (process-trap-exit #f)
+  (match-let*
+   ([#(ok ,pid) (start-server #f `#(state bliss))]
+    [#(EXIT #(fit #(gen-server call (,@pid throw))))
+     (catch (gen-server:call pid 'throw))])
+
+   (receive
+    [`(<gen-server-terminating> [name ,@pid]
+        [last-message throw]
+        [state bliss]
+        [reason fit])
+     (void)]
+    [,other (throw `#(unexpected-event ,other))])
+
+   (receive (after 500 (void))
+     [,other (throw `#(unexpected-event ,other))])
+   'ok))
+
+(isolate-mat crash7 ()
+  (capture-events)
+  (match-let*
+   ([#(ok ,pid) (start-server #f `#(state crash-state))]
+    [ok (gen-server:call pid 'throw-terminate)])
+
+   (receive
+    [`(<gen-server-terminating> [name ,@pid]
+        [last-message throw-terminate]
+        [state crash-state]
+        [reason terminated])
      (void)]
     [,other (throw `#(unexpected-event ,other))])
 
@@ -339,15 +386,15 @@
     [ok (gen-server:call 'my-test-name 'started?)]
 
     [ok (gen-server:cast 'my-test-name `#(,self handle-cast))]
-    [ok (receive (after 1000 (raise 'handle-cast))
+    [ok (receive (after 1000 (throw 'handle-cast))
           [#(,@pid handled-cast) 'ok])]
 
     [ok (gen-server:cast 'my-test-name `#(,self delayed-cast 1))]
-    [ok (receive (after 1000 (raise 'delayed-cast))
+    [ok (receive (after 1000 (throw 'delayed-cast))
           [#(,@pid delayed) 'ok])]
 
     [ok (gen-server:cast 'my-test-name `#(,self stop))]
-    [ok (receive (after 1000 (raise 'stop))
+    [ok (receive (after 1000 (throw 'stop))
           [#(,@pid stopped) 'ok])])
    'ok))
 
@@ -357,18 +404,18 @@
     [ok (gen-server:call 'my-test-name 'started?)]
 
     [,_ (send 'my-test-name `#(,self handle-info))]
-    [ok (receive (after 1000 (raise 'handle-info))
+    [ok (receive (after 1000 (throw 'handle-info))
           [#(,@pid handled-info) 'ok])]
 
     [,_ (send 'my-test-name `#(,self delayed-info 1))]
-    [ok (receive (after 1000 (raise 'delayed-info))
+    [ok (receive (after 1000 (throw 'delayed-info))
           [#(,@pid delayed-info) 'ok])]
 
     [,_ (send 'my-test-name `#(set-state #(,self report-termination)))]
     [,_ (send 'my-test-name `#(,self stop))]
-    [ok (receive (after 1000 (raise 'stop))
+    [ok (receive (after 1000 (throw 'stop))
           [#(,@pid stopped-info) 'ok])]
-    [ok (receive (after 1000 (raise 'bad-termination-reason))
+    [ok (receive (after 1000 (throw 'bad-termination-reason))
           [#(,@pid terminated #(,@self stopped-info)) 'ok])])
    'ok))
 
@@ -379,11 +426,11 @@
      (start-server #f `#(state #(,self report-termination)))]
     [ok (gen-server:call pid 'started?)]
     [,_ (send pid `#(,self raise objection))]
-    [ok (receive (after 100 (raise 'no-objection))
+    [ok (receive (after 100 (throw 'no-objection))
           [#(,@pid raising objection) 'ok])]
-    [ok (receive (after 100 (raise 'no-termination))
+    [ok (receive (after 100 (throw 'no-termination))
           [#(,@pid terminated objection) 'ok])])
-   (receive (after 1000 (raise 'no-event))
+   (receive (after 1000 (throw 'no-event))
      [`(<gen-server-terminating>
         [name ,@pid]
         [last-message #(,@self raise objection)]
@@ -398,20 +445,39 @@
      (start-server #f `#(state #(,self report-termination)))]
     [ok (gen-server:call pid 'started?)]
     [,_ (send pid `#(,self native-exception))]
-    [ok (receive (after 100 (raise 'no-exception))
+    [ok (receive (after 100 (throw 'no-exception))
           [#(,@pid causing-native-exception) 'ok])]
-    [,c (receive (after 100 (raise 'no-termination))
+    [,c (receive (after 100 (throw 'no-termination))
           [#(,@pid terminated ,c)
            (guard (condition? c))
            c])]
     ["Exception in cdr: 11 is not a pair."
      (exit-reason->english c)])
-   (receive (after 1000 (raise 'no-event))
+   (receive (after 1000 (throw 'no-event))
      [`(<gen-server-terminating>
         [name ,@pid]
         [last-message #(,@self native-exception)]
         [state #(,@self report-termination)]
         [reason ,@c]) 'ok])
+   'ok))
+
+(isolate-mat terminate3 ()
+  (capture-events)
+  (match-let*
+   ([#(ok ,pid)
+     (start-server #f `#(state #(,self report-termination)))]
+    [ok (gen-server:call pid 'started?)]
+    [,_ (send pid `#(,self throw heavy-object))]
+    [ok (receive (after 100 (throw 'no-throw))
+          [#(,@pid throwing heavy-object) 'ok])]
+    [ok (receive (after 100 (throw 'no-termination))
+          [#(,@pid terminated heavy-object) 'ok])])
+   (receive (after 1000 (throw 'no-event))
+     [`(<gen-server-terminating>
+        [name ,@pid]
+        [last-message #(,@self throw heavy-object)]
+        [state #(,@self report-termination)]
+        [reason heavy-object]) 'ok])
    'ok))
 
 (isolate-mat debug ()

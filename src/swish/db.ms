@@ -186,6 +186,15 @@
           (raise 'boom)))])
     (transaction db (execute "create table temp.foo(x)"))
     (transaction db (execute "drop table temp.foo")))
+   ;; Once more, this time with throw instead of raise
+   (match-let*
+    ([#(error pie)
+      (db:transaction db
+        (lambda ()
+          (execute "create table temp.bar(x)")
+          (throw 'pie)))])
+    (transaction db (execute "create table temp.bar(x)"))
+    (transaction db (execute "drop table temp.bar")))
    (do ([i 0 (+ i 1)]) ((= i 150))
      (db:log db "INSERT INTO table1 (col1, col2, col3) VALUES(?,?,?)"
        i i i))
@@ -210,7 +219,7 @@
       (transaction db
         (columns "SELECT col1,col2,col3 AS Column3 FROM table1"))]
      [#(EXIT failed-transaction)
-      (catch (transaction db (raise 'failed-transaction)))])
+      (catch (transaction db (throw 'failed-transaction)))])
     ;; trigger the handle-info timeout path
     (send db 'timeout)
     (db:stop db))))
@@ -231,7 +240,7 @@
          (assert (database? db))
          (raise 'make-db-init-fail)))]
     [#f (whereis name)])
-   (receive (after 1000 (raise 'timeout))
+   (receive (after 1000 (throw 'timeout))
      [#(EXIT ,pid make-db-init-fail)
       'ok])
    (match-let*
@@ -247,7 +256,7 @@
     ([#(ok ,db) (db:start&link #f ":memory:" 'open)]
      [,_ (db:log db "insert into nosuchtable(x) values(3)")]
      [stopped (db:stop db)])
-    (receive (after 1000 (raise 'timeout))
+    (receive (after 1000 (throw 'timeout))
       [`(<gen-server-terminating>
          [name ,@db]
          [reason #(db-error prepare ,_ ,_)])
@@ -354,7 +363,7 @@
        (let ([me self])
          (lambda (db)
            (send me `#(init ,(execute-sql db "pragma journal_mode"))))))]
-    [#(init (#("memory"))) (receive (after 1000 (raise 'timeout)) [,x x])])
+    [#(init (#("memory"))) (receive (after 1000 (throw 'timeout)) [,x x])])
 
    ;; Verify in-memory using shared cache connects to same data
    (transaction shared1
@@ -384,12 +393,12 @@
           (execute "INSERT INTO table1 (x, y) VALUES(?,?)" 1 2)
           (send me 'go-ahead)
           (receive (after 1000 'ok)))))]
-    [ok (receive (after 1000 (raise 'timeout))
+    [ok (receive (after 1000 (throw 'timeout))
           [go-ahead 'ok])]
     [(#(1 2))
      (transaction shared2
        (execute "SELECT x, y FROM table1"))])
-   (receive (after 2000 (raise 'timeout))
+   (receive (after 2000 (throw 'timeout))
      [`(<transaction-retry> [database ,@db-uri] ,count)
       (guard (> count 0))
       'ok])))

@@ -49,21 +49,21 @@
   (let ([t1 (dump ht1)]
         [t2 (dump ht2)])
     (unless (equal? t1 t2)
-      (raise `#(not-equal ,t1 ,t2)))))
+      (throw `#(not-equal ,t1 ,t2)))))
 
 (define (check-error x str)
   (match x
     [#(EXIT ,reason)
      (let ([err (exit-reason->english reason)])
        (unless (string=? err str)
-         (raise `#(not-equal ,err ,str))))]))
+         (throw `#(not-equal ,err ,str))))]))
 
 (define (check-error-or x . strs)
   (match x
     [#(EXIT ,reason)
      (let ([err (exit-reason->english reason)])
        (unless (member err strs)
-         (raise `#(never-equal ,err ,@strs))))]))
+         (throw `#(never-equal ,err ,@strs))))]))
 
 (define (gen-spec-macro name short long type help options)
   ;; We want to make sure we try each alphabetic and numeric character

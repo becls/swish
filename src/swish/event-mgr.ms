@@ -31,7 +31,7 @@
 
 (define (reported event)
   (receive
-   (after 1000 (raise `#(event-timeout ,event)))
+   (after 1000 (throw `#(event-timeout ,event)))
    [,@event 'ok]))
 
 (define (silence-log-handler)
@@ -93,13 +93,13 @@
   (capture-events)
   ;; explicit timestamp
   (system-detail <foo> [bar 'bell] [timestamp 1234])
-  (receive (after 1000 (raise `#(event-timeout 1)))
+  (receive (after 1000 (throw `#(event-timeout 1)))
     [`(<foo> [bar bell] [timestamp 1234]) 'ok])
   ;; add timestamp if not present
   (let* ([before (erlang:now)]
          [_ (system-detail <foo> [bar 'none])]
          [after (erlang:now)])
-    (receive (after 1000 (raise `#(event-timeout 2)))
+    (receive (after 1000 (throw `#(event-timeout 2)))
       [`(<foo> [bar none] ,timestamp)
        (assert (<= before timestamp after))])))
 
@@ -115,13 +115,13 @@
                (lambda ()
                  (event-mgr:add-handler raise)
                  (send caller 'ready)
-                 (receive (after 1000 (raise 'timeout)))))])
+                 (receive (after 1000 (throw 'timeout)))))])
     (receive
-     (after 1000 (raise 'timeout-waiting-to-start))
+     (after 1000 (throw 'timeout-waiting-to-start))
      [ready 'ok])
     (event-mgr:notify 'crash)
     (reported 'crash)
-    (receive (after 1000 (raise 'timeout-waiting))
+    (receive (after 1000 (throw 'timeout-waiting))
       [#(EXIT ,@pid crash) (void)]))
   'ok)
 
@@ -158,7 +158,7 @@
     (let ([lines (split (get) #\newline)])
       (define (assert-prefix! pattern)
         (match lines
-          [() (raise `#(pattern-not-found ,pattern))]
+          [() (throw `#(pattern-not-found ,pattern))]
           [(,line . ,rest)
            (set! lines rest)
            (unless (starts-with? line pattern)
@@ -222,7 +222,7 @@
       [ok (event-mgr:set-log-handler (lambda (x) (raise x)) pid)]
       [#(error log-handler-already-set) (event-mgr:set-log-handler (lambda (x) x) self)])
      (event-mgr:notify 'crash)
-     (receive (after 1000 (raise 'timeout))
+     (receive (after 1000 (throw 'timeout))
        [#(EXIT ,@pid crash) 'ok])
      (match-regexps '(seek "^Date: " "^Timestamp: " "^Event: crash")
        (split (get-output-string op) #\newline))

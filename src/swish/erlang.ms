@@ -98,7 +98,7 @@
   (match (launch)
     [`(<os-result> ,stdout ,stderr ,exit-status)
      (unless (eqv? expected-exit exit-status)
-       (raise `#(repl-test-unexpected-exit ,expected-exit ,exit-status)))
+       (throw `#(repl-test-unexpected-exit ,expected-exit ,exit-status)))
      (match-regexps patterns (append stdout stderr))]))
 
 (isolate-mat many-fib28 ()
@@ -113,7 +113,7 @@
   (do ([n n (- n 1)]) ((= n 0))
     (receive
      [#(EXIT ,_ normal) 'ok]
-     [#(EXIT ,_ ,reason) (raise reason)])))
+     [#(EXIT ,_ ,reason) (throw reason)])))
 
 (isolate-mat id-generator ()
   (define n 200000)
@@ -136,72 +136,72 @@
   (process-trap-exit #t)
   (let ([pid (spawn&link (lambda () (kill self 'live-free-or-die-hard)))])
     (receive
-     (after 1000 (raise 'timeout))
+     (after 1000 (throw 'timeout))
      [#(EXIT ,@pid live-free-or-die-hard) 'ok])
     ;; link to a dead process should immediately give EXIT message
     (link pid)
     (receive
-     (after 0 (raise 'no-exit-from-link))
+     (after 0 (throw 'no-exit-from-link))
      [#(EXIT ,@pid live-free-or-die-hard) 'ok])
     ;; link to a dead process without trap-exit should die
-    (let ([pid2 (spawn&link (lambda () (link pid) (raise 'link-no-fail)))])
+    (let ([pid2 (spawn&link (lambda () (link pid) (throw 'link-no-fail)))])
       (receive
-       (after 10 (raise 'no-exit-from-link))
+       (after 10 (throw 'no-exit-from-link))
        [#(EXIT ,@pid2 live-free-or-die-hard) 'ok]))))
 
 (isolate-mat suicide-normal ()
   (process-trap-exit #t)
   (let ([pid (spawn&link (lambda () (kill self 'normal)))])
     (receive
-     (after 1000 (raise 'timeout))
+     (after 1000 (throw 'timeout))
      [#(EXIT ,@pid normal) 'ok])
     ;; link to a dead process should immediately give EXIT message
     (link pid)
     (receive
-     (after 0 (raise 'no-exit-from-link))
+     (after 0 (throw 'no-exit-from-link))
      [#(EXIT ,@pid normal) 'ok])
     ;; link to a dead process without trap-exit should die
-    (let ([pid2 (spawn&link (lambda () (link pid) (raise 'link-no-fail)))])
+    (let ([pid2 (spawn&link (lambda () (link pid) (throw 'link-no-fail)))])
       (receive
-       (after 10 (raise 'timeout))
+       (after 10 (throw 'timeout))
        [#(EXIT ,@pid2 link-no-fail) 'ok]))))
 
 (isolate-mat suicide-throw-normal ()
   (process-trap-exit #t)
   (let ([pid (spawn&link (lambda () (kill self (try (throw 'normal)))))])
     (receive
-     (after 1000 (raise 'timeout))
+     (after 1000 (throw 'timeout))
      [#(EXIT ,@pid normal) 'ok])
     ;; link to a dead process should immediately give EXIT message
     (link pid)
     (receive
-     (after 0 (raise 'no-exit-from-link))
+     (after 0 (throw 'no-exit-from-link))
      [#(EXIT ,@pid normal) 'ok])
     ;; link to a dead process without trap-exit should die
-    (let ([pid2 (spawn&link (lambda () (link pid) (raise 'link-no-fail)))])
+    (let ([pid2 (spawn&link (lambda () (link pid) (throw 'link-no-fail)))])
       (receive
-       (after 10 (raise 'timeout))
+       (after 10 (throw 'timeout))
        [#(EXIT ,@pid2 link-no-fail) 'ok]))))
 
 (isolate-mat kill-normal ()
   (let ([pid (spawn&link (lambda () (receive [(word-from ,p) (send p 'roger)])))])
     (kill pid 'normal)
     (send pid `(word-from ,self))
-    (receive (after 1000 (raise 'normal-should-not-kill))
+    (receive (after 1000 (throw 'normal-should-not-kill))
       [roger 'ok])))
 
 (isolate-mat kill-throw-normal ()
   (let ([pid (spawn&link (lambda () (receive [(word-from ,p) (send p 'roger)])))])
     (kill pid (try (throw 'normal)))
     (send pid `(word-from ,self))
-    (receive (after 1000 (raise 'normal-should-not-kill))
+    (receive (after 1000 (throw 'normal-should-not-kill))
       [roger 'ok])))
 
 (isolate-mat kill-fault-normal ()
   (let ([pid (spawn&link (lambda () (receive [(word-from ,p) (send p 'roger)])))])
     (kill pid (make-fault 'normal))
     (send pid `(word-from ,self))
-    (receive (after 1000 (raise 'normal-should-not-kill))
+    (receive (after 1000 (throw 'normal-should-not-kill))
       [roger 'ok])))
 
 (isolate-mat link-native ()
@@ -211,34 +211,34 @@
   (process-trap-exit #t)
   (let ([pid (spawn&link (lambda () (cdr 7)))])
     (receive
-     (after 1000 (raise 'timeout))
+     (after 1000 (throw 'timeout))
      [#(EXIT ,@pid ,c) (assert-expected c)])
     ;; link to a dead process should immediately give EXIT message
     (link pid)
     (receive
-     (after 0 (raise 'no-exit-from-link))
+     (after 0 (throw 'no-exit-from-link))
      [#(EXIT ,@pid ,c) (assert-expected c)])
     ;; link to a dead process without trap-exit should die
-    (let ([pid2 (spawn&link (lambda () (link pid) (raise 'link-no-fail)))])
+    (let ([pid2 (spawn&link (lambda () (link pid) (throw 'link-no-fail)))])
       (receive
-       (after 10 (raise 'no-exit-from-link))
+       (after 10 (throw 'no-exit-from-link))
        [#(EXIT ,@pid2 ,c) (assert-expected c)]))))
 
 (isolate-mat link-raise ()
   (process-trap-exit #t)
   (let ([pid (spawn&link (lambda () (raise 'commotion)))])
     (receive
-     (after 1000 (raise 'timeout))
+     (after 1000 (throw 'timeout))
      [#(EXIT ,@pid commotion) 'ok])
     ;; link to a dead process should immediately give EXIT message
     (link pid)
     (receive
-     (after 0 (raise 'no-exit-from-link))
+     (after 0 (throw 'no-exit-from-link))
      [#(EXIT ,@pid commotion) 'ok])
     ;; link to a dead process without trap-exit should die
-    (let ([pid2 (spawn&link (lambda () (link pid) (raise 'link-no-fail)))])
+    (let ([pid2 (spawn&link (lambda () (link pid) (throw 'link-no-fail)))])
       (receive
-       (after 10 (raise 'no-exit-from-link))
+       (after 10 (throw 'no-exit-from-link))
        [#(EXIT ,@pid2 commotion)
         'ok]))))
 
@@ -247,7 +247,7 @@
   (process-trap-exit #t)
   (let ([pid0 (spawn&link (lambda () (raise 'normal)))])
     (receive
-     (after 1000 (raise 'timeout))
+     (after 1000 (throw 'timeout))
      [#(EXIT ,@pid0 normal) 'ok])
     (let ([pid1
            (spawn&link
@@ -255,24 +255,24 @@
               (link pid0)
               (raise 'awareness)))])
       (receive
-       (after 100 (raise 'wrong-exit-reason))
+       (after 100 (throw 'wrong-exit-reason))
        [#(EXIT ,@pid1 awareness) 'ok]))))
 
 (isolate-mat link-throw ()
   (process-trap-exit #t)
   (let ([pid (spawn&link (lambda () (throw 'fit)))])
     (receive
-     (after 1000 (raise 'timeout))
+     (after 1000 (throw 'timeout))
      [#(EXIT ,@pid fit) 'ok])
     ;; link to a dead process should immediately give EXIT message
     (link pid)
     (receive
-     (after 0 (raise 'no-exit-from-link))
+     (after 0 (throw 'no-exit-from-link))
      [#(EXIT ,@pid fit) 'ok])
     ;; link to a dead process without trap-exit should die
-    (let ([pid2 (spawn&link (lambda () (link pid) (raise 'link-no-fail)))])
+    (let ([pid2 (spawn&link (lambda () (link pid) (throw 'link-no-fail)))])
       (receive
-       (after 10 (raise 'no-exit-from-link))
+       (after 10 (throw 'no-exit-from-link))
        [#(EXIT ,@pid2 fit)
         'ok]))))
 
@@ -281,7 +281,7 @@
   (process-trap-exit #t)
   (let ([pid0 (spawn&link (lambda () (throw 'normal)))])
     (receive
-     (after 1000 (raise 'timeout))
+     (after 1000 (throw 'timeout))
      [#(EXIT ,@pid0 normal) 'ok])
     (let ([pid1
            (spawn&link
@@ -289,7 +289,7 @@
               (link pid0)
               (throw 'party)))])
       (receive
-       (after 100 (raise 'wrong-exit-reason))
+       (after 100 (throw 'wrong-exit-reason))
        [#(EXIT ,@pid1 party) 'ok]))))
 
 (isolate-mat default-parameters ()
@@ -407,7 +407,7 @@
      (assert (find (lambda (x) (eq? x b-name)) names))
      (send a-name `#(ping ,self))
      (receive
-      (after 100 (raise 'timeout))
+      (after 100 (throw 'timeout))
       [pong 'ok])
      (unregister a-name)
      (unregister b-name)
@@ -444,11 +444,11 @@
   (define (start-after timeout)
     (spawn&link
      (lambda ()
-       (receive (after timeout (raise 'timeout))))))
+       (receive (after timeout (throw 'timeout))))))
   (define (start-until timeout)
     (spawn&link
      (lambda ()
-       (receive (until (+ (erlang:now) timeout) (raise 'timeout))))))
+       (receive (until (+ (erlang:now) timeout) (throw 'timeout))))))
   (define (test-loop start)
     (let lp ([i 12] [pids '()])
       (cond
@@ -473,7 +473,7 @@
     [timeout (receive (after 0 'timeout))])
    (receive
     [x 'ok]
-    [,other (raise `#(bad-message ,other))])))
+    [,other (throw `#(bad-message ,other))])))
 
 (isolate-mat receive-until-0 ()
   (send self 'x)
@@ -484,7 +484,7 @@
     [timeout (receive (until 0 'timeout))])
    (receive
     [x 'ok]
-    [,other (raise `#(bad-message ,other))])))
+    [,other (throw `#(bad-message ,other))])))
 
 (isolate-mat panic-run-queue-empty ()
   (repl-test 80
@@ -497,7 +497,7 @@
 (isolate-mat panic-event-loop-process-terminated ()
   (repl-test 80
     '(begin
-       (osi_list_directory "." (lambda (x) (raise 'kaboom)))
+       (osi_list_directory "." (lambda (x) (throw 'kaboom)))
        (receive))
     'seek
     "Event: #\\(event-loop-process-terminated kaboom\\)")
@@ -519,7 +519,7 @@
   (collect)
   (repl-test 80
     '(begin
-       (add-finalizer (lambda () (raise 'kaboom)))
+       (add-finalizer (lambda () (throw 'kaboom)))
        (collect)
        (receive))
     'seek
@@ -554,7 +554,8 @@
         (link b)
         (sync)
         (match m
-          [#(die ,reason) (raise reason)]
+          [#(die raise ,reason) (raise reason)]
+          [#(die throw ,reason) (throw reason)]
           [#(divide ,n)
            (/ 1 n)
            (wait)]
@@ -565,7 +566,7 @@
              [C (spawn&link (lambda () (c B m)))])
         (for-each
          (lambda (pid)
-           (receive (after 1000 (raise 'timeout-syncing))
+           (receive (after 1000 (throw 'timeout-syncing))
              [#(sync ,@pid) 'ok]))
          (list A B C))
         `#(,A ,B ,C))))
@@ -574,14 +575,27 @@
       [,_ (flush)]))
   (process-trap-exit #t)
   (match-let*
-   ([#(,a ,b ,c) (start #f `#(die abc))]
+   (
+    [#(,a ,b ,c) (start #f `#(die raise abc))]
     [#f (process-alive? b 0)]
     [#f (process-alive? c 0)]
-    [ok (receive (after 1000 (raise 'timeout))
+    [ok (receive (after 1000 (throw 'timeout))
           [#(msg-from ,@a #(EXIT ,@b abc)) 'ok])]
     [ok (flush)]
 
-    [#(,a ,b ,c) (start #f `#(die normal))]
+    [#(,a ,b ,c) (start #f `#(die throw abc))]
+    [#f (process-alive? b 0)]
+    [#f (process-alive? c 0)]
+    [ok (receive (after 1000 (throw 'timeout))
+          [#(msg-from ,@a #(EXIT ,@b abc)) 'ok])]
+    [ok (flush)]
+
+    [#(,a ,b ,c) (start #f `#(die raise normal))]
+    [#t (process-alive? b 0)]
+    [#f (process-alive? c 0)]
+    [ok (flush)]
+
+    [#(,a ,b ,c) (start #f `#(die throw normal))]
     [#t (process-alive? b 0)]
     [#f (process-alive? c 0)]
     [ok (flush)]
@@ -589,44 +603,72 @@
     [#(,a ,b ,c) (start #f `#(divide 0))]
     [#f (process-alive? b 0)]
     [#f (process-alive? c 0)]
-    [ok (receive (after 1000 (raise 'timeout))
+    [ok (receive (after 1000 (throw 'timeout))
           [#(msg-from ,@a #(EXIT ,@b ,cc))
            (guard (condition? cc))
            'ok])]
     [ok (flush)]
 
-    [#(,a ,b ,c) (start #f `#(die kill))]
+    [#(,a ,b ,c) (start #f `#(die raise kill))]
     [#f (process-alive? b 0)]
     [#f (process-alive? c 0)]
-    [ok (receive (after 1000 (raise 'timeout))
+    [ok (receive (after 1000 (throw 'timeout))
           [#(msg-from ,@a #(EXIT ,@b kill)) 'ok])]
     [ok (flush)]
 
-    [#(,a ,b ,c) (start #t `#(die abc))]
+    [#(,a ,b ,c) (start #f `#(die throw kill))]
+    [#f (process-alive? b 0)]
+    [#f (process-alive? c 0)]
+    [ok (receive (after 1000 (throw 'timeout))
+          [#(msg-from ,@a #(EXIT ,@b kill)) 'ok])]
+    [ok (flush)]
+
+    [#(,a ,b ,c) (start #t `#(die raise abc))]
     [#t (process-alive? b 0)]
     [#f (process-alive? c 0)]
-    [ok (receive (after 1000 (raise 'timeout))
+    [ok (receive (after 1000 (throw 'timeout))
           [#(msg-from ,@b #(EXIT ,@c abc)) 'ok])]
     [ok (flush)]
 
-    [#(,a ,b ,c) (start #t `#(die normal))]
+    [#(,a ,b ,c) (start #t `#(die throw abc))]
     [#t (process-alive? b 0)]
     [#f (process-alive? c 0)]
-    [ok (receive (after 1000 (raise 'timeout))
+    [ok (receive (after 1000 (throw 'timeout))
+          [#(msg-from ,@b #(EXIT ,@c abc)) 'ok])]
+    [ok (flush)]
+
+    [#(,a ,b ,c) (start #t `#(die raise normal))]
+    [#t (process-alive? b 0)]
+    [#f (process-alive? c 0)]
+    [ok (receive (after 1000 (throw 'timeout))
+          [#(msg-from ,@b #(EXIT ,@c normal)) 'ok])]
+    [ok (flush)]
+
+    [#(,a ,b ,c) (start #t `#(die throw normal))]
+    [#t (process-alive? b 0)]
+    [#f (process-alive? c 0)]
+    [ok (receive (after 1000 (throw 'timeout))
           [#(msg-from ,@b #(EXIT ,@c normal)) 'ok])]
     [ok (flush)]
 
     [#(,a ,b ,c) (start #t 'normal)]
     [#t (process-alive? b 0)]
     [#f (process-alive? c 0)]
-    [ok (receive (after 1000 (raise 'timeout))
+    [ok (receive (after 1000 (throw 'timeout))
           [#(msg-from ,@b #(EXIT ,@c normal)) 'ok])]
     [ok (flush)]
 
-    [#(,a ,b ,c) (start #t `#(die kill))]
+    [#(,a ,b ,c) (start #t `#(die raise kill))]
     [#t (process-alive? b 0)]
     [#f (process-alive? c 0)]
-    [ok (receive (after 1000 (raise 'timeout))
+    [ok (receive (after 1000 (throw 'timeout))
+          [#(msg-from ,@b #(EXIT ,@c kill)) 'ok])]
+    [ok (flush)]
+
+    [#(,a ,b ,c) (start #t `#(die throw kill))]
+    [#t (process-alive? b 0)]
+    [#f (process-alive? c 0)]
+    [ok (receive (after 1000 (throw 'timeout))
           [#(msg-from ,@b #(EXIT ,@c kill)) 'ok])]
     [ok (flush)])
    'ok))
@@ -661,7 +703,7 @@
              [C (spawn&link (lambda () (c B m)))])
         (for-each
          (lambda (pid)
-           (receive (after 1000 (raise 'timeout-syncing))
+           (receive (after 1000 (throw 'timeout-syncing))
              [#(sync ,@pid) 'ok]))
          (list A B C))
         `#(,A ,B ,C))))
@@ -673,9 +715,9 @@
    ([#(,a ,b ,c) (start #f 'abc)]
     [#f (process-alive? b 0)]
     [#t (process-alive? c 0)]
-    [ok (receive (after 1000 (raise 'timeout))
+    [ok (receive (after 1000 (throw 'timeout))
           [#(msg-from ,@a #(EXIT ,@b abc)) 'ok])]
-    [ok (receive (after 1000 (raise 'timeout))
+    [ok (receive (after 1000 (throw 'timeout))
           [#(msg-from ,@c #(EXIT ,@b abc)) 'ok])]
     [ok (flush)]
 
@@ -687,32 +729,32 @@
     [#(,a ,b ,c) (start #f 'kill)]
     [#f (process-alive? b 0)]
     [#t (process-alive? c 0)]
-    [ok (receive (after 1000 (raise 'timeout))
+    [ok (receive (after 1000 (throw 'timeout))
           [#(msg-from ,@a #(EXIT ,@b killed)) 'ok])]
-    [ok (receive (after 1000 (raise 'timeout))
+    [ok (receive (after 1000 (throw 'timeout))
           [#(msg-from ,@c #(EXIT ,@b killed)) 'ok])]
     [ok (flush)]
 
     [#(,a ,b ,c) (start #t 'abc)]
     [#t (process-alive? b 0)]
     [#t (process-alive? c 0)]
-    [ok (receive (after 1000 (raise 'timeout))
+    [ok (receive (after 1000 (throw 'timeout))
           [#(msg-from ,@b #(EXIT ,@c abc)) 'ok])]
     [ok (flush)]
 
     [#(,a ,b ,c) (start #t 'normal)]
     [#t (process-alive? b 0)]
     [#t (process-alive? c 0)]
-    [ok (receive (after 1000 (raise 'timeout))
+    [ok (receive (after 1000 (throw 'timeout))
           [#(msg-from ,@b #(EXIT ,@c normal)) 'ok])]
     [ok (flush)]
 
     [#(,a ,b ,c) (start #t 'kill)]
     [#f (process-alive? b 0)]
     [#t (process-alive? c 0)]
-    [ok (receive (after 1000 (raise 'timeout))
+    [ok (receive (after 1000 (throw 'timeout))
           [#(msg-from ,@a #(EXIT ,@b killed)) 'ok])]
-    [ok (receive (after 1000 (raise 'timeout))
+    [ok (receive (after 1000 (throw 'timeout))
           [#(msg-from ,@c #(EXIT ,@b killed)) 'ok])]
     [ok (flush)])
    'ok))
@@ -732,7 +774,7 @@
   (for-each
    (lambda (pid)
      (receive
-      (after 1000 (raise 'timeout))
+      (after 1000 (throw 'timeout))
       [#(EXIT ,@pid normal) 'ok]))
    (list (spin) (spin) (spin) (spin) (spin))))
 
@@ -748,7 +790,7 @@
       [,expected (map get ips)]
       [,pid (spawn&link (lambda () (send me `(,self ,@(map get ips)))))]
       [,@expected
-       (receive (after 1000 (raise 'timeout))
+       (receive (after 1000 (throw 'timeout))
          [(,@pid . ,rest) rest])]
       ;; changing parameters in child process does not affect parent parameters
       [,pid
@@ -759,22 +801,22 @@
           (let ([child (spawn&link (lambda () (send me `(,self ,@(map get ips)))))])
             (send me `(,self ,child)))))]
       [,@expected
-       (receive (after 1000 (raise 'timeout))
+       (receive (after 1000 (throw 'timeout))
          [(,@pid ,child)
-          (receive (after 1000 (raise 'timeout))
+          (receive (after 1000 (throw 'timeout))
             [(,@child . ,10x)
              (map (lambda (x) (/ x 10)) 10x)])])]
       ;; changing parameters in parent process does not affect child once spawned
       [,pid
        (spawn&link
         (lambda ()
-          (receive (after 1000 (raise 'timeout))
+          (receive (after 1000 (throw 'timeout))
             [ready (send me `(,self ,@(map get ips)))])))]
       [,@expected
        (begin
          (for-each (lambda (p) (p 'nut)) ips)
          (send pid 'ready)
-         (receive (after 1000 (raise 'timeout))
+         (receive (after 1000 (throw 'timeout))
            [(,@pid . ,vals) vals]))]
       [#10(nut) (list->vector (map get ips))])
      'ok))
@@ -819,11 +861,11 @@
          [pid (spawn&link
                (lambda ()
                  (if (monitor? (monitor host))
-                     (raise 'success!)
-                     (raise 'bad-monitor))))]
+                     (throw 'success!)
+                     (throw 'bad-monitor))))]
          [m (monitor pid)])
     (receive
-     (after 10 (raise 'timeout))
+     (after 10 (throw 'timeout))
      [#(DOWN ,@m ,@pid success!) 'ok])))
 
 (isolate-mat pps ()
@@ -873,7 +915,7 @@
                 (lambda ()
                   (link parent)
                   (wait-for-io 'godot)
-                  (receive (after 0 (raise 'bad))
+                  (receive (after 0 (throw 'bad))
                     [for-coverage (send parent 'ok)])
                   (receive)))])
       (sleep-ms 1)
@@ -884,7 +926,7 @@
       ;; covers case in @send
       (send pid 'for-coverage)
       (complete-io pid)
-      (receive (after 10 (raise 'failed))
+      (receive (after 10 (throw 'failed))
         [ok 'ok])
       (kill pid 'abandoned)
       (test
@@ -1125,7 +1167,7 @@
       (match x
         [(,num ,str ((,bool)) ,vec)
          (printf "no output here\n")
-         (raise 'not-reached)
+         (throw 'not-reached)
          'bad]))
     (assert-bad-match x
       ;; single body expression, guard rejects
@@ -1139,7 +1181,7 @@
         [(,num ,str ,bool ,vec)
          (guard (string? bool))
          (printf "won't happen\n")
-         (raise 'not-reached)
+         (throw 'not-reached)
          'bad])))
   (match-let*
    ([,x '(1 "two" #t #(x y z))]
@@ -1216,14 +1258,14 @@
   )
 
 (mat match-eof ()
-  (match (read (open-input-string "")) [bad (raise 'wrong)] [#!eof 'ok])
+  (match (read (open-input-string "")) [bad (throw 'wrong)] [#!eof 'ok])
   (match-let* ([#!eof (read (open-input-string ""))]) 'ok)
   (let ()
     (match-define #!eof (read (open-input-string "")))
     'ok)
   (match (list (vector (eof-object)))
-    [#!eof (raise 'wrong)]
-    [#(#!eof) (raise 'wrong)]
+    [#!eof (throw 'wrong)]
+    [#(#!eof) (throw 'wrong)]
     [(#(#!eof)) 'ok])
   (match-let* ([#((7 . #!eof)) (vector (cons 7 (eof-object)))]) 'ok)
   (let ()
@@ -1803,51 +1845,51 @@
           (spawn&link
            (lambda ()
              (let f ()
-               (receive (after 1000 (raise 'timeout))
+               (receive (after 1000 (throw 'timeout))
                  [quit 'ok]
                  [(send ,who ,what) (send who what) (f)]))))])
      (define-record-type one (nongenerative) (fields x y))
      (define-record-type two (nongenerative) (parent one) (fields y z))
      ;; vector with some nested stuff
      (send pid `(send ,self #(marmoset ((lamp) ginger) corn)))
-     (receive (after 100 (raise 'timeout))
+     (receive (after 100 (throw 'timeout))
        [#(marmoset ((lamp) ,biscuit) ,chowder)
         (match-let* ([ginger biscuit] [corn chowder])
           'ok)])
      ;; native record
      (send pid `(send ,self ,(make-one 'hundred "percent")))
-     (receive (after 100 (raise 'timeout))
+     (receive (after 100 (throw 'timeout))
        [`(one ,x ,y) (match-let* ([hundred x] ["percent" y]) 'ok)])
      ;; native record, inheritance
      (send pid `(send ,self ,(make-two 'many 'fold "home" "improvement")))
-     (receive (after 100 (raise 'timeout))
+     (receive (after 100 (throw 'timeout))
        [`(one ,x ,y) (match-let* ([many x] [fold y]) 'ok)])
      ;; native record, inheritance
      (send pid `(send ,self ,(make-two 'many 'fold "home" "improvement")))
-     (receive (after 100 (raise 'timeout))
+     (receive (after 100 (throw 'timeout))
        [`(two ,x ,y) (match-let* ([many x] ["home" y]) 'ok)])
      ;; native record, restricted match
      (send pid `(send ,self ,(make-two 'many 'fold "home" '#("improvement"))))
-     (receive (after 100 (raise 'timeout))
-       [`(one ,x [y "home"]) (raise "don't match one's y with two's y value")]
-       [`(two [y fold]) (raise "don't match two's y with one's y value")]
-       [`(two ,x ,y [z (,val)]) (raise "z val is vector not list")]
+     (receive (after 100 (throw 'timeout))
+       [`(one ,x [y "home"]) (throw "don't match one's y with two's y value")]
+       [`(two [y fold]) (throw "don't match two's y with one's y value")]
+       [`(two ,x ,y [z (,val)]) (throw "z val is vector not list")]
        [`(two ,x ,y [z #(,val)]) (match-let* ([many x] ["home" y] ["improvement" val]) 'ok)])
      ;; nested record match
      (send pid `(send ,self #((one ,(make-one 1 2)) (two ,(make-two 8 7 5 4)))))
-     (receive (after 100 (raise 'timeout))
-       [(,a ,b) (raise "should be vector")]
-       [#((two ,_) (one ,_)) (raise "wrong order")]
+     (receive (after 100 (throw 'timeout))
+       [(,a ,b) (throw "should be vector")]
+       [#((two ,_) (one ,_)) (throw "wrong order")]
        [#((one `(one ,x ,y)) (two `(two [x ,two.x] [y ,two.y] ,z)))
         (match-let* ([1 x] [2 y] [8 two.x] [5 two.y] [4 z]) 'ok)])
      ;; nested record match, inheritance case
      (send pid `(send ,self ,(make-one (make-two 1 2 3 4) (make-one 5 (make-one 6 7)))))
-     (receive (after 100 (raise 'timeout))
+     (receive (after 100 (throw 'timeout))
        [`(one [x `(one ,x ,y)] [y `(one [x 5] [y `(one [x ,x2] [y ,y2])])])
         (match-let* ([1 x] [2 y] [6 x2] [7 y2]) 'ok)])
      ;; nested record match, another inheritance case
      (send pid `(send ,self ,(make-one (make-two 1 2 3 4) (make-two 5 (make-one 16 17) 11 12))))
-     (receive (after 100 (raise 'timeout))
+     (receive (after 100 (throw 'timeout))
        [`(one [x `(two ,x ,y ,z)] [y `(one [x 5] [y `(one [x ,x2] [y ,y2])])])
         (match-let* ([1 x] [3 y] [4 z] [16 x2] [17 y2]) 'ok)])
      ;; done
@@ -2500,7 +2542,7 @@
                (receive [continue #'0]))
              (foo))))
   (define (exit-reason p)
-    (receive (after 10000 (raise 'timeout)) [#(EXIT ,@p ,r) r]))
+    (receive (after 10000 (throw 'timeout)) [#(EXIT ,@p ,r) r]))
 
   (process-trap-exit #t)
   (gatekeeper:start&link)
@@ -2574,7 +2616,7 @@
       (receive
        (after 1000
          (osi_kill* os-pid 15)
-         (raise 'timeout))
+         (throw 'timeout))
        [#(process-terminated ,@os-pid ,_ ,_) 'ok])))
   (let-values
       ([(to-stdin from-stdout from-stderr os-pid)
@@ -2612,6 +2654,7 @@
   (match-let*
    ([,me self]
     [#(EXIT 123) (run-spawned (catch (raise 123)))]
+    [#(EXIT 123) (run-spawned (catch (throw 123)))]
     [#(EXIT 123) (run-spawned (catch (exit 123)))])
    'ok)
   (repl-test 1

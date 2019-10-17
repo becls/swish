@@ -436,7 +436,7 @@
      '(seek #0="Event: #\\(<child-end> .*\\)" seek #0# seek #0# "") stderr)]
    [#(EXIT `(<os-process-failed> [exit-status 3] ,stderr))
     (printf "~{~a\n~}" stderr)
-    (raise 'matched-wrong-case)]))
+    (throw 'matched-wrong-case)]))
 
 (meta-cond
  [(memq (machine-type) '(i3nt ti3nt a6nt ta6nt))
