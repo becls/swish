@@ -7,6 +7,6 @@ mv csv$CSV chez
 echo 'travis_fold:start:ChezScheme'
 echo Building Chez Scheme Version $CSV
 cd chez
-./configure -m=$TARGET_MACHINE
+./configure -m="$TARGET_MACHINE"
 make
 echo 'travis_fold:end:ChezScheme'
