@@ -77,7 +77,7 @@ matrix:
         - git config core.autocrlf false; rm .git/index; git reset --hard
         - choco install make -y
         - choco install python2 -y
-dist: xenial
+dist: bionic
 script:
   - .travis/get-chez-scheme.sh
   - .travis/build.sh
