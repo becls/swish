@@ -11,4 +11,11 @@ make test || {
     echo 'travis_fold:end:failures'
     exit $rc
 }
-make coverage
+make coverage || {
+    rc=$?
+    echo 'travis_fold:start:failures'
+    echo Mat output
+    cat src/swish/*.mo || true
+    echo 'travis_fold:end:failures'
+    exit $rc
+}
