@@ -33,7 +33,7 @@
    mat-data-results
    mat-data?
    mat-result-message
-   mat-result-stack
+   mat-result-stacks
    mat-result-tags
    mat-result-test
    mat-result-type
@@ -47,8 +47,10 @@
   (import
    (chezscheme)
    (swish erlang)
+   (swish errors)
    (swish io)
    (swish json)
+   (swish log-db)
    (swish meta)
    (swish osi)
    (swish software-info)
@@ -106,7 +108,7 @@
      (<- (lambda (x) (map string->symbol x)))]
     [type (-> symbol->string) (<- string->symbol)]
     message
-    stack
+    stacks
     [sstats
      (->
       (lambda (sstats)
@@ -156,9 +158,13 @@
            [before (statistics)]
            [result
             (or skip
-                (guard (e [else (cons 'fail e)])
-                  ((%mat-test mat))
-                  'pass))])
+                (let ([ignore #f])
+                  (guard (e [else (list 'fail e ignore)])
+                    (call/cc
+                     (lambda (k)
+                       (set! ignore k)
+                       ((%mat-test mat))))
+                    'pass)))])
       (reporter (%mat-name mat) (%mat-tags mat) result
         (sstats-difference (statistics) before))))
 
@@ -180,20 +186,6 @@
      [(eq? x 'skip) 'skip]
      [(and (pair? x) (eq? (car x) 'fail)) 'fail]
      [else #f]))
-
-  (define (extract x)
-    (if (condition? x)
-        (let-values ([(op get) (open-string-output-port)])
-          (display-condition x op)
-          (get))
-        (format "~s" x)))
-
-  (define (stack x)
-    (if (continuation-condition? x)
-        (let-values ([(op get) (open-string-output-port)])
-          (dump-stack (condition-continuation x) op 'default)
-          (get))
-        ""))
 
   (define (print-col col1 col2 col3)
     (printf " ~8a ~14a ~a\n" col1 col2 col3))
@@ -217,8 +209,14 @@
         (define (reporter name tags result sstats)
           (define r
             (case (result-type result)
-              [(pass skip) (make-mat-result test-file name tags result "" "" sstats)]
-              [(fail) (make-mat-result test-file name tags 'fail (extract (cdr result)) (stack (cdr result)) sstats)]
+              [(pass skip) (make-mat-result test-file name tags result "" '() sstats)]
+              [(fail)
+               (match (cdr result)
+                 [(,e ,ignore)
+                  (make-mat-result test-file name tags 'fail
+                    (exit-reason->english e)
+                    (map stack->json (remq ignore (exit-reason->stacks e)))
+                    sstats)])]
               [else (errorf '$run-mats "unknown result ~s" result)]))
           (update-tally! r)
           (progress-reporter r)

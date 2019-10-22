@@ -382,12 +382,32 @@
   function renderType(r) {
     return `<td class="result-type"><div class="result-${r.type}">${escapeHtml(r.type)}<\/div><\/td>`;
   }
+  function renderSource(r, prefix) {
+    return r ? `${prefix} at offset ${r.bfp || "?"} of ${r.path || "?"}` : "";
+  }
+  function renderFrame(r) {
+    return `${r.description || "?"}${renderSource(r.source, '') || renderSource(r['procedure-source'],' in procedure')}\n` +
+      (r.free || []).map(f => `  ${f.name}: ${f.value}\n`).join('');
+  }
+  function showTruncated(s) {
+    return s.truncated ? `Stack dump truncated due to max-depth = ${s.truncated}.` : '';
+  }
+  let nStackID = 0;
+  function renderStack(s) {
+    nStackID += 1;
+    return `<input id="${nStackID}" type="checkbox" class="result-stack" checked>
+            <label for="${nStackID}" class="result-stack"><span><\/span>${escapeHtml(s.frames.map(renderFrame).join('') + showTruncated(s))}<\/label>`;
+  }
+  function renderStacks(stacks) {
+    if (!Array.isArray(stacks)) return '';
+    return stacks.map(renderStack).join('');
+  }
   function renderDetails(r) {
     return (r.message || r.stack) ?
       `<td colspan="7">
          <div class="result-error">
            <div class="result-message">${escapeHtml(r.message)}<\/div>
-           <div class="result-stack">${escapeHtml(r.stack)}<\/div>
+           ${renderStacks(r.stacks)}
          <\/div>
        <\/td>`
       : ('pass' == r.type || 'Result' == r.type) ? renderSstats(r.sstats) : '<td colspan="7"><\/td>';
@@ -528,9 +548,12 @@
              ".result-fail { width: 4em; text-transform: uppercase; color: red;}"
              ".result-error { position: relative; min-width: 50vw; max-width: 60vw; }"
              ".result-message { }"
-             ".result-stack:hover { max-height: 10em; overflow: auto; }"
-             ".result-stack:not(:hover):not(:empty):before { content: \"...\"; position: absolute; right: 0px; bottom: 0px; margin-right: .5em; font-size: large; }"
-             ".result-stack { font-family: monospace; white-space: pre; background: rgba(255,220,220,.125); max-height: 1em; overflow: hidden; }"
+             "label.result-stack { display: flex; white-space: pre; overflow: auto; }"
+             "input.result-stack { display: none; }"
+             "input.result-stack + label span { min-width: 1em; display: inline-block; }"
+             "input.result-stack + label span::before { content: \"▼\"; }"
+             "input.result-stack:checked + label span::before { content: \"▶\"; }"
+             "input.result-stack:checked + label.result-stack { text-overflow: ellipsis; max-height: 1.25em; line-height: 1.25; overflow: hidden; }"
              ".result-type { width: 5em; }"
              ".result-sstats { text-align: right;}"
              ".sstats-cpu { width: 6em; }"

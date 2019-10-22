@@ -490,18 +490,34 @@
                   (cons n (bug (- n 1)))))
             (mat zero ()
               (assert (list? (bug 10)))))))))
-  (define (check results test-name type tags message stack)
+  (define test-file4
+    (write-test-file "test-report4.ms"
+      (lambda ()
+        (for-each pretty-print
+          `((import (swish mat))
+            ;; check stack depth reporting
+            (define (flub n what)
+              (if (= n 0)
+                  (throw what)
+                  (cons n (flub (- n 1) what))))
+            (mat hangry () (throw 'tantrum))
+            (mat deep () (flub 100 'deep))
+            (mat shallow () (flub 1 "a fit")))))))
+  (define (check results test-name type tags message check-stack)
     (match-let*
      ([,mr (find (lambda (mr) (equal? test-name (mat-result-test mr))) results)]
       [#t (mat-result? mr)]
       [,@type (mat-result-type mr)]
       [,@tags (mat-result-tags mr)]
       [,@message (mat-result-message mr)]
-      [,@stack (and stack (mat-result-stack mr))])
+      [#t (or (not check-stack)
+              (check-stack
+               (map json-stack->string (mat-result-stacks mr))))])
      'ok))
   (define mo-path1 (string-append test-file ".mo"))
   (define mo-path2 (string-append test-file2 ".mo"))
   (define mo-path3 (string-append test-file3 ".mo"))
+  (define mo-path4 (string-append test-file4 ".mo"))
   (define (get-data content)
     (match-let* ([(,_ ,data) (pregexp-match "<script>var data = (.*);</script><script>\n  function escapeHtml" content)])
       (json:string->object data)))
@@ -526,16 +542,16 @@
     ["fail" (json:ref test2-result 'type #f)]
     [(,_) (pregexp-match "Exception: failed assertion #f at line 3,.*" (json:ref test2-result 'message #f))]
     ["fail" (json:ref test3-result 'type #f)]
-    ["Exception in cdr: 17 is not a pair" (json:ref test3-result 'message #f)])
+    ["Exception in cdr: 17 is not a pair." (json:ref test3-result 'message #f)])
    'ok)
   ;; check .mo results file
   (let ([data (load-results mo-path1)])
     (let ([results (mat-data-results data)])
-      (check results 'TEST1 'pass '(good) "" "")
+      (check results 'TEST1 'pass '(good) "" #f)
       (check results 'TEST2 'fail '(tag1 tag2)
-        (format "Exception: failed assertion #f at line 3, char 32 of ~a" test-file)
+        (format "Exception: failed assertion #f at line 3, char 32 of ~a." test-file)
         #f)
-      (check results 'TEST3 'fail '() "Exception in cdr: 17 is not a pair" #f))
+      (check results 'TEST3 'fail '() "Exception in cdr: 17 is not a pair." #f))
     (match-let*
      ([,meta (mat-data-meta-data data)]
       ;; (meta-data completed)
@@ -598,10 +614,52 @@
    '(seek "Exception in bug: didn't handle zero"))
   (let* ([data (load-results mo-path3)]
          [results (mat-data-results data)])
-    (check results 'zero 'fail '() "Exception in bug: didn't handle zero"
-      (format "~:{#<continuation in bug> at line 5, char 15 of ~a\n  n: ~a\n~}Stack dump truncated due to max-depth = 10.\n"
-        (map (lambda (n) (list test-file3 (+ n 1)))
-          (iota 10)))))
+    (check results 'zero 'fail '() "Exception in bug: didn't handle zero."
+      (lambda (actual-formatted)
+        (equal? actual-formatted
+          (list
+           ;; JSON stack data provides offset, not line and char
+           (format "~:{#<continuation in bug> at offset 106 of ~a\n  n: ~a\n~}Stack dump truncated due to max-depth = 10.\n"
+             (map (lambda (n) (list test-file3 (+ n 1)))
+               (iota 10))))))))
+  ;; check stack dump
+  (match-let*
+   ([ok (nonzero-exit (swish-test test-file4)
+          '(seek "Tests run: 3   Pass: 0   Fail: 3   Skip: 0"))]
+    [,data (load-results mo-path4)]
+    [,results (mat-data-results data)]
+    [,max-depth 10]
+    [,where (format "#<continuation in flub> at offset 78 of ~a" test-file4)]
+    [,trunc-prefix "Stack dump truncated due to max-depth = "]
+    [,trunc (format "~a~a." trunc-prefix max-depth)])
+   (check results 'hangry 'fail '() "tantrum" null?)
+   (check results 'deep 'fail '() "deep"
+     (lambda (actual-formatted)
+       (match-let* ([(,str) actual-formatted])
+         (equal? (split str #\newline)
+           (let expect ([n max-depth] [ls (list trunc "")])
+             (if (= n 0)
+                 ls
+                 (expect (- n 1)
+                   `(,where ,(format "  n: ~s" n) ,@ls))))))))
+   (match-let* ([,mr (find (lambda (mr) (eq? 'deep (mat-result-test mr))) results)]
+                [(,stack0) (mat-result-stacks mr)]
+                [,@max-depth (json:ref stack0 'truncated 'wrong)]
+                [(,fr0 . ,_) (json:ref stack0 'frames '())]
+                [,depth (json:ref stack0 'depth "missing")])
+     (assert (> depth 100)))
+   (check results 'shallow 'fail '() "a fit"
+     (lambda (actual-formatted)
+       (match-let* ([(,str) actual-formatted]
+                    [,lines (split str #\newline)])
+         (and (match-regexps
+               `(,(pregexp-quote where)
+                 "  n: 1"
+                 seek
+                 "#<system continuation in new-cafe>")
+               lines)
+              (not (find (lambda (line) (starts-with? line trunc-prefix))
+                     lines)))))))
   ;; all pass, but some skipped so nonzero exit
   (nonzero-exit
    (swish-test "--progress none --tag good --report " report-file1 " " test-file)
@@ -780,10 +838,12 @@
       [,mo3 (find-suite test-file3)]
       [,zero-result (find-test 'zero mo3)]
       ["fail" (json:ref zero-result 'type #f)]
-      ["Exception in bug: didn't handle zero" (json:ref zero-result 'message #f)]
+      ["Exception in bug: didn't handle zero." (json:ref zero-result 'message #f)]
       [(,_)
-       (pregexp-match "continuation in bug.*at line 5, char 15"
-         (json:ref zero-result 'stack "no stack"))]
+       (pregexp-match "continuation in bug.*at offset 106"
+         (format "~{~a\n~}"
+           (map json-stack->string
+             (json:ref zero-result 'stacks "no stack"))))]
       [,mo4 (find-suite "incomplete.ms")]
       [#f (json:ref mo4 '(meta-data completed) "bupkis")]
       [() (mat-data-results mo4)])

@@ -174,7 +174,8 @@ Each result is a JSON object with the following keys:
 \begin{tabular}{lp{4.6in}}
   \code{message} & error message from failing test, or empty string \\
   \code{sstats} & a JSON object representing the \code{sstats-difference} for the test \\
-  \code{stack} & output of \code{dump-stack} for failing test if a continuation was available, or empty string \\
+  \code{stacks} & if test failed with exception \var{e}, then\\
+                & \code{(map stack->json (exit-reason->stacks \var{e}))} \\
   \code{tags} & a list of strings corresponding to the symbolic tags in the \code{mat} form \\
   \code{test} & a string corresponding to the symbolic \code{mat} name \\
   \code{test-file} & the name of the test file \\
