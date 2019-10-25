@@ -610,7 +610,6 @@ ptr osi_get_argv() {
 
 size_t osi_get_bytes_used(void) {
 #if defined(__APPLE__)
-  malloc_zone_pressure_relief(NULL, 0);
   struct mstats ms = mstats();
   return ms.bytes_used;
 #elif defined(__GLIBC__)
