@@ -251,10 +251,32 @@ static ptr close_fs_port(uptr port, ptr callback) {
   return Strue;
 }
 
+static void close_async_cb(uv_handle_t* handle) {
+  free(handle);
+}
+
+static void close_fd_cb(uv_async_t* async) {
+  ptr callback = (ptr)async->data;
+  Sunlock_object(callback);
+  uv_close((uv_handle_t*)async, close_async_cb);
+  osi_add_callback1(callback, Sfixnum(0));
+}
+
 static ptr close_fd_port(uptr port, ptr callback) {
+  // Use an async handle to add the callback in the proper context.
+  uv_async_t* async = malloc_container(uv_async_t);
+  if (!async)
+    return osi_make_error_pair("osi_close_fd_port", UV_ENOMEM);
+  int rc = uv_async_init(osi_loop, async, close_fd_cb);
+  if (rc < 0)
+    return osi_make_error_pair("uv_async_init", rc);
+  rc = uv_async_send(async);
+  if (rc < 0)
+    return osi_make_error_pair("uv_async_send", rc);
+  Slock_object(callback);
+  async->data = callback;
   fs_port_t* p = (fs_port_t*)port;
   free(p);
-  osi_add_callback1(callback, Sfixnum(0));
   return Strue;
 }
 
@@ -1168,9 +1190,9 @@ static void get_callbacks_timer_cb(uv_timer_t* handle) {
 
 ptr osi_get_callbacks(uint64_t timeout) {
   uv_update_time(osi_loop);
-  if ((0 == timeout) || (Snil != g_callbacks)) {
+  if (0 == timeout)
     uv_run(osi_loop, UV_RUN_NOWAIT);
-  } else {
+  else {
     g_timer.data = 0;
     uv_timer_start(&g_timer, get_callbacks_timer_cb, timeout, 0);
     uv_run(osi_loop, UV_RUN_ONCE);
