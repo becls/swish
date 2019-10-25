@@ -228,6 +228,14 @@
 
   (define (@kill p raw-reason)
     (define reason (unwrap-fault-condition raw-reason))
+    (define extended-reason
+      (cond
+       [(pcb-cont p) =>
+        (lambda (k)
+          (if (memq reason '(normal shutdown))
+              raw-reason
+              (make-fault-condition k reason (list raw-reason))))]
+       [else raw-reason]))
     (when (eq? p event-loop-process)
       (panic `#(event-loop-process-terminated ,reason)))
     (when (eq? p finalizer-process)
@@ -236,7 +244,7 @@
       (remove-q p))
     (pcb-cont-set! p #f)
     (pcb-winders-set! p '())
-    (pcb-exception-state-set! p raw-reason)
+    (pcb-exception-state-set! p extended-reason)
     (pcb-inbox-set! p #f)
     (pcb-flags-set! p 0)
     (pcb-src-set! p #f)
@@ -247,7 +255,7 @@
     (let ([links (pcb-links p)])
       (pcb-links-set! p '())
       (@remove-links links p)
-      (@kill-linked links p reason raw-reason))
+      (@kill-linked links p reason extended-reason))
     (let ([monitors (pcb-monitors p)])
       (pcb-monitors-set! p '())
       (for-each
@@ -257,7 +265,7 @@
             [(eq? origin p)
              (@remove-monitor m (mon-target m))]
             [else
-             (@send origin (make-DOWN-msg m p raw-reason))
+             (@send origin (make-DOWN-msg m p extended-reason))
              (@remove-monitor m origin)])))
        monitors)))
 

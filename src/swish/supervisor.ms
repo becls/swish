@@ -447,6 +447,37 @@
      [`(EXIT ,@cpid2 ,reason) (throw `#(bad-exit-reason ,reason))])
    'ok))
 
+(supervisor-mat stop-timeout3 ()
+  (match-let*
+   ([#(ok ,pid) (start 'one-for-one 2 3600 '())]
+    [,child1 `#(child1 ,supervisor-1:start-child permanent 1000 worker)]
+    [,child2 `#(child2 ,supervisor-1:start-child permanent 1000 worker)]
+    [#(ok ,cpid1) (supervisor:start-child 'sup-test child1)]
+    [,_ (link cpid1)]
+    [#(ok ,cpid2) (supervisor:start-child 'sup-test child2)]
+    [,_ (link cpid2)])
+
+   ;; This causes the error case of monitor-child to occur and flow
+   ;; thru shutdown.
+   (with-interrupts-disabled
+    (send cpid2 `(throw darts ,(make-fault 'bad-aim)))
+    (kill pid 'shutdown))
+
+   (receive (after 5000 (throw 'no-exit-reason))
+     [`(EXIT ,@pid shutdown) 'ok]
+     [`(EXIT ,@pid ,reason) (throw `#(bad-exit-reason ,reason))])
+
+   (receive (after 2000 (throw 'no-exit-reason))
+     [`(EXIT ,@cpid1 shutdown) 'ok]
+     [`(EXIT ,@cpid1 ,reason) (throw `#(bad-exit-reason ,reason))])
+
+   (receive (after 2000 (throw 'no-exit-reason))
+     [`(EXIT ,@cpid2 darts ,e)
+      (match-let* ([(,k0 ,k1) (exit-reason->stacks e)])
+        'ok)]
+     [`(EXIT ,@cpid2 ,reason) (throw `#(bad-exit-reason ,reason))])
+   'ok))
+
 (supervisor-mat stop-brutal-kill ()
   (match-let*
    ([#(ok ,pid) (start 'one-for-one 2 3600 '())]
@@ -498,6 +529,37 @@
 
    (receive (after 2000 (throw 'no-exit-reason))
      [`(EXIT ,@cpid2 died) 'ok]
+     [`(EXIT ,@cpid2 ,reason) (throw `#(bad-exit-reason ,reason))])
+   'ok))
+
+(supervisor-mat stop-brutal-kill3 ()
+  (match-let*
+   ([#(ok ,pid) (start 'one-for-one 2 3600 '())]
+    [,child1 `#(child1 ,supervisor-1:start-child permanent 1000 worker)]
+    [,child2 `#(child2 ,supervisor-1:start-child permanent brutal-kill worker)]
+    [#(ok ,cpid1) (supervisor:start-child 'sup-test child1)]
+    [,_ (link cpid1)]
+    [#(ok ,cpid2) (supervisor:start-child 'sup-test child2)]
+    [,_ (link cpid2)])
+
+   ;; This causes the error case of monitor-child to occur and flow
+   ;; thru shutdown.
+   (with-interrupts-disabled
+    (send cpid2 `(throw confetti #f))
+    (kill pid 'shutdown))
+
+   (receive (after 5000 (throw 'no-exit-reason))
+     [`(EXIT ,@pid shutdown) 'ok]
+     [`(EXIT ,@pid ,reason) (throw `#(bad-exit-reason ,reason))])
+
+   (receive (after 2000 (throw 'no-exit-reason))
+     [`(EXIT ,@cpid1 shutdown) 'ok]
+     [`(EXIT ,@cpid1 ,reason) (throw `#(bad-exit-reason ,reason))])
+
+   (receive (after 2000 (throw 'no-exit-reason))
+     [`(EXIT ,@cpid2 confetti ,e)
+      (match-let* ([(,k0) (exit-reason->stacks e)])
+        'ok)]
      [`(EXIT ,@cpid2 ,reason) (throw `#(bad-exit-reason ,reason))])
    'ok))
 

@@ -342,8 +342,8 @@
     (cond
      [(<child> pid child) =>
       (lambda (pid)
-        (let ([reason (shutdown pid (<child> shutdown child))])
-          (report-end child 1 reason #f)
+        (let-values ([(reason err) (shutdown pid (<child> shutdown child))])
+          (report-end child 1 reason err)
           (<child> copy child [pid #f])))]
      [else child]))
 
@@ -354,15 +354,19 @@
          [brutal-kill
           (kill pid 'kill)
           (receive
-           [`(DOWN ,_ ,@pid ,reason) reason])]
+           [`(DOWN ,_ ,@pid ,reason ,err)
+            (values reason err)])]
          [,timeout
           (kill pid 'shutdown)
           (receive (after timeout
                      (kill pid 'kill)
                      (receive
-                      [`(DOWN ,_ ,@pid ,reason) reason]))
-            [`(DOWN ,_ ,@pid ,reason) reason])])]
-      [#(error ,reason) reason]))
+                      [`(DOWN ,_ ,@pid ,reason ,err)
+                       (values reason err)]))
+            [`(DOWN ,_ ,@pid ,reason ,err)
+             (values reason err)])])]
+      [#(error ,reason ,err)
+       (values reason err)]))
 
   (define (monitor-child pid)
     (monitor pid)
@@ -370,9 +374,9 @@
     (receive (after 0 'ok)
       [`(EXIT ,@pid ,reason)
        (receive
-        [`(DOWN ,_ ,@pid ,_)
+        [`(DOWN ,_ ,@pid ,_ ,err)
          (profile-me)
-         `#(error ,reason)])]))
+         `#(error ,reason ,err)])]))
 
   (define (state-mark-child-dead child state)
     ($state copy*
