@@ -1118,7 +1118,7 @@ ptr osi_open_file(const char* path, int flags, int mode, ptr callback) {
   if (rc < 0) {
     Sunlock_object(callback);
     free(req);
-    return osi_make_error_pair("uv_fs_close", rc);
+    return osi_make_error_pair("uv_fs_open", rc);
   }
   return Strue;
 }
