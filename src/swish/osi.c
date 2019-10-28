@@ -22,6 +22,8 @@
 
 #include "osi.h"
 
+#include <assert.h>
+
 #ifdef _WIN32
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "iphlpapi.lib")
@@ -101,6 +103,7 @@ static send_request_t g_send_request;
 static osi_thread_t g_scheme_thread;
 
 void osi_add_callback_list(ptr callback, ptr args) {
+  assert(g_callbacks); // must only be called via osi_get_callbacks
   g_callbacks = Scons(Scons(callback, args), g_callbacks);
 }
 
@@ -747,7 +750,7 @@ void osi_exit(int status) {
   uv_timer_stop(&g_timer);
   uv_close((uv_handle_t*)&g_timer, NULL);
   uv_close((uv_handle_t*)&g_send_request.async, NULL);
-  uv_run(osi_loop, UV_RUN_NOWAIT);
+  osi_get_callbacks(0); // drop any callbacks since we're exiting
   // force _exit if loop is still busy, since exit() may block
   g_exit.force = uv_loop_close(osi_loop);
   if (g_exit.initialized) {
@@ -1189,6 +1192,7 @@ static void get_callbacks_timer_cb(uv_timer_t* handle) {
 }
 
 ptr osi_get_callbacks(uint64_t timeout) {
+  g_callbacks = Snil;
   uv_update_time(osi_loop);
   if (0 == timeout)
     uv_run(osi_loop, UV_RUN_NOWAIT);
@@ -1202,7 +1206,7 @@ ptr osi_get_callbacks(uint64_t timeout) {
     }
   }
   ptr callbacks = g_callbacks;
-  g_callbacks = Snil;
+  g_callbacks = 0;
   return callbacks;
 }
 
@@ -1370,7 +1374,7 @@ void osi_init(void) {
   uv_loop_init(&g_loop);
   osi_loop = &g_loop;
   uv_timer_init(osi_loop, &g_timer);
-  g_callbacks = Snil;
+  g_callbacks = 0;
   g_scheme_thread = thread_self();
   uv_async_init(osi_loop, &g_send_request.async, send_request_async_cb);
   uv_mutex_init(&g_send_request.mutex);

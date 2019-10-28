@@ -275,7 +275,7 @@ int swish_service(int argc, const char* argv[]) {
   // but for now it's simpler to close poll_handle here and close osi_loop.
   uv_poll_stop(&poll_handle);
   uv_close((uv_handle_t*)&poll_handle, NULL);
-  uv_run(osi_loop, UV_RUN_NOWAIT);
+  osi_get_callbacks(0); // drop any callbacks since we're exiting
   g_exit.force = uv_loop_close(osi_loop);
   if (g_exit.force)
     _exit(status);
