@@ -179,32 +179,33 @@
         primes))
      '()
      buffer-sizes))
-  (define (watch-callbacks renames updates)
-    ;; macOS does not send update events consistently for new files.
+  (define (watch-callbacks who renames updates)
     (let lp ([renames-tbd renames]
-             [updates-tbd (if (memq (machine-type) '(a6osx ta6osx))
-                              '()
-                              updates)]
-             [updates-seen (if (memq (machine-type) '(a6osx ta6osx))
-                               updates
-                               '())])
+             [renames-seen '()]
+             [updates-tbd updates]
+             [updates-seen '()])
       (receive
-       (after 100
+       (after 500
          (unless (and (null? renames-tbd) (null? updates-tbd))
-           (raise `#(path-changed-missing ,renames-tbd ,updates-tbd))))
+           (raise `#(path-changed-missing ,who ,renames-tbd ,updates-tbd))))
        [#(path-changed ,@test-dir ,filename 1)
-        (if (member filename renames-tbd)
-            (lp (remove filename renames-tbd) updates-tbd updates-seen)
-            (raise `#(unexpected-path-rename ,filename ,renames)))]
+        (cond
+         [(member filename renames-tbd)
+          (lp (remove filename renames-tbd) (cons filename renames-seen)
+            updates-tbd updates-seen)]
+         [(member filename renames-seen)
+          (lp renames-tbd renames-seen updates-tbd updates-seen)]
+         [else
+          (raise `#(unexpected-path-rename ,who ,filename ,renames))])]
        [#(path-changed ,@test-dir ,filename 2)
         (cond
          [(member filename updates-tbd)
-          (lp renames-tbd (remove filename updates-tbd)
-            (cons filename updates-seen))]
+          (lp renames-tbd renames-seen
+            (remove filename updates-tbd) (cons filename updates-seen))]
          [(member filename updates-seen)
-          (lp renames-tbd updates-tbd updates-seen)]
+          (lp renames-tbd renames-seen updates-tbd updates-seen)]
          [else
-          (raise `#(unexpected-path-updated ,filename ,updates))])])))
+          (raise `#(unexpected-path-updated ,who ,filename ,updates))])])))
   (define bullet "\x2022;")
   (define test-dir (string-append bullet "files-test" bullet "/"))
   (match-let*
@@ -260,19 +261,25 @@
           (match-let* ([2 (path-watcher-count)])
             (print-path-watchers op))))
       (write-file fn)
-      (watch-callbacks '("basic") '("basic"))
+      (watch-callbacks 1 '("basic")
+        (if (memq (machine-type) '(a6osx ta6osx))
+            '()
+            '("basic")))
       (rename-path fn fn2)
       (assert (not (file-exists? fn)))
       (assert (file-exists? fn2))
-      (watch-callbacks '("basic" "moved") '())
+      (watch-callbacks 2 '("basic" "moved") '())
       (write-file fn)
-      (watch-callbacks '("basic") '("basic"))
+      (watch-callbacks 3 '("basic")
+        (if (memq (machine-type) '(a6osx ta6osx))
+            '()
+            '("basic")))
       (delete-file fn2)
       (assert (not (file-exists? fn2)))
-      (watch-callbacks '("moved") '())
+      (watch-callbacks 4 '("moved") '())
       (delete-file fn)
       (assert (not (file-exists? fn)))
-      (watch-callbacks '("basic") '())
+      (watch-callbacks 5 '("basic") '())
       (close-path-watcher watcher))
 
     (let* ([buffers (make-buffers)]
@@ -469,7 +476,7 @@
       close-fake
       print-fake))
   (match-let*
-    ([,fake-count (foreign-handle-count fakes-id)]
+   ([,fake-count (foreign-handle-count fakes-id)]
     [,print-fakes (foreign-handle-print fakes-id)]
     [,os (open-output-string)]
     [0 (fake-count)]
@@ -607,18 +614,18 @@
     [ok (begin (signal-handler SIGWINCH handle-it) 'ok)]
     [,@handle-it (signal-handler SIGWINCH)]
     [,trapped-signals ;; in app-core.ss
-      (sort <
-        (cons SIGWINCH
-          (meta-cond
-           [(memq (machine-type) '(i3nt ti3nt a6nt ta6nt))
-            (list SIGBREAK SIGHUP SIGINT)]
-           [else
-            (list SIGHUP SIGINT SIGTERM)])))]
+     (sort <
+       (cons SIGWINCH
+         (meta-cond
+          [(memq (machine-type) '(i3nt ti3nt a6nt ta6nt))
+           (list SIGBREAK SIGHUP SIGINT)]
+          [else
+           (list SIGHUP SIGINT SIGTERM)])))]
     [ok (and (andmap procedure? (map signal-handler trapped-signals)) 'ok)]
     [,@trapped-signals
-      (let ([os (open-output-string)])
-        (print-signal-handlers os)
-        (->signals (get-output-string os)))]
+     (let ([os (open-output-string)])
+       (print-signal-handlers os)
+       (->signals (get-output-string os)))]
     [,@trapped-signals
      (let ([os (open-output-string)])
        (parameterize ([current-output-port os])
