@@ -26,6 +26,7 @@
    gen-server:call
    gen-server:cast
    gen-server:debug
+   gen-server:enter-loop
    gen-server:reply
    gen-server:start
    gen-server:start&link
@@ -67,6 +68,27 @@
                [terminate terminate]
                [debug #f])
              (list arg ...)))]))
+
+  (define-syntax (gen-server:enter-loop x)
+    (syntax-case x ()
+      [(k state)
+       #'(k state 'infinity)]
+      [(k state timeout)
+       (with-implicit (k handle-call handle-cast handle-info terminate)
+         #'($enter-loop
+            (<gen-server-interface> make
+              [init #f]
+              [handle-call handle-call]
+              [handle-cast handle-cast]
+              [handle-info handle-info]
+              [terminate terminate]
+              [debug #f])
+            state
+            timeout))]))
+
+  (define ($enter-loop iface state timeout)
+    (loop (process-parent) (or (process-name) self) iface state
+      (resolve-timeout timeout)))
 
   (define (start name iface init-args)
     (let* ([thunk (make-thunk self name (make-starter name iface init-args))]

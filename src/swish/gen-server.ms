@@ -211,6 +211,111 @@
          (receive))))])
    'ok))
 
+(isolate-mat enter-loop ()
+  (define (do-state-effect state)
+    (match state
+      [#(send ,who ,what)
+       (send who what)
+       state]
+      [#(send-parent ,who)
+       (send who `#(parent ,(process-parent)))
+       state]))
+  (define (terminate reason state) 'ok)
+  (define (handle-call msg from state) (match msg))
+  (define (handle-cast msg state) (match msg))
+  (define (handle-info msg state)
+    (match msg
+      [timeout
+       `#(no-reply ,(do-state-effect state))]
+      [`(EXIT ,pid ,reason)
+       `#(stop ,reason ,(do-state-effect state))]))
+
+  (define (flush-msgs)
+    (receive (after 10 '())
+      [,msg (cons msg (flush-msgs))]))
+
+  (define (test-with-parent name)
+    (match-let*
+     ([,me self]
+      [,pid (spawn&link
+             (lambda ()
+               (process-trap-exit #t)
+               (when name
+                 (register name self))
+               (send me `#(armed ,self))
+               (gen-server:enter-loop '())))]
+      [,pid (receive (after 1000 (throw 'timeout))
+              [#(armed ,pid) pid])]
+      [,_ (link pid)]
+      [ok (receive (after 10 'ok))]     ; give it a moment to start
+      [,_ (kill pid 'stopped)]
+      [,name/pid (or name pid)]
+      [(`(EXIT ,@pid stopped)
+        `(<gen-server-terminating>
+          [name ,@name/pid]
+          [last-message `(EXIT ,@me stopped)]
+          [reason stopped]))
+       (flush-msgs)])
+     'ok))
+
+  (define (test-without-parent name)
+    (match-let*
+     ([,me self]
+      [,_ (spawn
+           (lambda ()
+             (spawn
+              (lambda ()
+                (process-trap-exit #t)
+                (when name
+                  (register name self))
+                (do () ((not (process-parent))) (gc))
+                (send me `#(armed ,self))
+                (gen-server:enter-loop `#(send-parent ,me))))))]
+      [,pid (receive (after 1000 (throw 'timeout))
+              [#(armed ,pid) pid])]
+      [,_ (link pid)]
+      [ok (receive (after 10 'ok))]     ; give it a moment to start
+      [,_ (kill pid 'stopped)]
+      [,name/pid (or name pid)]
+      [(#(parent #f)
+        `(EXIT ,@pid stopped)
+        `(<gen-server-terminating>
+          [name ,@name/pid]
+          [last-message `(EXIT ,@me stopped)]
+          [reason stopped]))
+       (flush-msgs)])
+     'ok))
+
+  (capture-events)
+  (process-trap-exit #t)
+  (match-let*
+   ([,me self]
+    [ok (test-with-parent #f)]
+    [ok (test-with-parent (gensym "unique"))]
+    [ok (test-without-parent #f)]
+    [ok (test-without-parent (gensym "unique"))]
+    ;; timeout
+    [,pid
+     (spawn&link
+      (lambda ()
+        (gen-server:enter-loop `#(send ,me #(,self timer-fired)) 100)))]
+    [ok (receive (after 1000 (throw 'timeout))
+          [#(,@pid timer-fired) 'ok])]
+    ;; on-exit runs
+    [,pid
+     (spawn&link
+      (lambda ()
+        (on-exit (send me `#(,self on-exit-fired))
+          (process-trap-exit #t)
+          (gen-server:enter-loop '()))))]
+    [ok (receive (after 10 'ok))]       ; give it a moment to start
+    [,_ (kill pid 'stopped)]
+    [(#(,@pid on-exit-fired)
+      `(EXIT ,@pid stopped)
+      `(<gen-server-terminating> [name ,@pid] [reason stopped]))
+     (flush-msgs)])
+   'ok))
+
 (isolate-mat stop ()
   (process-trap-exit #t)
   (match-let*

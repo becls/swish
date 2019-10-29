@@ -141,6 +141,31 @@ process and yield \code{\#(error \#(bad-return-value \var{other}))}.
 \code{gen-server:start} behaves the same as \code{start\&link}
 except that it does not link to the calling process.
 
+\defineentry{gen-server:enter-loop}
+\begin{syntax}
+  \code{(gen-server:enter-loop \var{state} \opt{\var{timeout}})}
+\end{syntax}
+\returns{} does not return
+
+\code{gen-server:enter-loop} transforms the calling process into a
+generic server. The \var{state} and \var{timeout} are equivalent to
+those returned by \code{init}.
+
+On entry, the macro calls \code{(process-name)} to determine the
+registered name of the process, if any, and \code{(process-parent)} to
+determine the spawning process, if available, for logging and
+processing termination. As a result, the name recorded in
+\code{<gen-server-terminating>} will not reflect subsequent changes in
+process registration.
+
+This macro uses the current scope to capture the callback functions
+\code{handle-call}, \code{handle-cast}, \code{handle-info}, and
+\code{terminate}.
+
+While \code{gen-server:enter-loop} does not return normally, it does
+raise an exception upon termination. This allows any exception
+handlers or winders on the stack to run.
+
 \defineentry{gen-server:call}
 \begin{procedure}
   \code{(gen-server:call \var{server} \var{request} \opt{\var{timeout}})}
