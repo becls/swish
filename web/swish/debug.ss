@@ -36,10 +36,71 @@
     (format "~a day~:p, ~a hour~:p, ~a minute~:p, ~a second~:p"
       days hours minutes seconds)))
 
+(define next-id
+  (let ([n (erlang:now)])
+    (lambda ()
+      (set! n (+ n 1))
+      (format "~36r" n))))
+
+(define (show-state state spawned)
+  (define op (open-output-string))
+  (define (format-stacks k*)
+    (define (cons-formatted k rest)
+      (dump-stack k op 'default)
+      (cons (get-output-string op) rest))
+    (fold-right cons-formatted '() k*))
+  (match state
+    [#(exited ,reason)
+     (let ([why `(begin "\"" ,(exit-reason->english reason) "\"")])
+       `(begin
+          "exited with reason "
+          ,(match (format-stacks (exit-reason->stacks reason))
+             [() `(begin ,why ,spawned)]
+             [,k*
+              (let ([id (next-id)])
+                `(begin
+                   (input (@ (id ,id) (type "checkbox") (class "collapsoid")))
+                   (label (@ (for ,id) (class "reason")) ,why)
+                   (span ,spawned)
+                   (label (@ (for ,id) (class "stackdump"))
+                     ,@(map
+                        (let ([checked (unless (null? (cdr k*)) '(checked "true"))])
+                          (lambda (k)
+                            (let ([sid (next-id)])
+                              `(begin
+                                 (input (@ (id ,sid) (type "checkbox") (class "stack") ,checked))
+                                 (label (@ (for ,sid) (class "stack")) (span) ,k)))))
+                        k*))))])))]
+    [,_
+     (print-process-state state op)
+     (display-string spawned op)
+     (get-output-string op)]))
+
+(define (process->html p)
+  (with-process-details p
+    (lambda (id name spawned state)
+      `(begin
+         ,(format "~6d: ~@[~a ~]" id name)
+         ,(show-state state (format ", spawned ~a\n" spawned))))))
+
 (when (find-param "collect")
   (collect (collect-maximum-generation)))
 
+(print-graph #t)
+
 (hosted-page "Debug" '()
+  `(style
+     "input.collapsoid { display: none; }"
+     "label.reason { display: inline; color: blue; }"
+     "input.collapsoid:checked + label.reason + span + label.stackdump { display: block; margin-left: 5em; }"
+     "input.collapsoid + label.reason + span + label.stackdump { display: none; }"
+     "label.stack { display: flex; }"
+     "input.stack { display: none; }"
+     "input.stack + label span { min-width: 1em; display: inline-block; }"
+     "input.stack + label span::before { content: \"▼\"; }"
+     "input.stack:checked + label span::before { content: \"▶\"; }"
+     "input.stack:checked + label.stack { text-overflow: ellipsis; white-space: pre; max-height: 1.25em; line-height: 1.25; overflow: hidden; }"
+     )
   `(pre
     ,(let-values ([(op get) (open-string-output-port)])
        (let ([now (current-time)])
@@ -60,6 +121,12 @@
        (newline op)
        (display-statistics op)
        (newline op)
-       (pps op)
+       (get))
+    (begin
+      "Processes:\n"
+      ,@(ps-fold-left > '()
+          (lambda (rest p)
+            (cons (process->html p) rest))))
+    ,(let-values ([(op get) (open-string-output-port)])
        (print-foreign-handles op)
        (get))))

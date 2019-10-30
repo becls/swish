@@ -54,10 +54,12 @@
    monitor?
    on-exit
    pps
+   print-process-state
    process-id
    process-trap-exit
    process?
    profile-me
+   ps-fold-left
    receive
    register
    reset-console-event-handler
@@ -73,6 +75,7 @@
    walk-stack
    walk-stack-max-depth
    whereis
+   with-process-details
    )
   (import
    (chezscheme)
@@ -448,33 +451,38 @@
       (dump-process-table op (lambda (p) #t))]))
 
   (define (dump-process-table op pred)
-    (vector-for-each
-     (lambda (p)
-       (when (pred p)
-         (print-process p op)))
-     (vector-sort (lambda (x y) (< (pcb-id x) (pcb-id y)))
-       (no-interrupts (hashtable-keys process-table)))))
+    (parameterize ([print-length 3] [print-level 6])
+      (ps-fold-left < #f
+        (lambda (_ p)
+          (when (pred p)
+            (print-process p op))))))
+
+  (define (exception-state-continuation p)
+    (let ([e (pcb-exception-state p)])
+      (and (continuation-condition? e)
+           e)))
 
   (define dbg
     (case-lambda
      [()
       (dump-process-table (current-output-port)
-        (lambda (p)
-          (continuation-condition? (pcb-exception-state p))))]
+        exception-state-continuation)]
      [(who)
-      (define (find-match id exception base)
-        (if (eqv? id who) exception base))
-      (debug-condition (dbg #f find-match))
-      (debug)]
-     [(base proc) ;; proc is (lambda (id exception base) ...)
-      (define (gather p base)
-        (let ([exception (pcb-exception-state p)])
-          (if (continuation-condition? exception)
-              (proc (pcb-id p) exception base)
-              base)))
-      (fold-right gather base
-        (vector->list
-         (no-interrupts (hashtable-keys process-table))))]))
+      (define (find-process-to-debug base p)
+        (if (eqv? (process-id p) who)
+            (exception-state-continuation p)
+            base))
+      (debug-condition (ps-fold-left < #f find-process-to-debug))
+      (debug)]))
+
+  (define (ps-fold-left id<? base f)
+    (let* ([v (vector-sort (lambda (x y) (id<? (pcb-id x) (pcb-id y)))
+                (no-interrupts (hashtable-keys process-table)))]
+           [end (vector-length v)])
+      ;; fixed evaluation order in case f has side effects
+      (do ([i 0 (fx+ i 1)]
+           [base base (f base (vector-ref v i))])
+          ((= i end) base))))
 
   (define dump-stack
     (let ()
@@ -587,37 +595,53 @@
   (define (process? p) (pcb? p))
 
   (define (print-process p op)
-    (define (print-src src op)
-      (when src
-        (match-let* ([#(,at ,offset ,file) src])
-          (fprintf op " ~a char ~d of ~a" at offset file))))
+    (with-process-details p
+     (lambda (id name spawned state)
+       (fprintf op " ~6d: " id)
+       (when name
+         (display name op)
+         (write-char #\space op))
+       (print-process-state state op)
+       (fprintf op ", spawned ~d\n" spawned))))
+
+  (define (with-process-details p k)
+    (arg-check 'with-process-details [p pcb?] [k procedure?])
     (let-values
         ([(name precedence sleeping? blocked-io? enqueued? completed? src)
           (with-interrupts-disabled
            (values (pcb-name p) (pcb-precedence p) (pcb-sleeping? p)
              (pcb-blocked-io? p) (enqueued? p) (not (alive? p)) (pcb-src p)))])
-      (fprintf op " ~6d: " (pcb-id p))
-      (when name
-        (display name op)
-        (write-char #\space op))
-      (cond
-       [(eq? self p)
-        (display-string "running" op)]
-       [sleeping?
-        (fprintf op "waiting for up to ~as"
-          (/ (max (- precedence (erlang:now)) 0) 1000.0))
-        (print-src src op)]
-       [blocked-io?
-        (fprintf op "waiting for ~a" src)]
-       [enqueued?
-        (display-string "ready to run" op)]
-       [completed?
-        (fprintf op "exited with reason ~s"
-          (unwrap-fault-condition (pcb-exception-state p)))]
-       [else
-        (display-string "waiting indefinitely" op)
-        (print-src src op)])
-      (fprintf op ", spawned ~d\n" (pcb-create-time p))))
+      (k (pcb-id p) name (pcb-create-time p)
+        (cond
+         [(eq? self p) 'running]
+         [sleeping?
+          `#(sleep-up-to
+             ,(/ (max (- precedence (erlang:now)) 0) 1000.0)
+             ,src)]
+         [blocked-io? `#(waiting-for ,src)]
+         [enqueued? 'ready]
+         [completed? `#(exited ,(pcb-exception-state p))]
+         [else `#(waiting-indefinitely ,src)]))))
+
+  (define (print-src src op)
+    (when src
+      (match-let* ([#(,at ,offset ,file) src])
+        (fprintf op " ~a char ~d of ~a" at offset file))))
+
+  (define (print-process-state state op)
+    (match state
+      [running (display-string "running" op)]
+      [#(sleep-up-to ,seconds ,src)
+       (fprintf op "waiting for up to ~as" seconds)
+       (print-src src op)]
+      [#(waiting-for ,src)
+       (fprintf op "waiting for ~a" src)]
+      [ready (display-string "ready to run" op)]
+      [#(exited ,reason)
+       (fprintf op "exited with reason ~s" (unwrap-fault-condition reason))]
+      [#(waiting-indefinitely ,src)
+       (display-string "waiting indefinitely" op)
+       (print-src src op)]))
 
   (define process-id
     (case-lambda

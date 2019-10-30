@@ -1140,8 +1140,7 @@ the timestamp is the clock time from \code{erlang:now}, and
 \defineentry{dbg}
 \begin{procedure}
   \code{(dbg)}\\
-  \code{(dbg \var{id})}\\
-  \code{(dbg \var{base} \var{proc})}\strut
+  \code{(dbg \var{id})}
 \end{procedure}
 \returns{} see below
 
@@ -1157,10 +1156,44 @@ exception state of process \var{id}. If process \var{id} does not
 exist or did not exit with a continuation condition, the following
 message is printed: ``Nothing to debug.''
 
-\code{(dbg \var{base} \var{proc})} folds over the processes that
-exited with a continuation condition and calls \var{proc} with the
-process id, process exception state, and the accumulator value
-(initially \var{base}). It returns the final accumulator value.
+% ----------------------------------------------------------------------------
+\defineentry{ps-fold-left}
+\begin{procedure}
+  \code{(ps-fold-left \var{id<?} \var{base} \var{f})}
+\end{procedure}
+\returns{} see below
+
+The \code{ps-fold-left} procedure folds over the process table
+ordered by \var{id<?} on \code{process-id} and calls \var{f}
+with the accumulator value (initially \var{base}) and the process
+for each entry in the table.
+
+% ----------------------------------------------------------------------------
+\defineentry{with-process-details}
+\begin{procedure}
+  \code{(with-process-details \var{p} \var{f})}
+\end{procedure}
+\returns{} see below
+
+The \code{with-process-details} procedure takes a process \var{p}
+and returns the value obtained by calling the procedure \var{f}
+with four values:
+the process id,
+the process name,
+the value of \code{erlang:now} when the process was created,
+and a representation of the process state
+that may be passed to \code{print-process-state}.
+
+% ----------------------------------------------------------------------------
+\defineentry{print-process-state}
+\begin{procedure}
+  \code{(print-process-state \var{state} \var{op})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{print-process-state} procedure takes a \var{state} from
+\code{with-process-details} and prints a description of the process state
+to the textual output port \var{op} in the format used by \code{pps}.
 
 % ----------------------------------------------------------------------------
 \defineentry{dump-stack}

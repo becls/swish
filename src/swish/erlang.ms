@@ -414,7 +414,11 @@
     [#(EXIT #(bad-arg whereis 12)) (catch (whereis 12))]
     [#(EXIT #(bad-arg who arg)) (catch (bad-arg 'who 'arg))]
     [#(EXIT #(bad-arg walk-stack-max-depth -1))
-     (catch (walk-stack-max-depth -1))])
+     (catch (walk-stack-max-depth -1))]
+    [#(EXIT #(bad-arg with-process-details polychlorinated-byphenyl))
+     (catch (with-process-details 'polychlorinated-byphenyl values))]
+    [#(EXIT #(bad-arg with-process-details "spill beans"))
+     (catch (with-process-details self "spill beans"))])
    (print-char-name #t)
    (print-gensym 'pretty)
    (print-graph #t)
