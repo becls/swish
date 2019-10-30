@@ -150,8 +150,8 @@
 
   (define (handle-info msg state)
     (match msg
-      [`(EXIT ,pid ,reason)
-       (match (restart-child pid reason state)
+      [`(EXIT ,pid ,reason ,err)
+       (match (restart-child pid reason err state)
          [#(ok ,new-state)
           (profile-me)
           `#(no-reply ,new-state)]
@@ -237,17 +237,17 @@
            [#(error ,reason)
             `#(error ,(append (reverse rest) (cons child new-children)))])])))
 
-  (define (report-start-error reason child)
-    (report-error 'start-error reason child)
+  (define (report-start-error reason err child)
+    (report-error 'start-error reason err child)
     `#(error ,reason))
 
   (define (do-start-child child children)
-    (match (catch ((<child> thunk child)))
+    (match (try ((<child> thunk child)))
       [#(ok ,pid) (guard (process? pid))
        (cond
         [(find-pid pid children)
          (profile-me)
-         (report-start-error `#(duplicate-process ,pid) child)]
+         (report-start-error `#(duplicate-process ,pid) #f child)]
         [else
          (link pid)
          (let ([child (<child> copy child [pid pid])])
@@ -258,13 +258,13 @@
        `#(ok #f ,child)]
       [#(error ,reason)
        (profile-me)
-       (report-start-error reason child)]
-      [#(EXIT ,reason)
+       (report-start-error reason #f child)]
+      [`(catch ,reason ,err)
        (profile-me)
-       (report-start-error reason child)]
+       (report-start-error reason err child)]
       [,other
        (profile-me)
-       (report-start-error `#(bad-return-value ,other) child)]))
+       (report-start-error `#(bad-return-value ,other) #f child)]))
 
   (define (handle-start-child child state)
     (match (state-find-child (<child> name child) state)
@@ -283,17 +283,17 @@
        (profile-me)
        `#(reply #(error #(already-started ,pid)) ,state)]))
 
-  (define (restart-child pid reason state)
+  (define (restart-child pid reason err state)
     (cond
      [(state-find-pid pid state) =>
       (lambda (child)
-        (do-restart (<child> restart-type child) reason child state))]
+        (do-restart (<child> restart-type child) reason err child state))]
      [else
       (profile-me)
       `#(ok ,state)]))
 
-  (define (do-restart restart-type reason child state)
-    (report-end child 0 reason)
+  (define (do-restart restart-type reason err child state)
+    (report-end child 0 reason err)
     (match restart-type
       [permanent
        (restart child state)]
@@ -311,7 +311,7 @@
       [#(ok ,new-state)
        (strategic-restart child new-state)]
       [#(terminate ,new-state)
-       (report-error 'shutdown 'reached-max-restart-intensity child)
+       (report-error 'shutdown 'reached-max-restart-intensity #f child)
        `#(shutdown ,(state-remove-child child new-state))]))
 
   (define (strategic-restart child state)
@@ -343,7 +343,7 @@
      [(<child> pid child) =>
       (lambda (pid)
         (let ([reason (shutdown pid (<child> shutdown child))])
-          (report-end child 1 reason)
+          (report-end child 1 reason #f)
           (<child> copy child [pid #f])))]
      [else child]))
 
@@ -434,13 +434,15 @@
            '())]
       [() '()]))
 
-  (define (report-error err reason child)
-    (system-detail <supervisor-error>
-      [supervisor self]
-      [error-context err]
-      [reason reason]
-      [child-pid (<child> pid child)]
-      [child-name (<child> name child)]))
+  (define (report-error err-context reason err child)
+    (let-values ([(reason details) (normalize-exit-reason reason err)])
+      (system-detail <supervisor-error>
+        [supervisor self]
+        [error-context err-context]
+        [reason reason]
+        [details details]
+        [child-pid (<child> pid child)]
+        [child-name (<child> name child)])))
 
   (define (report-start child)
     (system-detail <child-start>
@@ -451,9 +453,11 @@
       [shutdown (<child> shutdown child)]
       [type (<child> type child)]))
 
-  (define (report-end child killed reason)
-    (system-detail <child-end>
-      [pid (<child> pid child)]
-      [killed killed]
-      [reason reason]))
+  (define (report-end child killed reason err)
+    (let-values ([(reason details) (normalize-exit-reason reason err)])
+      (system-detail <child-end>
+        [pid (<child> pid child)]
+        [killed killed]
+        [reason reason]
+        [details details])))
   )

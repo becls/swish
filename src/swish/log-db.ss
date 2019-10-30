@@ -40,6 +40,7 @@
    (swish app-io)
    (swish db)
    (swish erlang)
+   (swish errors)
    (swish event-mgr)
    (swish events)
    (swish io)
@@ -192,18 +193,10 @@
      [(condition? x)
       (parameterize ([print-graph #t] [print-level 3] [print-length 6])
         (let ([op (open-output-string)])
-          (display-condition x op)
-          (write-char #\. op)
-          (let ([reason-string (get-output-string op)]
-                [stack-string
-                 (and (continuation-condition? x)
-                      (let ([op (open-output-string)])
-                        (dump-stack (condition-continuation x) op 'default)
-                        (get-output-string op)))])
-            (format "~s"
-              (if stack-string
-                  `#(error ,reason-string ,stack-string)
-                  `#(error ,reason-string))))))]
+          (json:write-object op #f json:write
+            [message (exit-reason->english x)]
+            [stacks (map stack->json (exit-reason->stacks x))])
+          (get-output-string op)))]
      [(json:object? x) (json:object->string x)]
      [else (parameterize ([print-graph #t]) (format "~s" x))]))
 
@@ -299,14 +292,15 @@
 
   (module (swish-event-logger)
     (define schema-name 'swish)
-    (define schema-version "2019-06-26")
+    (define schema-version "2019-10-18")
 
     (define-simple-events create-simple-tables log-simple-event
       (<child-end>
        (timestamp integer)
        (pid integer)
        (killed integer)
-       (reason text))
+       (reason text)
+       (details text))
       (<child-start>
        (timestamp integer)
        (supervisor integer)
@@ -329,7 +323,8 @@
        (name text)
        (last-message text)
        (state text)
-       (reason text))
+       (reason text)
+       (details text))
       (<http-request>
        (timestamp integer)
        (pid integer)
@@ -359,6 +354,7 @@
        (supervisor integer)
        (error-context text)
        (reason text)
+       (details text)
        (child-pid integer)
        (child-name text))
       (<system-attributes>
@@ -397,7 +393,7 @@
         (set! next-child-id (+ (or id 0) 1)))
 
       (execute "drop view if exists child")
-      (execute "create view child as select T1.pid as id, T1.name, T1.supervisor, T1.restart_type, T1.type, T1.shutdown, T1.timestamp as start, T2.timestamp - T1.timestamp as duration, T2.killed, T2.reason from child_start T1 left outer join child_end T2 on T1.pid=T2.pid")
+      (execute "create view child as select T1.pid as id, T1.name, T1.supervisor, T1.restart_type, T1.type, T1.shutdown, T1.timestamp as start, T2.timestamp - T1.timestamp as duration, T2.killed, T2.reason, T2.details from child_start T1 left outer join child_end T2 on T1.pid=T2.pid")
 
       (create-prune-on-insert-triggers
        (child_end timestamp)
@@ -439,6 +435,50 @@
     (define (upgrade-db)
       (match (log-db:version schema-name)
         [,@schema-version (create-db)]
+        ["2019-06-26"
+         (define chunk-size 1000)
+         (define op (open-output-string))
+         (define (convert reason)
+           (match (catch (read (open-input-string reason)))
+             [#(error ,r)
+              (json:write-object op #f json:write [message r])
+              (values "exception" (get-output-string op))]
+             [#(error ,r ,s)
+              (json:write-object op #f json:write [message r] [preformatted-stack s])
+              (values "exception" (get-output-string op))]
+             [#(EXIT ,_)
+              (json:write-object op #f json:write [message reason])
+              (values "exception" (get-output-string op))]
+             [,r
+              (let ([message (exit-reason->english r)])
+                (if (string=? message reason)
+                    (values reason #f)
+                    (begin
+                      (json:write-object op #f json:write [message message])
+                      (values reason (get-output-string op)))))]))
+         (define (update-reason&details table)
+           (define (fetch offset)
+             (execute (format "select rowid, reason from ~a order by rowid limit ? offset ?" table)
+               chunk-size offset))
+           (let lp ([offset 0])
+             (let ([rows (fetch offset)])
+               (unless (null? rows)
+                 (let cvt ([offset offset] [rows rows])
+                   (match rows
+                     [() (lp offset)]
+                     [(#(,rowid ,reason) . ,rows)
+                      (let-values ([(reason details) (convert reason)])
+                        (execute (format "update ~a set reason = ?, details = ? where rowid = ?" table)
+                          reason details rowid))
+                      (cvt (+ offset 1) rows)]))))))
+         (execute "alter table child_end add column details text")
+         (execute "alter table gen_server_terminating add column details text")
+         (execute "alter table supervisor_error add column details text")
+         (update-reason&details "child_end")
+         (update-reason&details "gen_server_terminating")
+         (update-reason&details "supervisor_error")
+         (log-db:version schema-name "2019-10-18")
+         (upgrade-db)]
         ["2019-05-24"
          (execute "alter table statistics rename to statistics_orig")
          (execute "create table statistics(timestamp integer, date text, reason text, bytes_allocated integer, osi_bytes_used integer, sqlite_memory integer, sqlite_memory_highwater integer, foreign_handles text, cpu real, real real, bytes integer, gc_count integer, gc_cpu real, gc_real real, gc_bytes integer)")

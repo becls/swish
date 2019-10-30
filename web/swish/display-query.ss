@@ -115,22 +115,20 @@
 (define (make-td c r)
   (let* ([text (format "~a" r)]
          [len (string-length text)]
-         [text (if (starts-with-ci? text "(a (")
-                   r
-                   text)])
+         [r (or r "")])
     (cond
      [(< len 64)
-      `(td (@ (class "narrow")) ,text)]
+      `(td (@ (class ,(format "narrow ~a" c))) ,r)]
      [(< len 256)
-      `(td (@ (class "normal")) ,text)]
+      `(td (@ (class ,(format "normal ~a" c))) ,r)]
      [(< len 512)
-      `(td (@ (class "wide")) ,text)]
+      `(td (@ (class ,(format "wide ~a" c))) ,r)]
      [else
       (let ([id (symbol->string (gensym))])
         `(td (@ (class "extra-wide"))
            (div (@ (class ,(format "elide ~a" c)) (word-break "break-all"))
              (input (@ (class "elide") (id ,id) (type "checkbox") (checked "yes")))
-             (label (@ (for ,id) (class "elide")) ,text))))])))
+             (label (@ (for ,id) (class "elide")) ,r))))])))
 
 (define (data->html-table border columns rows f)
   (let ([columns (vector->list columns)])

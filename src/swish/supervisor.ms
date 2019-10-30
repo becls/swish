@@ -46,6 +46,7 @@
       [die `#(stop died ,state)]
       [stop `#(stop normal ,state)]
       [(raise ,reason) (raise reason)]
+      [(throw ,reason ,inner) (throw reason inner)]
       [#(sleep ,t)
        (sleep-ms t)
        `#(no-reply ,state)]
@@ -169,10 +170,11 @@
       `(<supervisor-error> ,@supervisor
          [error-context start-error]
          [reason crash]
+         [details `(catch crash)]
          [child-pid #f]
          [child-name child2])
       `(EXIT ,@supervisor shutdown)
-      `(<child-end> [pid ,@pid1] [killed 1] [reason shutdown]))
+      `(<child-end> [pid ,@pid1] [killed 1] [reason shutdown] [details #f]))
      (get-events 0)])
    'ok))
 
@@ -242,6 +244,7 @@
        [supervisor ,_]
        [error-context start-error]
        [reason #(duplicate-process ,_)]
+       [details `(catch #(duplicate-process ,_))]
        [child-pid #f]
        [child-name child2])
      'ok])))
@@ -259,7 +262,8 @@
          [type worker]))
      (get-events 0)]
     [ok (supervisor:terminate-child supervisor 'child1)]
-    [(`(<child-end> [pid ,@pid1] [killed 1] [reason shutdown])) (get-events 0)]
+    [(`(<child-end> [pid ,@pid1] [killed 1] [reason shutdown] [details #f]))
+     (get-events 0)]
     [#(ok ,pid2) (supervisor:restart-child supervisor 'child1)]
     [(`(<child-start> ,@supervisor [pid ,@pid2]
          [name child1]
@@ -272,8 +276,9 @@
         [name ,@pid2]
         [last-message (raise ruckus)]
         [state ()]
-        [reason ruckus])
-      `(<child-end> [pid ,@pid2] [killed 0] [reason ruckus])
+        [reason ruckus]
+        [details `(catch ruckus)])
+      `(<child-end> [pid ,@pid2] [killed 0] [reason ruckus] [details `(catch ruckus)])
       `(<child-start> ,@supervisor
          [pid ,pid3]
          [name child1]
@@ -282,7 +287,7 @@
          [type worker]))
      (get-events 100)]
     [,_ (supervisor-mat-cleanup)]
-    [(`(<child-end> [pid ,@pid3] [killed 1] [reason shutdown]))
+    [(`(<child-end> [pid ,@pid3] [killed 1] [reason shutdown] [details #f]))
      (get-events 0)])
    'ok)
   ;; now with low tolerance for restart to trigger supervisor-error
@@ -300,15 +305,50 @@
         [name ,@pid1]
         [last-message (raise objection)]
         [state ()]
-        [reason objection])
+        [reason objection]
+        [details `(catch objection ,e0)])
       `(EXIT ,@supervisor shutdown)
-      `(<child-end> [pid ,@pid1] [killed 0] [reason objection])
+      `(<child-end> [pid ,@pid1] [killed 0] [reason objection] [details `(catch objection ,e1)])
       `(<supervisor-error> ,@supervisor
          [error-context shutdown]
          [reason reached-max-restart-intensity]
+         [details `(catch reached-max-restart-intensity)]
          [child-pid ,@pid1]
          [child-name child1]))
-     (get-events 100)])
+     (get-events 100)]
+    [() (exit-reason->stacks e0)]
+    [() (exit-reason->stacks e1)])
+   'ok)
+  ;; now with low tolerance for restart to trigger supervisor-error, but throw
+  (match-let*
+   ([#(ok ,supervisor) (start 'one-for-one 0 1 (list child1))]
+    [,oops (make-fault 'fumble)]
+    [(`(<child-start> ,@supervisor
+         [pid ,pid1]
+         [name child1]
+         [restart-type permanent]
+         [shutdown 1000]
+         [type worker]))
+     (get-events 0)]
+    [,_ (send pid1 `(throw ball ,oops))]
+    [(`(<gen-server-terminating>
+        [name ,@pid1]
+        [last-message (throw ball ,@oops)]
+        [state ()]
+        [reason ball]
+        [details `(catch ball ,e0)])
+      `(EXIT ,@supervisor shutdown)
+      `(<child-end> [pid ,@pid1] [killed 0] [reason ball] [details `(catch ball ,e1)])
+      `(<supervisor-error> ,@supervisor
+         [error-context shutdown]
+         [reason reached-max-restart-intensity]
+         [details `(catch reached-max-restart-intensity)]
+         [child-pid ,@pid1]
+         [child-name child1]))
+     (get-events 100)]
+    [(,oops-k) (exit-reason->stacks oops)]
+    [(,@oops-k ,k) (exit-reason->stacks e0)]
+    [(,@oops-k ,@k) (exit-reason->stacks e1)])
    'ok))
 
 (supervisor-mat start-error ()
@@ -747,7 +787,8 @@
      [`(<supervisor-error>
         [supervisor ,@pid]
         [error-context shutdown]
-        [reason reached-max-restart-intensity])
+        [reason reached-max-restart-intensity]
+        [details `(catch reached-max-restart-intensity)])
       'ok])))
 
 (supervisor-mat one-for-all ()
@@ -938,7 +979,7 @@
 
     (receive
      (after 0 (throw 'no-watcher-child-log))
-     [`(<child-end> [pid ,@cpid] [killed 0] [reason normal])
+     [`(<child-end> [pid ,@cpid] [killed 0] [reason normal] [details #f])
       'ok]))))
 
 (supervisor-mat watcher-shutdown ()

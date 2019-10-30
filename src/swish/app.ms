@@ -490,15 +490,15 @@
           '(seek
             "Date: "
             "Timestamp: "
-            "Event: #\\(<child-end>.*normal\\)"
+            "Event: #\\(<child-end>.*normal #f\\)"
             seek
             "Date: "
             "Timestamp: "
-            "Event: #\\(<child-end>.*shutdown\\)"
+            "Event: #\\(<child-end>.*shutdown #f\\)"
             seek
             "Date: "
             "Timestamp: "
-            "Event: #\\(<child-end>.*shutdown\\)")
+            "Event: #\\(<child-end>.*shutdown #f\\)")
           (let f ()
             (receive (after 0 '())
               [(,@from-stderr . ,msg) (cons msg (f))])))

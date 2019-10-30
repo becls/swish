@@ -239,7 +239,8 @@
     [`(<gen-server-terminating> [name ,@pid]
         [last-message crash]
         [state crash-state]
-        [reason crashed])
+        [reason crashed]
+        [details `(catch crashed)])
      (void)]
     [,other (throw `#(unexpected-event ,other))])
 
@@ -290,7 +291,8 @@
     [`(<gen-server-terminating> [name ,@pid]
         [last-message native-exception]
         [state ignorance]
-        [reason ,@c])
+        [reason exception]
+        [details ,@c])
      (void)]
     [,other (throw `#(unexpected-event ,other))])
 
@@ -310,7 +312,8 @@
     [`(<gen-server-terminating> [name ,@pid]
         [last-message throw]
         [state bliss]
-        [reason fit])
+        [reason fit]
+        [details `(catch fit)])
      (void)]
     [,other (throw `#(unexpected-event ,other))])
 
@@ -328,7 +331,8 @@
     [`(<gen-server-terminating> [name ,@pid]
         [last-message throw-terminate]
         [state crash-state]
-        [reason terminated])
+        [reason terminated]
+        [details `(catch terminated)])
      (void)]
     [,other (throw `#(unexpected-event ,other))])
 
@@ -458,7 +462,10 @@
         [name ,@pid]
         [last-message #(,@self native-exception)]
         [state #(,@self report-termination)]
-        [reason ,@c]) 'ok])
+        [reason exception]
+        ,details)
+      (match (exit-reason->english details)
+        ["Exception in cdr: 11 is not a pair." 'ok])])
    'ok))
 
 (isolate-mat terminate3 ()

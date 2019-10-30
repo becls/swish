@@ -45,40 +45,39 @@
         (format "~d:~2,'0d:~2,'0d.~3,'0d" hours minutes seconds milliseconds)
         (format "~2,'0d:~2,'0d.~3,'0d" minutes seconds milliseconds))))
 
-(define (get-reason-and-stack x)
-  (match (catch (read (open-input-string x)))
-    [#(EXIT ,_) (values x "")]
-    [,reason
+(define (get-message-and-stacks details)
+  (match (catch (json:string->object details))
+    [#(EXIT ,_) (values "" "")]
+    [,obj
      (values
-      (exit-reason->english reason)
-      (exit-reason->stack reason))]))
-
-(define (exit-reason->stack reason)
-  (match reason
-    [#(error ,_reason ,stack) stack]
-    [,_ ""]))
+      (json:ref obj 'message "")
+      (or (json:ref obj 'preformatted-stack #f)
+          (format "~{~a~^~80,,,'-<~>\n~}"
+            (map json-stack->string
+              (json:ref obj 'stacks '())))))]))
 
 (define (dispatch)
   (let ([limit (integer-param "limit" 0 params)]
         [offset (integer-param "offset" 0 params)]
-        [child-sql "SELECT id, name, supervisor, restart_type, type, shutdown, datetime(start/1000,'unixepoch','localtime') as start, duration, killed, reason, null as stack FROM child WHERE reason IS NOT NULL AND reason NOT IN ('normal', 'shutdown') ORDER BY id DESC"]
-        [gen-sql "SELECT datetime(timestamp/1000,'unixepoch','localtime') as timestamp, name, last_message, state, reason, null as stack  FROM gen_server_terminating ORDER BY ROWID DESC"]
-        [super-sql "SELECT datetime(timestamp/1000,'unixepoch','localtime') as timestamp, supervisor, error_context, reason, child_pid, child_name, null as stack FROM supervisor_error ORDER BY ROWID DESC"]
+        [child-sql "SELECT id, name, supervisor, restart_type, type, shutdown, datetime(start/1000,'unixepoch','localtime') as start, duration, killed, reason, details as message, NULL as stacks FROM child WHERE reason IS NOT NULL AND reason NOT IN ('normal', 'shutdown') ORDER BY id DESC"]
+        [gen-sql "SELECT datetime(timestamp/1000,'unixepoch','localtime') as timestamp, name, last_message, state, reason, details as message, NULL as stacks  FROM gen_server_terminating ORDER BY ROWID DESC"]
+        [super-sql "SELECT datetime(timestamp/1000,'unixepoch','localtime') as timestamp, supervisor, error_context, reason, child_pid, child_name, details as message, NULL as stacks FROM supervisor_error ORDER BY ROWID DESC"]
         [sql (string-param "sql" params)]
-        [child-func  (lambda (id name supervisor restart-type type shutdown start duration killed reason _stack)
-                       (let-values ([(reason stack) (get-reason-and-stack reason)])
+        [child-func  (lambda (id name supervisor restart-type type shutdown start duration killed reason details _ignore)
+                       (let-values ([(message stacks) (get-message-and-stacks details)])
                          (list id name supervisor restart-type type shutdown start (nice-duration duration)
-                           (if (eqv? killed 1) "Y" "n") reason stack)))]
-        [gen-func  (lambda (timestamp name last-message state reason _stack)
-                     (let-values ([(reason stack) (get-reason-and-stack reason)])
-                       (list timestamp name last-message state reason stack)))]
-        [super-func  (lambda (timestamp supervisor error-context reason child-pid child-name _stack)
-                       (let-values ([(reason stack) (get-reason-and-stack reason)])
+                           (if (eqv? killed 1) "Y" "n") reason message stacks)))]
+        [gen-func  (lambda (timestamp name last-message state reason details _ignore)
+                     (let-values ([(message stacks) (get-message-and-stacks details)])
+                       (list timestamp name last-message state reason message stacks)))]
+        [super-func  (lambda (timestamp supervisor error-context reason child-pid child-name details _ignore)
+                       (let-values ([(message stacks) (get-message-and-stacks details)])
                          (list timestamp supervisor error-context
                            reason
                            (or child-pid "None")
                            child-name
-                           stack)))]
+                           message
+                           stacks)))]
         [type (get-param "type")])
 
     (define (previous-sql-valid? sql)

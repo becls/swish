@@ -232,3 +232,41 @@ process with the same failure reason. The log handler is removed when
 message from \var{owner}.
 
 \var{owner} is a process.
+
+\defineentry{informative-exit-reason?}
+\begin{procedure}
+  \code{(informative-exit-reason? \var{x})}
+\end{procedure}
+\returns{} boolean
+
+The \code{informative-exit-reason?} procedure returns \code{\#t} if \var{x} is
+a fault condition containing a continuation or containing a reason other
+than \code{normal} or \code{shutdown}.
+Otherwise it returns \code{\#t} if \var{x} is
+not \code{normal} or \code{shutdown}.
+
+\defineentry{normalize-exit-reason}
+\begin{procedure}
+  \code{(normalize-exit-reason \var{r} \opt{\var{e}})}
+\end{procedure}
+\returns{} \var{reason} and \var{details}
+
+The \code{normalize-exit-reason} procedure takes \var{r} and \var{e}
+from matching
+\code{`(catch ,\var{r} \opt{,\var{e}})},
+\code{`(EXIT \var{p} ,\var{r} \opt{,\var{e}})}, or
+\code{`(DOWN \var{m} \var{p} ,\var{r} \opt{,\var{e}})}
+and returns two values, \var{reason} and \var{details}, suitable
+for use in \code{<child-end>}, \code{<gen-server-terminating>},
+and \code{<supervisor-error>} events.
+If \var{r} is a condition, then \var{reason} is the symbol \code{exception}
+and \var{details} is either \var{e} if it satisfies \code{informative-exit-reason?}
+or \var{r}.
+Otherwise \var{reason} is \var{r} and \var{details} is \var{e} if it
+satisfies \code{informative-exit-reason?} or a fault condition for \var{r}
+if \var{r} satisfies the \code{informative-exit-reason?} predicate.
+If the optional \var{e} is omitted, then \var{r} is matched against the
+extended match pattern \code{`(catch ,\var{r} ,\var{e})}.
+If this pattern matches, then \code{normalize-exit-reason} is called with the
+values obtained for \var{r} and \var{e}.
+Otherwise, \var{r} is used for both \var{r} and \var{e}.

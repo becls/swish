@@ -42,7 +42,8 @@
     timestamp
     pid
     killed
-    reason)
+    reason
+    details)
   (define-tuple <child-start>
     timestamp
     supervisor
@@ -65,7 +66,8 @@
     name
     last-message
     state
-    reason)
+    reason
+    details)
   (define-tuple <http-request>
     timestamp
     pid
@@ -95,6 +97,7 @@
     supervisor
     error-context
     reason
+    details
     child-pid
     child-name)
   (define-tuple <system-attributes>

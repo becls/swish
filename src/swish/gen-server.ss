@@ -187,16 +187,18 @@
          (report-terminating r e name msg state)
          e]
         [,_
-         (unless (or (eq? reason 'normal) (eq? reason 'shutdown))
-           (report-terminating r e name msg state))
+         (report-terminating r e name msg state)
          e])))
 
-  (define (report-terminating reason context name msg state)
-    (system-detail <gen-server-terminating>
-      [name name]
-      [last-message msg]
-      [state state]
-      [reason reason]))
+  (define (report-terminating reason err name msg state)
+    (when (informative-exit-reason? err)
+      (let-values ([(reason details) (normalize-exit-reason reason err)])
+        (system-detail <gen-server-terminating>
+          [name name]
+          [last-message msg]
+          [state state]
+          [reason reason]
+          [details details]))))
 
   (define (failed-call reason e context)
     (throw `#(,reason #(gen-server call ,context)) e))

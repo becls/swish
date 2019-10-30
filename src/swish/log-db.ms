@@ -32,6 +32,12 @@
    [else 'ok]))
 
 (mat coerce ()
+  (define (check-condition c message check-stack)
+    (match-let*
+     ([,s (coerce c)]
+      [,obj (json:string->object s)]
+      [,@message (json:ref obj 'message 'nope)])
+     (check-stack (json:ref obj 'stacks 'nope))))
   (match-let*
    (["foo" (coerce "foo")]
     [0 (coerce 0)]
@@ -49,19 +55,60 @@
     [,n (guard (and (integer? n) (> n 0)))
       (coerce (spawn (lambda () 'ok)))]
     ["Mon, 2 Feb 2015 01:02:03 +0000" (coerce (make-date 0 3 2 1 2 2 2015 0))]
-    [#(error "Exception: condition without a stack.")
-     (read
-      (open-input-string
-       (coerce (condition
-                (make-error)
-                (make-message-condition "condition without a stack")))))]
-    [#(error "Exception in car: 12 is not a pair." ,stack)
-     (guard (starts-with? stack "#<system continuation in"))
-     (read
-      (open-input-string
-       (coerce
-        (match (catch (car 12))
-          [#(EXIT ,reason) reason]))))]
+    [ok (check-condition
+         (condition
+          (make-error)
+          (make-message-condition "condition without a stack"))
+         "Exception: condition without a stack."
+         (lambda (stacks) (match stacks [() 'ok])))]
+    [ok (check-condition
+         (match (catch (car 12))
+           [#(EXIT ,reason) reason])
+         "Exception in car: 12 is not a pair."
+         (lambda (stacks)
+           (match-let*
+            ([(,stack0 . ,_) stacks]
+             [#t (json:object? stack0)]
+             [10 (json:ref stack0 'truncated 'wrong)]
+             [12 (json:ref stack0 'depth #f)]
+             [(,f0 . ,_) (json:ref stack0 'frames '())]
+             [,s (json:ref f0 'description 'bad)]
+             [#t (starts-with? s "#<system continuation in")])
+            'ok)))]
+    [ok (check-condition
+         (try
+          (eval ;; avoid getting source info
+           '(let loop1 ([n 3] [m 1])
+              (if (< n m)
+                  (match m)
+                  (list n m (loop1 (- n 1) (+ m 1)))))))
+         "Pattern match failed: 3."
+         (lambda (stacks)
+           (define (check-frame f depth desc free)
+             (match-let*
+              ([,@desc (json:ref f 'description 'nope)]
+               [,@depth (json:ref f 'depth 'nope)]
+               ["stack-frame" (json:ref f 'type 'nope)]
+               [none (json:ref f 'procedure-source 'none)]
+               [,@free
+                (and free
+                     (map (lambda (v)
+                            (list (json:ref v 'name "") (json:ref v 'value "")))
+                       (sort (lambda (v0 v1)
+                               (string<? (json:ref v0 'name "") (json:ref v1 'name "")))
+                         (json:ref f 'free 'nope))))])
+              'ok))
+           (match-let*
+            ([(,stack0) stacks]
+             [#t (json:object? stack0)]
+             [10 (json:ref stack0 'truncated 'wrong)]
+             [15 (json:ref stack0 'depth #f)]
+             [(,f0 ,f1 ,f2 ,f3 . ,_) (json:ref stack0 'frames 0)]
+             [ok (check-frame f0 0 "#<continuation in loop1>" '())]
+             [ok (check-frame f1 1 "#<continuation in loop1>" '(("m" "2") ("n" "2")))]
+             [ok (check-frame f2 2 "#<continuation in loop1>" '(("m" "1") ("n" "3")))]
+             [ok (check-frame f3 3 "#<system continuation in dynamic-wind>" #f)])
+            'ok)))]
     ;; Other cases
     ["7.0+1.0i" (coerce 7.0+1.0i)]      ; complex
     ["#(<point> 1 2)"                   ; tuple
@@ -75,8 +122,10 @@
        [bar (list 1 "two" (json:make-object [zip #t]))]))]
     ["#0=(1 . #0#)"
      (coerce '#0=(1 . #0#))]
-    ["#(error \"Exception occurred with condition components:\\n  0. &irritants: #0=(1 . #0#).\")"
-     (coerce (make-irritants-condition '#1=(1 . #1#)))])
+    [ok (check-condition
+         (make-irritants-condition '#1=(1 . #1#))
+         "Exception occurred with condition components:\n  0. &irritants: #0=(1 . #0#)."
+         (lambda (stacks) (match stacks [() 'ok])))])
    'ok))
 
 (isolate-mat log-handler ()
@@ -207,9 +256,10 @@
         (transaction 'log-db
           (execute "select timestamp, supervisor, error_context, child_pid, child_name from supervisor_error order by rowid"))]
        [(#(,reason)) orig-supervisor-error-reason]
+       [#(error ,reason) (read (open-input-string reason))]
        [(#(,@reason))
         (transaction 'log-db
-          (execute "select reason from supervisor_error order by rowid"))]
+          (execute "select json_extract(details, '$.message') from supervisor_error order by rowid"))]
        [,@orig-system-attributes
         (transaction 'log-db
           ;; N.B. filter out entry added when we did log-db:setup during the test

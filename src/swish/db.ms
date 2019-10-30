@@ -259,7 +259,8 @@
     (receive (after 1000 (throw 'timeout))
       [`(<gen-server-terminating>
          [name ,@db]
-         [reason #(db-error prepare ,_ ,_)])
+         [reason #(db-error prepare ,_ ,_)]
+         [details `(catch #(db-error prepare ,_ ,_))])
        'ok]))))
 
 (mat statements ()

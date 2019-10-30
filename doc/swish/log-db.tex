@@ -249,8 +249,10 @@ The argument \var{x} is a Scheme object mapped to a SQLite value.
   \var{date} & {\code{format-rfc2822}} \\
   \var{JSON object} & \code{json:object->string} \\
   \var{process} & integer key for \var{process}, unique in this database instance \\
-  \var{condition} & a string containing \code{\#(error \var{reason})}
-  where the \var{reason} is obtained from \code{display-condition} \\
+  \var{condition}
+  & a string representing a JSON object with the following fields:\\
+  & \code{message} containing \code{(exit-reason->english \var{x})} and\\
+  & \code{stacks} containing \code{(map stack->json (exit-reason->stacks \var{x}))} \\
   \var{continuation-condition} & a string containing \code{\#(error
     \var{reason} \var{stack})} where the \var{stack} is obtained from
   \code{dump-stack} \\

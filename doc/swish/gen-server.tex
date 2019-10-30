@@ -68,8 +68,8 @@ respectively.
 The \code{gen-server} framework code automatically interprets a
 \code{stop} return value from the callback API or an \code{EXIT}
 message from the process which created it as a termination request and
-calls \code{terminate}. Unless the termination reason is either
-\code{normal} or \code{shutdown}, generic servers use
+calls \code{terminate}. If the termination reason satisfies the
+\code{informative-exit-reason?} predicate, generic servers use
 \code{event-mgr:notify} to report the termination.
 
 Erlang's \code{gen\_server} supports timeouts during
@@ -291,11 +291,13 @@ All generic servers send the event manager the following event:
   \argrow{last-message}{the last message received by the server}
   \argrow{state}{the last state passed into \code{terminate}}
   \argrow{reason}{the reason for termination}
+  \argrow{details}{\code{\#f} or a fault-condition containing the reason for termination}
 \end{pubevent}
 
 This event is fired after a successful call to \code{terminate}
-unless the reason for termination is \code{normal} or
-\code{shutdown}. If the \code{terminate} procedure exits with a
+if the reason for termination satisfies the \code{informative-exit-reason?}
+predicate.
+If the \code{terminate} procedure exits with a
 new \var{reason}, the event contains the new \var{reason}.
 
 \begin{pubevent}{<gen-server-debug>}
@@ -511,8 +513,9 @@ allocated. When it returns, the server exits for the given
 \code{\#(stop \etc)}. When a supervision tree is terminating,
 \var{reason} will be \code{shutdown}.
 
-The return value of \code{terminate} is ignored.  Unless the
-termination reason is either \code{normal} or \code{shutdown}, the
+The return value of \code{terminate} is ignored.  If the
+termination reason satisifies the \code{informative-exit-reason?}
+predicate, the
 generic server framework uses \code{event-mgr:notify} to report the
 termination. The server then terminates for that reason.
 

@@ -227,3 +227,53 @@
      (match-regexps '(seek "^Date: " "^Timestamp: " "^Event: crash")
        (split (get-output-string op) #\newline))
      'ok)))
+
+(isolate-mat exit-reason ()
+  (match-let*
+   ([#t (informative-exit-reason? (make-fault 'normal))]
+    [#f (informative-exit-reason? (try (raise 'normal)))]
+    [#t (informative-exit-reason? (try (throw 'normal)))]
+    [#t (informative-exit-reason? (make-fault 'shutdown))]
+    [#f (informative-exit-reason? (try (raise 'shutdown)))]
+    [#t (informative-exit-reason? (try (throw 'shutdown)))]
+    [#t (informative-exit-reason? (try (raise 'bar)))]
+    [#t (informative-exit-reason? 'bug)]
+    [#f (informative-exit-reason? 'normal)]
+    [#f (informative-exit-reason? 'shutdown)])
+   'ok)
+  (match-let*
+   ([,normalize
+     (lambda x
+       (let-values ([(reason details) (apply normalize-exit-reason x)])
+         (list reason details)))]
+    [,c (guard (c [else c]) (cdr 2))]
+    [(exception ,@c) (normalize c)]
+    [(exception ,@c) (normalize c #f)]
+    [(exception ,@c) (normalize c (try (raise 'normal)))]
+    [(exception `(catch ,@c)) (normalize c (try (raise c)))]
+    [(normal #f) (normalize 'normal)]
+    [(normal #f) (normalize 'normal 'normal)]
+    [(normal #f) (normalize 'normal 'shutdown)]
+    [(shutdown #f) (normalize 'shutdown 'shutdown)]
+    [,fault-normal (make-fault 'normal)]
+    [,fault-shutdown (make-fault 'shutdown)]
+    [(normal ,@fault-normal) (normalize fault-normal)]
+    [(normal ,@fault-normal) (normalize 'normal fault-normal)]
+    [(shutdown ,@fault-shutdown) (normalize fault-shutdown)]
+    [(shutdown ,@fault-shutdown) (normalize 'shutdown fault-shutdown)]
+    [(normal #f) (normalize (try (raise 'normal)))]
+    [(normal #f) (normalize (catch (raise 'normal)))]
+    [(normal #f) (normalize 'normal (try (raise 'normal)))]
+    [(shutdown #f) (normalize (try (raise 'shutdown)))]
+    [(shutdown #f) (normalize (catch (raise 'shutdown)))]
+    [(shutdown #f) (normalize 'shutdown (try (raise 'shutdown)))]
+    [,r0 '#(bad-arg foo bar)]
+    [(,@r0 `(catch ,@r0)) (normalize r0)]
+    [(,@r0 `(catch ,@r0)) (normalize (catch (raise r0)))]
+    [(,@r0 `(catch ,@r0)) (normalize r0 #f)]
+    [(red-flag `(catch red-flag red-flag)) (normalize 'red-flag)]
+    [,e1 (try (raise 'red-flag))]
+    [(red-flag `(catch red-flag red-flag)) (normalize e1)]
+    [,e2 (try (throw 'red-flag))]
+    [(red-flag `(catch red-flag ,@e2)) (normalize e2)])
+   'ok))

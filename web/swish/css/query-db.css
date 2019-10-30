@@ -81,3 +81,8 @@ textarea.sql {
     overflow-x: auto;
     width: 100%;
 }
+
+.stacks {
+    white-space: pre;
+    font-family: monospace;
+}

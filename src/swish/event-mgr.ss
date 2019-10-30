@@ -28,6 +28,8 @@
    event-mgr:set-log-handler
    event-mgr:start&link
    event-mgr:unregister
+   informative-exit-reason?
+   normalize-exit-reason
    system-detail
    )
   (import
