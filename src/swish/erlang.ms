@@ -34,6 +34,9 @@
  (swish testing)
  )
 
+(parameterize ([library-extensions '((".ss" . ".so"))])
+  (eval '(import (swish internal-testing))))
+
 (define-syntax assert-bad-match
   (syntax-rules ()
     [(_ v e) (assert-bad-match v ,_ e)]
@@ -163,9 +166,33 @@
        (after 10 (raise 'timeout))
        [#(EXIT ,@pid2 link-no-fail) 'ok]))))
 
+(isolate-mat suicide-throw-normal ()
+  (process-trap-exit #t)
+  (let ([pid (spawn&link (lambda () (kill self (try (throw 'normal)))))])
+    (receive
+     (after 1000 (raise 'timeout))
+     [#(EXIT ,@pid normal) 'ok])
+    ;; link to a dead process should immediately give EXIT message
+    (link pid)
+    (receive
+     (after 0 (raise 'no-exit-from-link))
+     [#(EXIT ,@pid normal) 'ok])
+    ;; link to a dead process without trap-exit should die
+    (let ([pid2 (spawn&link (lambda () (link pid) (raise 'link-no-fail)))])
+      (receive
+       (after 10 (raise 'timeout))
+       [#(EXIT ,@pid2 link-no-fail) 'ok]))))
+
 (isolate-mat kill-normal ()
   (let ([pid (spawn&link (lambda () (receive [(word-from ,p) (send p 'roger)])))])
     (kill pid 'normal)
+    (send pid `(word-from ,self))
+    (receive (after 1000 (raise 'normal-should-not-kill))
+      [roger 'ok])))
+
+(isolate-mat kill-throw-normal ()
+  (let ([pid (spawn&link (lambda () (receive [(word-from ,p) (send p 'roger)])))])
+    (kill pid (try (throw 'normal)))
     (send pid `(word-from ,self))
     (receive (after 1000 (raise 'normal-should-not-kill))
       [roger 'ok])))
@@ -223,6 +250,40 @@
       (receive
        (after 100 (raise 'wrong-exit-reason))
        [#(EXIT ,@pid1 awareness) 'ok]))))
+
+(isolate-mat link-throw ()
+  (process-trap-exit #t)
+  (let ([pid (spawn&link (lambda () (throw 'fit)))])
+    (receive
+     (after 1000 (raise 'timeout))
+     [#(EXIT ,@pid fit) 'ok])
+    ;; link to a dead process should immediately give EXIT message
+    (link pid)
+    (receive
+     (after 0 (raise 'no-exit-from-link))
+     [#(EXIT ,@pid fit) 'ok])
+    ;; link to a dead process without trap-exit should die
+    (let ([pid2 (spawn&link (lambda () (link pid) (raise 'link-no-fail)))])
+      (receive
+       (after 10 (raise 'no-exit-from-link))
+       [#(EXIT ,@pid2 fit)
+        'ok]))))
+
+;; like suicide-normal, but with throw in place of kill
+(isolate-mat link-throw-normal ()
+  (process-trap-exit #t)
+  (let ([pid0 (spawn&link (lambda () (throw 'normal)))])
+    (receive
+     (after 1000 (raise 'timeout))
+     [#(EXIT ,@pid0 normal) 'ok])
+    (let ([pid1
+           (spawn&link
+            (lambda ()
+              (link pid0)
+              (throw 'party)))])
+      (receive
+       (after 100 (raise 'wrong-exit-reason))
+       [#(EXIT ,@pid1 party) 'ok]))))
 
 (isolate-mat default-parameters ()
   (match-let*
@@ -2610,6 +2671,107 @@
       [#(EXIT #(bad-arg dump-stack ,@bignum)) (catch (call/cc (lambda (k) (dump-stack k p bignum))))])
      'ok)))
 
+(define (condition-equal? a b)
+  (and (condition? a) (condition? b)
+       (equal? (condition-who a) (condition-who b))
+       (equal? (condition-message a) (condition-message b))
+       (equal? (condition-irritants a) (condition-irritants b))))
+
+(mat try-catch ()
+  (define (bug x)
+    (match x
+      [raise (raise `#(raised ,x))]
+      [throw (throw `#(thrown ,x))]
+      [crash (cdr x)]))
+  (define (effective origin)
+    (match origin
+      [out 'raise]   ;; right now bad-match calls raise
+      [crash 'raise] ;; native error calls raise
+      [,_ origin]))
+  (define (check origin same?)
+    (match-let*
+     ([,C (catch (bug origin))]
+      [,T (try (bug origin))]
+      [#(EXIT ,reason) C]
+      [#t (same? reason (match T [`(&swish-condition ,reason) reason]))]
+      [#t (same? reason (match C [`(catch ,r) r]))]
+      [#t (same? reason (match T [`(catch ,r) r]))]
+      [#t (same? reason (match C [`(catch ,r ,@r) r]))]
+      [#t (same? reason
+            (match (effective origin)
+              [throw (match T [`(catch ,r ,@T) r])]
+              [raise (match T [`(catch ,r ,@r) r])]))]
+      ;; catch of re-raise or re-throw
+      [,@C (catch (match C [`(catch ,r ,e) (raise e)]))]
+      [,@C (catch (match C [`(catch ,r ,e) (throw e)]))]
+      [,C2 (catch (match T [`(catch ,r ,e) (raise e)]))]
+      [,@C2 (catch (match T [`(catch ,r ,e) (throw e)]))]
+      [#t (same? reason (match C2 [#(EXIT ,reason) reason]))]
+      ;; try of re-raise or re-throw
+      [,T2 (try (match C [`(catch ,r ,e) (raise e)]))]
+      [,T3 (try (match C [`(catch ,r ,e) (throw e)]))]
+      [,T4 (try (match T [`(catch ,r ,e) (raise e)]))]
+      [,T5 (try (match T [`(catch ,r ,e) (throw e)]))]
+      [#t (same? reason (match T2 [`(catch ,r) r]))]
+      [#t (same? reason (match T3 [`(catch ,r) r]))]
+      [#t (same? reason (match T4 [`(catch ,r) r]))]
+      [#t (same? reason (match T5 [`(catch ,r) r]))]
+      ;; catch or try between catch and use
+      [,C3 (catch (bug origin) 'wrong)]
+      [(ok fine) (list (catch 'ok) (try 'fine))]
+      [`(catch ,C-reason ,C-err) C3]
+      [(ok fine) (list (catch 'ok) (try 'fine))]
+      [#t (same? reason C-reason)]
+      [#t (eq? C-reason C-err)]
+      ;; catch or try between try and use
+      [,T6 (try (bug origin) 'wrong)]
+      [(ok fine) (list (catch 'ok) (try 'fine))]
+      [`(catch ,T-reason ,T-err) T6]
+      [(ok fine) (list (catch 'ok) (try 'fine))]
+      [#t (same? reason T-reason)]
+      [#t (eq? T-err
+            (match (effective origin)
+              [throw T-err]
+              [raise T-reason]))]
+      ;; no exception in catch or try acts like begin
+      [,ls '()]
+      [,add! (lambda (x) (set! ls (cons x ls)))]
+      [(3 2 1) (catch (add! 1) (add! 2) (add! 3) ls)]
+      [(6 5 4 3 2 1) (try (add! 4) (add! 5) (add! 6) ls)]
+      ;; nest (catch (try e))
+      [,C4 (catch (try (bug origin)))]
+      [`(catch ,r4 ,T7-err) C4]
+      [#t (same? reason r4)]
+      [#t (same? reason
+            (match (effective origin)
+              [throw (match T7-err [`(catch ,r ,@T7-err) r])]
+              [raise T7-err]))]
+      ;; nest (try (catch e))
+      [,T8 (try (catch (bug origin)))]
+      [`(catch ,r8 ,@r8) T8]
+      [#t (same? reason r8)]
+      )
+     'ok))
+  (check 'raise equal?)
+  (check 'throw equal?)
+  (check 'crash condition-equal?)
+  (check 'out equal?)
+  (let-values ([(c1 c2) (catch (values 'a 'b))]
+               [(t1 t2) (try (values 'c 'd))]
+               [() (catch (values))]
+               [() (try (values))])
+    (match-let*
+     ([a c1]
+      [b c2]
+      [c t1]
+      [d t2])
+     'ok))
+  (match-let*
+   ([3 (call/cc (lambda (k) (try (k 3))))]
+    [4 (call/cc (lambda (k) (catch (k 4))))])
+   'ok)
+  )
+
 (isolate-mat record-writers ()
   ;; mon
   (match-let*
@@ -2628,6 +2790,11 @@
     [,@expected1 (format "~s" pid)]
     [#t (unregister 'coverage)]
     [,@expected0 (format "~s" pid)])
+   'ok)
+  ;; &swish-condition
+  (match-let*
+   ([,c (try (throw 'ball))]
+    ["#<swish-condition ball>" (format "~s" c)])
    'ok)
   ;; console-event-handler treatment of native exceptions
   (let ([os (open-output-string)])

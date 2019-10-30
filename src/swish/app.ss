@@ -162,9 +162,9 @@
                          [app:config #f])
             (try-import)
             ;; use exit handler installed by the script, if any
-            (match (catch (load script-file))
-              [#(EXIT ,reason)
-               (app-exception-handler reason)
+            (match (try (load script-file))
+              [`(catch ,_ ,e)
+               (app-exception-handler e)
                (exit 1)]
               [,_ (exit)])))])))
 

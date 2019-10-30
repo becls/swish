@@ -117,7 +117,7 @@
    string->uuid
    uuid->string
    )
-  (import (chezscheme))
+  (import (chezscheme) (swish internal))
 
   (define _init_ ((foreign-procedure "osi_init" () void)))
 
@@ -126,6 +126,8 @@
       [(_ name (arg-name arg-type) ... ret-type)
        (define name
          (foreign-procedure (symbol->string 'name) (arg-type ...) ret-type))]))
+
+  ($import-internal throw)
 
   (define-syntax (define-osi x)
     (syntax-case x ()
@@ -142,7 +144,7 @@
               (let ([x (name* arg-name ...)])
                 (if (not (and (pair? x) (symbol? (car x))))
                     x
-                    (raise `#(osi-error name ,(car x) ,(cdr x))))))))]))
+                    (throw `#(osi-error name ,(car x) ,(cdr x))))))))]))
 
   ;; System
   (fdefine osi_get_argv ptr)
@@ -196,7 +198,7 @@
 
   (define (uuid->string uuid)
     (unless (and (bytevector? uuid) (= (bytevector-length uuid) 16))
-      (raise `#(bad-arg uuid->string ,uuid)))
+      (throw `#(bad-arg uuid->string ,uuid)))
     (format "~8,'0X-~4,'0X-~4,'0X-~4,'0X-~2,'0X~2,'0X~2,'0X~2,'0X~2,'0X~2,'0X"
       (#3%bytevector-u32-ref uuid 0 'little)
       (#3%bytevector-u16-ref uuid 4 'little)
@@ -210,7 +212,7 @@
       (#3%bytevector-u8-ref uuid 15)))
 
   (define (string->uuid s)
-    (define (err) (raise `#(bad-arg string->uuid ,s)))
+    (define (err) (throw `#(bad-arg string->uuid ,s)))
     (define (decode-digit c)
       (cond
        [(#3%char<=? #\0 c #\9)

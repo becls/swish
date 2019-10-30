@@ -66,30 +66,41 @@
   (define (claim-exception who c)
     (define stderr (console-error-port))
     (define os (open-output-string))
-    (fprintf stderr "~a: " who)
-    (guard (_ [else (display-condition c os)])
-      (cond
-       [(condition? c)
-        (display-condition (condition (make-who-condition #f) c) os)
-        (let ([text (get-output-string os)])
-          (display (or (strip-prefix text "Warning: ")
-                       (strip-prefix text "Exception: ")
-                       text)
-            os))]
-       [else (display (exit-reason->english c) os)]))
+    (when who (fprintf stderr "~a: " who))
+    (guard (_ [else (get-output-string os) (display-condition c os)])
+      (parameterize ([print-level 3] [print-length 6])
+        (cond
+         [(match c [`(catch ,_) #t] [,c (not (condition? c))])
+          (let ([text (exit-reason->english c)])
+            (unless who (display "Exception: " os))
+            (display text os))]
+         [(not who) (display (exit-reason->english c) os)]
+         [else
+          (display-condition (condition (make-who-condition #f) c) os)
+          (let ([text (get-output-string os)])
+            (display (or (strip-prefix text "Warning: ")
+                         (strip-prefix text "Exception: ")
+                         text)
+              os))])))
     ;; add final "." since display-condition does not and exit-reason->english may or may not
     (let ([i (- (port-output-index os) 1)])
       (when (and (> i 0) (not (char=? #\. (string-ref (port-output-buffer os) i))))
         (display "." os)))
     (display (get-output-string os) stderr)
     (fresh-line stderr)
-    (reset))
+    (unless (and (warning? c) (not (serious-condition? c)))
+      (when (and (> (#%$cafe) 0)
+                 (interactive?)
+                 (continuation-condition? (debug-condition)))
+        (display "Type (debug) to enter the debugger.\n" stderr))
+      (reset)))
 
   (define (app-exception-handler c)
     (debug-condition c)
-    (cond
-     [(app:name) => (lambda (who) (claim-exception who c))]
-     [else (default-exception-handler c)]))
+    (claim-exception (app:name)
+      (match c
+        [`(catch ,r) (if (condition? r) r c)]
+        [,_ c])))
 
   (define (int32? x) (and (or (fixnum? x) (bignum? x)) (<= #x-7FFFFFFF x #x7FFFFFFF)))
   (define (->exit-status exit-code)

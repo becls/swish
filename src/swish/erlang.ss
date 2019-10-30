@@ -60,6 +60,8 @@
    send
    spawn
    spawn&link
+   throw
+   try
    unlink
    unregister
    wait-for-io
@@ -217,7 +219,8 @@
     (on-exit (osi_exit 80)
       (console-event-handler event)))
 
-  (define (@kill p reason)
+  (define (@kill p raw-reason)
+    (define reason (unwrap-swish-condition raw-reason))
     (when (eq? p event-loop-process)
       (panic `#(event-loop-process-terminated ,reason)))
     (when (eq? p finalizer-process)
@@ -226,7 +229,7 @@
       (remove-q p))
     (pcb-cont-set! p #f)
     (pcb-winders-set! p '())
-    (pcb-exception-state-set! p reason)
+    (pcb-exception-state-set! p raw-reason)
     (pcb-inbox-set! p #f)
     (pcb-flags-set! p 0)
     (pcb-src-set! p #f)
@@ -266,27 +269,59 @@
   (define (@remove-monitor m p)
     (pcb-monitors-set! p (remq m (pcb-monitors p))))
 
+  ($import-internal
+   &swish-condition swish-condition-reason swish-condition? make-swish-condition
+   )
+
+  (define (unwrap-swish-condition r)
+    (if (swish-condition? r)
+        (swish-condition-reason r)
+        r))
+
+  (define (->swish-condition reason)
+    (if (swish-condition? reason)
+        reason
+        (make-swish-condition #f reason '())))
+
+  (define (->EXIT reason)
+    `#(EXIT ,(unwrap-swish-condition reason)))
+
+  (define-syntax try
+    (syntax-rules ()
+      [(_ e1 e2 ...)
+       ($trap (lambda () e1 e2 ...) ->swish-condition)]))
+
+  ;; This binding serves a dual purpose: it provides backwards
+  ;; compatibility for older code and it provides a binding for
+  ;; the define-match-extension used in newer code.
   (define-syntax catch
     (syntax-rules ()
       [(_ e1 e2 ...)
-       (call/1cc
-        (lambda (return)
-          (with-exception-handler
-           (lambda (reason) (return `#(EXIT ,reason)))
-           (lambda () e1 e2 ...))))]))
+       ($trap (lambda () e1 e2 ...) ->EXIT)]))
+
+  (define ($trap thunk ->reason)
+    (call/1cc
+     (lambda (return)
+       (with-exception-handler
+        (lambda (r)
+          (return (->reason r)))
+        thunk))))
+
+  ($import-internal throw)
 
   (define (bad-arg who arg)
     (raise `#(bad-arg ,who ,arg)))
 
-  (define (kill p reason)
+  (define (kill p raw-reason)
     (unless (pcb? p)
       (bad-arg 'kill p))
     (no-interrupts
      (when (alive? p)
-       (cond
-        [(eq? reason 'kill) (@kill p 'killed)]
-        [(pcb-trap-exit p) (@send p `#(EXIT ,self ,reason))]
-        [(not (eq? reason 'normal)) (@kill p reason)])
+       (let ([reason (unwrap-swish-condition raw-reason)])
+         (cond
+          [(eq? reason 'kill) (@kill p 'killed)]
+          [(pcb-trap-exit p) (@send p `#(EXIT ,self ,reason))]
+          [(not (eq? reason 'normal)) (@kill p raw-reason)]))
        (unless (alive? self)
          (yield #f 0))))
     #t)
@@ -311,10 +346,10 @@
        (cond
         [(alive? p) (@link p self)]
         [(pcb-trap-exit self)
-         (@send self `#(EXIT ,p ,(pcb-exception-state p)))]
+         (@send self `#(EXIT ,p ,(unwrap-swish-condition (pcb-exception-state p))))]
         [else
          (let ([r (pcb-exception-state p)])
-           (unless (eq? r 'normal)
+           (unless (eq? (unwrap-swish-condition r) 'normal)
              (@kill self r)
              (yield #f 0)))])))
     #t)
@@ -497,7 +532,8 @@
        [enqueued?
         (display-string "ready to run" op)]
        [completed?
-        (fprintf op "exited with reason ~s" (pcb-exception-state p))]
+        (fprintf op "exited with reason ~s"
+          (unwrap-swish-condition (pcb-exception-state p)))]
        [else
         (display-string "waiting indefinitely" op)
         (print-src src op)])
@@ -1356,6 +1392,51 @@
                ))
            (define-property name fields '(field ...)))]))
 
+  (define (legacy-EXIT? x)
+    (and (vector? x)
+         (#3%fx= (#3%vector-length x) 2)
+         (eq? (#3%vector-ref x 0) 'EXIT)))
+
+  (define-syntax direct-&swish-condition-ref
+    (syntax-rules ()
+      [(_ field x)
+       ((#3%csv7:record-field-accessor (record-type-descriptor &swish-condition) field) x)]))
+
+  (define-syntax exit-reason (syntax-rules ()))
+  (define-match-extension exit-reason
+    (lambda (v pattern)
+      (syntax-case pattern (quasiquote)
+        [`(exit-reason always-match? r e)
+         (with-temporaries (is-err? tmp.reason)
+           #`((bind is-err? (swish-condition? #,v))
+              (guard (or always-match? is-err? (legacy-EXIT? #,v)))
+              (bind tmp.reason
+                (if is-err?
+                    (direct-&swish-condition-ref 'reason #,v)
+                    (if always-match?
+                        (if (legacy-EXIT? #,v)
+                            (#3%vector-ref #,v 1)
+                            #,v)
+                        (#3%vector-ref #,v 1))))
+              (handle-fields (#,v is-err? tmp.reason) [reason r] [err e])))]))
+    (lambda (input fld var options context)
+      (syntax-case input ()
+        [(v is-err? tmp.reason)
+         (case (syntax->datum fld)
+           [(reason) #`((bind #,var tmp.reason))]
+           [(err) #`((bind #,var (if (and is-err? (direct-&swish-condition-ref 'k v)) v tmp.reason)))]
+           [else (pretty-syntax-violation "unknown field" fld)])])))
+
+  (define-match-extension catch
+    (lambda (v pattern)
+      (syntax-case pattern (quasiquote)
+        [`(catch r)
+         (with-temporaries (tmp)
+           #`((sub-match #,v `(exit-reason #f r ,_))))]
+        [`(catch r e)
+         (with-temporaries (tmp)
+           #`((sub-match #,v `(exit-reason #f r e))))])))
+
   (define-syntax redefine
     (syntax-rules ()
       [(_ var e) (#%$set-top-level-value! 'var e)]))
@@ -1390,6 +1471,12 @@
       (let ([ht (event-condition-table)])
         (when (and ht (not (eq-hashtable-ref ht x #f)))
           (eq-hashtable-set! ht x #t)))))
+
+  (record-writer (record-type-descriptor &swish-condition)
+    (lambda (r p wr)
+      (display-string "#<swish-condition " p)
+      (wr (swish-condition-reason r) p)
+      (write-char #\> p)))
 
   (disable-interrupts)
   (set-self! (@make-process #f))

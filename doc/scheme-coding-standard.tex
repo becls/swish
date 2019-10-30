@@ -92,15 +92,19 @@ matched and converted to strings in an appropriate language.
 
 \subsection* {Do not program defensively}
 
-A defensive program is one where the programmer does not trust the
-input data to the part of the system they are programming. In general
-one should not test input data to functions for correctness. Most of
-the code in the system should be written with the assumption that the
-input data to the function in question is correct. Only a small part
-of the code should actually perform any checking of the data. This is
-usually done when data enters the system for the first time. Once data
-has been checked as it enters the system, it should thereafter be
-assumed correct.
+According to the Erlang Programming Rules and Conventions~\cite{erlang-programming-rules}:
+
+\begin{quotation}
+\noindent
+A defensive program is one where the programmer does not ``trust'' the input
+data to the part of the system they are programming. In general one should not
+test input data to functions for correctness. Most of the code in the system
+should be written with the assumption that the input data to the function in
+question is correct. Only a small part of the code should actually perform any
+checking of the data. This is usually done when data ``enters'' the system for
+the first time, once data has been checked as it enters the system it should
+thereafter be assumed correct.
+\end{quotation}
 
 \subsection* {Think about append}
 
@@ -161,7 +165,8 @@ With \code{match}:
 
 \subsection* {Use match or match-let* with tuples}
 
-When binding multiple fields from a tuple, use \code{match} or
+When binding multiple fields from a tuple, use \code{match},
+\code{match-define}, or
 \code{match-let*} to minimize type checking.
 
 Given:
@@ -193,22 +198,48 @@ Extract all fields at once:
 When dealing with code that uses exceptions, use a fail-fast approach
 for the code. This usually produces code that is easier to read and
 reason about.
+It may also provide more informative debugging context by putting
+the call to \code{throw} in non-tail position, with variables of
+interest live after the call.
 
 Don't do this:
 \antipar
 \begin{alltt}
 (if \var{condition}
     (success)
-    (raise 'boom!))
+    (throw 'boom!))
 \end{alltt}
 
 Do this:
 \antipar
 \begin{alltt}
 (unless \var{condition}
-  (raise 'boom!))
+  (throw 'boom!))
 (success)
 \end{alltt}
+
+If you must raise an exception, prefer \code{throw} to \code{raise} in
+situations where the current continuation may provide useful debugging
+context.
+
+If you must trap exceptions, use the \code{try} form since it preserves
+debugging context that is discarded by the older \code{catch} form.
+
+To examine trapped exceptions, use the \code{catch} match extension since
+it is compatible with both \code{try} and \code{catch}.
+For example, the definition of \code{g} below works with either
+path through \code{f}.
+\codebegin
+(define (f x)
+  (if (eq? x 'old-school)
+      (catch \(e\sb{0}\) \ldots \(e\sb{n}\))
+      (try \(e\sb{0}\) \ldots \(e\sb{n}\))))
+(define (g x)
+  (match (f x)
+    [`(catch fire ,e) (throw 'water e)]
+    [`(catch ,_ ,e) (throw e)]
+    \ldots))
+\codeend
 
 \subsection* {Know when to use \texttt{eq?}, \texttt{eqv?},
   \texttt{equal?}, and \texttt{=}}

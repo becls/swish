@@ -463,7 +463,7 @@ set for \var{key}, this procedure has no effect.
 When a Swish application starts, it sets the default value of the
 \code{base-exception-handler} parameter to \code{app-exception-handler}.
 This procedure expects a single argument, typically a condition or an object
-passed to \code{raise}, which it saves in the parameter \code{debug-condition}.
+passed to \code{throw} or \code{raise}, which it saves in the parameter \code{debug-condition}.
 
 If \code{app:name} is set, then \code{app-exception-handler} writes a
 message to the console error port, prefixed with the application name,
