@@ -24,8 +24,7 @@
 
 ;; HTTP/HTML responses
 
-(define (get-page-name)
-  "Log database query")
+(define (get-page-name) "Log DB")
 
 (define (respond:error reason sql)
   (respond
@@ -54,41 +53,43 @@
          (map table-info
            (execute-sql db "select tbl_name from SQLITE_MASTER where type in (?, ?) order by tbl_name" "table" "view"))])
     (respond
-     `(div
-       (p "Please enter a SELECT or EXPLAIN statement in "
-         (a (@ (href "http://www.sqlite.org/lang_select.html")) "SQLite syntax") ". ")
-       (p (i "Note: LIMIT and OFFSET clauses are not allowed."))
-       (form (@ (method "get") (class "schema"))
-         (input (@ (name "limit") (class "hidden") (value 100)))
-         (input (@ (name "offset") (class "hidden") (value 0)))
-         (p (textarea (@ (id "sql") (name "sql") (class "sql"))
-              ,(or last-sql "")))
-         (p (button (@ (type "submit")) "Run Query"))))
+     `(div (@ (class "enter-query"))
+        (p "Please enter a SELECT or EXPLAIN statement in "
+          (a (@ (href "http://www.sqlite.org/lang_select.html")) "SQLite syntax") ". ")
+        (p (i "Note: LIMIT and OFFSET clauses are not allowed."))
+        (form (@ (method "get") (class "schema"))
+          (input (@ (name "limit") (class "hidden") (value 100)))
+          (input (@ (name "offset") (class "hidden") (value 0)))
+          (p (textarea (@ (id "sql") (name "sql") (class "sql"))
+               ,(or last-sql "")))
+          (p (button (@ (type "submit")) "Run Query"))))
      (section "Schema"
        (schema->html db-tables)))))
-
 
 ;; Running a query
 
 (define (check-run-query db sql limit offset)
   (define (check-request)
     (cond
-     [(string=? sql "") (raise `#(db-query-failed empty-query ,sql))]
+     [(string=? sql "") (throw `#(db-query-failed empty-query ,sql))]
      [(or (starts-with-ci? sql "select ")
           (starts-with-ci? sql "with ")
           (starts-with-ci? sql "explain ")
           (starts-with-ci? sql "select* "))
       (if (and limit offset)
           'ok
-          (raise `#(db-query-failed missing-limit-offset ,limit ,offset ,sql)))]
-     [else (raise `#(db-query-failed not-a-query ,sql))]))
+          (throw `#(db-query-failed missing-limit-offset ,limit ,offset ,sql)))]
+     [else (throw `#(db-query-failed not-a-query ,sql))]))
   (check-request)
   (do-query db sql limit offset "" (lambda x x)))
 
-(define (home-link last-sql)
-  `(a (@ (href ,(format "query-db?lastSql=~a"
-                  (http:percent-encode last-sql))))
-     "Return to query page"))
+(define (edit-query last-sql)
+  `(form (@ (method "get"))
+     (textarea (@ (name "lastSql") (class "hidden")) ,last-sql)
+     (button (@ (type "submit"))
+       ;; work around vertical alignment issue
+       (span (@ (style "height: 1em; display: inline-block;")) "🖉")
+       (span " Edit Query"))))
 
 ;; Dispatching requests
 
@@ -99,8 +100,8 @@
         [offset (integer-param "offset" 0 params)])
     (with-db [db (log-file) SQLITE_OPEN_READONLY]
       (if sql
-          (match (catch (check-run-query db sql limit offset))
-            [#(EXIT ,reason) (respond:error reason sql)]
+          (match (try (check-run-query db sql limit offset))
+            [`(catch ,reason) (respond:error reason sql)]
             [,value value])
           (do-home db last-sql)))))
 

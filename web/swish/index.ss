@@ -37,9 +37,12 @@
       days hours minutes seconds)))
 
 (hosted-page
- (format "~a ~a" (software-product-name) (software-version))
+ "Home"
  '()
- `(p "Snapshot from " ,(date-and-time))
- `(p "Uptime: " ,(uptime))
- `(p "These pages are designed for a 1680 by 1050 resolution using Firefox, Opera, Chrome, or Safari.")
- `(pre "software-info:\n" ,(json:object->string (software-info) 0)))
+ `(div
+   ,(let ([name (software-product-name)])
+      (when name
+        `(p ,(format "~a~@[ ~a~]" name (software-version)))))
+   (p "Snapshot from " ,(date-and-time))
+   (p "Uptime: " ,(uptime))
+   (pre "software-info:\n" ,(json:object->string (software-info) 0))))

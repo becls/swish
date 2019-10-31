@@ -20,9 +20,26 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE. */
 
-table { margin:0px; }
-.multi p { display:inline-block; width:120px;}
+#annotated_chart {
+    margin-left: 5px;
+    width: calc(100vw - 15px);
+    height: 70vh;
+    box-sizing: border-box;
+}
 
-div.panel div.panel { width:900px; height:300px; margin:7px auto;}
+h3 {
+    margin-top: 1ex;
+    font-family: Helvetica, sans-serif;
+}
 
-* html .multi p { display:block; float:left; }
+div.chart-options {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+    margin: 0px;
+    word-break: keep-all;
+}
+
+div.chart-options button.selected {
+    background: darkgray;
+}

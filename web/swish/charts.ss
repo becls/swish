@@ -22,17 +22,12 @@
 
 (http:include "components.ss")
 
-(define (load-packages names)
-  `(script
-    ,(format "google.load('visualization', '1', {packages:[~a]})"
-       (join (map (lambda (x) (format "'~a'" x)) names) #\,))))
-
 (define sanitize-column-name
   (let ([regexp (re "^json_extract\\(foreign_handles, '\\$.([^']*)'\\)")])
     (lambda (col)
       (match (pregexp-match regexp col)
         [(,_ ,col) col]
-        [,col col]))))
+        [,_ col]))))
 
 (define (make-annotated-time-line div-id columns rows)
   ;; packages: annotatedtimeline
@@ -56,9 +51,9 @@
            rows)
           #\,))
        (fprintf op "var chart = new google.visualization.AnnotatedTimeLine(document.getElementById('~a'));\n" div-id)
-       (fprintf op "chart.draw(data, {});\n")
+       (fprintf op "chart.draw(data, { });\n")
        (fprintf op "}\n")
-       (fprintf op "google.setOnLoadCallback(~a);\n" fname)
+       (fprintf op "google.charts.setOnLoadCallback(~a);\n" fname)
        (get-output-string op))))
 
 (define (fill-gaps rows)
@@ -90,11 +85,11 @@
    '()
    rows))
 
-(define (memory-chart db chart-columns limit)
+(define (annotated-chart db chart-columns limit)
   (let* ([sql (format "SELECT CAST(timestamp AS INTEGER) as timestamp,reason,~a FROM statistics WHERE (timestamp/1000) > CAST(strftime('%s','now',?) AS INTEGER) ORDER BY timestamp DESC" (join chart-columns #\,))]
          [stmt (sqlite:prepare db sql)])
     (on-exit (sqlite:finalize stmt)
-      (make-annotated-time-line "memory_chart"
+      (make-annotated-time-line "annotated_chart"
         (vector->list (sqlite:columns stmt))
         (fill-gaps (sqlite:execute stmt (list limit)))))))
 
@@ -111,11 +106,6 @@
     ("gc_real" "gc_real")
     ("gc_bytes" "gc_bytes")))
 
-(define (self-link chart limit text)
-  (link (format "?c=~a&limit=~a"
-          (http:percent-encode chart)
-          (http:percent-encode limit)) text))
-
 (with-db [db (log-file) SQLITE_OPEN_READONLY]
   (let* ([valid-charts
           (append standard-charts
@@ -126,34 +116,46 @@
                   `(,key ,(format "json_extract(foreign_handles, '$.~a')" key))]))
              (execute-sql db
                "select key from (select distinct key from json_each(foreign_handles), (select distinct foreign_handles from statistics)) order by key")))]
-         [chart (cond
-                 [(find-param "c") => (lambda (x) x)]
-                 [else (caar valid-charts)])]
+         [chart-type
+          (cond
+           [(find-param "chart-type") => (lambda (x) x)]
+           [else (caar valid-charts)])]
          [cols (cond
-                [(assoc chart valid-charts) => cdr]
-                [else (raise `#(invalid-chart ,chart))])]
+                [(assoc chart-type valid-charts) => cdr]
+                [else (throw `#(invalid-chart ,chart-type))])]
          [limit (or (find-param "limit") "-7 days")])
+    (define (option category value text)
+      (define (hidden-value name default)
+        `(textarea (@ (name ,name) (class "hidden"))
+           ,(if (equal? name category) value default)))
+      (define selected?
+        (equal? value
+          (match category
+            ["chart-type" chart-type]
+            ["limit" limit])))
+      `(form (@ (name "query") (method "get"))
+         ,(hidden-value "chart-type" chart-type)
+         ,(hidden-value "limit" limit)
+         (button (@ (type "submit") ,@(if selected? '((disabled) (class "selected")) '())) ,text)))
     (hosted-page "Charts"
       (list
-       (js-include "https://www.google.com/jsapi")
-       (load-packages '("annotatedtimeline"))
-       (memory-chart db cols limit)
-       (css-include "css/charts.css"))
-      `(div (@ (style "width:700px; height:300px; margin:10px auto 15px;"))
-         (h3 ,(format "Viewing chart: ~a" chart)) (div (@ (id "memory_chart") (style "width:700px; height:250px;"))))
-
-      (panel "Build a new Chart"
-        (column "standard multi"
-          (apply section "Chart Types"
-            (map
+       (css-include "css/charts.css")
+       (js-include "https://www.gstatic.com/charts/loader.js")
+       `(script "google.charts.load('current', {packages:['annotatedtimeline']});")
+       (annotated-chart db cols limit))
+      `(div (@ (id "annotated_chart")))
+      `(div
+        (h3 "Chart Types")
+        (div (@ (class "chart-options"))
+          ,@(map
              (lambda (chart)
-               (let ([c (car chart)])
-                 `(p ,(self-link c limit c))))
-             valid-charts)))
-        (column "narrow"
-          (apply section "Chart Limits"
-            (map
-             (lambda (limit text)
-               `(p ,(self-link chart limit text)))
+               (let ([type (car chart)])
+                 (option "chart-type" type type)))
+             valid-charts))
+        (h3 "Chart Limits")
+        (div (@ (class "chart-options"))
+          ,@(map
+             (lambda (lmt text)
+               (option "limit" lmt text))
              '("-7 days" "-14 days" "-1 month" "-2 months" "-3 months")
-             '("1 week" "2 weeks" "1 month" "2 months" "3 months"))))))))
+             '("1 week" "2 weeks" "1 month" "2 months" "3 months")))))))

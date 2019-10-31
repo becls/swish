@@ -20,69 +20,89 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE. */
 
-.hidden { display: none; }
+body { }
 
-.schema { width: 500px; }
+.schema { font-family: sans-serif; font-size: 9pt; overflow: auto; }
+.schema table td:first-child { width: 15em;  }
+.schema td:nth-child(2) { font-family: monospace;  }
+.schema h4 { margin-top: 1em; margin-bottom: .25em; font-weight: bold; }
 
 [disabled] { color:graytext; }
 
 form { display: inline; }
 
-input.offset { width: 4em; }
+input.offset { width: 4em; margin: 0px; box-sizing: border-box; height: 2em; }
 
-td.link {
-  padding: 3px 1px 1px 5px;
-  vertical-align: top;
-  border: 0px solid;
+.row-context { color: gray; font-family: sans-serif; font-size: 9pt; margin-left: 1em; }
+
+.enter-query {
+    grid-row: 1;
 }
 
-td.navigation {
-  padding: 1px;
-  vertical-align: top;
-  border: 0px solid;
+.schema-container {
+    grid-row: 2;
 }
 
 textarea.sql {
   height: 10em;
-  width: 40em;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.dataCont {
+    width: 100%;
+    box-sizing: border-box;
+    overflow: auto;
+    background: #EEE;
+    position: relative;
+}
+
+tr.fixed-table-header {
+    display: contents;
+}
+
+tr.fixed-table-header th div {
+    position: absolute;
+    top: 0px;
+    margin-top: 4pt;
+}
+
+tr.width-calculation {
+    overflow: hidden;
+    color: transparent;
+    background: #EEE;
+}
+
+.width-calculation th {
+    border-top: solid 2px transparent;
 }
 
 .dataTable {
     word-wrap: break-word;
-    width: 99%
+    font-family: Helvetica, sans-serif;
+    font-size: 9pt;
+    box-sizing: border-box;
 }
 
-.dataTable th{
+.dataTable th {
     text-align: left;
 }
 
-.narrow{
-    max-width: 150px;
-    min-width: 0px;
+.dataTable td {
+    height: 1em;
 }
 
-.normal{
-    max-width: 200px;
-    min-width: 0px;
-}
-
-.wide{
+div.wide {
     max-width: 250px;
-    min-width: 0px;
+    max-height: 75vh;
+    overflow-y: auto;
+    white-space: break-spaces;
 }
 
-.extra-wide{
-    max-width: 350px;
-    min-width: 0px;
-}
-
-
-.dataCont {
-    overflow-x: auto;
-    width: 100%;
-}
-
-.stacks {
+div.stacks {
     white-space: pre;
     font-family: monospace;
+    max-width: 350px;
+    max-height: 75vh;
+    overflow-y: auto;
 }

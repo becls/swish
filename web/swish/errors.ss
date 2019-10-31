@@ -26,11 +26,11 @@
 (define (get-page-name)
   (match (get-param "type")
     ["child" "Child Errors"]
-    ["gen-server" "Gen-server errors"]
-    ["supervisor" "Supervisor errors"]
-    [,_ (raise "invalid-type")]))
+    ["gen-server" "Gen-Server Errors"]
+    ["supervisor" "Supervisor Errors"]
+    [,_ (throw "invalid-type")]))
 
-(define (home-link last-sql)
+(define (edit-query last-sql)
   (void))
 
 (define (nice-duration x)
@@ -46,8 +46,8 @@
         (format "~2,'0d:~2,'0d.~3,'0d" minutes seconds milliseconds))))
 
 (define (get-message-and-stacks details)
-  (match (catch (json:string->object details))
-    [#(EXIT ,_) (values "" "")]
+  (match (try (json:string->object details))
+    [`(catch ,_) (values "" "")]
     [,obj
      (values
       (json:ref obj 'message "")

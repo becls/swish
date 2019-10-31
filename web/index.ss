@@ -7,8 +7,9 @@
       (title "Main Page"))
      (body
       (h1 "Main Page")
-      ,(format "~a Version ~a "
-         (software-product-name)
-         (software-version))
+      ,(let ([name (software-product-name)])
+         (when name
+           (format "~a ~@[Version ~a ~]" name
+             (software-version))))
       (a (@ (href "swish/index")) "Diagnostics Pages")
       "."))))

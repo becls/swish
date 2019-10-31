@@ -20,29 +20,6 @@
 ;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 ;;; DEALINGS IN THE SOFTWARE.
 
-(define (redirect url)
-  (http:respond op 302 `(("Location" . ,url)) '#vu8()))
-
-(define (non-hosted-page op params page-title heads . content)
-  (http:respond op 200 '(("Content-Type" . "text/html"))
-    (html->bytevector
-     `(html5
-       (head
-        (meta (@ (charset "UTF-8")))
-        (title ,page-title)
-        ,(css-include "css/components.css")
-        ,(js-include "js/components.js")
-        ,@heads)
-       (body
-        ,@content
-        (div (@ (class "undocked menu"))
-          ,(link "#Debugging" "Debugging")
-          (div (@ (class "menu item"))
-            ,(panel "Params" `(p ,(format "~a\n" params))))
-          ,(link "#Navigation" "Navigation")
-          (div (@ (class "menu item"))
-            ,(navigation))))))))
-
 (define (hosted-page page-title heads . content)
   (http:respond op 200 '(("Content-Type" . "text/html"))
     (html->bytevector
@@ -51,12 +28,10 @@
         (meta (@ (charset "UTF-8")))
         (title ,page-title)
         ,(css-include "css/components.css")
-        ,(js-include "js/components.js")
         ,@heads)
        (body
-        ,(docked-navigation)
-        ,(column "content right"
-           (apply panel page-title content))
+        ,(navigation page-title)
+        (div (@ (class "content")) ,@content)
         (div (@ (class "undocked menu"))
           ,(link "#Debugging" "Debugging")
           (div (@ (class "menu item"))
@@ -67,7 +42,7 @@
   `(a (@ (href ,url)) ,anchor))
 
 (define (js-include location)
-  `(script (@ (src ,location))))
+  `(script (@ (type "text/javascript") (src ,location))))
 
 (define (css-include location)
   `(link (@ (type "text/css")
@@ -79,29 +54,23 @@
 
 ;;Page Helpers
 
-(define (docked-navigation)
-  (column-with-id "main-nav" "docked menu left" (navigation)))
-
-(define (navigation)
-  (panel (osi_get_hostname)
-    (section (software-product-name)
-      (link "index" "Home")
-      (link "charts" "Charts")
-      (link "errors?type=child&sql=&limit=100&offset=0" "Child Errors")
-      (link "errors?type=gen-server&sql=&limit=100&offset=0" "Gen-Server Errors")
-      (link "errors?type=supervisor&sql=&limit=100&offset=0" "Supervisor Errors")
-      (link "query-db" "Log DB")
-      (link "debug" "Debug"))))
-
-(define (stilts height)
-  `(div (@ (style ,(format "height:~apx;" height)) (class "stilts"))))
-
-;;Form Helpers
-(define (column type . content)
-  `(div (@ (class ,(format "~a column" type))) ,@content))
-
-(define (column-with-id id type . content)
-  `(div (@ (id ,id) (class ,(format "~a column" type))) ,@content))
+(define (navigation page-title)
+  (define (maybe-link url title)
+    (if (equal? title page-title)
+        `(span ,title)
+        (link url title)))
+  (define name (software-product-name))
+  `(div (@ (id "main-nav"))
+     (div (@ (class "hostinfo"))
+       ,(when name `(span ,name "@"))
+       (span ,(osi_get_hostname)))
+     ,(maybe-link "index" "Home")
+     ,(maybe-link "charts" "Charts")
+     ,(maybe-link "errors?type=child&sql=&limit=100&offset=0" "Child Errors")
+     ,(maybe-link "errors?type=gen-server&sql=&limit=100&offset=0" "Gen-Server Errors")
+     ,(maybe-link "errors?type=supervisor&sql=&limit=100&offset=0" "Supervisor Errors")
+     ,(maybe-link "query-db" "Log DB")
+     ,(maybe-link "debug" "Debug")))
 
 (define (panel header . content)
   `(div (@ (class "panel"))

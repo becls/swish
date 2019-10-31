@@ -42,7 +42,7 @@
     (and string-value
          (if (and (integer? number-value) (>= number-value min-value))
              number-value
-             (raise `#(bad-integer-param ,name ,min-value ,number-value))))))
+             (throw `#(bad-integer-param ,name ,min-value ,number-value))))))
 
 (define (stringify x)
   (cond
@@ -87,55 +87,52 @@
       (let* ([no-limit (remove-limit-offset (sqlite:expanded-sql stmt))]
              [results (get-results (lambda () (sqlite:step stmt)) row->tr)]
              [count (length results)]
-             [flag (or (string-param "flag" params) "")])
+             [flag (string-param "flag" params)])
         (if (= count 0)
             (respond  (section "Query finished" `(p "Query was:") `(p ,no-limit)
-                        `(p ,(home-link no-limit))))
+                        `(p ,(edit-query no-limit))))
             (respond
-             `(table
-               (tr (@ (style "text-align: center;"))
-                 (td (@ (class "navigation"))
-                   ,(nav-form "Previous Page" (max 0 (- offset limit)) (> offset 0) no-limit))
-                 (td (@ (class "navigation"))
-                   (form (@ (id "rowForm") (method "get"))
-                     (textarea (@ (name "sql") (class "hidden")) ,no-limit)
-                     (input (@ (name "limit") (class "hidden") (value ,(stringify limit))))
-                     (input (@ (name "type") (class "hidden") (value ,(stringify type))))
-                     (button (@ (id "offsetButton") (type "submit")) "Go to row")
-                     (p (input (@ (id "offsetInput") (name "offset") (class "offset"))))))
-                 (td (@ (class "navigation"))
-                   ,(nav-form "Next Page" (+ offset limit) (= count limit) no-limit))
-                 (td (@ (class "link"))
-                   ,(home-link no-limit))))
-             `(p (@ (style "text-align: center; color: Red; size: +10; font-weight: bold")),flag)
-             (section (format "Rows ~d to ~d" (+ offset 1) (+ offset count))
-               (match (cons (sqlite:columns stmt) (sqlite:execute stmt '()))
-                 [(,cols . ,rows) (data->html-table 1 cols rows f)]))))))))
+             `(div
+               ,(edit-query no-limit)
+               ,(nav-form "Previous" (max 0 (- offset limit)) (> offset 0) no-limit)
+               ,(nav-form "Next" (+ offset limit) (= count limit) no-limit)
+               (form (@ (id "rowForm") (method "get"))
+                 (textarea (@ (name "sql") (class "hidden")) ,no-limit)
+                 (input (@ (name "limit") (class "hidden") (value ,(stringify limit))))
+                 (input (@ (name "type") (class "hidden") (value ,(stringify type))))
+                 (button (@ (id "offsetButton") (type "submit")) "Go to:")
+                 (input (@ (type "text") (min "1") (id "offsetInput") (name "offset") (class "offset") (placeholder "row"))))
+               (span (@ (class "row-context"))
+                 ,(format "Showing rows ~d to ~d" (+ offset 1) (+ offset count))))
+             (when flag
+               `(p (@ (style "text-align: center; color: Red; size: +10; font-weight: bold")) ,flag))
+             (match (cons (sqlite:columns stmt) (sqlite:execute stmt '()))
+               [(,cols . ,rows)
+                (data->html-table 1 cols rows f)])))))))
 
 (define (make-td c r)
-  (let* ([text (format "~a" r)]
-         [len (string-length text)]
-         [r (or r "")])
-    (cond
-     [(< len 64)
-      `(td (@ (class ,(format "narrow ~a" c))) ,r)]
-     [(< len 256)
-      `(td (@ (class ,(format "normal ~a" c))) ,r)]
-     [(< len 512)
-      `(td (@ (class ,(format "wide ~a" c))) ,r)]
-     [else
-      (let ([id (symbol->string (gensym))])
-        `(td (@ (class "extra-wide"))
-           (div (@ (class ,(format "elide ~a" c)) (word-break "break-all"))
-             (input (@ (class "elide") (id ,id) (type "checkbox") (checked "yes")))
-             (label (@ (for ,id) (class "elide")) ,r))))])))
+  (let* ([text (format "~@[~a~]" r)]
+         [len (string-length text)])
+    (if (or (> len 256) (equal? c "stacks"))
+        (let ([id (symbol->string (gensym))])
+          `(td
+            (div (@ (class ,(format "elide ~a wide" c)) (word-break "break-all"))
+              (input (@ (class "elide") (id ,id) (type "checkbox") (checked "yes")))
+              (label (@ (for ,id) (class "elide")) ,text))))
+        `(td (@ (class ,c)) ,text))))
 
 (define (data->html-table border columns rows f)
   (let ([columns (vector->list columns)])
     `(div (@ (class "dataCont"))
        (table (@ (class "dataTable"))
+         ;; Not clear how to get fixed headers in a table that can scroll
+         ;; both vertically and horizontally. May need Javascript.
+         (thead
+          (tr (@ (class "fixed-table-header"))
+            ,@(map (lambda (c) `(th (@ (class ,c)) (div ,c))) columns))
+          (tr (@ (class "width-calculation"))
+            ,@(map (lambda (c) `(th (@ (class ,c)) (span ,c))) columns)))
          (tbody
-          (tr ,@(map (lambda (c) `(th  ,c)) columns))
           ,@(map
              (lambda (row)
                `(tr ,@(map make-td columns (apply f (vector->list row)))))

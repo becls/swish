@@ -50,11 +50,11 @@
 
 (define (doit op)
   (let ([query (find-param "sql")])
-    (unless query (raise "Missing sql"))
+    (unless query (throw "Missing sql"))
     (unless (or (starts-with-ci? query "select ")
                 (starts-with-ci? query "with ")
                 (starts-with-ci? query "explain "))
-      (raise "Query must start with select, with, or explain."))
+      (throw "Query must start with select, with, or explain."))
     (with-db [db (log-file) SQLITE_OPEN_READONLY]
       (let ([stmt (sqlite:prepare db query)])
         (on-exit (sqlite:finalize stmt)
@@ -84,10 +84,10 @@
                        ("Access-Control-Max-Age" . "86400")
                        ("Content-Type" . "application/json"))
   (let-values ([(op get) (open-bytevector-output-port (make-utf8-transcoder))])
-    (match (catch (if (find-param "meta")
+    (match (try (if (find-param "meta")
                       (meta op)
                       (doit op)))
       [ok (get)]
-      [#(EXIT ,reason)
+      [`(catch ,reason)
        (json:object->bytevector
         (json:make-object [error (exit-reason->english reason)]))])))
