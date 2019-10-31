@@ -167,6 +167,7 @@
             (gen-server:start&link 'bad-sup))
           (app-sup-spec
            `(#(bad-sup ,bad-sup:start&link permanent infinity supervisor)))
+          (log-file ":memory:")
           (app:start)
           (app:shutdown 2)
           ;; simulate repl interaction after surprising
@@ -186,7 +187,8 @@
    (catch
     (script-test #f '()
       (format "~{~s\n~}\n"
-        '((app:start)
+        '((log-file ":memory:")
+          (app:start)
           ;; simulate winning race to exit-process with an earlier app:shutdown
           (#%$set-top-level-value! '$console-input-port 'bogus)
           (app:shutdown 1)
@@ -230,6 +232,7 @@
         (pretty-print
          ;; single expression to avoid gatekeeper interaction after app:start
          `(begin
+            (log-file ":memory:")
             (app:start)
             (printf "started\n")
             (flush-output-port)

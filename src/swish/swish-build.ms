@@ -670,25 +670,26 @@
   (define event "Event: #\\(<child-end> [0-9]+ #<process [678]> 1 (normal|shutdown)")
   (define expected-output
     `(seek "Date:" "Timestamp:" ,event
-      seek "Date:" "Timestamp:" ,event
-      seek "Date:" "Timestamp:" ,event))
+       seek "Date:" "Timestamp:" ,event
+       seek "Date:" "Timestamp:" ,event))
   (define app-shutdown
     (write-test-file "app-shutdown.ss"
       (lambda ()
         (printf "#! /usr/bin/env swish\n")
-        (pretty-print
-          `(match (command-line-arguments)
+        (for-each pretty-print
+          `((log-file ":memory:")
+            (match (command-line-arguments)
               [("normal") (app:start)]
               [("abnormal")
                (begin
                  (app:start)
                  (kill (whereis 'application) 'shutdown)
                  (receive))]
-             [("specific")
-              (begin
-                (app:start)
-                (app:shutdown 42)
-                (receive))])))))
+              [("specific")
+               (begin
+                 (app:start)
+                 (app:shutdown 42)
+                 (receive))]))))))
   (set-file-mode app-shutdown #o755)
   ;; run as /usr/bin/env script
   (run-bash "app-shutdown.ss" '("normal") expected-output)

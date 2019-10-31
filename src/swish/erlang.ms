@@ -2549,6 +2549,7 @@
        (printf "attempting to app:start\n")
        (app-sup-spec
         `(#(event-mgr ,event-mgr:start&link permanent 1000 worker)))
+       (log-file ":memory:")
        (app:start)
        (exit-handler
         (let ([orig (exit-handler)])
