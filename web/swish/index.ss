@@ -41,4 +41,5 @@
  '()
  `(p "Snapshot from " ,(date-and-time))
  `(p "Uptime: " ,(uptime))
- `(p "These pages are designed for a 1680 by 1050 resolution using Firefox, Opera, Chrome, or Safari."))
+ `(p "These pages are designed for a 1680 by 1050 resolution using Firefox, Opera, Chrome, or Safari.")
+ `(pre "software-info:\n" ,(json:object->string (software-info) 0)))
