@@ -336,7 +336,6 @@
          (lambda (profile-fn)
            (match (catch ($profile-load profile-fn (make-insert-filedata table)))
              [#(EXIT ,reason)
-              (let () (import (swish errors)) (printf "REASON: ~a\n" (exit-reason->english reason)))
               (errorf 'profile:dump-html "cannot load profile data from ~a" profile-fn)]
              [,_ (void)]))
          inputs))
