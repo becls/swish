@@ -24,19 +24,14 @@
   (export $import-internal)
   (import (scheme))
 
-  (module (&swish-condition swish-condition-inner* swish-condition-reason swish-condition? make-swish-condition)
-    ;; use define-record-type to seal &swish-condition
-    (define-record-type &swish-condition
-      (nongenerative)
-      (sealed #t)
-      (parent &continuation)
-      (fields
-       (immutable reason)
-       (immutable inner*)))
-    (alias make-swish-condition make-&swish-condition)
-    (alias swish-condition? &swish-condition?)
-    (alias swish-condition-reason &swish-condition-reason)
-    (alias swish-condition-inner* &swish-condition-inner*))
+  (define-record-type (&swish-condition make-swish-condition swish-condition?)
+    ;; use define-record to seal &swish-condition
+    (nongenerative)
+    (sealed #t)
+    (parent &continuation)
+    (fields
+     (immutable reason swish-condition-reason)
+     (immutable inner* swish-condition-inner*)))
 
   (define throw
     (case-lambda
