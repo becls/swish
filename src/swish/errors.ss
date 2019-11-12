@@ -24,6 +24,7 @@
   (export
    current-exit-reason->english
    exit-reason->english
+   exit-reason->stacks
    swish-exit-reason->english
    )
   (import
@@ -132,4 +133,21 @@
     (if (pair? x)
         (cdr x)
         (osi_get_error_text x)))
+
+  (define (exit-reason->stacks reason)
+    (define (get-k r)
+      (if (continuation-condition? r)
+          (condition-continuation r)
+          (match r
+            [#(EXIT ,reason) (get-k reason)]
+            [,_ #f])))
+    (define (cons-k r k*)
+      (let ([k (get-k r)])
+        (if k (cons k k*) k*)))
+    (define (add-stack k* reason)
+      (match reason
+        [`(&fault-condition [reason ,r] ,inner*)
+         (fold-left add-stack (cons-k reason (cons-k r k*)) inner*)]
+        [,_ (cons-k reason k*)]))
+    (add-stack '() reason))
   )

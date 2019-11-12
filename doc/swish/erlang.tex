@@ -1143,6 +1143,57 @@ the current output port.
   (dump-stack \var{k} \var{op} 'default)))}.
 
 % ----------------------------------------------------------------------------
+\defineentry{walk-stack}
+\begin{procedure}
+  \code{(walk-stack \var{k} \var{base} \var{handle-frame} \var{combine} \opt{\var{who} \var{max-depth} \var{truncated}})}
+\end{procedure}
+\returns{} see below
+
+The \code{walk-stack} procedure walks the stack of continuation \var{k}
+by calling the \var{handle-frame} and \var{combine} procedures for each
+stack frame until
+it reaches the base of the stack,
+or depth reaches the optional \var{max-depth},
+or the \var{next} argument to \var{combine} is not called.
+
+The \var{handle-frame} procedure is called with four arguments:
+
+\begin{tabular}{ll}
+\var{description} & a string describing the stack frame, e.g., \code{"\#<continuation in g>"} \\
+\var{source} & a source object identifying the return point or \code{\#f} \\
+\var{proc-source} & a source object identifying the procedure containing the return point or \code{\#f} \\
+\var{vars} & a list associating live free variables by name (or index) with their values
+\end{tabular}
+
+If \code{walk-stack} reaches a depth of \var{max-depth}, it calls
+the optional \var{truncated} procedure with \var{base} and \var{depth}.
+Otherwise, \code{walk-stack} calls the \var{combine} procedure with four arguments:
+
+\begin{tabular}{ll}
+\var{frame} & the value returned by \var{handle-frame} for the current frame\\
+\var{base} & the accumulator \\
+\var{depth} & the zero-based depth of the current frame \\
+\var{next} & a procedure that takes \var{base} and continues with the next frame
+\end{tabular}
+
+If \code{walk-stack} receives an invalid argument \var{val}, it calls
+\code{(bad-arg \var{who} \var{val})} with
+the symbol \code{walk-stack} as the default value for the
+optional \var{who} argument.
+
+% ----------------------------------------------------------------------------
+\defineentry{exit-reason->stacks}
+\begin{procedure}
+  \code{(exit-reason->stacks \var{x})}
+\end{procedure}
+\returns{} a list of continuations
+
+The \code{exit-reason->stacks} procedure takes a Swish condition \var{x},
+as created by \code{throw} or trapped by \code{try},
+and returns a list of continuations recorded in \var{x}.
+The continuations are listed innermost to outermost.
+
+% ----------------------------------------------------------------------------
 \defineentry{erlang:now}
 \begin{procedure}
   \code{(erlang:now)}

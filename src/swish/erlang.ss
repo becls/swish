@@ -66,6 +66,7 @@
    unlink
    unregister
    wait-for-io
+   walk-stack
    whereis
    )
   (import
@@ -463,48 +464,81 @@
 
   (define dump-stack
     (let ()
-      (define (source-path obj)
-        (call-with-values
-          (lambda () (obj 'source-path))
-          (case-lambda
-           [() #f]
-           [(path char)
-            (format " at offset ~a of ~a" char path)]
-           [(path line char)
-            (format " at line ~a, char ~a of ~a" line char path)])))
-      (define (dump-cont cont op)
-        (cont 'write op)
-        (cond
-         [(source-path cont) => (lambda (where) (display where op))]
-         [(source-path (cont 'code)) =>
-          (lambda (where) (fprintf op " in procedure~a" where))])
-        (newline op)
-        (when (cont 'source)
-          (do ([i 0 (fx+ i 1)] [len (cont 'length)])
-              ((fx= i len))
-            (let ([var (cont 'ref i)])
-              (fprintf op "  ~s: " (or (var 'name) i))
-              ((var 'ref) 'write op)
-              (newline op)))))
+      (define (source-path src)
+        (and (source-object? src)
+             (let ([sfd (source-object-sfd src)])
+               (call-with-values
+                 (lambda () (locate-source sfd (source-object-bfp src) #t))
+                 (case-lambda
+                  [()
+                   (format " at offset ~a of ~a" (source-object-bfp src)
+                     (source-file-descriptor-path sfd))]
+                  [(path line char)
+                   (format " at line ~a, char ~a of ~a" line char path)])))))
       (case-lambda
        [() (dump-stack (current-output-port))]
        [(op) (call/cc (lambda (k) (dump-stack k op 'default)))]
        [(k op max-depth)
+        (define (dump-frame name source proc-source vars)
+          (display name op)
+          (cond
+           [(source-path source) => (lambda (where) (display where op))]
+           [(source-path proc-source) =>
+            (lambda (where) (fprintf op " in procedure~a" where))])
+          (newline op)
+          (for-each
+           (lambda (var)
+             (fprintf op "  ~s: ~s\n" (car var) (cdr var)))
+           (or vars '())))
+        (define (next-frame frame base depth next) (next base))
+        (define (truncated base depth)
+          (fprintf op "Stack dump truncated due to max-depth = ~s.\n" depth))
         (unless (output-port? op) (bad-arg 'dump-stack op))
-        (let ([max-depth
-               (match max-depth
-                 [#f #f]
-                 [default 10]
-                 [,n (guard (and (fixnum? n) (positive? n))) n]
-                 [,_ (bad-arg 'dump-stack max-depth)])])
-          (parameterize ([print-level 3] [print-length 6] [print-gensym #f] [print-extended-identifiers #t])
-            (let loop ([cont (inspect/object k)] [depth 0])
-              (when (eq? (cont 'type) 'continuation)
-                (if (and max-depth (= depth max-depth))
-                    (fprintf op "Stack dump truncated due to max-depth = ~s.\n" max-depth)
-                    (begin
-                      (dump-cont cont op)
-                      (loop (cont 'link) (+ depth 1))))))))])))
+        (parameterize ([print-level 3] [print-length 6] [print-gensym #f] [print-extended-identifiers #t])
+          (walk-stack k (void) dump-frame next-frame
+            'dump-stack max-depth truncated))])))
+
+  (define (do-frame cont handle-frame)
+    (let ([description (format "~s" (cont 'value))]
+          [source (cont 'source-object)]
+          [proc-source ((cont 'code) 'source-object)]
+          [vars
+           (do ([i (fx1- (cont 'length)) (fx1- i)]
+                [vars '()
+                  (let ([var (cont 'ref i)])
+                    (cons (cons (or (var 'name) i) ((var 'ref) 'value))
+                      vars))])
+               ((fx< i 0) vars))])
+      (handle-frame description source proc-source vars)))
+
+  (define walk-stack
+    (case-lambda
+     [(k base handle-frame combine)
+      (walk-stack k base handle-frame combine 'walk-stack #f
+        (lambda (base depth) 'not-called))]
+     [(k base handle-frame combine who max-depth truncated)
+      (define in (if (symbol? who) who 'walk-stack))
+      (arg-check in
+        [handle-frame procedure?]
+        [who symbol?]
+        [combine procedure?]
+        [truncated procedure?])
+      (let ([max-depth
+             (match max-depth
+               [default 10]
+               [,n (guard (and (fixnum? n) (positive? n))) n]
+               [#f (most-positive-fixnum)]
+               [,_ (bad-arg in max-depth)])])
+        (let loop ([cont (inspect/object k)] [depth 0] [base base])
+          (cond
+           [(not (eq? (cont 'type) 'continuation)) base]
+           [(fx= depth max-depth) (truncated base depth)]
+           [else
+            ;; force evaluation order in case do-frame has side effects
+            (let ([frame (do-frame cont handle-frame)])
+              (combine frame base depth
+                (lambda (base)
+                  (loop (cont 'link) (+ depth 1) base))))])))]))
 
   (define (process? p) (pcb? p))
 

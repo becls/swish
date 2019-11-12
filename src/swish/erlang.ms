@@ -2678,6 +2678,297 @@
       [#(EXIT #(bad-arg dump-stack ,@bignum)) (catch (call/cc (lambda (k) (dump-stack k p bignum))))])
      'ok)))
 
+(mat walk-stack ()
+  (define file1.ss
+    (write-test-file "file1.ss"
+      (lambda ()
+        (printf ";; line 1\n")
+        (printf "(define (proc1 n x quit)\n")
+        (printf "  (if (< n x)\n")
+        (printf "      (proc2 (+ n 2) x quit)\n")
+        (printf "      (let* ([v1 n] [v2 x])\n")
+        (printf "        (list v1 v2 n x (proc1 (- n 1) x quit)))))\n"))))
+  (define file2.ss
+    (write-test-file "file2.ss"
+      (lambda ()
+        (printf "(define (proc2 n x quit)\n")
+        (printf "  (if (< n x)\n")
+        (printf "      (proc3 (+ n 1) x quit)\n")
+        (printf "      (let ([tmp (cons (+ 7 n) x)])\n")
+        (printf "        (list tmp n x (proc2 (- n 1) x quit)))))\n"))))
+  (define file3.ss
+    (write-test-file "file3.ss"
+      (lambda ()
+        (printf "(define (proc3 n x quit)\n")
+        (printf "  (if (< n x)\n")
+        (printf "      (proc4 (+ n 2) x quit)\n")
+        (printf "      (let ([zap (+ n x)])\n")
+        (printf "        (list zap n x (proc3 (- n 1) x quit)))))\n"))))
+  (define file4.ss
+    (write-test-file "file4.ss"
+      (lambda ()
+        (printf "(define (proc4 n x quit)\n")
+        (printf "  (if (< n x)\n")
+        (printf "      (quit)\n")
+        (printf "      (let* ([xyz (+ n x 65)] [pdq (integer->char xyz)])\n")
+        (printf "        (list xyz pdq (proc4 (- n 1) x quit)))))\n"))))
+  (define (get-source x)
+    (and (source-object? x)
+         (call-with-values
+           (lambda ()
+             ;; don't cache the result, since that will break
+             ;; coverage for the dump-stack "at offset" case
+             (locate-source-object-source x #t #f))
+           list)))
+  (define (symbol<? a b) (string<? (symbol->string a) (symbol->string b)))
+  (define (sort-vars als)
+    (sort (lambda (a b) (symbol<? (car a) (car b)))
+      als))
+  (parameterize ([compile-file-message #f]
+                 ;; prevent compiler from optimizing away v1, v2, tmp, etc.
+                 [run-cp0 (lambda (f x) x)])
+    (compile-and-load file1.ss #t #t)
+    (compile-and-load file2.ss #f #t)
+    (compile-and-load file3.ss #t #f)
+    (compile-and-load file4.ss #f #f))
+  (match-let*
+   ([#(EXIT #(bad-arg walk-stack 7)) (catch (walk-stack 3 5 7 values))]
+    [#(EXIT #(bad-arg walk-stack 9)) (catch (walk-stack 3 5 values 9))]
+    [#(EXIT #(bad-arg walk-stack 6))
+     (catch (walk-stack 3 5 values values 6 7 values))]
+    [#(EXIT #(bad-arg blort -7))
+     (catch (walk-stack 3 5 values values 'blort -7 values))]
+    [#(EXIT #(bad-arg blort #t))
+     (catch (walk-stack 3 5 values values 'blort #t values))]
+    [#(EXIT #(bad-arg blort 3.4))
+     (catch (walk-stack 3 5 values values 'blort 3.4 values))]
+    [#(EXIT #(bad-arg blort 8))
+     (catch (walk-stack 3 5 values values 'blort 'default 8))]
+    [tofu (walk-stack "not a stack" 'tofu
+            (lambda x (throw 'should-not-call))
+            (lambda y (throw 'should-not-call)))]
+    [,k (call/cc
+         (lambda (return)
+           ((top-level-value 'proc1) 3 0 (lambda () (call/cc return)))))]
+    [(,frame0 ,frame1 ,frame2 ,frame3 ,frame4 ,frame5 ,frame6 ,frame7 ,frame8)
+     (walk-stack k '() list
+       (lambda (frame base depth next)
+         (cons frame
+           (if (= depth 8)
+               base
+               (next base)))))]
+    [("#<continuation in proc4>" #f #f ,frame0-free) frame0]
+    [("#<continuation in proc4>" #f #f ,frame1-free) frame1]
+    [(0 1) (sort < (map car frame0-free))]
+    [(0 1) (sort < (map car frame1-free))]
+    [#\A (find char? (map cdr frame0-free))]
+    [#\B (find char? (map cdr frame1-free))]
+    [("#<continuation in proc3>" ,k-src3 ,p-src3 ,frame2-free) frame2]
+    [((n . 0) (x . 0) (zap . 0)) (sort-vars frame2-free)]
+    [("#<continuation in proc2>" ,k-src2 ,p-src2 ,frame3-free) frame3]
+    [(0 1 2) (map car frame3-free)]
+    [(7 . 0) (find pair? (map cdr frame3-free))]
+    [(0 0) (filter number? (map cdr frame3-free))]
+    [("#<continuation in proc2>" ,@k-src2 ,@p-src2 ,frame4-free) frame4]
+    [(0 1 2) (map car frame4-free)]
+    [(0 1) (sort < (filter number? (map cdr frame4-free)))]
+    [(8 . 0) (find pair? (map cdr frame4-free))]
+    [("#<continuation in proc1>" ,k-src1 ,p-src1 ,frame5-free) frame5]
+    [((n . 0) (v1 . 0) (v2 . 0) (x . 0)) (sort-vars frame5-free)]
+    [("#<continuation in proc1>" ,@k-src1 ,@p-src1 ,frame6-free) frame6]
+    [((n . 1) (v1 . 1) (v2 . 0) (x . 0)) (sort-vars frame6-free)]
+    [("#<continuation in proc1>" ,@k-src1 ,@p-src1 ,frame7-free) frame7]
+    [((n . 2) (v1 . 2) (v2 . 0) (x . 0)) (sort-vars frame7-free)]
+    [("#<continuation in proc1>" ,@k-src1 ,@p-src1 ,frame8-free) frame8]
+    [((n . 3) (v1 . 3) (v2 . 0) (x . 0)) (sort-vars frame8-free)]
+    [(,@file3.ss 5 23) (get-source k-src3)]
+    [(,@file3.ss 1 1) (get-source p-src3)]
+    [#f (get-source k-src2)]
+    [(,@file2.ss 1 1) (get-source p-src2)]
+    [(,@file1.ss 6 25) (get-source k-src1)]
+    [(,@file1.ss 2 1) (get-source p-src1)]
+    ;; cover the dump-stack "... at offset ..." case while we have
+    ;; a handy setup
+    [,! (delete-file file3.ss)]
+    )
+   'ok)
+  )
+
+(mat exit-reason->stacks ()
+  (define-syntax def
+    (syntax-rules ()
+      [(_ (proc fml ...) e0 e1 ...)
+       (define proc
+         (parameterize ([generate-inspector-information #t])
+           (compile
+            `(rec proc
+               (lambda (fml ...)
+                 e0 e1 ...)))))]))
+  (def (clop n)
+    (if (= n 0)
+        (throw 'zero!)
+        (+ n (clop (- n 1)))))
+  (def (flop e z)
+    (if (= z 0)
+        (throw 'bad e)
+        (list z (flop e (- z 1)))))
+  (def (glop e t)
+    (if (= t 0)
+        (throw e)
+        (- t (glop e (- t 1)))))
+  (def (plop d end)
+    (if (= d 0)
+        (end)
+        (memq d (plop (- d 1) end))))
+  (define (dump k limit)
+    (walk-stack k '()
+      (lambda (description src p-src vars)
+        (cons description vars))
+      (lambda (frame base depth next)
+        (cons frame (next base)))
+      'dump limit
+      (lambda (base depth) base)))
+  (match-let*
+   (
+    ;; exit reasons with no stack
+    [() (exit-reason->stacks 'none-here)]
+    [() (exit-reason->stacks '(nor here))]
+    [() (exit-reason->stacks 404)]
+    ;; no stack from catch
+    [,e0 (catch (clop 3))]
+    [() (exit-reason->stacks e0)]
+    [#(EXIT zero!) e0]
+    [`(catch zero!) e0]
+    [`(catch zero! zero!) e0]
+    ;; we do get a stack from try
+    [,e1 (try (clop 3))]
+    [(,k) (exit-reason->stacks e1)]
+    [(("#<continuation in clop>" (n . 1))
+      ("#<continuation in clop>" (n . 2))
+      ("#<continuation in clop>" (n . 3))
+      ("#<system continuation in dynamic-wind>" . ,_))
+     (dump k 4)]
+    [`(&fault-condition [reason zero!]) e1]
+    [`(catch zero!) e1]
+    ;; try raise e1: passes e1 through
+    [,e2 (try (plop 3 (lambda () (raise e1))))]
+    [(,@k) (exit-reason->stacks e2)]
+    ;; try throw e1: e1's k comes first
+    [,e3 (try (plop 3 (lambda () (throw e1))))]
+    [(,@k ,k2) (exit-reason->stacks e3)]
+    [(("#<continuation in plop>" (d . 1))
+      ("#<continuation in plop>" (d . 2))
+      ("#<continuation in plop>" (d . 3))
+      ("#<system continuation in dynamic-wind>" . ,_))
+     (dump k2 4)]
+    [`(&fault-condition [reason zero!]) e2]
+    [`(&fault-condition [reason zero!]) e3]
+    [`(catch zero!) e2]
+    [`(catch zero!) e3]
+    [`(catch zero! ,@e2) e2]
+    [`(catch zero! ,@e3) e3]
+    ;; try (throw 'bad e3) in flop
+    [,e4 (try (flop e3 4))]
+    [(,@k ,@k2 ,k4) (exit-reason->stacks e4)]
+    [(("#<continuation in flop>" (z . 1))
+      ("#<continuation in flop>" (z . 2))
+      ("#<continuation in flop>" (z . 3))
+      ("#<continuation in flop>" (z . 4))
+      ("#<system continuation in dynamic-wind>" . ,_))
+     (dump k4 5)]
+    [`(&fault-condition [reason bad]) e4]
+    [`(catch bad) e4]
+    [`(catch bad ,@e4) e4]
+    ;; try (throw e4) in glop
+    [,e5 (try (glop e4 2))]
+    [(,@k ,@k2 ,@k4 ,k5) (exit-reason->stacks e5)]
+    [(("#<continuation in glop>" (t . 1))
+      ("#<continuation in glop>" (t . 2))
+      ("#<system continuation in dynamic-wind>" . ,_))
+     (dump k5 3)]
+    [`(&fault-condition [reason bad]) e5]
+    [`(catch bad) e5]
+    [`(catch bad ,@e5) e5]
+    ;; try (throw 'bzzt e3) in plop
+    ;; throw where second arg has stack, but first has none
+    [,e6 (try (plop 4 (lambda () (throw 'bzzt e5))))]
+    [(,@k ,@k2 ,@k4 ,@k5 ,k6) (exit-reason->stacks e6)]
+    [(("#<continuation in plop>" (d . 1))
+      ("#<continuation in plop>" (d . 2))
+      ("#<continuation in plop>" (d . 3))
+      ("#<continuation in plop>" (d . 4))
+      ("#<system continuation in dynamic-wind>" . ,_))
+     (dump k6 5)]
+    [`(&fault-condition [reason bzzt]) e6]
+    [`(catch bzzt) e6]
+    [`(catch bzzt ,@e6) e6]
+    ;; like e6, but raise instead of err
+    [,e7 (try (plop 4 (lambda () (raise e5))))]
+    [(,@k ,@k2 ,@k4 ,k5) (exit-reason->stacks e7)]
+    [`(&fault-condition [reason bad]) e7])
+   'ok)
+  (match-let* ;; throw where both args have stack
+   ([,e0 (try (clop 3))]
+    [(,k0) (exit-reason->stacks e0)]
+    [,e1 (try (flop e0 2))]
+    [(,@k0 ,k1) (exit-reason->stacks e1)]
+    [,e2 (try (glop (try (cdr 11)) 4))]
+    [(,try0 ,k2 ,try1) (exit-reason->stacks e2)]
+    [,e3 (try (plop 1 (lambda () (throw e1 e2))))]
+    [(,@try0 ,@k2 ,@try1 ,@k0 ,@k1 ,k5) (exit-reason->stacks e3)]
+    [(("#<system continuation in dynamic-wind>" . ,_)) (dump try0 1)]
+    [(("#<continuation in glop>" (t . 1))
+      ("#<continuation in glop>" (t . 2))
+      ("#<continuation in glop>" (t . 3))
+      ("#<continuation in glop>" (t . 4))
+      ("#<system continuation in dynamic-wind>" . ,_))
+     (dump k2 5)]
+    [(("#<system continuation in dynamic-wind>" . ,_)) (dump try1 1)]
+    [(("#<continuation in clop>" (n . 1))
+      ("#<continuation in clop>" (n . 2))
+      ("#<continuation in clop>" (n . 3))
+      ("#<system continuation in dynamic-wind>" . ,_))
+     (dump k0 4)]
+    [(("#<continuation in flop>" (z . 1))
+      ("#<continuation in flop>" (z . 2))
+      ("#<system continuation in dynamic-wind>" . ,_))
+     (dump k1 3)]
+    [(("#<continuation in plop>" (d . 1))
+      ("#<system continuation in dynamic-wind>" . ,_))
+     (dump k5 2)]
+    )
+   'ok)
+  (match-let* ;; throw where first arg has stack, but second has none
+   ([,e0 (try (clop 4))]   ;; has stack
+    [,e1 (catch (clop 3))] ;; no stack
+    [,e2 (try (plop 2 (lambda () (throw e0 e1))))]
+    [(,k0 ,k1) (exit-reason->stacks e2)]
+    [(("#<continuation in clop>" (n . 1))
+      ("#<continuation in clop>" (n . 2))
+      ("#<continuation in clop>" (n . 3))
+      ("#<continuation in clop>" (n . 4))
+      ("#<system continuation in dynamic-wind>" . ,_))
+     (dump k0 5)]
+    [(("#<continuation in plop>" (d . 1))
+      ("#<continuation in plop>" (d . 2))
+      ("#<system continuation in dynamic-wind>" . ,_))
+     (dump k1 3)]
+    )
+   'ok)
+  (match-let* ;; throw where neither arg has stack
+   ([,e0 (catch (clop 4))] ;; no stack
+    [,e1 (catch (clop 2))] ;; no stack
+    [,e2 (try (plop 3 (lambda () (throw e0 e1))))]
+    [(,k1) (exit-reason->stacks e2)]
+    [(("#<continuation in plop>" (d . 1))
+      ("#<continuation in plop>" (d . 2))
+      ("#<continuation in plop>" (d . 3))
+      ("#<system continuation in dynamic-wind>" . ,_))
+     (dump k1 4)]
+    )
+   'ok)
+  )
+
 (define (condition-equal? a b)
   (and (condition? a) (condition? b)
        (equal? (condition-who a) (condition-who b))
@@ -2723,6 +3014,10 @@
       [#t (same? reason (match T3 [`(catch ,r) r]))]
       [#t (same? reason (match T4 [`(catch ,r) r]))]
       [#t (same? reason (match T5 [`(catch ,r) r]))]
+      [,k2 (exit-reason->stacks T2)]
+      [(,_ . ,k2) (exit-reason->stacks T3)]
+      [,k4 (exit-reason->stacks T4)]
+      [(,_ . ,k4) (exit-reason->stacks T5)]
       ;; catch or try between catch and use
       [,C3 (catch (bug origin) 'wrong)]
       [(ok fine) (list (catch 'ok) (try 'fine))]
