@@ -23,6 +23,7 @@
 #!chezscheme
 (library (swish erlang)
   (export
+   DOWN
    EXIT
    add-finalizer
    arg-check
@@ -256,7 +257,7 @@
             [(eq? origin p)
              (@remove-monitor m (mon-target m))]
             [else
-             (@send origin `#(DOWN ,m ,p ,reason))
+             (@send origin (make-DOWN-msg m p raw-reason))
              (@remove-monitor m origin)])))
        monitors)))
 
@@ -278,7 +279,8 @@
   ($import-internal
    make-fault
    &fault-condition fault-condition-reason fault-condition? make-fault-condition
-   EXIT-msg EXIT-msg? EXIT-msg-pid EXIT-msg-reason make-EXIT-msg)
+   EXIT-msg EXIT-msg? EXIT-msg-pid EXIT-msg-reason make-EXIT-msg
+   DOWN-msg DOWN-msg? DOWN-msg-monitor DOWN-msg-pid DOWN-msg-reason make-DOWN-msg)
 
   (define (unwrap-fault-condition r)
     (if (fault-condition? r)
@@ -382,7 +384,7 @@
            (begin
              (add-monitor m self)
              (add-monitor m p))
-           (@send self `#(DOWN ,m ,p ,(pcb-exception-state p)))))
+           (@send self (make-DOWN-msg m p (pcb-exception-state p)))))
       m))
 
   (define (demonitor m)
@@ -396,7 +398,7 @@
   (define (demonitor&flush m)
     (demonitor m)
     (receive (until 0 #t)
-      [#(DOWN ,@m ,_ ,_) #t]))
+      [`(DOWN ,@m ,_ ,_) #t]))
 
   (define (make-queue)
     (let ([q (make-q)])
@@ -1512,6 +1514,15 @@
          (with-temporaries (tmp)
            #`((sub-match #,v `(exit-reason #f r e))))])))
 
+  (define-syntax DOWN (syntax-rules ()))
+  (define-match-extension DOWN
+    (lambda (v pattern)
+      (syntax-case pattern (quasiquote)
+        [`(DOWN m p r)
+         #`((sub-match #,v `(DOWN-msg [monitor m] [pid p] [reason `(exit-reason #t r ,_)])))]
+        [`(DOWN m p r e)
+         #`((sub-match #,v `(DOWN-msg [monitor m] [pid p] [reason `(exit-reason #t r e)])))])))
+
   (define-syntax EXIT (syntax-rules ()))
   (define-match-extension EXIT
     (lambda (v pattern)
@@ -1573,6 +1584,15 @@
       (display-string " " p)
       (wr (unwrap-fault-condition (EXIT-msg-reason r)) p)
       (write-char #\> p)))
+
+  (record-writer (record-type-descriptor DOWN-msg)
+    (lambda (r p wr)
+      (display-string "#<DOWN " p)
+      (wr (DOWN-msg-pid r) p)
+      (display-string " " p)
+      (wr (unwrap-fault-condition (DOWN-msg-reason r)) p)
+      (write-char #\> p)))
+
   (disable-interrupts)
   (set-self! (@make-process #f))
   (set! event-loop-process

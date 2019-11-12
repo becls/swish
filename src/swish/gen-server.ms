@@ -146,7 +146,7 @@
   (define (with-monitor thunk)
     (let ([m (monitor (spawn thunk))])
       (receive (after 5000 (throw 'timeout))
-        [#(DOWN ,@m ,_ ,reason) reason])))
+        [`(DOWN ,@m ,_ ,reason) reason])))
   (define (init-does-not-return starter)
     (with-monitor
      (lambda ()

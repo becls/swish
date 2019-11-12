@@ -111,10 +111,11 @@ sets the \code{current-expand} parameter to the unhooked
 \code{handle-cast} procedure raises an exception on all messages.
 
 \genserver{gatekeeper}{handle-info} The gatekeeper
-\code{handle-info} procedure handles the following message:\antipar
+\code{handle-info} procedure handles messages matching the following
+pattern:\antipar
 
 \begin{itemize}
-\item \code{\#(DOWN \var{monitor} \_ \_)}: Find \var{mutex} $\in$
+\item \code{`(DOWN \var{monitor} \_ \_)}: Find \var{mutex} $\in$
   \var{state} where \var{mutex}.\var{monitor} =
   \var{monitor}. No-reply with \code{(leave-mutex \var{mutex}
     \var{state})}.

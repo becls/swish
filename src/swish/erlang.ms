@@ -441,7 +441,7 @@
     (register a-name a-pid)
     (register b-name b-pid)
     (monitor c-pid)
-    (receive [#(DOWN ,_ ,@c-pid ,_) 'ok])
+    (receive [`(DOWN ,_ ,@c-pid ,_) 'ok])
     (match-let*
      ([#(EXIT #(process-already-registered ,@a-name))
        (catch (register (gensym "A") a-pid))]
@@ -903,7 +903,35 @@
         [("abc" "xyz" #f) (list (g1) (g2) (g3))])
        'ok))))
 
-(isolate-mat monitor ()
+(isolate-mat monitor-raise ()
+  (process-trap-exit #t)
+  (let* ([host self]
+         [pid (spawn&link
+               (lambda ()
+                 (if (monitor? (monitor host))
+                     (raise 'success!)
+                     (raise 'bad-monitor))))]
+         [m (monitor pid)])
+    (receive
+     (after 10 (throw 'timeout))
+     [`(DOWN ,@m ,@pid success! success!) 'ok])))
+
+(isolate-mat monitor-raise-catch ()
+  (process-trap-exit #t)
+  (let* ([host self]
+         [pid (spawn&link
+               (lambda ()
+                 (raise
+                  (catch
+                   (if (monitor? (monitor host))
+                       (raise 'success!)
+                       (raise 'bad-monitor))))))]
+         [m (monitor pid)])
+    (receive
+     (after 10 (throw 'timeout))
+     [`(DOWN ,@m ,@pid success! success!) 'ok])))
+
+(isolate-mat monitor-throw ()
   (process-trap-exit #t)
   (let* ([host self]
          [pid (spawn&link
@@ -914,7 +942,29 @@
          [m (monitor pid)])
     (receive
      (after 10 (throw 'timeout))
-     [#(DOWN ,@m ,@pid success!) 'ok])))
+     [`(DOWN ,@m ,@pid success! ,err)
+      (match-let*
+       ([`(catch success! ,@err) err]
+        [(,k) (exit-reason->stacks err)])
+       'ok)])))
+
+(isolate-mat monitor-throw-try ()
+  (process-trap-exit #t)
+  (let* ([host self]
+         [pid (spawn&link
+               (lambda ()
+                 (throw
+                  (try
+                   (if (monitor? (monitor host))
+                       (throw 'party)
+                       (throw 'bad-monitor))))))]
+         [m (monitor pid)])
+    (receive
+     (after 10 (throw 'timeout))
+     [`(DOWN ,@m ,@pid party ,e)
+      (match-let* ([`(catch party ,@e) e]
+                   [(,k0 ,k1) (exit-reason->stacks e)])
+        'ok)])))
 
 (isolate-mat pps ()
   (parameterize ([collect-request-handler void])
@@ -3393,6 +3443,17 @@
         (guard (match x [`(EXIT ,@pid long) #t] [,_ #f]))
         (format "~s" x)])])
    (process-trap-exit #f))
+  ;; DOWN-msg
+  (match-let*
+   ([,pid (spawn (lambda () (throw 'home)))]
+    [,m (monitor pid)]
+    [,expected (format "#<DOWN ~s home>" pid)]
+    [,@expected
+     (receive (after 100 'wrong)
+       [,x
+        (guard (match x [`(DOWN ,@m ,@pid home) #t] [,_ #f]))
+        (format "~s" x)])])
+   'ok)
   ;; console-event-handler treatment of native exceptions
   (let ([os (open-output-string)])
     (define test-file
@@ -3456,17 +3517,17 @@
         (define pid0 (spawn (lambda () (printf "started\n") (raise 'issue))))
         (define m (monitor pid0))
         (receive (after 100 (fail 'pid0))
-          [#(DOWN ,_ ,@pid0 ,_) (dbg)])
+          [`(DOWN ,_ ,@pid0 ,_) (dbg)])
         (printf ";; now have a continuation condition, so something to dbg\n")
         (define pid1 (spawn (lambda () (cdr 123))))
         (define m (monitor pid1))
         (receive (after 100 (fail 'pid1))
-          [#(DOWN ,_ ,@pid1 ,_) (dbg)])
+          [`(DOWN ,_ ,@pid1 ,_) (dbg)])
         (printf ";; add another one\n")
         (define pid2 (spawn (lambda () (list (cdr (reverse 'transcriptase))))))
         (define m (monitor pid2))
         (receive (after 100 (fail 'pid2))
-          [#(DOWN ,_ ,@pid2 ,_) (dbg)])
+          [`(DOWN ,_ ,@pid2 ,_) (dbg)])
         (printf "debug pid2\n")
         (parameterize ([console-input-port (open-input-string "s i show-frames 2\nq\n")])
           (dbg (process-id pid2)))

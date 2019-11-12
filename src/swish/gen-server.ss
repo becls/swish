@@ -76,7 +76,7 @@
          [#(ack ,@pid ,reply)
           (demonitor&flush m)
           reply]
-         [#(DOWN ,@m ,_ ,reason)
+         [`(DOWN ,@m ,_ ,reason)
           `#(error ,reason)]))))
 
   (define (start&link name iface init-args)
@@ -244,10 +244,10 @@
         (when debug
           (debug-report 5 debug start self pid request #f reply))
         `#(ok ,reply)]
-       [#(DOWN ,@m ,_ ,reason)
+       [`(DOWN ,@m ,_ ,reason ,err)
         (when debug
           (debug-report 6 debug start self pid request #f reason))
-        (raise reason)])))
+        (raise err)])))
 
   (define (gen-server:cast server request)
     (catch (send server `#($gen-cast ,request)))

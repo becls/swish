@@ -58,6 +58,14 @@
      (immutable pid)
      (immutable reason)))
 
+  (define-record-type DOWN-msg
+    (nongenerative)
+    (sealed #t)
+    (fields
+     (immutable monitor)
+     (immutable pid)
+     (immutable reason)))
+
   (define-syntax $import-internal
     (let ([allowed? #t])
       (lambda (x)

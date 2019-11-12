@@ -139,7 +139,7 @@
 
   (define (handle-info msg state)
     (match msg
-      [#(DOWN ,monitor ,_ ,_)
+      [`(DOWN ,monitor ,_ ,_)
        `#(no-reply ,(leave-mutex (find-monitor monitor state) state))]))
 
   (define (enter-mutex resource from waiters state)

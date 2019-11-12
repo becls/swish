@@ -44,7 +44,7 @@
       (monitor process)
       (kill process 'shutdown)
       (receive
-       [#(DOWN ,_ ,@process ,_) 'ok]))
+       [`(DOWN ,_ ,@process ,_) 'ok]))
     ($exit-process))
 
   (define (handle-call msg from process) (match msg))

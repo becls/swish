@@ -55,7 +55,7 @@
     (lambda (pid)
       (monitor pid)
       (receive (after 60000 (throw 'http-sup-still-running))
-        [#(DOWN ,_ ,@pid ,_) 'ok]))]))
+        [`(DOWN ,_ ,@pid ,_) 'ok]))]))
 
 (define-syntax http-mat
   (syntax-rules ()
@@ -70,8 +70,8 @@
          [m (monitor pid)])
     (on-exit (shutdown-http)
       (receive (after 300000 (kill pid 'shutdown) (throw 'timeout))
-        [#(DOWN ,_ ,@pid normal) 'ok]
-        [#(DOWN ,_ ,@pid ,reason) (throw reason)]))))
+        [`(DOWN ,_ ,@pid normal) 'ok]
+        [`(DOWN ,_ ,@pid ,reason) (throw reason)]))))
 
 (define (simple-tcp x)
   (let-values ([(ip op) (connect-tcp "127.0.0.1" test-port)])

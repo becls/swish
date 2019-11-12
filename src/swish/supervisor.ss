@@ -354,14 +354,14 @@
          [brutal-kill
           (kill pid 'kill)
           (receive
-           [#(DOWN ,_ ,@pid ,reason) reason])]
+           [`(DOWN ,_ ,@pid ,reason) reason])]
          [,timeout
           (kill pid 'shutdown)
           (receive (after timeout
                      (kill pid 'kill)
                      (receive
-                      [#(DOWN ,_ ,@pid ,reason) reason]))
-            [#(DOWN ,_ ,@pid ,reason) reason])])]
+                      [`(DOWN ,_ ,@pid ,reason) reason]))
+            [`(DOWN ,_ ,@pid ,reason) reason])])]
       [#(error ,reason) reason]))
 
   (define (monitor-child pid)
@@ -370,7 +370,7 @@
     (receive (after 0 'ok)
       [`(EXIT ,@pid ,reason)
        (receive
-        [#(DOWN ,_ ,@pid ,_)
+        [`(DOWN ,_ ,@pid ,_)
          (profile-me)
          `#(error ,reason)])]))
 

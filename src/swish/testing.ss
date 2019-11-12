@@ -127,8 +127,8 @@
       (receive (after 60000
                  (kill pid 'kill)
                  (throw 'timeout))
-        [#(DOWN ,@m ,@pid normal) (void)]
-        [#(DOWN ,@m ,@pid ,reason) (raise reason)])))
+        [`(DOWN ,@m ,@pid normal) (void)]
+        [`(DOWN ,@m ,@pid ,reason) (raise reason)])))
 
   (define-syntax isolate-mat
     (syntax-rules ()
@@ -148,7 +148,7 @@
       (demonitor m)
       (receive
        (after timeout #t)
-       [#(DOWN ,@m ,@x ,_) #f])))
+       [`(DOWN ,@m ,@x ,_) #f])))
 
   (define (boot-system)
     (log-file (path-combine (data-dir) "TestLog.db3"))
@@ -161,7 +161,7 @@
       (lambda (pid)
         (monitor pid)
         (receive (after 60000 (throw 'main-sup-still-running))
-          [#(DOWN ,_ ,@pid ,_) 'ok]))]))
+          [`(DOWN ,_ ,@pid ,_) 'ok]))]))
 
   (define-syntax system-mat
     (syntax-rules ()
@@ -174,8 +174,8 @@
              [m (monitor pid)])
         (on-exit (shutdown-system)
           (receive (after 300000 (kill pid 'shutdown) (throw 'timeout))
-            [#(DOWN ,_ ,@pid normal) 'ok]
-            [#(DOWN ,_ ,@pid ,reason) (throw reason)])))))
+            [`(DOWN ,_ ,@pid normal) 'ok]
+            [`(DOWN ,_ ,@pid ,reason) (raise reason)])))))
 
   (define-tuple <os-result> stdout stderr exit-status)
 
