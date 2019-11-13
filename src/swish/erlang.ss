@@ -885,10 +885,15 @@
            (let ([c (vector-ref keys i)])
              (unless (eq? (eq-hashtable-ref ht c #f) 'dumped)
                (eq-hashtable-set! ht c 'dumped)
-               (fprintf op "Condition: ") (display-condition c op) (newline op)
-               (when (continuation-condition? c)
-                 (fprintf op "Stack:\n")
-                 (dump-stack (condition-continuation c) op 'default))))))
+               (unless (swish-condition? c)
+                 (fprintf op "Condition: ")
+                 (display-condition c op)
+                 (newline op))
+               (cond
+                [(and (continuation-condition? c) (condition-continuation c)) =>
+                 (lambda (k)
+                   (fprintf op "Stack:\n")
+                   (dump-stack k op 'default))])))))
        (newline op)
        (flush-output-port op))))
 
@@ -1444,6 +1449,11 @@
   (define event-condition-table (make-parameter #f))
   (define (reset-console-event-handler) (event-condition-table #f))
 
+  (define (add-event-condition! c)
+    (let ([ht (event-condition-table)])
+      (when (and ht (not (eq-hashtable-ref ht c #f)))
+        (eq-hashtable-set! ht c #t))))
+
   (record-writer (record-type-descriptor mon)
     (lambda (r p wr)
       (display-string "#<monitor " p)
@@ -1468,15 +1478,14 @@
       (display-string "#<compound condition: " p)
       (display-condition x p)
       (write-char #\> p)
-      (let ([ht (event-condition-table)])
-        (when (and ht (not (eq-hashtable-ref ht x #f)))
-          (eq-hashtable-set! ht x #t)))))
+      (add-event-condition! x)))
 
   (record-writer (record-type-descriptor &swish-condition)
     (lambda (r p wr)
       (display-string "#<swish-condition " p)
       (wr (swish-condition-reason r) p)
-      (write-char #\> p)))
+      (write-char #\> p)
+      (add-event-condition! r)))
 
   (disable-interrupts)
   (set-self! (@make-process #f))

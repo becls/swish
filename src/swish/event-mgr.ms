@@ -174,6 +174,38 @@
       (match lines ;; Should dump stack just once. Expect two blank lines.
         [("" "" . ,_) 'ok]))))
 
+(isolate-mat dump-stack2 ()
+  (stop-event-mgr)
+  (start-event-mgr)
+  (event-mgr:flush-buffer)
+  (let-values ([(p get) (open-string-output-port)])
+    (parameterize ([console-error-port p])
+      (let ([x (try (list (cons 2 (+ 7 (throw 'long)))))])
+        (event-mgr:notify x)
+        (event-mgr:notify x)
+        (sleep-ms 10)))
+    (let ([lines (split (get) #\newline)])
+      (define (assert-regexp! pattern)
+        (match lines
+          [() (throw `#(pattern-not-found ,pattern))]
+          [(,line . ,rest)
+           (set! lines rest)
+           (unless (pregexp-match pattern line)
+             (assert-regexp! pattern))]))
+      (assert-regexp! "^Date:")
+      (assert-regexp! "^Timestamp:")
+      (assert-regexp! "^Event: #<swish-condition long>")
+      ;; omit Condition: since it's already shown in the Event: and the
+      ;; ugly display-condition output doesn't provide much of interest here
+      (assert-regexp! "^Stack:")
+      (assert-regexp! "^#<continuation.*>.*event-mgr.ms")
+      (assert-regexp! "^Date:")
+      (assert-regexp! "^Timestamp:")
+      (assert-regexp! "^Event: #<swish-condition long>")
+      ;; again we omit Condition: for swish-condition
+      (match lines ;; Should dump stack just once. Expect two blank lines.
+        [("" "" . ,_) 'ok]))))
+
 (isolate-mat handler-error ()
   (define op (open-output-string))
   (parameterize ([console-error-port op])
