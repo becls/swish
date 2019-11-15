@@ -1362,6 +1362,14 @@
   (define event-condition-table (make-parameter #f))
   (define (reset-console-event-handler) (event-condition-table #f))
 
+  (record-writer (record-type-descriptor mon)
+    (lambda (r p wr)
+      (display-string "#<monitor " p)
+      (wr (mon-origin r) p)
+      (display-string " " p)
+      (wr (mon-target r) p)
+      (write-char #\> p)))
+
   (record-writer (record-type-descriptor pcb)
     (lambda (r p wr)
       (display-string "#<process " p)

@@ -623,4 +623,20 @@
            #\space)
           (collect-args #'(where ...)))])]))
 
-  (define SQLITE_STATUS_MEMORY_USED 0))
+  (define SQLITE_STATUS_MEMORY_USED 0)
+
+  (record-writer (record-type-descriptor database)
+    (lambda (r p wr)
+      (display-string "#<database " p)
+      (wr (database-filename r) p)
+      (write-char #\> p)))
+
+  (record-writer (record-type-descriptor statement)
+    (lambda (r p wr)
+      (display-string "#<statement " p)
+      (wr (statement-database r) p)
+      (display-string " " p)
+      (wr (statement-sql r) p)
+      (write-char #\> p)))
+
+  )

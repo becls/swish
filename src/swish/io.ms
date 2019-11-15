@@ -719,4 +719,33 @@
         ))])
   )
 
+(isolate-mat record-writers ()
+  ;; osi-port
+  (match-let*
+   ([,p (open-fd-port "mystdin" 0 #f)]
+    [,_ (close-osi-port p)]
+    [,expected (format "#<osi-port ~s>" "mystdin")]
+    [,@expected (format "~s" p)])
+   'ok)
+  ;; path-watcher
+  (match-let*
+   ([,w (watch-path (base-dir) self)]
+    [,_ (close-path-watcher w)]
+    [,expected (format "#<path-watcher ~s>" (base-dir))]
+    [,@expected (format "~s" w)])
+   'ok)
+  ;; listener
+  (match-let*
+   ([,l (listen-tcp "127.0.0.1" 0 self)]
+    [,p (listener-port-number l)]
+    [,_ (close-tcp-listener l)]
+    [,expected (format "#<tcp-listener 127.0.0.1:~a>" p)]
+    [,@expected (format "~s" l)]
+    [,l (listen-tcp "::1" 0 self)]
+    [,p (listener-port-number l)]
+    [,_ (close-tcp-listener l)]
+    [,expected (format "#<tcp-listener [::1]:~a>" p)]
+    [,@expected (format "~s" l)])
+   'ok))
+
 (hook-console-input)

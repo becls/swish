@@ -781,6 +781,17 @@
      (immutable create-time)
      (mutable handle)))
 
+  (define (display-socket l op)
+    (define (contains-period? s)
+      (let lp ([i 0] [n (string-length s)])
+        (and (< i n)
+             (or (char=? (string-ref s i) #\.)
+                 (lp (+ i 1) n)))))
+    (match-define `(listener ,address ,port-number) l)
+    (if (contains-period? address)
+        (fprintf op "~a:~a" address port-number)
+        (fprintf op "[~a]:~a" address port-number)))
+
   (define tcp-listeners
     (make-foreign-handle-guardian 'tcp-listeners
       listener-handle
@@ -788,19 +799,10 @@
       listener-create-time
       (lambda (l) (close-tcp-listener l))
       (lambda (op l handle)
-        (define (contains-period? s)
-          (let lp ([i 0] [n (string-length s)])
-            (and (< i n)
-                 (or (char=? (string-ref s i) #\.)
-                     (lp (+ i 1) n)))))
         (fprintf op "  ~d: " handle)
-        (let ([addr (listener-address l)])
-          (if (contains-period? addr)
-              (display-string addr op)
-              (fprintf op "[~a]" addr))
-          (fprintf op ":~d opened ~d\n"
-            (listener-port-number l)
-            (listener-create-time l))))))
+        (display-socket l op)
+        (fprintf op " opened ~d\n"
+          (listener-create-time l)))))
 
   (define tcp-listener-count (foreign-handle-count 'tcp-listeners))
   (define print-tcp-listeners (foreign-handle-print 'tcp-listeners))
@@ -948,4 +950,22 @@
         [(,who . ,errno) (io-error (sighandler-signum handler) who errno)])))
 
   (set-top-level-value! '@deliver-signal @deliver-signal)
+
+  (record-writer (record-type-descriptor osi-port)
+    (lambda (r p wr)
+      (display-string "#<osi-port " p)
+      (wr (osi-port-name r) p)
+      (write-char #\> p)))
+
+  (record-writer (record-type-descriptor path-watcher)
+    (lambda (r p wr)
+      (display-string "#<path-watcher " p)
+      (wr (path-watcher-path r) p)
+      (write-char #\> p)))
+
+  (record-writer (record-type-descriptor listener)
+    (lambda (r p wr)
+      (display-string "#<tcp-listener " p)
+      (display-socket r p)
+      (write-char #\> p)))
   )

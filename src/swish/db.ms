@@ -394,4 +394,17 @@
       (guard (> count 0))
       'ok])))
 
+(isolate-mat record-writers ()
+  ;; database and statement
+  (match-let*
+   ([,db (sqlite:open ":memory:" SQLITE_OPEN_READONLY)]
+    [,stmt (sqlite:prepare db "select 123")]
+    [,_ (sqlite:finalize stmt)]
+    [,_ (sqlite:close db)]
+    [,db-expected (format "#<database ~s>" ":memory:")]
+    [,@db-expected (format "~s" db)]
+    [,stmt-expected (format "#<statement ~a ~s>" db-expected "select 123")]
+    [,@stmt-expected (format "~s" stmt)])
+   'ok))
+
 (start-silent-event-mgr)

@@ -2611,6 +2611,13 @@
      'ok)))
 
 (isolate-mat record-writers ()
+  ;; mon
+  (match-let*
+   ([,pid (spawn&link values)]
+    [,m (monitor pid)]
+    [,expected (format "#<monitor ~s ~s>" self pid)]
+    [,@expected (format "~s" m)])
+   'ok)
   ;; pcb
   (match-let*
    ([,pid (spawn&link (lambda () (receive)))]
