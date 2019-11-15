@@ -204,7 +204,7 @@
       (repl-as #f script))]
     [#t
      (eq?
-      (match (debug-condition) [`(&swish-condition ,reason) reason])
+      (match (debug-condition) [`(&fault-condition ,reason) reason])
       last-err)]
     [()
      ;; named: err from catch
@@ -215,7 +215,7 @@
       (repl-as "my-app" script))]
     [#t
      (eq?
-      (match (debug-condition) [`(&swish-condition ,reason) reason])
+      (match (debug-condition) [`(&fault-condition ,reason) reason])
       last-err)])
    'ok)
   (match-let*
@@ -227,7 +227,7 @@
     [()
      ;; anonymous: raise err from try
      (match-regexps
-      '("#<swish-condition #<compound condition.*>>"
+      '("#<fault #<compound condition.*>>"
         "Exception in car: 2 is not a pair."
         "^$")
       (repl-as #f script))]
@@ -235,7 +235,7 @@
     [()
      ;; named: raise err from try
      (match-regexps
-      '("#<swish-condition #<compound condition.*>>"
+      '("#<fault #<compound condition.*>>"
         "my-app: 2 is not a pair."
         "^$")
       (repl-as "my-app" script))]
@@ -250,26 +250,26 @@
     [()
      ;; anonymous: throw err from try
      (match-regexps
-      '("#<swish-condition #<compound condition.*>>"
+      '("#<fault #<compound condition.*>>"
         "Exception in length: 3 is not a proper list."
         "^$")
       (repl-as #f script))]
     [#t
      (eq?
       (match (debug-condition)
-        [`(&swish-condition [inner* ()] ,reason) reason])
+        [`(&fault-condition [inner* ()] ,reason) reason])
       last-err)]
     [()
      ;; named: throw err from try
      (match-regexps
-      '("#<swish-condition #<compound condition.*>>"
+      '("#<fault #<compound condition.*>>"
         "my-app: 3 is not a proper list."
         "^$")
       (repl-as "my-app" script))]
     [#t
      (eq?
       (match (debug-condition)
-        [`(&swish-condition [inner* ()] ,reason)  reason])
+        [`(&fault-condition [inner* ()] ,reason)  reason])
       last-err)])
    'ok)
   (match-let*

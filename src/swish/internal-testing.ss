@@ -21,6 +21,6 @@
 ;;; DEALINGS IN THE SOFTWARE.
 
 (library (swish internal-testing)
-  (export &swish-condition)
+  (export &fault-condition)
   (import (scheme) (swish internal))
-  ($import-internal &swish-condition))
+  ($import-internal &fault-condition))

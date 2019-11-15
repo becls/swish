@@ -197,6 +197,13 @@
     (receive (after 1000 (raise 'normal-should-not-kill))
       [roger 'ok])))
 
+(isolate-mat kill-fault-normal ()
+  (let ([pid (spawn&link (lambda () (receive [(word-from ,p) (send p 'roger)])))])
+    (kill pid (make-fault 'normal))
+    (send pid `(word-from ,self))
+    (receive (after 1000 (raise 'normal-should-not-kill))
+      [roger 'ok])))
+
 (isolate-mat link-native ()
   (define (assert-expected e)
     (match (and (condition? e) (exit-reason->english e))
@@ -2693,7 +2700,7 @@
      ([,C (catch (bug origin))]
       [,T (try (bug origin))]
       [#(EXIT ,reason) C]
-      [#t (same? reason (match T [`(&swish-condition ,reason) reason]))]
+      [#t (same? reason (match T [`(&fault-condition ,reason) reason]))]
       [#t (same? reason (match C [`(catch ,r) r]))]
       [#t (same? reason (match T [`(catch ,r) r]))]
       [#t (same? reason (match C [`(catch ,r ,@r) r]))]
@@ -2772,6 +2779,34 @@
    'ok)
   )
 
+(mat make-fault ()
+  (match-let*
+   ([,e0 (make-fault 'flak)]
+    [`(catch flak) e0]
+    [`(catch flak ,@e0) e0]
+    [(no-raise ,e1) (list 'no-raise (make-fault 'cold e0))]
+    [`(catch cold) e1]
+    [`(catch cold ,@e1) e1]
+    [`(&fault-condition
+       [reason cold]
+       [inner* (`(&fault-condition [reason flak] [inner* ()] [k ,k0]))]
+       [k ,k1])
+     e1]
+    [#t (#%$continuation? k0)]
+    [#t (#%$continuation? k1)]
+    [ok
+     (call/cc
+      (lambda (return)
+        (define (my-exit-reason->english x)
+          ;; should call exit-reason->english on reason within &fault-condition
+          (match x
+            [cold (return 'ok)]
+            [,_ (swish-exit-reason->english x)]))
+        (parameterize ([current-exit-reason->english my-exit-reason->english])
+          (exit-reason->english e1)
+          'nope)))])
+   'ok))
+
 (isolate-mat record-writers ()
   ;; mon
   (match-let*
@@ -2791,10 +2826,10 @@
     [#t (unregister 'coverage)]
     [,@expected0 (format "~s" pid)])
    'ok)
-  ;; &swish-condition
+  ;; &fault-condition
   (match-let*
    ([,c (try (throw 'ball))]
-    ["#<swish-condition ball>" (format "~s" c)])
+    ["#<fault ball>" (format "~s" c)])
    'ok)
   ;; console-event-handler treatment of native exceptions
   (let ([os (open-output-string)])

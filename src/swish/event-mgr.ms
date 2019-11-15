@@ -194,15 +194,15 @@
              (assert-regexp! pattern))]))
       (assert-regexp! "^Date:")
       (assert-regexp! "^Timestamp:")
-      (assert-regexp! "^Event: #<swish-condition long>")
+      (assert-regexp! "^Event: #<fault long>")
       ;; omit Condition: since it's already shown in the Event: and the
       ;; ugly display-condition output doesn't provide much of interest here
       (assert-regexp! "^Stack:")
       (assert-regexp! "^#<continuation.*>.*event-mgr.ms")
       (assert-regexp! "^Date:")
       (assert-regexp! "^Timestamp:")
-      (assert-regexp! "^Event: #<swish-condition long>")
-      ;; again we omit Condition: for swish-condition
+      (assert-regexp! "^Event: #<fault long>")
+      ;; again we omit Condition: for fault-condition
       (match lines ;; Should dump stack just once. Expect two blank lines.
         [("" "" . ,_) 'ok]))))
 

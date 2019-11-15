@@ -410,13 +410,13 @@ returned.
   \code{(try \var{e1} \var{e2} \etc{})}
 \end{syntax}
 \expandsto{}
-\code{(\$trap (lambda () \var{e1} \var{e2} \etc{}) ->swish-condition)}
+\code{(\$trap (lambda () \var{e1} \var{e2} \etc{}) ->fault-condition)}
 
 The \code{try} macro evaluates expressions \var{e1} \var{e2}
 \etc{} in a dynamic context that traps exceptions.  If no exception is
 raised, the return value is the value of the last expression. If
-exception \var{reason} is raised, the value returned
-matches the extended match pattern \code{`(catch \var{reason})}.
+exception \var{reason} is raised, the return value is a fault condition
+matching the extended match pattern \code{`(catch \var{reason} \opt{\var{e}})}.
 
 % ----------------------------------------------------------------------------
 \defineentry{catch}
@@ -444,10 +444,23 @@ Otherwise, \var{e} is matched against the exit reason.
 \end{procedure}
 \returns{} does not return
 
-The \code{throw} procedure raises a Swish condition containing reason
+The \code{throw} procedure raises a fault condition containing reason
 \var{r}, an optional inner exception \var{inner}, and the current
 continuation, which may provide useful debugging context.
 The exception raised may be trapped by \code{try} and matched using
+the extended match pattern \code{`(catch \var{r} \opt{\var{e}})}.
+
+% ----------------------------------------------------------------------------
+\defineentry{make-fault}
+\begin{procedure}
+  \code{(make-fault \var{r} \opt{\var{inner}})}
+\end{procedure}
+\returns{} a fault condition
+
+The \code{make-fault} procedure returns a fault condition containing reason
+\var{r}, an optional inner exception \var{inner}, and the current
+continuation, which may provide useful debugging context.
+The return value matches
 the extended match pattern \code{`(catch \var{r} \opt{\var{e}})}.
 
 % ----------------------------------------------------------------------------

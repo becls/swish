@@ -34,7 +34,7 @@
    (swish osi)
    )
 
-  ($import-internal &swish-condition)
+  ($import-internal &fault-condition)
 
   (define (exit-reason->english x)
     ((current-exit-reason->english) x))
@@ -107,7 +107,7 @@
       [no-process "No process."]
       [timeout "Timeout."]
       [unexpected-eof "Unexpected end-of-file."]
-      [`(&swish-condition ,reason) (exit-reason->english reason)]
+      [`(&fault-condition ,reason) (exit-reason->english reason)]
 
       ;; The following must come last:
       [,x

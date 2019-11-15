@@ -40,6 +40,7 @@
    inherited-parameters
    kill
    link
+   make-fault
    make-inherited-parameter
    make-process-parameter
    match
@@ -220,7 +221,7 @@
       (console-event-handler event)))
 
   (define (@kill p raw-reason)
-    (define reason (unwrap-swish-condition raw-reason))
+    (define reason (unwrap-fault-condition raw-reason))
     (when (eq? p event-loop-process)
       (panic `#(event-loop-process-terminated ,reason)))
     (when (eq? p finalizer-process)
@@ -270,26 +271,27 @@
     (pcb-monitors-set! p (remq m (pcb-monitors p))))
 
   ($import-internal
-   &swish-condition swish-condition-reason swish-condition? make-swish-condition
+   make-fault
+   &fault-condition fault-condition-reason fault-condition? make-fault-condition
    )
 
-  (define (unwrap-swish-condition r)
-    (if (swish-condition? r)
-        (swish-condition-reason r)
+  (define (unwrap-fault-condition r)
+    (if (fault-condition? r)
+        (fault-condition-reason r)
         r))
 
-  (define (->swish-condition reason)
-    (if (swish-condition? reason)
+  (define (->fault-condition reason)
+    (if (fault-condition? reason)
         reason
-        (make-swish-condition #f reason '())))
+        (make-fault-condition #f reason '())))
 
   (define (->EXIT reason)
-    `#(EXIT ,(unwrap-swish-condition reason)))
+    `#(EXIT ,(unwrap-fault-condition reason)))
 
   (define-syntax try
     (syntax-rules ()
       [(_ e1 e2 ...)
-       ($trap (lambda () e1 e2 ...) ->swish-condition)]))
+       ($trap (lambda () e1 e2 ...) ->fault-condition)]))
 
   ;; This binding serves a dual purpose: it provides backwards
   ;; compatibility for older code and it provides a binding for
@@ -317,7 +319,7 @@
       (bad-arg 'kill p))
     (no-interrupts
      (when (alive? p)
-       (let ([reason (unwrap-swish-condition raw-reason)])
+       (let ([reason (unwrap-fault-condition raw-reason)])
          (cond
           [(eq? reason 'kill) (@kill p 'killed)]
           [(pcb-trap-exit p) (@send p `#(EXIT ,self ,reason))]
@@ -346,10 +348,10 @@
        (cond
         [(alive? p) (@link p self)]
         [(pcb-trap-exit self)
-         (@send self `#(EXIT ,p ,(unwrap-swish-condition (pcb-exception-state p))))]
+         (@send self `#(EXIT ,p ,(unwrap-fault-condition (pcb-exception-state p))))]
         [else
          (let ([r (pcb-exception-state p)])
-           (unless (eq? (unwrap-swish-condition r) 'normal)
+           (unless (eq? (unwrap-fault-condition r) 'normal)
              (@kill self r)
              (yield #f 0)))])))
     #t)
@@ -533,7 +535,7 @@
         (display-string "ready to run" op)]
        [completed?
         (fprintf op "exited with reason ~s"
-          (unwrap-swish-condition (pcb-exception-state p)))]
+          (unwrap-fault-condition (pcb-exception-state p)))]
        [else
         (display-string "waiting indefinitely" op)
         (print-src src op)])
@@ -885,7 +887,7 @@
            (let ([c (vector-ref keys i)])
              (unless (eq? (eq-hashtable-ref ht c #f) 'dumped)
                (eq-hashtable-set! ht c 'dumped)
-               (unless (swish-condition? c)
+               (unless (fault-condition? c)
                  (fprintf op "Condition: ")
                  (display-condition c op)
                  (newline op))
@@ -1402,34 +1404,34 @@
          (#3%fx= (#3%vector-length x) 2)
          (eq? (#3%vector-ref x 0) 'EXIT)))
 
-  (define-syntax direct-&swish-condition-ref
+  (define-syntax direct-&fault-condition-ref
     (syntax-rules ()
       [(_ field x)
-       ((#3%csv7:record-field-accessor (record-type-descriptor &swish-condition) field) x)]))
+       ((#3%csv7:record-field-accessor (record-type-descriptor &fault-condition) field) x)]))
 
   (define-syntax exit-reason (syntax-rules ()))
   (define-match-extension exit-reason
     (lambda (v pattern)
       (syntax-case pattern (quasiquote)
         [`(exit-reason always-match? r e)
-         (with-temporaries (is-err? tmp.reason)
-           #`((bind is-err? (swish-condition? #,v))
-              (guard (or always-match? is-err? (legacy-EXIT? #,v)))
+         (with-temporaries (is-fault? tmp.reason)
+           #`((bind is-fault? (fault-condition? #,v))
+              (guard (or always-match? is-fault? (legacy-EXIT? #,v)))
               (bind tmp.reason
-                (if is-err?
-                    (direct-&swish-condition-ref 'reason #,v)
+                (if is-fault?
+                    (direct-&fault-condition-ref 'reason #,v)
                     (if always-match?
                         (if (legacy-EXIT? #,v)
                             (#3%vector-ref #,v 1)
                             #,v)
                         (#3%vector-ref #,v 1))))
-              (handle-fields (#,v is-err? tmp.reason) [reason r] [err e])))]))
+              (handle-fields (#,v is-fault? tmp.reason) [reason r] [err e])))]))
     (lambda (input fld var options context)
       (syntax-case input ()
-        [(v is-err? tmp.reason)
+        [(v is-fault? tmp.reason)
          (case (syntax->datum fld)
            [(reason) #`((bind #,var tmp.reason))]
-           [(err) #`((bind #,var (if (and is-err? (direct-&swish-condition-ref 'k v)) v tmp.reason)))]
+           [(err) #`((bind #,var (if (and is-fault? (direct-&fault-condition-ref 'k v)) v tmp.reason)))]
            [else (pretty-syntax-violation "unknown field" fld)])])))
 
   (define-match-extension catch
@@ -1480,10 +1482,10 @@
       (write-char #\> p)
       (add-event-condition! x)))
 
-  (record-writer (record-type-descriptor &swish-condition)
+  (record-writer (record-type-descriptor &fault-condition)
     (lambda (r p wr)
-      (display-string "#<swish-condition " p)
-      (wr (swish-condition-reason r) p)
+      (display-string "#<fault " p)
+      (wr (fault-condition-reason r) p)
       (write-char #\> p)
       (add-event-condition! r)))
 

@@ -24,27 +24,32 @@
   (export $import-internal)
   (import (scheme))
 
-  (define-record-type (&swish-condition make-swish-condition swish-condition?)
-    ;; use define-record to seal &swish-condition
+  (define-record-type (&fault-condition make-fault-condition fault-condition?)
+    ;; use define-record to seal &fault-condition
     (nongenerative)
     (sealed #t)
     (parent &continuation)
     (fields
-     (immutable reason swish-condition-reason)
-     (immutable inner* swish-condition-inner*)))
+     (immutable reason fault-condition-reason)
+     (immutable inner* fault-condition-inner*)))
+
+  (define ($with-fault-condition reason inner* handler)
+    (call/cc
+     (lambda (k)
+       (handler
+        (if (fault-condition? reason)
+            (make-fault-condition k (fault-condition-reason reason) (cons reason inner*))
+            (make-fault-condition k reason inner*))))))
 
   (define throw
     (case-lambda
-     [(reason) ($throw reason '())]
-     [(reason inner) ($throw reason (list inner))]))
+     [(reason) ($with-fault-condition reason '() raise)]
+     [(reason inner) ($with-fault-condition reason (list inner) raise)]))
 
-  (define ($throw reason inner*)
-    (call/cc
-     (lambda (k)
-       (raise
-        (if (swish-condition? reason)
-            (make-swish-condition k (swish-condition-reason reason) (cons reason inner*))
-            (make-swish-condition k reason inner*))))))
+  (define make-fault
+    (case-lambda
+     [(reason) ($with-fault-condition reason '() values)]
+     [(reason inner) ($with-fault-condition reason (list inner) values)]))
 
   (define-syntax $import-internal
     (let ([allowed? #t])
