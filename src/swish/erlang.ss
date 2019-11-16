@@ -57,6 +57,7 @@
    print-process-state
    process-id
    process-name
+   process-parent
    process-trap-exit
    process?
    profile-me
@@ -661,10 +662,19 @@
         (bad-arg 'process-name p))
       (pcb-name p)]))
 
+  (define (process-parent)
+    (let ([x (weak-parent)])
+      (and (weak-pair? x)
+           (let ([x (car x)])
+             (and (not (bwp-object? x)) x)))))
+
   (define (inherit-parameters thunk)
+    (define parent self)
     (define inherited (inherited-parameters))
     (define vals (map (lambda (p) (p)) inherited))
     (lambda ()
+      (weak-parent (weak-cons parent '()))
+      (set! parent #f)
       (for-each (lambda (p v) (p v)) inherited vals)
       (set! inherited '())
       (set! vals '())
@@ -1586,6 +1596,8 @@
     (let ([ht (event-condition-table)])
       (when (and ht (not (eq-hashtable-ref ht c #f)))
         (eq-hashtable-set! ht c #t))))
+
+  (define weak-parent (make-process-parameter #f))
 
   (record-writer (record-type-descriptor mon)
     (lambda (r p wr)

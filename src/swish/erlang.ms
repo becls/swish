@@ -921,6 +921,22 @@
       [#t (andmap process? pids)]) ;; ensure pids are live across gc
      'ok)))
 
+(isolate-mat process-parent ()
+  (define me self)
+  (spawn
+   (lambda ()
+     (send me `#(t1 ,(process-parent)))))
+  (spawn
+   (lambda ()
+     (spawn
+      (lambda ()
+        (do () ((not (process-parent))) (gc))
+        (send me `#(t2 ,(process-parent)))))))
+  (receive (after 1000 (throw 'timeout))
+    [#(t1 ,@me) 'ok])
+  (receive (after 1000 (throw 'timeout))
+    [#(t2 #f) 'ok]))
+
 (isolate-mat inherited-parameters ()
   (define (get p) (p))
   (parameterize ([inherited-parameters '()])

@@ -924,6 +924,17 @@ process, exception \code{\#(bad-arg process-name \var{process})} is
 raised.
 
 % ----------------------------------------------------------------------------
+\defineentry{process-parent}
+\begin{procedure}
+  \code{(process-parent)}
+\end{procedure}
+\returns{} the parent process or \code{\#f}
+
+The \code{process-parent} procedure returns the process which spawned
+the current process or \code{\#f} if the parent process has been
+garbage collected.
+
+% ----------------------------------------------------------------------------
 \defineentry{process-trap-exit}
 \begin{parameter}
   \code{process-trap-exit}
