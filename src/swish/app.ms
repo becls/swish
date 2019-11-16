@@ -88,6 +88,9 @@
    'ok))
 
 (mat app-exception-handler ()
+  (define (unwrap-debug-condition)
+    (find (lambda (x) (match x [`(&fault-condition) x] [,_ #f]))
+      (simple-conditions (debug-condition))))
   (define (go who val)
     (call/cc
      (lambda (k)
@@ -96,7 +99,9 @@
                         [console-error-port os]
                         [reset-handler
                          (lambda ()
-                           (assert (eq? val (debug-condition)))
+                           (assert
+                            (or (eq? val (debug-condition))
+                                (eq? val (unwrap-debug-condition))))
                            (k (get-output-string os)))])
            (app-exception-handler val))
          "failed to invoke reset-handler"))))
@@ -204,7 +209,7 @@
       (repl-as #f script))]
     [#t
      (eq?
-      (match (debug-condition) [`(&fault-condition ,reason) reason])
+      (match (unwrap-debug-condition) [`(&fault-condition ,reason) reason])
       last-err)]
     [()
      ;; named: err from catch
@@ -215,8 +220,10 @@
       (repl-as "my-app" script))]
     [#t
      (eq?
-      (match (debug-condition) [`(&fault-condition ,reason) reason])
-      last-err)])
+      (match (unwrap-debug-condition) [`(&fault-condition ,reason) reason])
+      last-err)]
+    [(,k0 ,k1) (exit-reason->stacks (unwrap-debug-condition))]
+    [,@k0 (condition-continuation (debug-condition))])
    'ok)
   (match-let*
    ([,script
@@ -239,7 +246,34 @@
         "my-app: 2 is not a pair."
         "^$")
       (repl-as "my-app" script))]
-    [#t (eq? (debug-condition) last-err)])
+    [#t (eq? (debug-condition) last-err)]
+    [(,k0) (exit-reason->stacks last-err)]
+    [,@k0 (condition-continuation (debug-condition))])
+   'ok)
+  (match-let*
+   ([,script
+     (format "~{~s\n~}"
+       '((define x (try (throw 'overboard)))
+         x
+         (match x [`(catch ,r ,e) (set! last-err e) (raise e)])))]
+    [()
+     ;; anonymous: raise thrown from try
+     (match-regexps
+      '("#<fault overboard>"
+        "Exception: overboard."
+        "^$")
+      (repl-as #f script))]
+    [#t (eq? (unwrap-debug-condition) last-err)]
+    [()
+     ;; named: raise thrown from try
+     (match-regexps
+      '("#<fault overboard>"
+        "my-app: overboard."
+        "^$")
+      (repl-as "my-app" script))]
+    [#t (eq? (unwrap-debug-condition) last-err)]
+    [(,k0) (exit-reason->stacks last-err)]
+    [,@k0 (condition-continuation (debug-condition))])
    'ok)
   (match-let*
    ([,script
@@ -256,8 +290,8 @@
       (repl-as #f script))]
     [#t
      (eq?
-      (match (debug-condition)
-        [`(&fault-condition [inner* ()] ,reason) reason])
+      (match (unwrap-debug-condition)
+        [`(&fault-condition ,reason [inner* ()]) reason])
       last-err)]
     [()
      ;; named: throw err from try
@@ -268,9 +302,11 @@
       (repl-as "my-app" script))]
     [#t
      (eq?
-      (match (debug-condition)
-        [`(&fault-condition [inner* ()] ,reason)  reason])
-      last-err)])
+      (match (unwrap-debug-condition)
+        [`(&fault-condition ,reason [inner* ()]) reason])
+      last-err)]
+    [(,k0 ,k1) (exit-reason->stacks (unwrap-debug-condition))]
+    [,@k0 (condition-continuation (debug-condition))])
    'ok)
   (match-let*
    ([()

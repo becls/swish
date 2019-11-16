@@ -20,6 +20,7 @@
 ;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 ;;; DEALINGS IN THE SOFTWARE.
 
+#!chezscheme
 (library (swish errors)
   (export
    current-exit-reason->english
@@ -150,4 +151,31 @@
          (fold-left add-stack (cons-k reason (cons-k r k*)) inner*)]
         [,_ (cons-k reason k*)]))
     (add-stack '() reason))
+
+  (define-syntax redefine
+    (syntax-rules ()
+      [(_ var e) (#%$set-top-level-value! 'var e)]))
+
+  ;; Native debugger doesn't know how to print our fault-condition and doesn't
+  ;; understand multiple stacks, so package up a message condition and shadow
+  ;; c's continuation by picking the first k returned by exit-reason->english,
+  ;; which is typically closest to the source of the original error. Folks get
+  ;; reasonable default behavior and they can inspect the condition directly
+  ;; for more details.
+  (redefine debug-condition
+    (let ([system-debug-condition (#%$top-level-value 'debug-condition)])
+      (case-lambda
+       [() (system-debug-condition)]
+       [(c)
+        (system-debug-condition
+         (match c
+           [`(&fault-condition)
+            (parameterize ([print-graph #t])
+              (let ([msg (make-message-condition (exit-reason->english c))])
+                (match (exit-reason->stacks c)
+                  [(,k0 ,k1 . ,_)
+                   (condition (make-continuation-condition k0) c msg)]
+                  [,_ (condition c msg)])))]
+           [,_ c]))])))
+
   )
