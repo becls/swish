@@ -56,6 +56,7 @@
    pps
    print-process-state
    process-id
+   process-name
    process-trap-exit
    process?
    profile-me
@@ -651,6 +652,14 @@
       (unless (pcb? p)
         (bad-arg 'process-id p))
       (pcb-id p)]))
+
+  (define process-name
+    (case-lambda
+     [() (pcb-name self)]
+     [(p)
+      (unless (pcb? p)
+        (bad-arg 'process-name p))
+      (pcb-name p)]))
 
   (define (inherit-parameters thunk)
     (define inherited (inherited-parameters))

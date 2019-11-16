@@ -912,6 +912,18 @@ a process, exception \code{\#(bad-arg process-id \var{process})} is
 raised.
 
 % ----------------------------------------------------------------------------
+\defineentry{process-name}
+\begin{procedure}
+  \code{(process-name \opt{\var{process}})}
+\end{procedure}
+\returns{} the process name or \code{\#f}
+
+The \code{process-name} procedure returns \var{process}.\code{name},
+where \var{process} defaults to \code{self}. If \var{process} is not a
+process, exception \code{\#(bad-arg process-name \var{process})} is
+raised.
+
+% ----------------------------------------------------------------------------
 \defineentry{process-trap-exit}
 \begin{parameter}
   \code{process-trap-exit}

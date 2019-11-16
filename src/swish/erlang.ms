@@ -344,7 +344,8 @@
   (match-let*
    ([#f (process-trap-exit)]
     [,x (guard (pid? x)) (process-id)]
-    [,@x (process-id self)])
+    [,@x (process-id self)]
+    [#f (process-name)])
    'ok))
 
 (isolate-mat bad-args ()
@@ -384,6 +385,7 @@
     [#(EXIT #(bad-arg print-precision -3)) (catch (print-precision -3))]
     [#(EXIT #(bad-arg print-radix 1)) (catch (print-radix 1))]
     [#(EXIT #(bad-arg process-id 12)) (catch (process-id 12))]
+    [#(EXIT #(bad-arg process-name 12)) (catch (process-name 12))]
     [#(EXIT #(bad-arg register 12)) (catch (register (gensym) 12))]
     [#(EXIT #(bad-arg register 12)) (catch (register 12 'bad))]
     [#(EXIT #(bad-arg reset-handler 12)) (catch (reset-handler 12))]
@@ -453,7 +455,9 @@
        (catch (register a-name (spawn void)))]
       [#(EXIT #(process-dead ,@c-pid)) (catch (register (gensym "C") c-pid))]
       [,@a-pid (whereis a-name)]
+      [,@a-name (process-name a-pid)]
       [,@b-pid (whereis b-name)]
+      [,@b-name (process-name b-pid)]
       [,names (get-registered)])
      (assert (find (lambda (x) (eq? x a-name)) names))
      (assert (find (lambda (x) (eq? x b-name)) names))
