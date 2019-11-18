@@ -217,7 +217,7 @@
    ([#(ok ,pid) (start&link-server #f 'process-trap-exit)])
    (kill pid 'shutdown)
    (receive (after 5000 (throw 'not-stopped))
-     [#(EXIT ,@pid shutdown) 'ok])))
+     [`(EXIT ,@pid shutdown) 'ok])))
 
 (isolate-mat crash ()
   (process-trap-exit #t)
@@ -225,7 +225,7 @@
    ([#(ok ,pid) (start&link-server #f '())]
     [#(EXIT #(#(shutdown reason) ,_))
      (catch (gen-server:call pid 'shutdown-reason))]
-    [ok (receive [#(EXIT ,@pid #(shutdown reason)) 'ok])])
+    [ok (receive [`(EXIT ,@pid #(shutdown reason)) 'ok])])
    'ok))
 
 (isolate-mat crash2 ()

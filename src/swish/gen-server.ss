@@ -84,7 +84,7 @@
            [pid (spawn&link thunk)])
       (receive
        [#(ack ,@pid ,reply) reply]
-       [#(EXIT ,@pid ,reason)
+       [`(EXIT ,@pid ,reason)
         (receive (until 0 (void))
           [#(ack ,@pid ,reply) (void)])
         `#(error ,reason)])))
@@ -133,7 +133,7 @@
 
   (define (handle-msg msg parent name iface state timeout)
     (match msg
-      [#(EXIT ,@parent ,reason)
+      [`(EXIT ,@parent ,reason)
        (terminate reason name msg iface state)]
       [#($gen-call ,from ,msg)
        (match (catch (do-handle-call iface msg from state))

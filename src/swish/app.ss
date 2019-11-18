@@ -75,7 +75,7 @@
                      ;; after log-db shuts down from getting lost.
                      (process-trap-exit #t)
                      (receive
-                      [#(EXIT ,_ ,_) (event-mgr:unregister)])))))
+                      [`(EXIT ,_ ,_) (event-mgr:unregister)])))))
         permanent 1000 worker)
       #(log-db:setup ,(lambda () (log-db:setup loggers))
          temporary 1000 worker)

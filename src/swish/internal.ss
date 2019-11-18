@@ -51,6 +51,13 @@
      [(reason) ($with-fault-condition reason '() values)]
      [(reason inner) ($with-fault-condition reason (list inner) values)]))
 
+  (define-record-type EXIT-msg
+    (nongenerative)
+    (sealed #t)
+    (fields
+     (immutable pid)
+     (immutable reason)))
+
   (define-syntax $import-internal
     (let ([allowed? #t])
       (lambda (x)

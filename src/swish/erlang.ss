@@ -23,6 +23,7 @@
 #!chezscheme
 (library (swish erlang)
   (export
+   EXIT
    add-finalizer
    arg-check
    bad-arg
@@ -245,7 +246,7 @@
     (let ([links (pcb-links p)])
       (pcb-links-set! p '())
       (@remove-links links p)
-      (@kill-linked links p reason))
+      (@kill-linked links p reason raw-reason))
     (let ([monitors (pcb-monitors p)])
       (pcb-monitors-set! p '())
       (for-each
@@ -277,7 +278,7 @@
   ($import-internal
    make-fault
    &fault-condition fault-condition-reason fault-condition? make-fault-condition
-   )
+   EXIT-msg EXIT-msg? EXIT-msg-pid EXIT-msg-reason make-EXIT-msg)
 
   (define (unwrap-fault-condition r)
     (if (fault-condition? r)
@@ -326,7 +327,7 @@
        (let ([reason (unwrap-fault-condition raw-reason)])
          (cond
           [(eq? reason 'kill) (@kill p 'killed)]
-          [(pcb-trap-exit p) (@send p `#(EXIT ,self ,reason))]
+          [(pcb-trap-exit p) (@send p (make-EXIT-msg self raw-reason))]
           [(not (eq? reason 'normal)) (@kill p raw-reason)]))
        (unless (alive? self)
          (yield #f 0))))
@@ -352,7 +353,7 @@
        (cond
         [(alive? p) (@link p self)]
         [(pcb-trap-exit self)
-         (@send self `#(EXIT ,p ,(unwrap-fault-condition (pcb-exception-state p))))]
+         (@send self (make-EXIT-msg p (pcb-exception-state p)))]
         [else
          (let ([r (pcb-exception-state p)])
            (unless (eq? (unwrap-fault-condition r) 'normal)
@@ -836,14 +837,14 @@
             (#%$current-winders winders)
             k)))))
 
-  (define (@kill-linked links p reason)
+  (define (@kill-linked links p reason raw-reason)
     (unless (null? links)
       (let ([linked (car links)])
         (cond
          [(not (alive? linked))]
-         [(pcb-trap-exit linked) (@send linked `#(EXIT ,p ,reason))]
-         [(not (eq? reason 'normal)) (@kill linked reason)]))
-      (@kill-linked (cdr links) p reason)))
+         [(pcb-trap-exit linked) (@send linked (make-EXIT-msg p raw-reason))]
+         [(not (eq? reason 'normal)) (@kill linked raw-reason)]))
+      (@kill-linked (cdr links) p reason raw-reason)))
 
   (define (whereis name)
     (unless (symbol? name)
@@ -1511,6 +1512,15 @@
          (with-temporaries (tmp)
            #`((sub-match #,v `(exit-reason #f r e))))])))
 
+  (define-syntax EXIT (syntax-rules ()))
+  (define-match-extension EXIT
+    (lambda (v pattern)
+      (syntax-case pattern (quasiquote)
+        [`(EXIT p r)
+         #`((sub-match #,v `(EXIT-msg [pid p] [reason `(exit-reason #t r ,_)])))]
+        [`(EXIT p r e)
+         #`((sub-match #,v `(EXIT-msg [pid p] [reason `(exit-reason #t r e)])))])))
+
   (define-syntax redefine
     (syntax-rules ()
       [(_ var e) (#%$set-top-level-value! 'var e)]))
@@ -1556,6 +1566,13 @@
       (write-char #\> p)
       (add-event-condition! r)))
 
+  (record-writer (record-type-descriptor EXIT-msg)
+    (lambda (r p wr)
+      (display-string "#<EXIT " p)
+      (wr (EXIT-msg-pid r) p)
+      (display-string " " p)
+      (wr (unwrap-fault-condition (EXIT-msg-reason r)) p)
+      (write-char #\> p)))
   (disable-interrupts)
   (set-self! (@make-process #f))
   (set! event-loop-process

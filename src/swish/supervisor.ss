@@ -150,7 +150,7 @@
 
   (define (handle-info msg state)
     (match msg
-      [#(EXIT ,pid ,reason)
+      [`(EXIT ,pid ,reason)
        (match (restart-child pid reason state)
          [#(ok ,new-state)
           (profile-me)
@@ -368,7 +368,7 @@
     (monitor pid)
     (unlink pid)
     (receive (after 0 'ok)
-      [#(EXIT ,@pid ,reason)
+      [`(EXIT ,@pid ,reason)
        (receive
         [#(DOWN ,_ ,@pid ,_)
          (profile-me)

@@ -210,11 +210,11 @@ processes the following messages:
 does not process any messages.
 
 \genserver{supervisor}{handle-info} The \code{handle-info} procedure
-processes the following message:
+processes messages matching the following patterns:
 
 \antipar
 \begin{itemize}
-  \item{\code{\#(EXIT \var{pid} \var{reason})}}: Find \var{pid} in
+  \item{\code{`(EXIT \var{pid} \var{reason})}}: Find \var{pid} in
     the children list and apply the restart strategy. An unknown
     \var{pid} is ignored.
 

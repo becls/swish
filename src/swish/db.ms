@@ -241,7 +241,7 @@
          (raise 'make-db-init-fail)))]
     [#f (whereis name)])
    (receive (after 1000 (throw 'timeout))
-     [#(EXIT ,pid make-db-init-fail)
+     [`(EXIT ,pid make-db-init-fail)
       'ok])
    (match-let*
     ;; Original failure mode:

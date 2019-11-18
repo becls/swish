@@ -338,9 +338,10 @@ from \code{erlang:now}), or \code{infinity}. The default
 another message is received, then a \code{timeout} message will be
 processed by \code{handle-info}.
 
-Messages sent using \code{send}, including \code{\#(EXIT \var{pid}
-  \var{reason})} and \code{\#(DOWN \var{monitor} \var{pid}
-  \var{reason})}, are processed by \code{handle-info}.
+Messages sent using \code{send}, including those matching
+\code{`(EXIT \var{pid} \var{reason})}
+and \code{\#(DOWN \var{monitor} \var{pid} \var{reason})},
+are processed by \code{handle-info}.
 
 The generic server framework will automatically interpret an
 \code{EXIT} message from the process which spawned it as a reason

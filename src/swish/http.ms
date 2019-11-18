@@ -559,7 +559,7 @@
     (link http)
     (send http fail-msg)
     (receive (after 100 (throw 'timeout))
-      [#(EXIT ,@http ,@fail-msg) 'ok])))
+      [`(EXIT ,@http ,@fail-msg) 'ok])))
 
 (http-mat mime-types ()
   (capture-events)

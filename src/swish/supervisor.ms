@@ -97,8 +97,8 @@
       (when (process-alive? pid 0)
         (kill pid 'shutdown)
         (receive (after 5000 (throw 'no-shutdown))
-          [#(EXIT ,@pid shutdown) 'ok]
-          [#(EXIT ,@pid ,reason) (throw `#(bad-exit-reason ,reason))])))]))
+          [`(EXIT ,@pid shutdown) 'ok]
+          [`(EXIT ,@pid ,reason) (throw `#(bad-exit-reason ,reason))])))]))
 
 (define (get-events timeout)
   (receive (after timeout '())
@@ -136,8 +136,8 @@
   (match-let* ([#(ok ,pid) (start 'one-for-one 2 3600 '())])
     (kill pid 'shutdown)
     (receive (after 2000 (throw 'no-exit-reason))
-      [#(EXIT ,@pid shutdown) 'ok]
-      [#(EXIT ,@pid ,reason)
+      [`(EXIT ,@pid shutdown) 'ok]
+      [`(EXIT ,@pid ,reason)
        (throw `#(bad-exit-reason ,reason))]))
   'ok)
 
@@ -171,7 +171,7 @@
          [reason crash]
          [child-pid #f]
          [child-name child2])
-      #(EXIT ,@supervisor shutdown)
+      `(EXIT ,@supervisor shutdown)
       `(<child-end> [pid ,@pid1] [killed 1] [reason shutdown]))
      (get-events 0)])
    'ok))
@@ -301,7 +301,7 @@
         [last-message (raise objection)]
         [state ()]
         [reason objection])
-      #(EXIT ,@supervisor shutdown)
+      `(EXIT ,@supervisor shutdown)
       `(<child-end> [pid ,@pid1] [killed 0] [reason objection])
       `(<supervisor-error> ,@supervisor
          [error-context shutdown]
@@ -315,24 +315,24 @@
   (match-let* ([#(error ,(reason <= #(invalid-strategy foo)))
                 (start 'foo 'bar 'baz '())])
     (receive (after 2000 (throw 'no-exit-reason))
-      [#(EXIT ,_ ,@reason) 'ok]
-      [#(EXIT ,_ ,reason)
+      [`(EXIT ,_ ,@reason) 'ok]
+      [`(EXIT ,_ ,reason)
        (throw `#(bad-exit-reason ,reason))])))
 
 (supervisor-mat start-error2 ()
   (match-let* ([#(error ,(reason <= #(invalid-intensity bar)))
                 (start 'one-for-one 'bar 'baz '())])
     (receive (after 2000 (throw 'no-exit-reason))
-      [#(EXIT ,_ ,@reason) 'ok]
-      [#(EXIT ,_ ,reason)
+      [`(EXIT ,_ ,@reason) 'ok]
+      [`(EXIT ,_ ,reason)
        (throw `#(bad-exit-reason ,reason))])))
 
 (supervisor-mat start-error3 ()
   (match-let* ([#(error ,(reason <= #(invalid-period baz)))
                 (start 'one-for-one 0 'baz '())])
     (receive (after 2000 (throw 'no-exit-reason))
-      [#(EXIT ,_ ,@reason) 'ok]
-      [#(EXIT ,_ ,reason)
+      [`(EXIT ,_ ,@reason) 'ok]
+      [`(EXIT ,_ ,reason)
        (throw `#(bad-exit-reason ,reason))])))
 
 (supervisor-mat stop-infinity ()
@@ -346,11 +346,11 @@
      (supervisor:start-child 'sup-test child2)])
    (kill pid 'shutdown)
    (receive (after 5000 (throw 'no-exit-reason))
-     [#(EXIT ,@pid shutdown) 'ok]
-     [#(EXIT ,@pid ,reason) (throw `#(bad-exit-reason ,reason))])
+     [`(EXIT ,@pid shutdown) 'ok]
+     [`(EXIT ,@pid ,reason) (throw `#(bad-exit-reason ,reason))])
    (receive (after 2000 (throw 'no-exit-reason))
-     [#(EXIT ,@cpid1 shutdown) 'ok]
-     [#(EXIT ,@cpid1 ,reason) (throw `#(bad-exit-reason ,reason))])
+     [`(EXIT ,@cpid1 shutdown) 'ok]
+     [`(EXIT ,@cpid1 ,reason) (throw `#(bad-exit-reason ,reason))])
    'ok))
 
 (supervisor-mat stop-timeout ()
@@ -366,16 +366,16 @@
    (kill pid 'shutdown)
 
    (receive (after 5000 (throw 'no-exit-reason))
-     [#(EXIT ,@pid shutdown) 'ok]
-     [#(EXIT ,@pid ,reason) (throw `#(bad-exit-reason ,reason))])
+     [`(EXIT ,@pid shutdown) 'ok]
+     [`(EXIT ,@pid ,reason) (throw `#(bad-exit-reason ,reason))])
 
    (receive (after 2000 (throw 'no-exit-reason))
-     [#(EXIT ,@cpid1 shutdown) 'ok]
-     [#(EXIT ,@cpid1 ,reason) (throw `#(bad-exit-reason ,reason))])
+     [`(EXIT ,@cpid1 shutdown) 'ok]
+     [`(EXIT ,@cpid1 ,reason) (throw `#(bad-exit-reason ,reason))])
 
    (receive (after 2000 (throw 'no-exit-reason))
-     [#(EXIT ,@cpid2 killed) 'ok]
-     [#(EXIT ,@cpid2 ,reason) (throw `#(bad-exit-reason ,reason))])
+     [`(EXIT ,@cpid2 killed) 'ok]
+     [`(EXIT ,@cpid2 ,reason) (throw `#(bad-exit-reason ,reason))])
    'ok))
 
 (supervisor-mat stop-timeout2 ()
@@ -395,16 +395,16 @@
     (kill pid 'shutdown))
 
    (receive (after 5000 (throw 'no-exit-reason))
-     [#(EXIT ,@pid shutdown) 'ok]
-     [#(EXIT ,@pid ,reason) (throw `#(bad-exit-reason ,reason))])
+     [`(EXIT ,@pid shutdown) 'ok]
+     [`(EXIT ,@pid ,reason) (throw `#(bad-exit-reason ,reason))])
 
    (receive (after 2000 (throw 'no-exit-reason))
-     [#(EXIT ,@cpid1 shutdown) 'ok]
-     [#(EXIT ,@cpid1 ,reason) (throw `#(bad-exit-reason ,reason))])
+     [`(EXIT ,@cpid1 shutdown) 'ok]
+     [`(EXIT ,@cpid1 ,reason) (throw `#(bad-exit-reason ,reason))])
 
    (receive (after 2000 (throw 'no-exit-reason))
-     [#(EXIT ,@cpid2 died) 'ok]
-     [#(EXIT ,@cpid2 ,reason) (throw `#(bad-exit-reason ,reason))])
+     [`(EXIT ,@cpid2 died) 'ok]
+     [`(EXIT ,@cpid2 ,reason) (throw `#(bad-exit-reason ,reason))])
    'ok))
 
 (supervisor-mat stop-brutal-kill ()
@@ -420,16 +420,16 @@
    (kill pid 'shutdown)
 
    (receive (after 5000 (throw 'no-exit-reason))
-     [#(EXIT ,@pid shutdown) 'ok]
-     [#(EXIT ,@pid ,reason) (throw `#(bad-exit-reason ,reason))])
+     [`(EXIT ,@pid shutdown) 'ok]
+     [`(EXIT ,@pid ,reason) (throw `#(bad-exit-reason ,reason))])
 
    (receive (after 2000 (throw 'no-exit-reason))
-     [#(EXIT ,@cpid1 shutdown) 'ok]
-     [#(EXIT ,@cpid1 ,reason) (throw `#(bad-exit-reason ,reason))])
+     [`(EXIT ,@cpid1 shutdown) 'ok]
+     [`(EXIT ,@cpid1 ,reason) (throw `#(bad-exit-reason ,reason))])
 
    (receive (after 2000 (throw 'no-exit-reason))
-     [#(EXIT ,@cpid2 killed) 'ok]
-     [#(EXIT ,@cpid2 ,reason) (throw `#(bad-exit-reason ,reason))])
+     [`(EXIT ,@cpid2 killed) 'ok]
+     [`(EXIT ,@cpid2 ,reason) (throw `#(bad-exit-reason ,reason))])
    'ok))
 
 (supervisor-mat stop-brutal-kill2 ()
@@ -449,16 +449,16 @@
     (kill pid 'shutdown))
 
    (receive (after 5000 (throw 'no-exit-reason))
-     [#(EXIT ,@pid shutdown) 'ok]
-     [#(EXIT ,@pid ,reason) (throw `#(bad-exit-reason ,reason))])
+     [`(EXIT ,@pid shutdown) 'ok]
+     [`(EXIT ,@pid ,reason) (throw `#(bad-exit-reason ,reason))])
 
    (receive (after 2000 (throw 'no-exit-reason))
-     [#(EXIT ,@cpid1 shutdown) 'ok]
-     [#(EXIT ,@cpid1 ,reason) (throw `#(bad-exit-reason ,reason))])
+     [`(EXIT ,@cpid1 shutdown) 'ok]
+     [`(EXIT ,@cpid1 ,reason) (throw `#(bad-exit-reason ,reason))])
 
    (receive (after 2000 (throw 'no-exit-reason))
-     [#(EXIT ,@cpid2 died) 'ok]
-     [#(EXIT ,@cpid2 ,reason) (throw `#(bad-exit-reason ,reason))])
+     [`(EXIT ,@cpid2 died) 'ok]
+     [`(EXIT ,@cpid2 ,reason) (throw `#(bad-exit-reason ,reason))])
    'ok))
 
 (supervisor-mat child-admin ()
@@ -477,8 +477,8 @@
      (catch (supervisor:terminate-child 'foo 'child1))]
     [ok (supervisor:terminate-child 'sup-test 'child1)])
    (receive (after 1000 (throw 'no-child-termination))
-     [#(EXIT ,@cpid shutdown) 'ok]
-     [#(EXIT ,@cpid ,reason) (throw `#(bad-exit-reason ,reason))])
+     [`(EXIT ,@cpid shutdown) 'ok]
+     [`(EXIT ,@cpid ,reason) (throw `#(bad-exit-reason ,reason))])
    (match-let*
     ([(#(child1 #f worker)) (which-children 'sup-test)]
      [(1 0 0 1) (get-child-counts 'sup-test)]
@@ -686,8 +686,8 @@
 
    (send cpid1 'die)
    (receive
-    [#(EXIT ,@cpid1 died) 'ok]
-    [#(EXIT ,@cpid1 ,reason) (throw `#(bad-exit-reason ,reason))])
+    [`(EXIT ,@cpid1 died) 'ok]
+    [`(EXIT ,@cpid1 ,reason) (throw `#(bad-exit-reason ,reason))])
    (sleep-ms 100)
 
    (let ([children (which-children 'sup-test)])
@@ -705,13 +705,13 @@
 
    ;; restart frequency
    (send cpid2 'die)
-   (receive [#(EXIT ,@cpid2 ,_) 'ok])
+   (receive [`(EXIT ,@cpid2 ,_) 'ok])
    (sleep-ms 100)
    (match-let* ([(#(,_ ,pid4 ,_) . ,_) (which-children 'sup-test)])
      (send pid4 'die)
      (receive
       (after 3000 (throw 'restart-failed))
-      [#(EXIT ,@pid ,_) 'ok]))))
+      [`(EXIT ,@pid ,_) 'ok]))))
 
 (supervisor-mat one-for-one-escalation ()
   (define child1 `#(child1 ,(lambda () (supervisor-1:start-child 'error))
@@ -727,14 +727,14 @@
 
    (send cpid1 'die)
    (receive
-    [#(EXIT ,@cpid1 died) 'ok]
-    [#(EXIT ,@cpid1 ,reason) (throw `#(bad-exit-reason ,reason))])
+    [`(EXIT ,@cpid1 died) 'ok]
+    [`(EXIT ,@cpid1 ,reason) (throw `#(bad-exit-reason ,reason))])
    (receive
     (after 2000 (throw 'supervisor-alive))
-    [#(EXIT ,@pid ,_) 'ok])
+    [`(EXIT ,@pid ,_) 'ok])
    (receive
     (after 4000 (throw 'all-not-terminated))
-    [#(EXIT ,@cpid2 ,_) 'ok])
+    [`(EXIT ,@cpid2 ,_) 'ok])
    (do ([i 0 (+ i 1)]) ((= i 4))
      (receive (after 0 (throw `(no-event ,i)))
        [`(<supervisor-error>
@@ -762,9 +762,9 @@
 
    (send cpid1 'die)
    (receive
-    [#(EXIT ,@cpid1 died) 'ok]
-    [#(EXIT ,@cpid1 ,reason) (throw `#(bad-exit-reason ,reason))])
-   (receive [#(EXIT ,@cpid2 ,_) 'ok])
+    [`(EXIT ,@cpid1 died) 'ok]
+    [`(EXIT ,@cpid1 ,reason) (throw `#(bad-exit-reason ,reason))])
+   (receive [`(EXIT ,@cpid2 ,_) 'ok])
    (sleep-ms 100)
 
    ;; no old children should be alive
@@ -787,7 +787,7 @@
        (send pid4 'die)
        (receive
         (after 3000 (throw 'restart-failed))
-        [#(EXIT ,@pid ,_) 'ok])
+        [`(EXIT ,@pid ,_) 'ok])
        (kill pid 'shutdown)))))
 
 (supervisor-mat one-for-all-escalation ()
@@ -803,14 +803,14 @@
 
    (send cpid1 'die)
    (receive
-    [#(EXIT ,@cpid1 died) 'ok]
-    [#(EXIT ,@cpid1 ,reason) (throw `#(bad-exit-reason ,reason))])
+    [`(EXIT ,@cpid1 died) 'ok]
+    [`(EXIT ,@cpid1 ,reason) (throw `#(bad-exit-reason ,reason))])
    (receive
     (after 2000 (throw 'all-not-terminated))
-    [#(EXIT ,@cpid2 ,_) 'ok])
+    [`(EXIT ,@cpid2 ,_) 'ok])
    (receive
     (after 4000 (throw 'supervisor-alive))
-    [#(EXIT ,@pid ,_) 'ok])))
+    [`(EXIT ,@pid ,_) 'ok])))
 
 (supervisor-mat child-unlink ()
   (match-let*
@@ -866,7 +866,7 @@
    (send cpid4 'die)
    (receive
     (after 10000 (throw 'child-was-not-killed))
-    [#(EXIT ,@cpid4 ,_) 'ok])
+    [`(EXIT ,@cpid4 ,_) 'ok])
    (sleep-ms 100)
 
    (match-let*
@@ -880,25 +880,25 @@
     (send cpid3 'die)
     (receive
      (after 1000 (throw 'child-was-not-killed))
-     [#(EXIT ,@cpid3 died) 'ok]
-     [#(EXIT ,@cpid3 ,reason) (throw `#(bad-exit-reason ,reason))])
+     [`(EXIT ,@cpid3 died) 'ok]
+     [`(EXIT ,@cpid3 ,reason) (throw `#(bad-exit-reason ,reason))])
 
     (sleep-ms 1000)
     (receive
      (after 1000 (throw 'child-was-not-killed))
-     [#(EXIT ,@new-cpid4 ,_) 'ok])
+     [`(EXIT ,@new-cpid4 ,_) 'ok])
     (receive
      (after 1000 (throw 'child-was-not-killed))
-     [#(EXIT ,@sup2 ,_) 'ok])
+     [`(EXIT ,@sup2 ,_) 'ok])
     (receive
      (after 1000 (throw 'child-was-not-killed))
-     [#(EXIT ,@cpid1 ,_) 'ok])
+     [`(EXIT ,@cpid1 ,_) 'ok])
     (receive
      (after 1000 (throw 'child-was-not-killed))
-     [#(EXIT ,@cpid2 ,_) 'ok])
+     [`(EXIT ,@cpid2 ,_) 'ok])
     (receive
      (after 1000 (throw 'child-was-not-killed))
-     [#(EXIT ,@sup1 ,_) 'ok])
+     [`(EXIT ,@sup1 ,_) 'ok])
 
     (match-let*
      ([(#(sup-child2 ,new-sup2 ,_) #(sup-child1 ,new-sup1 ,_))
@@ -948,8 +948,8 @@
     [,_ (link cpid)])
    (watcher:shutdown-children pid)
    (receive (after 5000 (throw 'no-exit-reason))
-     [#(EXIT ,@cpid shutdown) 'ok]
-     [#(EXIT ,@cpid ,reason) (throw `#(bad-exit-reason ,reason))])
+     [`(EXIT ,@cpid shutdown) 'ok]
+     [`(EXIT ,@cpid ,reason) (throw `#(bad-exit-reason ,reason))])
    (match-let*
     ([() (which-children pid)]
      [(0 0 0 0) (get-child-counts pid)])

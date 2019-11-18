@@ -290,8 +290,8 @@
                              ($state copy*
                                [pages (ht:delete pages abs-path)])))]
            [,_ `#(no-reply ,state)])]
-        [#(EXIT ,_ normal) `#(no-reply ,state)]
-        [#(EXIT ,pid ,reason)
+        [`(EXIT ,_ normal) `#(no-reply ,state)]
+        [`(EXIT ,pid ,reason)
          `#(no-reply
             ,(call/cc
               (lambda (return)

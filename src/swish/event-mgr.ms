@@ -122,7 +122,7 @@
     (event-mgr:notify 'crash)
     (reported 'crash)
     (receive (after 1000 (throw 'timeout-waiting))
-      [#(EXIT ,@pid crash) (void)]))
+      [`(EXIT ,@pid crash) (void)]))
   'ok)
 
 (isolate-mat console ()
@@ -223,7 +223,7 @@
       [#(error log-handler-already-set) (event-mgr:set-log-handler (lambda (x) x) self)])
      (event-mgr:notify 'crash)
      (receive (after 1000 (throw 'timeout))
-       [#(EXIT ,@pid crash) 'ok])
+       [`(EXIT ,@pid crash) 'ok])
      (match-regexps '(seek "^Date: " "^Timestamp: " "^Event: crash")
        (split (get-output-string op) #\newline))
      'ok)))

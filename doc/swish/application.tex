@@ -62,10 +62,10 @@ to determine if the application shut down normally.
 \code{handle-cast} procedure raises an exception on all messages.
 
 \genserver{application}{handle-info} The application
-\code{handle-info} procedure handles the following message:\antipar
+\code{handle-info} procedure handles messages matching the pattern:\antipar
 
 \begin{itemize}
-\item \code{\#(EXIT \var{p} \var{reason})}: If \var{p} =
+\item \code{`(EXIT \var{p} \var{reason})}: If \var{p} =
   \var{process}, return \code{\#(stop \var{reason} \#f)}. Otherwise,
   return \code{\#(stop \var{reason} \var{process})}.
 \end{itemize}

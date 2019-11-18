@@ -192,8 +192,8 @@
         [timeout
          (remove-dead-entries ($state cache))
          (no-reply state)]
-        [#(EXIT ,@pid normal) (no-reply ($state copy [worker #f]))]
-        [#(EXIT ,_pid ,reason) `#(stop ,reason ,($state copy [worker #f]))])))
+        [`(EXIT ,@pid normal) (no-reply ($state copy [worker #f]))]
+        [`(EXIT ,_pid ,reason) `#(stop ,reason ,($state copy [worker #f]))])))
 
   (define (no-reply state)
     (let ([state (update state)])
@@ -264,8 +264,8 @@
      [($state worker) =>
       (lambda (pid)
         (receive
-         [#(EXIT ,@pid normal) (flush (update ($state copy [worker #f])))]
-         [#(EXIT ,@pid ,reason) (raise reason)]))]
+         [`(EXIT ,@pid normal) (flush (update ($state copy [worker #f])))]
+         [`(EXIT ,@pid ,reason) (raise reason)]))]
      [else state]))
 
   (define ($execute sql bindings)

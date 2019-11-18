@@ -112,8 +112,8 @@
     (spawn&link (lambda () (match-let* ([514229 (fib 28)]) 'ok))))
   (do ([n n (- n 1)]) ((= n 0))
     (receive
-     [#(EXIT ,_ normal) 'ok]
-     [#(EXIT ,_ ,reason) (throw reason)])))
+     [`(EXIT ,_ normal) 'ok]
+     [`(EXIT ,_ ,reason) (throw reason)])))
 
 (isolate-mat id-generator ()
   (define n 200000)
@@ -137,51 +137,55 @@
   (let ([pid (spawn&link (lambda () (kill self 'live-free-or-die-hard)))])
     (receive
      (after 1000 (throw 'timeout))
-     [#(EXIT ,@pid live-free-or-die-hard) 'ok])
+     [`(EXIT ,@pid live-free-or-die-hard) 'ok])
     ;; link to a dead process should immediately give EXIT message
     (link pid)
     (receive
      (after 0 (throw 'no-exit-from-link))
-     [#(EXIT ,@pid live-free-or-die-hard) 'ok])
+     [`(EXIT ,@pid live-free-or-die-hard) 'ok])
     ;; link to a dead process without trap-exit should die
     (let ([pid2 (spawn&link (lambda () (link pid) (throw 'link-no-fail)))])
       (receive
        (after 10 (throw 'no-exit-from-link))
-       [#(EXIT ,@pid2 live-free-or-die-hard) 'ok]))))
+       [`(EXIT ,@pid2 ,r ,e)
+        ;; the r and e patterns in `(EXIT ,_ ,r ,e) are matched against the
+        ;; reason directly if it is not an exception trapped by try or catch
+        (match-let* ([live-free-or-die-hard r] [,@r e])
+          'ok)]))))
 
 (isolate-mat suicide-normal ()
   (process-trap-exit #t)
   (let ([pid (spawn&link (lambda () (kill self 'normal)))])
     (receive
      (after 1000 (throw 'timeout))
-     [#(EXIT ,@pid normal) 'ok])
+     [`(EXIT ,@pid normal) 'ok])
     ;; link to a dead process should immediately give EXIT message
     (link pid)
     (receive
      (after 0 (throw 'no-exit-from-link))
-     [#(EXIT ,@pid normal) 'ok])
+     [`(EXIT ,@pid normal) 'ok])
     ;; link to a dead process without trap-exit should die
     (let ([pid2 (spawn&link (lambda () (link pid) (throw 'link-no-fail)))])
       (receive
        (after 10 (throw 'timeout))
-       [#(EXIT ,@pid2 link-no-fail) 'ok]))))
+       [`(EXIT ,@pid2 link-no-fail) 'ok]))))
 
 (isolate-mat suicide-throw-normal ()
   (process-trap-exit #t)
   (let ([pid (spawn&link (lambda () (kill self (try (throw 'normal)))))])
     (receive
      (after 1000 (throw 'timeout))
-     [#(EXIT ,@pid normal) 'ok])
+     [`(EXIT ,@pid normal) 'ok])
     ;; link to a dead process should immediately give EXIT message
     (link pid)
     (receive
      (after 0 (throw 'no-exit-from-link))
-     [#(EXIT ,@pid normal) 'ok])
+     [`(EXIT ,@pid normal) 'ok])
     ;; link to a dead process without trap-exit should die
     (let ([pid2 (spawn&link (lambda () (link pid) (throw 'link-no-fail)))])
       (receive
        (after 10 (throw 'timeout))
-       [#(EXIT ,@pid2 link-no-fail) 'ok]))))
+       [`(EXIT ,@pid2 link-no-fail) 'ok]))))
 
 (isolate-mat kill-normal ()
   (let ([pid (spawn&link (lambda () (receive [(word-from ,p) (send p 'roger)])))])
@@ -212,34 +216,52 @@
   (let ([pid (spawn&link (lambda () (cdr 7)))])
     (receive
      (after 1000 (throw 'timeout))
-     [#(EXIT ,@pid ,c) (assert-expected c)])
+     [`(EXIT ,@pid ,c) (assert-expected c)])
     ;; link to a dead process should immediately give EXIT message
     (link pid)
     (receive
      (after 0 (throw 'no-exit-from-link))
-     [#(EXIT ,@pid ,c) (assert-expected c)])
+     [`(EXIT ,@pid ,c) (assert-expected c)])
     ;; link to a dead process without trap-exit should die
     (let ([pid2 (spawn&link (lambda () (link pid) (throw 'link-no-fail)))])
       (receive
        (after 10 (throw 'no-exit-from-link))
-       [#(EXIT ,@pid2 ,c) (assert-expected c)]))))
+       [`(EXIT ,@pid2 ,c) (assert-expected c)]))))
 
 (isolate-mat link-raise ()
   (process-trap-exit #t)
   (let ([pid (spawn&link (lambda () (raise 'commotion)))])
     (receive
      (after 1000 (throw 'timeout))
-     [#(EXIT ,@pid commotion) 'ok])
+     [`(EXIT ,@pid commotion) 'ok])
     ;; link to a dead process should immediately give EXIT message
     (link pid)
     (receive
      (after 0 (throw 'no-exit-from-link))
-     [#(EXIT ,@pid commotion) 'ok])
+     [`(EXIT ,@pid commotion) 'ok])
     ;; link to a dead process without trap-exit should die
     (let ([pid2 (spawn&link (lambda () (link pid) (throw 'link-no-fail)))])
       (receive
        (after 10 (throw 'no-exit-from-link))
-       [#(EXIT ,@pid2 commotion)
+       [`(EXIT ,@pid2 commotion)
+        'ok]))))
+
+(isolate-mat link-raise-catch ()
+  (process-trap-exit #t)
+  (let ([pid (spawn&link (lambda () (raise (catch (raise 'ruckus)))))])
+    (receive
+     (after 1000 (throw 'timeout))
+     [`(EXIT ,@pid ruckus ruckus) 'ok])
+    ;; link to a dead process should immediately give EXIT message
+    (link pid)
+    (receive
+     (after 0 (throw 'no-exit-from-link))
+     [`(EXIT ,@pid ruckus) 'ok])
+    ;; link to a dead process without trap-exit should die
+    (let ([pid2 (spawn&link (lambda () (link pid) (throw 'link-no-fail)))])
+      (receive
+       (after 10 (throw 'no-exit-from-link))
+       [`(EXIT ,@pid2 ruckus)
         'ok]))))
 
 ;; like suicide-normal, but with raise in place of kill
@@ -248,7 +270,7 @@
   (let ([pid0 (spawn&link (lambda () (raise 'normal)))])
     (receive
      (after 1000 (throw 'timeout))
-     [#(EXIT ,@pid0 normal) 'ok])
+     [`(EXIT ,@pid0 normal) 'ok])
     (let ([pid1
            (spawn&link
             (lambda ()
@@ -256,24 +278,50 @@
               (raise 'awareness)))])
       (receive
        (after 100 (throw 'wrong-exit-reason))
-       [#(EXIT ,@pid1 awareness) 'ok]))))
+       [`(EXIT ,@pid1 awareness) 'ok]))))
 
 (isolate-mat link-throw ()
   (process-trap-exit #t)
   (let ([pid (spawn&link (lambda () (throw 'fit)))])
     (receive
      (after 1000 (throw 'timeout))
-     [#(EXIT ,@pid fit) 'ok])
+     [`(EXIT ,@pid fit ,e)
+      (match-let*
+       ([`(catch fit ,@e) e]
+        [(,k) (exit-reason->stacks e)])
+       'ok)])
     ;; link to a dead process should immediately give EXIT message
     (link pid)
     (receive
      (after 0 (throw 'no-exit-from-link))
-     [#(EXIT ,@pid fit) 'ok])
+     [`(EXIT ,@pid fit) 'ok])
     ;; link to a dead process without trap-exit should die
     (let ([pid2 (spawn&link (lambda () (link pid) (throw 'link-no-fail)))])
       (receive
        (after 10 (throw 'no-exit-from-link))
-       [#(EXIT ,@pid2 fit)
+       [`(EXIT ,@pid2 fit)
+        'ok]))))
+
+(isolate-mat link-throw-try ()
+  (process-trap-exit #t)
+  (let ([pid (spawn&link (lambda () (throw (try (throw 'away)))))])
+    (receive
+     (after 1000 (throw 'timeout))
+     [`(EXIT ,@pid away ,e)
+      (match-let*
+       ([`(catch away ,@e) e]
+        [(,k0 ,k1) (exit-reason->stacks e)])
+       'ok)])
+    ;; link to a dead process should immediately give EXIT message
+    (link pid)
+    (receive
+     (after 0 (throw 'no-exit-from-link))
+     [`(EXIT ,@pid away) 'ok])
+    ;; link to a dead process without trap-exit should die
+    (let ([pid2 (spawn&link (lambda () (link pid) (throw 'link-no-fail)))])
+      (receive
+       (after 10 (throw 'no-exit-from-link))
+       [`(EXIT ,@pid2 away)
         'ok]))))
 
 ;; like suicide-normal, but with throw in place of kill
@@ -282,7 +330,7 @@
   (let ([pid0 (spawn&link (lambda () (throw 'normal)))])
     (receive
      (after 1000 (throw 'timeout))
-     [#(EXIT ,@pid0 normal) 'ok])
+     [`(EXIT ,@pid0 normal) 'ok])
     (let ([pid1
            (spawn&link
             (lambda ()
@@ -290,7 +338,7 @@
               (throw 'party)))])
       (receive
        (after 100 (throw 'wrong-exit-reason))
-       [#(EXIT ,@pid1 party) 'ok]))))
+       [`(EXIT ,@pid1 party) 'ok]))))
 
 (isolate-mat default-parameters ()
   (match-let*
@@ -580,14 +628,14 @@
     [#f (process-alive? b 0)]
     [#f (process-alive? c 0)]
     [ok (receive (after 1000 (throw 'timeout))
-          [#(msg-from ,@a #(EXIT ,@b abc)) 'ok])]
+          [#(msg-from ,@a `(EXIT ,@b abc)) 'ok])]
     [ok (flush)]
 
     [#(,a ,b ,c) (start #f `#(die throw abc))]
     [#f (process-alive? b 0)]
     [#f (process-alive? c 0)]
     [ok (receive (after 1000 (throw 'timeout))
-          [#(msg-from ,@a #(EXIT ,@b abc)) 'ok])]
+          [#(msg-from ,@a `(EXIT ,@b abc)) 'ok])]
     [ok (flush)]
 
     [#(,a ,b ,c) (start #f `#(die raise normal))]
@@ -604,7 +652,7 @@
     [#f (process-alive? b 0)]
     [#f (process-alive? c 0)]
     [ok (receive (after 1000 (throw 'timeout))
-          [#(msg-from ,@a #(EXIT ,@b ,cc))
+          [#(msg-from ,@a `(EXIT ,@b ,cc))
            (guard (condition? cc))
            'ok])]
     [ok (flush)]
@@ -613,63 +661,63 @@
     [#f (process-alive? b 0)]
     [#f (process-alive? c 0)]
     [ok (receive (after 1000 (throw 'timeout))
-          [#(msg-from ,@a #(EXIT ,@b kill)) 'ok])]
+          [#(msg-from ,@a `(EXIT ,@b kill)) 'ok])]
     [ok (flush)]
 
     [#(,a ,b ,c) (start #f `#(die throw kill))]
     [#f (process-alive? b 0)]
     [#f (process-alive? c 0)]
     [ok (receive (after 1000 (throw 'timeout))
-          [#(msg-from ,@a #(EXIT ,@b kill)) 'ok])]
+          [#(msg-from ,@a `(EXIT ,@b kill)) 'ok])]
     [ok (flush)]
 
     [#(,a ,b ,c) (start #t `#(die raise abc))]
     [#t (process-alive? b 0)]
     [#f (process-alive? c 0)]
     [ok (receive (after 1000 (throw 'timeout))
-          [#(msg-from ,@b #(EXIT ,@c abc)) 'ok])]
+          [#(msg-from ,@b `(EXIT ,@c abc)) 'ok])]
     [ok (flush)]
 
     [#(,a ,b ,c) (start #t `#(die throw abc))]
     [#t (process-alive? b 0)]
     [#f (process-alive? c 0)]
     [ok (receive (after 1000 (throw 'timeout))
-          [#(msg-from ,@b #(EXIT ,@c abc)) 'ok])]
+          [#(msg-from ,@b `(EXIT ,@c abc)) 'ok])]
     [ok (flush)]
 
     [#(,a ,b ,c) (start #t `#(die raise normal))]
     [#t (process-alive? b 0)]
     [#f (process-alive? c 0)]
     [ok (receive (after 1000 (throw 'timeout))
-          [#(msg-from ,@b #(EXIT ,@c normal)) 'ok])]
+          [#(msg-from ,@b `(EXIT ,@c normal)) 'ok])]
     [ok (flush)]
 
     [#(,a ,b ,c) (start #t `#(die throw normal))]
     [#t (process-alive? b 0)]
     [#f (process-alive? c 0)]
     [ok (receive (after 1000 (throw 'timeout))
-          [#(msg-from ,@b #(EXIT ,@c normal)) 'ok])]
+          [#(msg-from ,@b `(EXIT ,@c normal)) 'ok])]
     [ok (flush)]
 
     [#(,a ,b ,c) (start #t 'normal)]
     [#t (process-alive? b 0)]
     [#f (process-alive? c 0)]
     [ok (receive (after 1000 (throw 'timeout))
-          [#(msg-from ,@b #(EXIT ,@c normal)) 'ok])]
+          [#(msg-from ,@b `(EXIT ,@c normal)) 'ok])]
     [ok (flush)]
 
     [#(,a ,b ,c) (start #t `#(die raise kill))]
     [#t (process-alive? b 0)]
     [#f (process-alive? c 0)]
     [ok (receive (after 1000 (throw 'timeout))
-          [#(msg-from ,@b #(EXIT ,@c kill)) 'ok])]
+          [#(msg-from ,@b `(EXIT ,@c kill)) 'ok])]
     [ok (flush)]
 
     [#(,a ,b ,c) (start #t `#(die throw kill))]
     [#t (process-alive? b 0)]
     [#f (process-alive? c 0)]
     [ok (receive (after 1000 (throw 'timeout))
-          [#(msg-from ,@b #(EXIT ,@c kill)) 'ok])]
+          [#(msg-from ,@b `(EXIT ,@c kill)) 'ok])]
     [ok (flush)])
    'ok))
 
@@ -716,9 +764,9 @@
     [#f (process-alive? b 0)]
     [#t (process-alive? c 0)]
     [ok (receive (after 1000 (throw 'timeout))
-          [#(msg-from ,@a #(EXIT ,@b abc)) 'ok])]
+          [#(msg-from ,@a `(EXIT ,@b abc)) 'ok])]
     [ok (receive (after 1000 (throw 'timeout))
-          [#(msg-from ,@c #(EXIT ,@b abc)) 'ok])]
+          [#(msg-from ,@c `(EXIT ,@b abc)) 'ok])]
     [ok (flush)]
 
     [#(,a ,b ,c) (start #f 'normal)]
@@ -730,32 +778,32 @@
     [#f (process-alive? b 0)]
     [#t (process-alive? c 0)]
     [ok (receive (after 1000 (throw 'timeout))
-          [#(msg-from ,@a #(EXIT ,@b killed)) 'ok])]
+          [#(msg-from ,@a `(EXIT ,@b killed)) 'ok])]
     [ok (receive (after 1000 (throw 'timeout))
-          [#(msg-from ,@c #(EXIT ,@b killed)) 'ok])]
+          [#(msg-from ,@c `(EXIT ,@b killed)) 'ok])]
     [ok (flush)]
 
     [#(,a ,b ,c) (start #t 'abc)]
     [#t (process-alive? b 0)]
     [#t (process-alive? c 0)]
     [ok (receive (after 1000 (throw 'timeout))
-          [#(msg-from ,@b #(EXIT ,@c abc)) 'ok])]
+          [#(msg-from ,@b `(EXIT ,@c abc)) 'ok])]
     [ok (flush)]
 
     [#(,a ,b ,c) (start #t 'normal)]
     [#t (process-alive? b 0)]
     [#t (process-alive? c 0)]
     [ok (receive (after 1000 (throw 'timeout))
-          [#(msg-from ,@b #(EXIT ,@c normal)) 'ok])]
+          [#(msg-from ,@b `(EXIT ,@c normal)) 'ok])]
     [ok (flush)]
 
     [#(,a ,b ,c) (start #t 'kill)]
     [#f (process-alive? b 0)]
     [#t (process-alive? c 0)]
     [ok (receive (after 1000 (throw 'timeout))
-          [#(msg-from ,@a #(EXIT ,@b killed)) 'ok])]
+          [#(msg-from ,@a `(EXIT ,@b killed)) 'ok])]
     [ok (receive (after 1000 (throw 'timeout))
-          [#(msg-from ,@c #(EXIT ,@b killed)) 'ok])]
+          [#(msg-from ,@c `(EXIT ,@b killed)) 'ok])]
     [ok (flush)])
    'ok))
 
@@ -775,7 +823,7 @@
    (lambda (pid)
      (receive
       (after 1000 (throw 'timeout))
-      [#(EXIT ,@pid normal) 'ok]))
+      [`(EXIT ,@pid normal) 'ok]))
    (list (spin) (spin) (spin) (spin) (spin))))
 
 (isolate-mat inherited-parameters ()
@@ -2542,7 +2590,7 @@
                (receive [continue #'0]))
              (foo))))
   (define (exit-reason p)
-    (receive (after 10000 (throw 'timeout)) [#(EXIT ,@p ,r) r]))
+    (receive (after 10000 (throw 'timeout)) [`(EXIT ,@p ,r) r]))
 
   (process-trap-exit #t)
   (gatekeeper:start&link)
@@ -3333,6 +3381,18 @@
    ([,c (try (throw 'ball))]
     ["#<fault ball>" (format "~s" c)])
    'ok)
+  ;; EXIT-msg
+  (match-let*
+   ([,_ (process-trap-exit #t)]
+    [,pid (spawn (lambda () (throw 'long)))]
+    [#t (link pid)]
+    [,expected (format "#<EXIT ~s long>" pid)]
+    [,@expected
+     (receive (after 100 'wrong)
+       [,x
+        (guard (match x [`(EXIT ,@pid long) #t] [,_ #f]))
+        (format "~s" x)])])
+   (process-trap-exit #f))
   ;; console-event-handler treatment of native exceptions
   (let ([os (open-output-string)])
     (define test-file

@@ -202,16 +202,16 @@ processes the following message:
 \end{itemize}
 
 \genserver{db}{handle-info} The \code{handle-info} procedure
-processes the following messages:
+processes messages matching the following patterns:
 
 \antipar\begin{itemize}
 
 \item \code{timeout}: Remove old entries from the statement cache.
 
-\item \code{\#(EXIT \var{worker-pid} normal)}: The worker finished
+\item \code{`(EXIT \var{worker-pid} normal)}: The worker finished
   the previous request successfully. Process the queue.
 
-\item \code{\#(EXIT \var{worker-pid} \var{reason})}: The worker
+\item \code{`(EXIT \var{worker-pid} \var{reason})}: The worker
   failed to process the previous request. Flush the queue and stop
   with \var{reason}.
 

@@ -53,7 +53,7 @@
 
   (define (handle-info msg process)
     (match msg
-      [#(EXIT ,p ,reason)
+      [`(EXIT ,p ,reason)
        `#(stop ,reason ,(and (not (eq? p process)) process))]))
 
   (define (application:start starter)

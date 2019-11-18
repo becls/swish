@@ -116,7 +116,7 @@
     (match msg
       [#(notify ,event)
        `#(no-reply ,(do-notify event state))]
-      [#(EXIT ,pid ,_)
+      [`(EXIT ,pid ,_)
        (let ([log-handler ($state log-handler)])
          (if (and log-handler (eq? (<handler> owner log-handler) pid))
              `#(no-reply ,($state copy [log-handler #f]))

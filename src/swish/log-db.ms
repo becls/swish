@@ -104,7 +104,7 @@
                       (raise 'bad-logger)))])))])
        (event-mgr:notify 'fail)
        (receive (after 1000 (throw 'timeout))
-         [#(EXIT ,@log-db bad-logger)
+         [`(EXIT ,@log-db bad-logger)
           'ok])))))
 
 (isolate-mat create ()

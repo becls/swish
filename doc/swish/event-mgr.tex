@@ -121,7 +121,7 @@ processes the following messages:
 does not process any messages.
 
 \genserver{event-mgr}{handle-info}The \code{handle-info} procedure
-handles the following messages:
+handles messages matching the following patterns:
 
 \antipar\begin{itemize}
 
@@ -130,7 +130,7 @@ handles the following messages:
 
   \var{event} is any Scheme datum.
 
-\item \code{\#(EXIT \var{pid} \var{\_})}: Removes the log or other
+\item \code{`(EXIT \var{pid} \var{\_})}: Removes the log or other
   event handler associated with \var{pid}.
 
 \end{itemize}
