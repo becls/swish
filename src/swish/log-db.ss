@@ -190,7 +190,7 @@
      [(process? x) (process->child-id x)]
      [(date? x) (format-rfc2822 x)]
      [(condition? x)
-      (parameterize ([print-graph #t])
+      (parameterize ([print-graph #t] [print-level 3] [print-length 6])
         (let ([op (open-output-string)])
           (display-condition x op)
           (write-char #\. op)
