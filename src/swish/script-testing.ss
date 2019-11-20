@@ -30,6 +30,7 @@
    script-test
    swish-exe
    test-os-process
+   with-script-test-parameters
    write-test-file
    )
   (import
@@ -104,8 +105,25 @@
             [exit-status exit-status])))
        (match-regexps patterns (append stdout stderr))]))
 
+  (define script-test-parameters (make-parameter '()))
+
+  (define-syntax with-script-test-parameters
+    (syntax-rules ()
+      [(_ ([param-name val] ...) e0 e1 ...)
+       (parameterize ([script-test-parameters `(#(param-name ,val) ...)])
+         e0 e1 ...)]))
+
   (define (script-test maybe-script args for-stdin patterns)
     (define script-file (or maybe-script "-q"))
+    (define set-parameters
+      (match (script-test-parameters)
+        [() #f]
+        [,params
+         `(for-each
+           (lambda (p)
+             (match-define #(,',param-name ,',val) p)
+             ((eval param-name) val))
+           ',params)]))
     (cond
      [(whereis 'profiler)
       (let ([tmp-file (string-append (profile:filename) ".sub-process")])
@@ -127,9 +145,18 @@
                  (reset-handler (lambda () (exit 1)))
                  (void))
                (on-exit (begin (profile:save) (unless ,maybe-script (exit)))
+                 ,set-parameters
                  (apply swish-start ',script-file ',args)))
              for-stdin)
            patterns)))]
+     [set-parameters
+      (test-os-process swish-exe '("-q" "--")
+        (format "~{~s\n~}~a"
+          `(,set-parameters
+            (on-exit (unless ,maybe-script (exit))
+              (apply swish-start ',script-file ',args)))
+          for-stdin)
+        patterns)]
      [else (test-os-process swish-exe `(,script-file ,@args) for-stdin patterns)]))
 
   )
