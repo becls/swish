@@ -128,12 +128,12 @@
                  (kill pid 'kill)
                  (throw 'timeout))
         [`(DOWN ,@m ,@pid normal) (void)]
-        [`(DOWN ,@m ,@pid ,reason) (raise reason)])))
+        [`(DOWN ,@m ,@pid ,reason ,e) (raise e)])))
 
   (define-syntax isolate-mat
     (syntax-rules ()
       [(_ name tags e1 e2 ...)
-       (mat name tags ($isolate-mat (lambda () e1 e2 ...)))]))
+       (mat name tags ($isolate-mat (lambda () e1 e2 ... (void))))]))
 
   (define (match-prefix lines pattern)
     (match lines
@@ -166,7 +166,11 @@
   (define-syntax system-mat
     (syntax-rules ()
       [(_ name tags e1 e2 ...)
-       (mat name tags ($system-mat (lambda () (boot-system) e1 e2 ...)))]))
+       (mat name tags
+         ($system-mat
+          (lambda ()
+            (boot-system)
+            (let () e1 e2 ... (void)))))]))
 
   (define ($system-mat thunk)
     (parameterize ([console-error-port (open-output-string)])
@@ -175,7 +179,7 @@
         (on-exit (shutdown-system)
           (receive (after 300000 (kill pid 'shutdown) (throw 'timeout))
             [`(DOWN ,_ ,@pid normal) 'ok]
-            [`(DOWN ,_ ,@pid ,reason) (raise reason)])))))
+            [`(DOWN ,_ ,@pid ,reason ,e) (raise e)])))))
 
   (define-tuple <os-result> stdout stderr exit-status)
 

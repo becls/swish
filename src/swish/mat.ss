@@ -128,7 +128,7 @@
   (define-syntax mat
     (syntax-rules ()
       [(_ name (tag ...) e1 e2 ...)
-       (add-mat 'name '(tag ...) (lambda () e1 e2 ...))]))
+       (add-mat 'name '(tag ...) (lambda () e1 e2 ... (void)))]))
 
   (define (all-mats) (reverse (mats)))
 

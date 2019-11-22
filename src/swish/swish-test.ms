@@ -632,7 +632,14 @@
     [,where (format "#<continuation in flub> at offset 78 of ~a" test-file4)]
     [,trunc-prefix "Stack dump truncated due to max-depth = "]
     [,trunc (format "~a~a." trunc-prefix max-depth)])
-   (check results 'hangry 'fail '() "tantrum" null?)
+   (check results 'hangry 'fail '() "tantrum"
+     (lambda (actual-formatted)
+       (match-let*
+        ([(,str) actual-formatted]
+         [(,first . ,_) (split str #\newline)]
+         [(,_) (pregexp-match "#<continuation> at offset 116 of .*test-report4.ms"
+                 first)])
+        #t)))
    (check results 'deep 'fail '() "deep"
      (lambda (actual-formatted)
        (match-let* ([(,str) actual-formatted])
@@ -655,11 +662,9 @@
          (and (match-regexps
                `(,(pregexp-quote where)
                  "  n: 1"
-                 seek
-                 "#<system continuation in new-cafe>")
+                 ,(pregexp-quote (format "#<continuation> at offset 181 of ~a" test-file4)))
                lines)
-              (not (find (lambda (line) (starts-with? line trunc-prefix))
-                     lines)))))))
+              #t)))))
   ;; all pass, but some skipped so nonzero exit
   (nonzero-exit
    (swish-test "--progress none --tag good --report " report-file1 " " test-file)
