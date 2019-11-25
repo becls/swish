@@ -91,7 +91,7 @@
 
   (define (make-starter name iface init-args)
     (lambda (reply parent)
-      (match (catch (do-init iface init-args))
+      (match (try (do-init iface init-args))
         [#(ok ,state)
          (reply `#(ok ,self))
          (loop parent (or name self) iface state 'infinity)]
@@ -104,9 +104,10 @@
         [ignore
          (reply 'ignore)
          (raise 'normal)]
-        [#(EXIT ,reason)
+        [`(catch ,reason ,e)
          (reply `#(error ,reason))
-         (raise reason)]
+         ;; throw is not useful here; it would merely add k from thunk->cont
+         (raise e)]
         [,other
          (let ([reason `#(bad-return-value ,other)])
            (reply `#(error ,reason))
@@ -133,10 +134,10 @@
 
   (define (handle-msg msg parent name iface state timeout)
     (match msg
-      [`(EXIT ,@parent ,reason)
-       (terminate reason name msg iface state)]
+      [`(EXIT ,@parent ,reason ,e)
+       (terminate e name msg iface state)]
       [#($gen-call ,from ,msg)
-       (match (catch (do-handle-call iface msg from state))
+       (match (try (do-handle-call iface msg from state))
          [#(reply ,reply0 ,new-state)
           (gen-server:reply from reply0)
           (loop parent name iface new-state 'infinity)]
@@ -150,13 +151,13 @@
          [,other
           (handle-common-reply other parent name msg iface state)])]
       [#($gen-cast ,msg)
-       (let ([reply (catch (do-handle-cast iface msg state))])
+       (let ([reply (try (do-handle-cast iface msg state))])
          (handle-common-reply reply parent name msg iface state))]
       [#($gen-debug ,debug)
        (loop parent name (<gen-server-interface> copy iface [debug debug])
          state timeout)]
       [,msg
-       (let ([reply (catch (do-handle-info iface msg state))])
+       (let ([reply (try (do-handle-info iface msg state))])
          (handle-common-reply reply parent name msg iface state))]))
 
   (define (handle-common-reply reply parent name msg iface state)
@@ -167,43 +168,51 @@
        (loop parent name iface new-state (resolve-timeout timeout))]
       [#(stop ,reason ,new-state)
        (terminate reason name msg iface new-state)]
-      [#(EXIT ,reason)
-       (terminate reason name msg iface state)]
+      [`(catch ,reason ,e)
+       (terminate e name msg iface state)]
       [,_
        (terminate `#(bad-return-value ,reply) name msg iface state)]))
 
   (define (terminate reason name msg iface state)
+    ;; throw is not useful here; it would merely add k from thunk->cont
     (raise (terminate-reason reason name msg iface state)))
 
   (define (terminate-reason reason name msg iface state)
-    (match (catch (do-terminate iface reason state))
-      [#(EXIT ,r)
-       (report-terminating r name msg state)
-       r]
-      [,_
-       (unless (or (eq? reason 'normal) (eq? reason 'shutdown))
-         (report-terminating reason name msg state))
-       reason]))
+    (let-values ([(r e)
+                  (match reason
+                    [`(catch ,r ,e) (values r e)]
+                    [,_ (values reason reason)])])
+      (match (try (do-terminate iface r state))
+        [`(catch ,r ,e)
+         (report-terminating r e name msg state)
+         e]
+        [,_
+         (unless (or (eq? reason 'normal) (eq? reason 'shutdown))
+           (report-terminating r e name msg state))
+         e])))
 
-  (define (report-terminating reason name msg state)
+  (define (report-terminating reason context name msg state)
     (system-detail <gen-server-terminating>
       [name name]
       [last-message msg]
       [state state]
       [reason reason]))
 
+  (define (failed-call reason e context)
+    (throw `#(,reason #(gen-server call ,context)) e))
+
   (define gen-server:call
     (case-lambda
      [(server request timeout)
-      (match (catch (do-call server request timeout))
+      (match (try (do-call server request timeout))
         [#(ok ,res) res]
-        [#(EXIT ,reason)
-         (raise `#(,reason #(gen-server call (,server ,request ,timeout))))])]
+        [`(catch ,reason ,e)
+         (failed-call reason e `(,server ,request ,timeout))])]
      [(server request)
-      (match (catch (do-call server request 5000))
+      (match (try (do-call server request 5000))
         [#(ok ,res) res]
-        [#(EXIT ,reason)
-         (raise `#(,reason #(gen-server call (,server ,request))))])]))
+        [`(catch ,reason ,e)
+         (failed-call reason e `(,server ,request))])]))
 
   (define-syntax no-interrupts
     (syntax-rules ()

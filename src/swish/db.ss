@@ -151,10 +151,10 @@
                   [open SQLITE_OPEN_READWRITE]
                   [create
                    (logor SQLITE_OPEN_READWRITE SQLITE_OPEN_CREATE)]))])
-      (match (catch (db-init db))
-        [#(EXIT ,reason)
+      (match (try (db-init db))
+        [`(catch ,reason ,e)
          (sqlite:close db)
-         (throw reason)]
+         (raise e)]
         [,_ (void)])
       `#(ok ,(<db-state> make
                [filename filename]
@@ -164,13 +164,13 @@
                [worker #f]))))
 
   (define (terminate reason state)
-    (let ([x (catch (flush state))])
+    (let ([x (try (flush state))])
       (vector-for-each (lambda (e) (sqlite:finalize (entry-stmt e)))
         (hashtable-values (cache-ht ($state cache))))
       (finalize-lazy-statements ($state cache))
       (sqlite:close ($state db))
       (match x
-        [#(EXIT ,reason) (raise reason)]
+        [`(catch ,reason ,e) (raise e)]
         [,_ 'ok])))
 
   (define (handle-call msg from state)
@@ -193,7 +193,7 @@
          (remove-dead-entries ($state cache))
          (no-reply state)]
         [`(EXIT ,@pid normal) (no-reply ($state copy [worker #f]))]
-        [`(EXIT ,_pid ,reason) `#(stop ,reason ,($state copy [worker #f]))])))
+        [`(EXIT ,_pid ,reason ,e) `#(stop ,e ,($state copy [worker #f]))])))
 
   (define (no-reply state)
     (let ([state (update state)])
@@ -242,11 +242,11 @@
         (execute-with-retry-on-busy "BEGIN IMMEDIATE")
         (match x
           [#(transaction ,f ,from)
-           (match (catch (f))
-             [#(EXIT ,reason)
+           (match (try (limit-stack (f)))
+             [`(catch ,reason ,e)
               (finalize-lazy-statements cache)
               (execute-with-retry-on-busy "ROLLBACK")
-              (gen-server:reply from `#(error ,reason))]
+              (gen-server:reply from `#(error ,e))]
              [,result
               (finalize-lazy-statements cache)
               (execute-with-retry-on-busy "COMMIT")
@@ -265,7 +265,7 @@
       (lambda (pid)
         (receive
          [`(EXIT ,@pid normal) (flush (update ($state copy [worker #f])))]
-         [`(EXIT ,@pid ,reason) (raise reason)]))]
+         [`(EXIT ,@pid ,reason ,e) (raise e)]))]
      [else state]))
 
   (define ($execute sql bindings)
@@ -278,8 +278,8 @@
     (define (attempt stmt count sleep-times)
       (unless (< count 500)
         (throw `#(db-retry-failed ,sql ,count)))
-      (match (catch (sqlite:execute stmt '()))
-        [#(EXIT #(db-error ,_ (,_ ,sqlite_rc . ,_) ,_))
+      (match (try (sqlite:execute stmt '()))
+        [`(catch #(db-error ,_ (,_ ,sqlite_rc . ,_) ,_))
          (guard
           (let ([rc (- (- sqlite_rc) 6000000)])
             (or (bits-set? rc 5)    ;; SQLITE_BUSY
@@ -287,7 +287,7 @@
          (match sleep-times
            [(,t . ,rest)
             (receive (after t (attempt stmt (+ count 1) rest)))])]
-        [#(EXIT ,reason) (throw reason)]
+        [`(catch ,reason ,e) (raise e)]
         [,_ count]))
     (let* ([stmt (get-statement sql)]
            [start-time (erlang:now)]

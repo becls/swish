@@ -135,16 +135,16 @@
       [`(<event-mgr-state> [event-buffer #f] ,log-handler ,handlers)
        (for-each
         (lambda (h)
-          (match (catch ((<handler> proc h) event))
-            [#(EXIT ,reason) (kill (<handler> owner h) reason)]
+          (match (try ((<handler> proc h) event))
+            [`(catch ,reason ,e) (kill (<handler> owner h) e)]
             [,_ (void)]))
         handlers)
        (cond
         [log-handler
-         (match (catch ((<handler> proc log-handler) event))
-           [#(EXIT ,reason)
+         (match (try ((<handler> proc log-handler) event))
+           [`(catch ,reason ,e)
             (unlink (<handler> owner log-handler))
-            (kill (<handler> owner log-handler) reason)
+            (kill (<handler> owner log-handler) e)
             (console-event-handler event)
             ($state copy [log-handler #f])]
            [,_ state])]

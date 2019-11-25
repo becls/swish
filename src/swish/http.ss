@@ -682,22 +682,23 @@
       [params params])
     (let ([start-pos (port-position op)])
       (match
-       (catch
+       (try
         (cond
          [(not (validate-path path))
           (not-found op)
           (raise `#(invalid-http-path ,path))]
          [(http-cache:get-handler method path) =>
           (lambda (handler)
-            (handler ip op request header params)
+            (limit-stack
+             (handler ip op request header params))
             (flush-output-port op))]
          [else
           (not-found op)
           (raise `#(http-file-not-found ,path))]))
-       [#(EXIT ,reason)
+       [`(catch ,reason ,e)
         (when (= start-pos (port-position op))
           (internal-server-error op))
-        (throw reason)]
+        (raise e)]
        [,_ (void)])))
 
   (define (http:percent-encode s)

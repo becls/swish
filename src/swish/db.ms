@@ -188,7 +188,7 @@
     (transaction db (execute "drop table temp.foo")))
    ;; Once more, this time with throw instead of raise
    (match-let*
-    ([#(error pie)
+    ([#(error `(catch pie))
       (db:transaction db
         (lambda ()
           (execute "create table temp.bar(x)")
