@@ -216,6 +216,8 @@
     (db:stop db))))
 
 (isolate-mat errors ()
+  (start-silent-event-mgr)
+  (capture-events)
   (process-trap-exit #t)
   (match-let*
    ([#(EXIT #(invalid-context lazy-execute)) (catch (lazy-execute "SELECT 1"))]
@@ -232,7 +234,25 @@
     [#f (whereis name)])
    (receive (after 1000 (raise 'timeout))
      [#(EXIT ,pid make-db-init-fail)
-      'ok])))
+      'ok])
+   (match-let*
+    ;; Original failure mode:
+    ;;  1. db:stop does a gen-server:call to db with timeout 'infinity
+    ;;  2. db's handle-call calls flush
+    ;;  3. error during flush of bad db:log raises exception, killing worker
+    ;;  4. flush receives EXIT message for failed worker and raises exception
+    ;;  5. gen-server calls db's terminate, but db state still has worker set
+    ;;  6. terminate calls flush with same worker pid
+    ;;  7. flush waits indefinitely to receive pid EXIT that was already
+    ;;     received in step 4
+    ([#(ok ,db) (db:start&link #f ":memory:" 'open)]
+     [,_ (db:log db "insert into nosuchtable(x) values(3)")]
+     [stopped (db:stop db)])
+    (receive (after 1000 (raise 'timeout))
+      [`(<gen-server-terminating>
+         [name ,@db]
+         [reason #(db-error prepare ,_ ,_)])
+       'ok]))))
 
 (mat statements ()
   (let ([db (sqlite:open ":memory:" SQLITE_OPEN_READWRITE)])

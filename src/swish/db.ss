@@ -164,12 +164,14 @@
                [worker #f]))))
 
   (define (terminate reason state)
-    (catch (flush state))
-    (vector-for-each (lambda (e) (sqlite:finalize (entry-stmt e)))
-      (hashtable-values (cache-ht ($state cache))))
-    (finalize-lazy-statements ($state cache))
-    (sqlite:close ($state db))
-    'ok)
+    (let ([x (catch (flush state))])
+      (vector-for-each (lambda (e) (sqlite:finalize (entry-stmt e)))
+        (hashtable-values (cache-ht ($state cache))))
+      (finalize-lazy-statements ($state cache))
+      (sqlite:close ($state db))
+      (match x
+        [#(EXIT ,reason) (raise reason)]
+        [,_ 'ok])))
 
   (define (handle-call msg from state)
     (match msg
@@ -177,7 +179,7 @@
        (no-reply
         ($state copy* [queue (queue:add `#(transaction ,f ,from) queue)]))]
       [filename `#(reply ,($state filename) ,state ,(get-timeout state))]
-      [stop `#(stop normal stopped ,(flush state))]))
+      [stop `#(stop normal stopped ,state)]))
 
   (define (handle-cast msg state)
     (match msg
