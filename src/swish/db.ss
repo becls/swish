@@ -274,11 +274,16 @@
   (define (execute-with-retry-on-busy sql)
     ;; Use with BEGIN IMMEDIATE, COMMIT, and ROLLBACK
     (define sleep-times '(2 3 6 11 16 21 26 26 26 51 51 . #0=(101 . #0#)))
+    (define (bits-set? rc bits) (equal? bits (bitwise-and rc bits)))
     (define (attempt stmt count sleep-times)
       (unless (< count 500)
         (raise `#(db-retry-failed ,sql ,count)))
       (match (catch (sqlite:execute stmt '()))
-        [#(EXIT #(db-error ,_ (,_ . #x20000005) ,detail)) ; SQLITE_BUSY
+        [#(EXIT #(db-error ,_ (,_ ,sqlite_rc . ,_) ,_))
+         (guard
+          (let ([rc (- (- sqlite_rc) 6000000)])
+            (or (bits-set? rc 5)    ;; SQLITE_BUSY
+                (bits-set? rc 6)))) ;; SQLITE_LOCKED
          (match sleep-times
            [(,t . ,rest)
             (receive (after t (attempt stmt (+ count 1) rest)))])]

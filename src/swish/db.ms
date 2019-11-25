@@ -216,7 +216,6 @@
     (db:stop db))))
 
 (isolate-mat errors ()
-  (start-silent-event-mgr)
   (capture-events)
   (process-trap-exit #t)
   (match-let*
@@ -367,3 +366,32 @@
 
     (db:stop file)
     (catch (remove-file filename)))))
+
+(isolate-mat retry ()
+  (capture-events)
+  (match-let*
+   ([,db-uri "file::memory:?cache=shared"]
+    [#(ok ,shared1) (db:start&link #f db-uri 'create)]
+    [#(ok ,shared2) (db:start&link #f db-uri 'create)]
+    [()
+     (transaction shared1
+       (execute "CREATE TABLE table1 (x, y)"))]
+    [,me self]
+    [,pid
+     (spawn&link
+      (lambda ()
+        (transaction shared1
+          (execute "INSERT INTO table1 (x, y) VALUES(?,?)" 1 2)
+          (send me 'go-ahead)
+          (receive (after 1000 'ok)))))]
+    [ok (receive (after 1000 (raise 'timeout))
+          [go-ahead 'ok])]
+    [(#(1 2))
+     (transaction shared2
+       (execute "SELECT x, y FROM table1"))])
+   (receive (after 2000 (raise 'timeout))
+     [`(<transaction-retry> [database ,@db-uri] ,count)
+      (guard (> count 0))
+      'ok])))
+
+(start-silent-event-mgr)
