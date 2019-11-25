@@ -27,10 +27,12 @@
    coerce
    create-table
    define-simple-events
+   json-stack->string
    log-db:get-instance-id
    log-db:setup
    log-db:start&link
    log-db:version
+   stack->json
    swish-event-logger
    )
   (import
@@ -204,6 +206,88 @@
                   `#(error ,reason-string))))))]
      [(json:object? x) (json:object->string x)]
      [else (parameterize ([print-graph #t]) (format "~s" x))]))
+
+  (define stack->json
+    (case-lambda
+     [(k) (stack->json k 'default)]
+     [(k max-depth)
+      (define who 'stack->json)
+      (define (set-source! obj field x)
+        (when (source-object? x)
+          (let ([sfd (source-object-sfd x)])
+            (json:set! obj field
+              (json:make-object
+               [bfp (source-object-bfp x)]
+               [efp (source-object-efp x)]
+               [path (source-file-descriptor-path sfd)]
+               [checksum (source-file-descriptor-checksum sfd)])))))
+      (define (var->json var)
+        (json:make-object
+         [name (format "~s" (car var))]
+         [value (format "~s" (cdr var))]))
+      (define obj (inspect/object k))
+      (unless (eq? 'continuation (obj 'type))
+        (bad-arg who k))
+      (parameterize ([print-graph #t])
+        (let ([stack (json:make-object [type "stack"] [depth (obj 'depth)])])
+          (json:set! stack 'frames
+            (walk-stack k '()
+              (lambda (description source proc-source free)
+                (let ([frame
+                       (json:make-object
+                        [type "stack-frame"]
+                        [description description])])
+                  (set-source! frame 'source source)
+                  (set-source! frame 'procedure-source proc-source)
+                  (when free (json:set! frame 'free (map var->json free)))
+                  frame))
+              (lambda (frame base depth next)
+                (json:set! frame 'depth depth)
+                (cons frame (next base)))
+              who
+              max-depth
+              (lambda (base depth)
+                (json:set! stack 'truncated depth)
+                base)))
+          stack))]))
+
+  (define json-stack->string
+    (let ()
+      (define who 'json-stack->string)
+      (define ($json-stack->string op x)
+        (define (dump-src prefix)
+          (lambda (src)
+            (fprintf op "~@[ ~a~] at offset ~a of ~a" prefix
+              (json:ref src 'bfp "?")
+              (json:ref src 'path "?"))))
+        (define (dump-frame x)
+          (fprintf op "~a" (json:ref x 'description "?"))
+          (cond
+           [(json:ref x 'source #f) => (dump-src #f)]
+           [(json:ref x 'procedure-source #f) => (dump-src "in procedure")])
+          (newline op)
+          (for-each
+           (lambda (free)
+             (fprintf op "  ~a: ~a\n"
+               (json:ref free 'name "?")
+               (json:ref free 'value "?")))
+           (json:ref x 'free '())))
+        (unless (and (json:object? x) (equal? "stack" (json:ref x 'type #f)))
+          (bad-arg who x))
+        (for-each dump-frame (json:ref x 'frames '()))
+        (cond
+         [(json:ref x 'truncated #f) =>
+          (lambda (max-depth)
+            (fprintf op "Stack dump truncated due to max-depth = ~a.\n"
+              max-depth))]))
+      (case-lambda
+       [(op x)
+        (arg-check who [op output-port? textual-port?])
+        ($json-stack->string op x)]
+       [(x)
+        (let-values ([(op get) (open-string-output-port)])
+          ($json-stack->string op x)
+          (get))])))
 
   (define-syntax (log-sql x)
     (syntax-case x ()

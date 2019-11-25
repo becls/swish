@@ -2790,9 +2790,80 @@
     ;; cover the dump-stack "... at offset ..." case while we have
     ;; a handy setup
     [,! (delete-file file3.ss)]
-    )
-   'ok)
-  )
+    [,extract-frames
+     (let ()
+       (define (make-frame desc free)
+         (and desc (cons desc free)))
+       (define (extract-frames lines)
+         (remq #f
+           (let f ([lines lines] [desc #f] [free '()])
+             (match lines
+               [() (list (make-frame desc free))]
+               [(,line . ,lines)
+                (if (starts-with? line " ")
+                    (f lines desc (cons line free))
+                    (cons (make-frame desc free) (f lines line '())))]))))
+       extract-frames)]
+    [,match-frame
+     (lambda (f1 f2)
+       (define (extract-free free)
+         (match (pregexp-match (re "^  ([^:]+): (.*)") free)
+           [(,_ ,var ,val) (cons var val)]))
+       (match-let*
+        ([(,desc . ,f1-free) f1]
+         [(,@desc . ,f2-free) f2]
+         [,f1-free-sorted (sort string<? f1-free)]
+         [,f2-free-sorted (sort string<? f2-free)]
+         [,named-vars-match (equal? f1-free-sorted f2-free-sorted)]
+         [#t (or named-vars-match
+                 ;; otherwise, must not have names, just free-var numbers
+                 (let ([f1-extracted (map extract-free f1-free)]
+                       [f2-extracted (map extract-free f2-free)])
+                   (and (andmap string->number (map car f1-extracted))
+                        (andmap string->number (map car f2-extracted))
+                        (equal?
+                         (sort string<? (map cdr f1-extracted))
+                         (sort string<? (map cdr f2-extracted))))))])
+        'ok))]
+    [,compare
+     (lambda (expected actual)
+       (for-each match-frame
+         (extract-frames expected)
+         (extract-frames actual))
+       'ok)]
+    [,make-expected
+     ;; stack->json records source info in terms of bfp,
+     ;; but dump-stack may give us line numbers
+     (lambda (offset-only?)
+       `("#<continuation in proc4>"
+         "  0: 65"
+         "  1: #\\A"
+         "#<continuation in proc4>"
+         "  0: 66"
+         "  1: #\\B"
+         ,(format "#<continuation in proc3> at offset 117 of ~a" file3.ss)
+         "  n: 0"
+         "  x: 0"
+         "  zap: 0"
+         ,(format "#<continuation in proc2> in procedure at ~a of ~a"
+            (if offset-only? "offset 0" "line 1, char 1")
+            file2.ss)
+         "  0: 0"
+         "  1: 0"
+         "  2: (7 . 0)"
+         "Stack dump truncated due to max-depth = 4."
+         ""))]
+    [,expected (make-expected #f)]
+    [,actual
+     (let ([os (open-output-string)])
+       (dump-stack k os 4)
+       (split (get-output-string os) #\newline))]
+    [ok (compare expected actual)]
+    [,json-expected (make-expected #t)]
+    [,json (stack->json k 4)]
+    [,json-actual (split (json-stack->string json) #\newline)]
+    [ok (compare json-expected json-actual)])
+   'ok))
 
 (mat exit-reason->stacks ()
   (define-syntax def
