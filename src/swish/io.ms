@@ -46,7 +46,8 @@
    (lambda ()
      (receive (after timeout (throw reason))))))
 
-(define (stop-watchdog x) (unlink x))
+(define (stop-linked x) (unlink x) (kill x 'kill))
+(define stop-watchdog stop-linked)
 
 (define (get-bv ip len)
   (let* ([me self]
@@ -74,9 +75,10 @@
                `#(send/expect-timeout ,timeout ,(bytevector-length data)))])
     (on-exit (stop-watchdog dog)
       (let ([w (spawn&link (lambda () (writer op)))])
-        (put-bv w data #t)
-        (let ([new (get-bv ip (bytevector-length data))])
-          (assert (equal? new data)))))))
+        (on-exit (stop-linked w)
+          (put-bv w data #t)
+          (let ([new (get-bv ip (bytevector-length data))])
+            (assert (equal? new data))))))))
 
 (define primes '(7 11 13 239 241 251))
 (define buffer-sizes '(1 127 256 1024 2048 4096 8192))

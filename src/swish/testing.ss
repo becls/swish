@@ -121,14 +121,43 @@
     (let ([me self])
       (event-mgr:add-handler (lambda (event) (send me event)))))
 
+  (define (cleanup-after pid)
+    (let ([parent-id (process-id pid)]
+          [deadline (+ (erlang:now) 1000)]
+          [profiler (whereis 'profiler)])
+      (let ([rogues
+             (ps-fold-left > '()
+               (lambda (ls p)
+                 (if (or (<= (process-id p) parent-id) (eq? p profiler))
+                     ls
+                     (let ([m (monitor p)])
+                       (receive (until deadline (cons p ls))
+                         [`(DOWN ,@m ,@p ,r) ls])))))])
+        (for-each
+         (lambda (rogue)
+           (receive (after 100 (kill rogue 'shutdown))
+             [`(DOWN ,m ,@rogue ,r) 'ok]))
+         rogues))))
+
   (define ($isolate-mat thunk)
-    (let* ([pid (spawn thunk)]
+    (let* ([me self]
+           [pid (spawn
+                 (lambda ()
+                   (thunk)
+                   (process-trap-exit #f)
+                   (send me `#(done ,self))
+                   (receive)))]
            [m (monitor pid)])
-      (receive (after 60000
-                 (kill pid 'kill)
-                 (throw 'timeout))
-        [`(DOWN ,@m ,@pid normal) (void)]
-        [`(DOWN ,@m ,@pid ,reason ,e) (raise e)])))
+      (on-exit (cleanup-after pid)
+        (receive (after 60000
+                   (kill pid 'kill)
+                   (throw 'timeout))
+          [`(DOWN ,@m ,@pid ,reason ,e) (raise e)]
+          [#(done ,@pid)
+           (kill pid 'shutdown)
+           (receive (after 1000 (throw 'timeout))
+             [`(DOWN ,@m ,@pid shutdown) 'ok]
+             [`(DOWN ,@m ,@pid ,r ,e) (raise e)])]))))
 
   (define-syntax isolate-mat
     (syntax-rules ()
