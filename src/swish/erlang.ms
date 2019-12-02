@@ -971,70 +971,102 @@
         'ok)])))
 
 (isolate-mat pps ()
-  (parameterize ([collect-request-handler void])
-    (define (check-output patterns with-port)
-      (let-values ([(p get) (open-string-output-port)])
-        (with-port p)
-        (match-regexps patterns (split (get) #\newline))))
-    (define (test patterns)
-      (check-output patterns (lambda (p) (pps p)))
-      (check-output patterns
-        (lambda (p)
-          (parameterize ([current-output-port p])
-            (pps)))))
-    (define (test-spawn thunk pattern-suffix)
-      (define pid (and thunk (spawn thunk)))
-      (on-exit (when pid (kill pid 'kill))
-        (define id (process-id (or pid self)))
-        (define pattern (format " +~a: ~a" id pattern-suffix))
-        (sleep-ms 1)
-        (test `("Processes:" seek ,pattern ""))))
-    (define parent self)
+  (define (check-output patterns with-port)
+    (let-values ([(p get) (open-string-output-port)])
+      (with-port p)
+      (match-regexps patterns (split (get) #\newline))))
+  (define (test patterns)
+    (check-output patterns (lambda (p) (pps p)))
+    (check-output patterns
+      (lambda (p)
+        (parameterize ([current-output-port p])
+          (pps)))))
+  (define (test-spawn thunk state-match? pattern-suffix)
+    (define pid (and thunk (spawn thunk)))
+    (on-exit (when pid (kill pid 'kill))
+      (define id (process-id (or pid self)))
+      (define pattern (format " +~a: ~a" id pattern-suffix))
+      (when (and pid state-match?)
+        (wait-for-state pid state-match?))
+      (test `("Processes:" seek ,pattern ""))))
+  (define (wait-for-state pid match?)
+    (let wait ([n 1])
+      (if (> n 10)
+          (throw 'timeout)
+          (with-process-details pid
+            (lambda (id name create-time state)
+              (unless (match? state)
+                (receive (after n (wait (+ n 1))))))))))
+  (define parent self)
+  (test
+   `("Processes:"
+     " +1: waiting for up to [.0-9]+s at char [0-9]+ of .*testing.ss, spawned [0-9]+"
+     " +2: ready to run, spawned [0-9]+"
+     ;; finalizer may be waiting or ready to run
+     " +3: (?:waiting indefinitely at char [0-9]+ of .*[/\\\\]erlang.ss|ready to run), spawned [0-9]+"))
+  (test-spawn #f #f "running, spawned [0-9]+")
+  ;; named
+  (register 'named self)
+  (test-spawn #f #f "named running, spawned [0-9]+")
+  ;; dead
+  (test-spawn
+   (lambda () (car 12))
+   (lambda (state)
+     (match state
+       [#(exited ,_) 'ok]
+       [,_ #f]))
+   "exited with reason #<compound condition: Exception in car: 12 is not a pair>, spawned [0-9]+")
+  ;; no-src
+  (test-spawn
+   (lambda () (eval '(receive (after 60000 'ok))))
+   (lambda (state)
+     (match state
+       [#(sleep-up-to ,_ ,_) 'ok]
+       [,_ #f]))
+   "waiting for up to [.0-9]+s, spawned [0-9]+")
+  ;; normal; covers a case in @thunk->cont
+  (test-spawn exit
+    (lambda (state)
+      (match state
+        [#(exited ,_) 'ok]
+        [,_ #f]))
+    "exited with reason normal, spawned [0-9]+")
+  ;; forever
+  (process-trap-exit #t)
+  (test-spawn
+   (lambda () (link parent) (receive (until 'infinity 'ok)))
+   (lambda (state)
+     (match state
+       [#(waiting-indefinitely ,_) 'ok]
+       [,_ #f]))
+   "waiting indefinitely at char [0-9]+ of .*[/\\\\]erlang.ms, spawned [0-9]+")
+  ;; waiting for io
+  (let ([pid (spawn
+              (lambda ()
+                (link parent)
+                (wait-for-io 'godot)
+                (receive (after 0 (throw 'bad))
+                  [for-coverage (send parent 'ok)])
+                (receive)))])
+    (wait-for-state pid
+      (lambda (state)
+        (match state
+          [#(waiting-for godot) 'ok]
+          [,_ #f])))
     (test
-     `("Processes:"
-       " +1: waiting for up to [.0-9]+s at char [0-9]+ of .*testing.ss, spawned [0-9]+"
-       " +2: ready to run, spawned [0-9]+"
-       " +3: waiting indefinitely at char [0-9]+ of .*[/\\\\]erlang.ss, spawned [0-9]+"))
-    (test-spawn #f "running, spawned [0-9]+")
-    ;; named
-    (register 'named self)
-    (test-spawn #f "named running, spawned [0-9]+")
-    ;; dead
-    (test-spawn (lambda () (car 12))
-      "exited with reason #<compound condition: Exception in car: 12 is not a pair>, spawned [0-9]+")
-    ;; no-src
-    (test-spawn (lambda () (eval '(receive (after 10 'ok))))
-      "waiting for up to [.0-9]+s, spawned [0-9]+")
-    ;; normal; covers a case in @thunk->cont
-    (test-spawn exit
-      "exited with reason normal, spawned [0-9]+")
-    ;; forever
-    (process-trap-exit #t)
-    (test-spawn (lambda () (link parent) (receive (until 'infinity 'ok)))
-      "waiting indefinitely at char [0-9]+ of .*[/\\\\]erlang.ms, spawned [0-9]+")
-    ;; waiting for io
-    (let ([pid (spawn
-                (lambda ()
-                  (link parent)
-                  (wait-for-io 'godot)
-                  (receive (after 0 (throw 'bad))
-                    [for-coverage (send parent 'ok)])
-                  (receive)))])
-      (sleep-ms 1)
-      (test
-       `("Processes:" seek
-         ,(format " +~a: waiting for godot, spawned [0-9]+"
-            (process-id pid))))
-      ;; covers case in @send
-      (send pid 'for-coverage)
-      (complete-io pid)
-      (receive (after 10 (throw 'failed))
-        [ok 'ok])
-      (kill pid 'abandoned)
-      (test
-       `("Processes:" seek
-         ,(format " +~a: exited with reason abandoned, spawned [0-9]+"
-            (process-id pid)))))))
+     `("Processes:" seek
+       ,(format " +~a: waiting for godot, spawned [0-9]+"
+          (process-id pid))))
+    ;; covers case in @send
+    (send pid 'for-coverage)
+    (complete-io pid)
+    (receive (after 1000 (throw 'failed))
+      [ok 'ok])
+    (kill pid 'abandoned)
+    (test
+     `("Processes:" seek
+       ,(format " +~a: exited with reason abandoned, spawned [0-9]+"
+          (process-id pid))))))
 
 (mat t1 ()
   (assert (= (match 5 (,x x)) 5)))
