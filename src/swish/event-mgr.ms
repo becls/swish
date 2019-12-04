@@ -42,7 +42,19 @@
    [(whereis 'event-mgr) => (lambda (pid) (kill pid 'kill))]
    [else 'ok]))
 
-(isolate-mat basic ()
+;; many event-mgr mats spawn processes that isolate-mat will clean up
+;; for us, but we don't need to wait.
+(define-syntax event-mgr-mat
+  (syntax-rules ()
+    [(_ name (tag ...) e0 e1 ...)
+     (isolate-mat name
+       (settings
+        [tags (tag ...)]
+        [process-kill-delay 0]
+        [process-cleanup-deadline 0])
+       e0 e1 ...)]))
+
+(event-mgr-mat basic ()
   (stop-event-mgr)
   (start-event-mgr)
   (silence-log-handler)
@@ -64,7 +76,7 @@
     (assert (not (whereis 'event-mgr)))
     'ok))
 
-(isolate-mat buffering ()
+(event-mgr-mat buffering ()
   (stop-event-mgr)
   (start-event-mgr)
   (silence-log-handler)
@@ -84,7 +96,7 @@
     (reported e4)
     'ok))
 
-(isolate-mat system-detail ()
+(event-mgr-mat system-detail ()
   (define-tuple <foo> bar timestamp)
   (stop-event-mgr)
   (start-event-mgr)
@@ -103,7 +115,7 @@
       [`(<foo> [bar none] ,timestamp)
        (assert (<= before timestamp after))])))
 
-(isolate-mat crash ()
+(event-mgr-mat crash ()
   (process-trap-exit #t)
   (stop-event-mgr)
   (start-event-mgr)
@@ -125,7 +137,7 @@
       [`(EXIT ,@pid crash) (void)]))
   'ok)
 
-(isolate-mat console ()
+(event-mgr-mat console ()
   (stop-event-mgr)
   (let-values ([(p get) (open-string-output-port)])
     (parameterize ([console-error-port p])
@@ -145,7 +157,7 @@
       (match-prefix lines "Timestamp:")
       (match-prefix lines "Event: console-event"))))
 
-(isolate-mat dump-stack ()
+(event-mgr-mat dump-stack ()
   (stop-event-mgr)
   (start-event-mgr)
   (event-mgr:flush-buffer)
@@ -174,7 +186,7 @@
       (match lines ;; Should dump stack just once. Expect two blank lines.
         [("" "" . ,_) 'ok]))))
 
-(isolate-mat dump-stack2 ()
+(event-mgr-mat dump-stack2 ()
   (stop-event-mgr)
   (start-event-mgr)
   (event-mgr:flush-buffer)
@@ -206,7 +218,7 @@
       (match lines ;; Should dump stack just once. Expect two blank lines.
         [("" "" . ,_) 'ok]))))
 
-(isolate-mat handler-error ()
+(event-mgr-mat handler-error ()
   (define op (open-output-string))
   (parameterize ([console-error-port op])
     (stop-event-mgr)
@@ -228,7 +240,7 @@
        (split (get-output-string op) #\newline))
      'ok)))
 
-(isolate-mat exit-reason ()
+(event-mgr-mat exit-reason ()
   (match-let*
    ([#t (informative-exit-reason? (make-fault 'normal))]
     [#f (informative-exit-reason? (try (raise 'normal)))]

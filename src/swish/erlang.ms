@@ -584,7 +584,7 @@
     'seek
     "Event: #\\(finalizer-process-terminated killed\\)"))
 
-(isolate-mat chain-reaction ()
+(isolate-mat chain-reaction (settings [process-kill-delay 0])
   ;; A, B, C are linked. C dies for different reasons
   (define (start trap? m)
     (let ([host self])
@@ -725,7 +725,7 @@
     [ok (flush)])
    'ok))
 
-(isolate-mat chain-reaction2 ()
+(isolate-mat chain-reaction2 (settings [process-kill-delay 0])
   ;; A, B, C are linked. C kills B for different reasons
   (define (start trap? m)
     (let ([host self])

@@ -55,6 +55,7 @@
    (swish json)
    (swish log-db)
    (swish mat)
+   (swish meta)
    (swish osi)
    (swish pregexp)
    (swish profile)
@@ -121,9 +122,9 @@
     (let ([me self])
       (event-mgr:add-handler (lambda (event) (send me event)))))
 
-  (define (cleanup-after pid)
+  (define (cleanup-after pid deadline kill-delay)
     (let ([parent-id (process-id pid)]
-          [deadline (+ (erlang:now) 1000)]
+          [deadline (+ (erlang:now) deadline)]
           [profiler (whereis 'profiler)])
       (let ([rogues
              (ps-fold-left > '()
@@ -135,12 +136,15 @@
                          [`(DOWN ,@m ,@p ,r) ls])))))])
         (for-each
          (lambda (rogue)
-           (receive (after 100 (kill rogue 'shutdown))
+           (receive (after kill-delay (kill rogue 'shutdown))
              [`(DOWN ,m ,@rogue ,r) 'ok]))
          rogues))))
 
-  (define ($isolate-mat thunk)
-    (let* ([me self]
+  (define ($isolate-mat timeout deadline kill-delay thunk)
+    (let* ([white-flag
+            ;; avoid dynamic-wind frame in stack dump
+            (make-fault 'timeout)]
+           [me self]
            [pid (spawn
                  (lambda ()
                    (thunk)
@@ -148,10 +152,10 @@
                    (send me `#(done ,self))
                    (receive)))]
            [m (monitor pid)])
-      (on-exit (cleanup-after pid)
-        (receive (after 60000
+      (on-exit (cleanup-after pid deadline kill-delay)
+        (receive (after timeout
                    (kill pid 'kill)
-                   (throw 'timeout))
+                   (raise white-flag))
           [`(DOWN ,@m ,@pid ,reason ,e) (raise e)]
           [#(done ,@pid)
            (kill pid 'shutdown)
@@ -159,10 +163,37 @@
              [`(DOWN ,@m ,@pid shutdown) 'ok]
              [`(DOWN ,@m ,@pid ,r ,e) (raise e)])]))))
 
-  (define-syntax isolate-mat
-    (syntax-rules ()
-      [(_ name tags e1 e2 ...)
-       (mat name tags ($isolate-mat (lambda () e1 e2 ... (void))))]))
+  (define-syntax (isolate-mat x)
+    (define defaults
+      '([tags ()]
+        [timeout 60000]
+        [process-cleanup-deadline 500]
+        [process-kill-delay 100]))
+    (define (make-lookup x forms)
+      (define clauses
+        (collect-clauses x forms (map car defaults)))
+      (lambda (key)
+        (syntax-case (find-clause key clauses) ()
+          [(key val) #'val]
+          [_ (cond
+              [(assq key defaults) => cadr]
+              [else (errorf 'isolate-mat "unknown key ~s" key)])])))
+    (syntax-case x ()
+      [(_ name (settings setting ...) e1 e2 ...)
+       (eq? (datum settings) 'settings)
+       (let ([lookup (make-lookup x #'(setting ...))])
+         (with-syntax ([tags (lookup 'tags)]
+                       [timeout-ms (lookup 'timeout)]
+                       [deadline (lookup 'process-cleanup-deadline)]
+                       [kill-delay (lookup 'process-kill-delay)])
+           #`(add-mat 'name 'tags
+               #,(replace-source x ;; use isolate-mat source in timeout continuation
+                   #'(lambda ()
+                       ($isolate-mat timeout-ms deadline kill-delay
+                         (lambda () e1 e2 ... (void)))
+                       (void))))))]
+      [(_ name tag-list e1 e2 ...)
+       #'(isolate-mat name (settings [tags tag-list]) e1 e2 ...)]))
 
   (define (match-prefix lines pattern)
     (match lines
