@@ -3539,6 +3539,29 @@
        ,@stack-info)
      (split (get-output-string os) #\newline))))
 
+(isolate-mat cyclic-event ()
+  ;; Handle cyclic structures in console-event-handler.
+  (script-test #f '()
+    (parameterize ([print-graph #t])
+      (format "~{~s\n~}\n"
+        '((event-mgr:notify
+           (let f ([n 3])
+             (if (= n 0)
+                 (make-fault '#0=(a b c . #0#))
+                 (list n (f (- n 1))))))
+          (receive (after 100 (exit))))))
+    `(seek
+      "Date:"
+      "Timestamp:"
+      ,(pregexp-quote "Event: (3 (2 (1 #<fault #0=(a b c . #0#)>)))")
+      "Stack:"
+      "#<continuation in f>"
+      "  n: 1"
+      "#<continuation in f>"
+      "  n: 2"
+      "#<continuation in f>"
+      "  n: 3")))
+
 (isolate-mat dbg ()
   (script-test #f '()
     (format "~{~s\n~}"

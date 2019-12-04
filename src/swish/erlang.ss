@@ -977,29 +977,30 @@
 
   (define (console-event-handler event)
     (with-interrupts-disabled
-     (let ([op (console-error-port)]
-           [ht (or (event-condition-table) (make-eq-hashtable))])
-       (event-condition-table ht)
-       (fprintf op "\nDate: ~a\n" (date-and-time))
-       (fprintf op "Timestamp: ~a\n" (erlang:now))
-       (fprintf op "Event: ~s\n" event)
-       (let* ([keys (hashtable-keys ht)]
-              [end (vector-length keys)])
-         (do ([i 0 (fx1+ i)]) ((fx= i end))
-           (let ([c (vector-ref keys i)])
-             (unless (eq? (eq-hashtable-ref ht c #f) 'dumped)
-               (eq-hashtable-set! ht c 'dumped)
-               (unless (fault-condition? c)
-                 (fprintf op "Condition: ")
-                 (display-condition c op)
-                 (newline op))
-               (cond
-                [(and (continuation-condition? c) (condition-continuation c)) =>
-                 (lambda (k)
-                   (fprintf op "Stack:\n")
-                   (dump-stack k op 'default))])))))
-       (newline op)
-       (flush-output-port op))))
+     (parameterize ([print-graph #t])
+       (let ([op (console-error-port)]
+             [ht (or (event-condition-table) (make-eq-hashtable))])
+         (event-condition-table ht)
+         (fprintf op "\nDate: ~a\n" (date-and-time))
+         (fprintf op "Timestamp: ~a\n" (erlang:now))
+         (fprintf op "Event: ~s\n" event)
+         (let* ([keys (hashtable-keys ht)]
+                [end (vector-length keys)])
+           (do ([i 0 (fx1+ i)]) ((fx= i end))
+             (let ([c (vector-ref keys i)])
+               (unless (eq? (eq-hashtable-ref ht c #f) 'dumped)
+                 (eq-hashtable-set! ht c 'dumped)
+                 (unless (fault-condition? c)
+                   (fprintf op "Condition: ")
+                   (display-condition c op)
+                   (newline op))
+                 (cond
+                  [(and (continuation-condition? c) (condition-continuation c)) =>
+                   (lambda (k)
+                     (fprintf op "Stack:\n")
+                     (dump-stack k op 'default))])))))
+         (newline op)
+         (flush-output-port op)))))
 
   (define make-process-parameter
     (case-lambda
