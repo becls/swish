@@ -830,6 +830,93 @@
       [`(EXIT ,@pid normal) 'ok]))
    (list (spin) (spin) (spin) (spin) (spin))))
 
+(isolate-mat process-parameter-collection ()
+  (define g (make-guardian))
+  (define (salvaged)
+    (let ([x (g)])
+      (if x (cons x (salvaged)) '())))
+  ;; We'll collect drop-param while processes are still live and verify that
+  ;; its values were collected.
+  (define drop-param (make-process-parameter 'drop))
+  ;; We'll collect after processes have exited and verify that values of
+  ;; keep-param were collected.
+  (define keep-param (make-process-parameter 'keep))
+  (define me self)
+  (define (test-params val)
+    (spawn&link
+     (lambda ()
+       (match-let*
+        ([drop (drop-param)]
+         [keep (keep-param)]
+         [,v1 `(for-drop-param ,val)]
+         [,_ (g v1)]
+         [,_ (drop-param v1)]
+         [,v2 `(for-keep-param ,val)]
+         [,_ (g v2)]
+         [,_ (keep-param v2)]
+         [(for-drop-param ,@val) (drop-param)]
+         [(for-keep-param ,@val) (keep-param)])
+        (send me self)
+        (receive (after 1000 (throw 'timeout))
+          [drop-param-was-dropped 'ok])
+        ;; Once the drop-param parameter is collected, the guardian should
+        ;; report that the value we assigned to drop-param was collectible,
+        ;; but the value we assigned to keep-param should still be live.
+        (receive (after 1000 (throw 'timeout))
+          [(for-drop-param ,@val) 'ok]
+          [(for-keep-param ,@val) (throw 'keep-param-premature-demise)])
+        (send me `(,self done))))))
+  (g drop-param)
+  (let* ([vals (iota 10)]
+         [pids (map test-params vals)]
+         [deadline (+ (erlang:now) 1000)])
+    ;; wait for children to be ready
+    (for-each
+     (lambda (pid)
+       (receive (until deadline (throw 'timeout))
+         [,@pid 'ok]))
+     pids)
+    ;; drop drop-param and verify that it was spared from collection
+    (match-let*
+     ([,_ (set! drop-param #f)]
+      [,_ (gc)]
+      [(,p)
+       (guard (procedure? p))
+       (salvaged)]
+      [drop (p)])
+     'ok)
+    ;; collect drop-param and verify that its values were collectible
+    (match-let*
+     ([,_ (gc)]
+      [,_ (for-each (lambda (pid) (send pid 'drop-param-was-dropped)) pids)]
+      ;; collect again so that drop-param values are collectible
+      [,_ (gc)]
+      [,collectible (salvaged)]
+      [,_ (for-each
+           (lambda (pid)
+             (for-each (lambda (spared) (send pid spared))
+               collectible))
+           pids)]
+      [,deadline (+ (erlang:now) 1000)]
+      [,_ (for-each
+           (lambda (pid)
+             (receive (until deadline (throw 'timeout))
+               [(,@pid done) 'ok]))
+           pids)])
+     'ok)
+    ;; collect again now that the processes have exited (but are all still live)
+    ;; and verify that the values registered for keep-param were collectible
+    (match-let*
+     ([,_ (gc)]
+      [keep (keep-param)] ;; ensure that keep-param is live across gc
+      [,collectible (salvaged)]
+      [,@vals
+       (sort <
+         (map (lambda (x) (match x [(for-keep-param ,val) val]))
+           collectible))]
+      [#t (andmap process? pids)]) ;; ensure pids are live across gc
+     'ok)))
+
 (isolate-mat inherited-parameters ()
   (define (get p) (p))
   (parameterize ([inherited-parameters '()])

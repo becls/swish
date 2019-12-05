@@ -176,7 +176,7 @@
     (fields
      (immutable id)
      (immutable create-time)
-     (immutable parameters)
+     (mutable parameters)
      (mutable name)
      (mutable cont)
      (mutable sic)
@@ -251,6 +251,7 @@
     (pcb-inbox-set! p #f)
     (pcb-flags-set! p 0)
     (pcb-src-set! p #f)
+    (pcb-parameters-set! p #f)
     (let ([name (pcb-name p)])
       (when name
         (pcb-name-set! p #f)
