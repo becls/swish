@@ -33,6 +33,7 @@
  (swish string-utils)
  (swish testing)
  (swish watcher)
+ (swish websocket)
  )
 
 (define web-dir (make-parameter (path-combine (output-dir) "web-mats")))
@@ -1144,4 +1145,323 @@
     [,too-large-str (number->string too-large)]
     [#(EXIT #(http-invalid-content-length ,@too-large-str))
      (catch (test (number->string too-large)))])
+   'ok))
+
+(http-mat websocket ()
+  (define me self)
+
+  (define (make-byte-stream prime)
+    (let ([next 0])
+      (lambda ()
+        (set! next (modulo (+ next prime) 256))
+        next)))
+
+  (define (build-buffer size stream)
+    (let ([bv (make-bytevector size)])
+      (do ([i 0 (+ i 1)]) ((= i size))
+        (bytevector-u8-set! bv i (stream)))
+      bv))
+
+  (define (build-string size stream)
+    (let ([s (make-string size)])
+      (do ([i 0 (+ i 1)]) ((= i size))
+        (string-set! s i (integer->char (stream))))
+      s))
+
+  (define (get-msg from)
+    (receive (after 1000 (throw 'get-msg-timeout))
+      [#(ws:message ,@from ,msg) msg]))
+
+  (define (send/expect p1 p2 data)
+    (ws:send p1 data)
+    (assert (equal? data (get-msg p2))))
+
+  (define primes '(7 11 13 239 241 251))
+  (define buffer-sizes '(1 127 256 1024 2048 4096 8192 65537))
+
+  (define (check-loopback p1 p2)
+    (for-each
+     (lambda (prime)
+       (for-each
+        (lambda (size)
+          (send/expect p1 p2 (build-buffer size (make-byte-stream prime)))
+          (send/expect p1 p2 (build-string size (make-byte-stream prime))))
+        buffer-sizes))
+     primes))
+
+  (capture-events)
+  (supervisor:start&link 'http-sup 'one-for-all 0 1
+    (http:configure-server #f 0
+      (http:url-handler
+       (ws:upgrade conn request me))))
+
+  (let* ([c (ws:connect "127.0.0.1" (get-http-port) "/" self
+              (ws:options
+               [ping-frequency 10]
+               [fragmentation-size 1025]))]
+         [_ (receive [#(ws:init ,@c) 'ok])]
+         [s (receive [#(ws:init ,s) s])])
+    (check-loopback c s)
+    (check-loopback s c)
+    (ws:close c)
+    (receive (after 1000 (throw 'no-client-close))
+      [#(ws:closed ,@c 1000 "") 'ok])
+    (receive (after 1000 (throw 'no-server-close))
+      [#(ws:closed ,@s 1000 "") 'ok])))
+
+(http-mat websocket-connect-errors ()
+  (define me self)
+  (define (req header)
+    (utf8->string
+     (call-with-bytevector-output-port
+      (lambda (op)
+        (put-bytevector op (string->utf8 "GET / HTTP/1.1\r\n"))
+        (http:write-header op header)))))
+
+  (capture-events)
+  (supervisor:start&link 'http-sup 'one-for-all 0 1
+    (http:configure-server #f 0
+      (http:url-handler
+       (ws:upgrade conn request me))))
+
+  ;; Order matters here.
+  (match-let*
+   ([,bad400 "HTTP/1.1 400 \r\nCache-Control: no-cache\r\n\r\n"]
+    [,bad426 "HTTP/1.1 426 \r\nCache-Control: no-cache\r\nSec-WebSocket-Version: 13\r\n\r\n"]
+    [`(<result> [reason #(websocket-invalid-method POST)] [output ,@bad400])
+     (test-error&output "POST / HTTP/1.1\r\n\r\n")]
+    [,hdr '()]
+    [`(<result> [reason #(websocket-missing-header host)] [output ,@bad400])
+     (test-error&output (req hdr))]
+    [,hdr (cons (cons "Host" (format "127.0.0.1:~a" (get-http-port))) hdr)]
+    [`(<result> [reason #(websocket-missing-header upgrade)] [output ,@bad400])
+     (test-error&output (req hdr))]
+    [,hdr-bad (cons (cons "Upgrade" "not-websocket") hdr)]
+    [`(<result> [reason #(websocket-invalid-header upgrade "not-websocket")]
+        [output ,@bad400])
+     (test-error&output (req hdr-bad))]
+    [,hdr (cons (cons "Upgrade" "websocket") hdr)]
+    [`(<result> [reason #(websocket-missing-header connection)] [output ,@bad400])
+     (test-error&output (req hdr))]
+    [,hdr-bad (cons (cons "Connection" "sidestep") hdr)]
+    [`(<result> [reason #(websocket-invalid-header connection "sidestep")]
+        [output ,@bad400])
+     (test-error&output (req hdr-bad))]
+    ;; Multiple values in the Connection field are supposed to be
+    ;; stripped by proxies. Firefox insists on sending them even if
+    ;; a proxy is not involved.
+    [,hdr-firefox (cons (cons "Connection" "keep-alive, Upgrade") hdr)]
+    [`(<result> [reason #(websocket-missing-header sec-websocket-version)]
+        [output ,@bad426])
+     (test-error&output (req hdr-firefox))]
+    ;; Like the Firefox case, but includes an empty value
+    [,hdr-coverage (cons (cons "Connection" "keep-alive,,Upgrade") hdr)]
+    [`(<result> [reason #(websocket-missing-header sec-websocket-version)]
+        [output ,@bad426])
+     (test-error&output (req hdr-coverage))]
+    [,hdr (cons (cons "Connection" "Upgrade") hdr)]
+    [`(<result> [reason #(websocket-missing-header sec-websocket-version)]
+        [output ,@bad426])
+     (test-error&output (req hdr))]
+    [,hdr-bad (cons (cons "Sec-WebSocket-Version" "12") hdr)]
+    [`(<result> [reason #(websocket-invalid-header sec-websocket-version "12")]
+        [output ,@bad426])
+     (test-error&output (req hdr-bad))]
+    [,hdr (cons (cons "Sec-WebSocket-Version" "13") hdr)]
+    [`(<result> [reason #(websocket-missing-header sec-websocket-key)]
+        [output ,@bad400])
+     (test-error&output (req hdr))])
+   'ok))
+
+(http-mat websocket-bad-args ()
+  (match-let*
+   ([#(EXIT #(bad-arg fragmentation-size a))
+     (catch ((ws:options [fragmentation-size 'a])))]
+    [#(EXIT #(bad-arg fragmentation-size 0))
+     (catch ((ws:options [fragmentation-size 0])))]
+    [#(EXIT #(bad-arg maximum-message-size a))
+     (catch ((ws:options [maximum-message-size 'a])))]
+    [#(EXIT #(bad-arg maximum-message-size 0))
+     (catch ((ws:options [maximum-message-size 0])))]
+    [#(EXIT #(bad-arg ping-frequency a))
+     (catch ((ws:options [ping-frequency 'a])))]
+    [#(EXIT #(bad-arg ping-frequency 0))
+     (catch ((ws:options [ping-frequency 0])))]
+    [#(EXIT #(bad-arg pong-timeout a))
+     (catch ((ws:options [pong-timeout 'a])))]
+    [#(EXIT #(bad-arg pong-timeout 0))
+     (catch ((ws:options [pong-timeout 0])))]
+    [#(EXIT #(bad-arg ws:upgrade a))
+     (catch (ws:upgrade 'a 'b 'c))]
+    [#(EXIT #(bad-arg ws:upgrade a))
+     (catch (ws:upgrade 'a 'b 'c 'd))]
+    [,conn (spawn&link (lambda () (receive)))]
+    [#(EXIT #(bad-arg ws:upgrade b))
+     (catch (ws:upgrade conn 'b 'c 'd))]
+    [,req (<request> make [method #f] [original-path #f] [path #f]
+            [params #f] [host #f] [header #f])]
+    [#(EXIT #(bad-arg ws:upgrade c))
+     (catch (ws:upgrade conn req 'c 'd))]
+    [,pid (spawn&link (lambda () (receive)))]
+    [#(EXIT #(bad-arg ws:upgrade d))
+     (catch (ws:upgrade conn req pid 'd))]
+    [#(EXIT #(bad-arg ws:connect a))
+     (catch (ws:connect 'a 'b 'c 'd))]
+    [#(EXIT #(bad-arg ws:connect a))
+     (catch (ws:connect 'a 'b 'c 'd 'e))]
+    [#(EXIT #(bad-arg ws:connect b))
+     (catch (ws:connect "127.0.0.1" 'b 'c 'd 'e))]
+    [#(EXIT #(bad-arg ws:connect c))
+     (catch (ws:connect "127.0.0.1" 80 'c 'd 'e))]
+    [#(EXIT #(bad-arg ws:connect d))
+     (catch (ws:connect "127.0.0.1" 80 "/" 'd 'e))]
+    [,pid (spawn&link (lambda () (receive)))]
+    [#(EXIT #(bad-arg ws:connect e))
+     (catch (ws:connect "127.0.0.1" 80 "/" pid 'e))]
+    [#(EXIT #(bad-arg ws:send a))
+     (catch (ws:send 'test 'a))]
+    [#(EXIT #(bad-arg ws:send 0))
+     (catch (ws:send 'test 0))])
+   'ok))
+
+(http-mat websocket-linking ()
+  (define me self)
+  (capture-events)
+  (supervisor:start&link 'http-sup 'one-for-all 0 1
+    (http:configure-server #f 0
+      (http:url-handler
+       (let ([pid (spawn
+                   (lambda ()
+                     (receive
+                      [normal 'ok]
+                      [crash (raise 'crashed)])))])
+         (send me `#(ws ,self))
+         (send me `#(pid ,pid))
+         (when (http:find-param 'link params)
+           (link pid))
+         (ws:upgrade conn request pid)))))
+  (let ()
+    (define (do-test link? msg check)
+      (discard-events)
+      (let* ([req (if link? "/?link" "/")]
+             [c (ws:connect "127.0.0.1" (get-http-port) req self)]
+             [_ (receive [#(ws:init ,@c) 'ok])]
+             [s (receive [#(ws ,s) s])]
+             [pid (receive [#(pid ,pid) pid])])
+        (send pid msg)
+        (check c s)))
+    (define (check-crash c s)
+      (receive (after 100 (throw 'no-client-close))
+        [#(ws:closed ,@c 1011 "") 'ok])
+      (receive (after 100 (throw 'no-child-log))
+        [`(<child-end> [pid ,@s] [reason crashed]) 'ok]))
+    (define (check-normal c s)
+      (receive (after 100 (throw 'no-client-close))
+        [#(ws:closed ,@c 1000 "") 'ok])
+      (receive (after 100 (throw 'no-child-log))
+        [`(<child-end> [pid ,@s] [reason normal]) 'ok]))
+    (do-test #f 'crash check-crash)
+    (do-test #t 'crash check-crash)
+    (do-test #f 'normal check-normal)
+    (do-test #t 'normal check-normal)))
+
+(http-mat websocket-maximum-message-size ()
+  (define me self)
+  (capture-events)
+  (supervisor:start&link 'http-sup 'one-for-all 0 1
+    (http:configure-server #f 0
+      (http:url-handler
+       (ws:upgrade conn request me
+         (ws:options
+          [maximum-message-size
+           (string->number (http:get-param 'max params))])))))
+  (let ()
+    (define (do-test max-size)
+      (discard-events)
+      (let* ([c (ws:connect "127.0.0.1" (get-http-port)
+                  (format "/?max=~a" max-size) self)]
+             [_ (receive [#(ws:init ,@c) 'ok])]
+             [s (receive [#(ws:init ,s) s])])
+        (let ([str (make-string max-size #\a)])
+          (ws:send c str)
+          (receive (after 1000 (throw 'no-echo))
+            [#(ws:message ,@s ,@str) 'ok]))
+        (let ([str (make-string (+ max-size 1) #\b)])
+          (ws:send c str)
+          (receive (after 1000 (throw 'no-server-close))
+            [#(ws:closed ,@s 1002 ,_) 'ok]))
+        (receive (after 1000 (throw 'no-client-close))
+          [#(ws:closed ,@c 1002 ,_) 'ok]
+          [#(ws:closed ,@c 1001 ,_)
+           ;; When the message size is large, it is likely the server
+           ;; side closes the connection, and the client side fails
+           ;; for an io-error, which is then translated into a 1001
+           ;; code on the client side.
+           'ok])))
+    (do-test 100)
+    (do-test 1000)
+    (do-test 10000)
+    (do-test 100000)))
+
+(http-mat websocket-ping ()
+  (define me self)
+  (capture-events)
+  (supervisor:start&link 'http-sup 'one-for-all 0 1
+    (http:configure-server #f 0
+      (http:url-handler
+       (ws:upgrade conn request me
+         (ws:options
+          [ping-frequency 10]
+          [pong-timeout 1])))))
+  (let-values ([(ip op) (connect-tcp "127.0.0.1" (get-http-port))])
+    (for-each
+     (lambda (str)
+       (put-bytevector op (string->utf8 str))
+       (put-bytevector op (string->utf8 "\r\n")))
+     '("GET / HTTP/1.1"
+       "Connection: Upgrade"
+       "Host: 127.0.0.1"
+       "Upgrade: websocket"
+       "Sec-Websocket-Version: 13"
+       "Sec-Websocket-Key: dGhlIHNhbXBsZSBub25jZQ=="))
+    (put-bytevector op (string->utf8 "\r\n"))
+    (flush-output-port op)
+    (receive (after 1000 (throw 'no-ws:init))
+      [#(ws:init ,s)
+       (receive (after 1000 (throw 'no-server-close))
+         [#(ws:closed ,@s 1002 "no response from ping") 'ok])])))
+
+(http-mat websocket-client-connect-errors ()
+  (define (do-test req)
+    (catch (ws:connect "127.0.0.1" (get-http-port) req self)))
+  (supervisor:start&link 'http-sup 'one-for-all 0 1
+    (http:configure-server #f 0
+      (http:url-handler
+       (http:respond conn
+         (string->number (http:get-param 'status params))
+         (fold-right
+          (lambda (k acc)
+            (let ([v (http:find-param k params)])
+              (if v
+                  (cons (cons (symbol->string k) v) acc)
+                  acc)))
+          '()
+          '(connection upgrade sec-websocket-accept))
+         '#vu8()))))
+  ;; Order matters here.
+  (match-let*
+   ([#(EXIT #(websocket-upgrade-failed 404))
+     (do-test "/?status=404")]
+    [#(EXIT #(websocket-missing-header connection))
+     (do-test "/?status=101")]
+    [#(EXIT #(websocket-invalid-header connection "sidestep"))
+     (do-test "/?status=101&connection=sidestep")]
+    [#(EXIT #(websocket-missing-header upgrade))
+     (do-test "/?status=101&connection=upgrade")]
+    [#(EXIT #(websocket-invalid-header upgrade "not-websocket"))
+     (do-test "/?status=101&connection=upgrade&upgrade=not-websocket")]
+    [#(EXIT #(websocket-missing-header sec-websocket-accept))
+     (do-test "/?status=101&connection=upgrade&upgrade=websocket")]
+    [#(EXIT #(websocket-invalid-header sec-websocket-accept "bad-key"))
+     (do-test "/?status=101&connection=upgrade&upgrade=websocket&sec-websocket-accept=bad-key")])
    'ok))

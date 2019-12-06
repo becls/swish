@@ -36,9 +36,10 @@
 \section {Introduction}
 
 The HTTP interface provides a basic implementation of the Hypertext
-Transfer Protocol~\cite{RFC7230}. The programming interface includes
-procedures for the HyperText Markup Language (HTML) version
-5~\cite{html5} and JavaScript Object Notation (JSON)~\cite{RFC7159}.
+Transfer Protocol~\cite{RFC7230} and the WebSocket
+Protocol~\cite{RFC6455}. The programming interface includes procedures
+for the HyperText Markup Language (HTML) version 5~\cite{html5} and
+JavaScript Object Notation (JSON)~\cite{RFC7159}.
 
 \section {Theory of Operation}
 
@@ -174,6 +175,42 @@ When it returns a procedure, the cache starts an \emph{evaluator}
 process. The evaluator process calls the procedure with the cache's
 root directory and the absolute file path. The evaluator procedure
 returns \code{\#f} or a URL handler. The cache stores the URL handler.
+
+\subsection{WebSocket Protocol}\label{sec:websocket-protocol}
+
+The WebSocket Protocol enables bidirectional communication and is well
+supported by web browsers and software platforms.  The protocol
+utilizes message fragmentation and control frame messages.  The
+\code{(swish websocket)} library represents a WebSocket connection as
+a gen-server referred to as a \emph{websocket}.
+
+The \emph{websocket} gen-server manages message fragmentation, ping
+and pong control messages, and sends messages to a separate
+process. The following messages are sent:
+
+\antipar\begin{itemize}
+
+\item \code{\#(ws:init \var{ws})}: Indicates that the HTTP protocol
+  upgrade to websocket is complete for process \var{ws} and messages
+  can be exchanged.
+
+\item \code{\#(ws:message \var{ws} \var{message})}: Indicates that a
+  \var{message} bytevector or string was received by process \var{ws}.
+
+\item \code{\#(ws:closed \var{ws} \var{code} \var{reason})}: Indicates
+  that the websocket and underlying output port is closed. The cause
+  is indicated by the numeric status \var{code}. Status codes 1000 and
+  1001 are used to indicate normal exit reasons.  The \var{reason}
+  string may be useful for logging and debugging but is not
+  necessarily presentable to a user.
+
+\end{itemize}
+
+As a server, a URL handler can call \code{ws:upgrade} in tail position
+to switch to the WebSocket Protocol.
+
+A client establishes a connection to a server using \code{ws:connect}
+to connect and request usage of the WebSocket Protocol.
 
 \section {Security}
 
@@ -670,6 +707,79 @@ directory of the current file.
   \code{http:include}. The splicing is done with \code{let-syntax}
   so that any nested \code{http:include} expressions are processed
   relative to the directory of \var{filename}.}
+
+\subsection {WebSocket Protocol}
+
+\defineentry{ws:upgrade}
+\defineentry{ws:options}
+\begin{procedure}
+  \code{(ws:upgrade \var{conn} \var{request} \var{process} \opt{\var{options}})}
+\end{procedure}
+\returns{} see below
+
+The \code{ws:upgrade} procedure checks the header of the \var{request}
+tuple and upgrades the calling process to a gen-server that speaks the
+WebSocket protocol. The connection \var{conn} is used during the
+opening handshake to report errors. As it runs, the gen-server sends
+the messages defined in Section~\ref{sec:websocket-protocol} to the
+given \var{process}. It raises an exception upon termination (see
+\code{gen-server:enter-loop}).
+
+The \var{options} are defined with \code{(ws:options (\var{option}
+  \var{value}) \etc)}. The following options may be used:
+
+\begin{tabular}{lrp{.5\textwidth}}
+  option & default & description \\ \hline
+
+  \code{fragmentation-size} & 1,048,576 & a positive fixnum or
+  \code{\#f} to disable; the maximum length in bytes of a single
+  message payload \\
+
+  \code{maximum-message-size} & 16,777,216 & a positive fixnum; the
+  maximum length in bytes of the total payload for a single message
+  that can be read from input \\
+
+  \code{ping-frequency} & 30,000 & a positive fixnum; the maximum
+  number of milliseconds since last receiving a message before issuing
+  a ping request \\
+
+  \code{pong-timeout} & 5,000 & a positive fixnum; the maximum number
+  of milliseconds to wait for a reply to a ping before failing
+\end{tabular}
+
+\defineentry{ws:connect}
+\begin{procedure}
+  \code{(ws:connect \var{hostname} \var{port} \var{request} \var{process} \opt{\var{options}})}
+\end{procedure}
+\returns{} a websocket gen-server process
+
+The \code{ws:connect} procedure initiates a TCP connection to
+\var{hostname} on the given \var{port} number and issues an upgrade
+for the \var{request} uniform resource identifier string. It then
+spawns and returns a gen-server process that sends the messages
+defined in Section~\ref{sec:websocket-protocol} to the given
+\var{process}.
+
+The \var{options} are the same as defined for \code{ws:upgrade}.
+
+\defineentry{ws:send}
+\begin{procedure}
+  \code{(ws:send \var{server} \var{message})}
+\end{procedure}
+\returns{} \code{ok}
+
+The \code{ws:send} procedure uses \code{gen-server:cast} to transmit
+the bytevector or string \var{message} to the websocket process or
+registered name \var{server}.
+
+\defineentry{ws:close}
+\begin{procedure}
+  \code{(ws:close \var{server})}
+\end{procedure}
+\returns{} \code{ok}
+
+The \code{ws:close} procedure uses \code{gen-server:cast} to close the
+websocket process or registered name \var{server}.
 
 \subsection {HyperText Markup Language}
 

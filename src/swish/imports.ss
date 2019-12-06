@@ -54,4 +54,5 @@
     (swish statistics)
     (swish string-utils)
     (swish supervisor)
-    (swish watcher))))
+    (swish watcher)
+    (swish websocket))))
