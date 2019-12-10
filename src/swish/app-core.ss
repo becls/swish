@@ -170,7 +170,6 @@
          [started? (run)]
          [else
           (set! started? #t)
-          (reset-handler (lambda () (application:shutdown application-exit-code)))
           (base-exception-handler app-exception-handler)
           (random-seed (+ (remainder (erlang:now) (- (ash 1 32) 1)) 1))
           (hook-console-input)
@@ -179,6 +178,10 @@
              (exit-handler
               (lambda args
                 (apply application:shutdown args)
+                (bail)))
+             (reset-handler
+              (lambda ()
+                (application:shutdown application-exit-code)
                 (bail)))
              (when stand-alone?
                (app:name who)
