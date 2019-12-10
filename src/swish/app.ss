@@ -166,7 +166,7 @@
               [`(catch ,_ ,e)
                (app-exception-handler e)
                (exit 1)]
-              [,_ (exit)])))])))
+              [,_ (void)])))])))
 
   (define (swish-start . args)
     ($swish-start #f args run))

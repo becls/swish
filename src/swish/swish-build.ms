@@ -1235,6 +1235,49 @@
   (run-fat "bounce" '() (expected-output "bounce" '()))
   )
 
+;; (swish-start <script> arg ...) should return, not exit
+(isolate-mat swish-start2 ()
+  (define script2
+    (write-test-file "script2"
+      (lambda ()
+        (printf "#! /usr/bin/env swish\n")
+        (for-each pretty-print
+          `((printf "script2 app:name = ~a, args =~{ ~a~}.\n"
+              (app:name) (command-line-arguments))
+            27)))))
+  (define script1
+    (write-test-file "script1"
+      (lambda ()
+        (printf "#! /usr/bin/env swish\n")
+        (for-each pretty-print
+          `((printf "script1 before: app:name = ~a, args =~{ ~a~}.\n"
+              (app:name) (command-line-arguments))
+            (printf "script1 calling script2\n")
+            (printf "result = ~s\n" (swish-start ,script2 "apple" "cider"))
+            (printf "script1 after: app:name = ~a, args =~{ ~a~}.\n"
+              (app:name) (command-line-arguments)))))))
+  (define script1.ss (string-append script1 ".ss"))
+  (define args '("ginger" "mace" "nutmeg"))
+  (define expected-output
+    (let ([arg-str (format "~{ ~a~}" args)])
+      `(,(format "^script1 before: app:name = script1, args =~a" arg-str)
+        "^script1 calling script2"
+        "^script2 app:name = script2, args = apple cider\\.$"
+        "^result = #<void>$"
+        ,(format "^script1 after: app:name = script1, args =~a" arg-str))))
+  (set-file-mode script1 #o755)
+  (set-file-mode script2 #o755)
+  ;; run as /usr/bin/env script
+  (run-bash "script1" args expected-output)
+  ;; run as thin app
+  (rename-path script1 script1.ss)
+  (build-example "script1" '())
+  (run-thin "script1" args expected-output)
+  (assert (delete-file (output-file "script1")))
+  ;; run as fat app
+  (build-example "script1" '("-b" "petite"))
+  (run-fat "script1" args expected-output))
+
 (isolate-mat try-import ()
   ;; combined into one big mat so we build fewer executables
   (define (ref-export var)
