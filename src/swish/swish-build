@@ -405,7 +405,9 @@
          [obj-fn (or obj-fn tmp-fn)])
     (on-exit (target-case target-type
                [(library) (when tmp-fn (rm-f tmp-fn))]
-               [(component linked stand-alone) (rm-f obj-fn)])
+               [(component linked stand-alone)
+                (unless (string=? obj-fn output-fn)
+                  (rm-f obj-fn))])
       (when (> (verbosity) 0) (printf "compiling ~a\n" (source-file)))
       (parameterize ([generate-inspector-information #f]
                      [generate-procedure-source-information #t]

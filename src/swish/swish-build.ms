@@ -1523,3 +1523,39 @@
   (run-thin "test" '() '("happy day" "great joy"))
   (delete-file test)
   )
+
+;; Regression test for bug where swish-build deletes the -o output-filename if
+;; source-filename extension matches an entry in library-extensions for which
+;; output-filename is the corresponding object file, e.g. "foo.ss" ->
+;; "foo.so".
+(isolate-mat filename-regression ()
+  (define lib.ss
+    (write-test-file "lib.ss"
+      (lambda ()
+        (pretty-print
+         '(library (lib)
+            (export x)
+            (import (scheme))
+            (define x 11))))))
+  (define lib.so (string-append (path-root lib.ss) ".so"))
+  (define prog.ss
+    (write-test-file "prog.ss"
+      (lambda ()
+        (pretty-print '(printf "okay\n")))))
+  (define prog.so (string-append (path-root prog.ss) ".so"))
+  ;; library case
+  (delete-file lib.so)
+  (swish-build-test `(,lib.ss "-o" ,lib.so "--library") '())
+  (assert (file-exists? lib.so))
+  ;; component case
+  (delete-file prog.so)
+  (swish-build-test `(,prog.ss "-o" ,prog.so "-c") '())
+  (assert (file-exists? prog.so))
+  ;; linked-program case
+  (delete-file prog.so)
+  (swish-build-test `(,prog.ss "-o" ,prog.so) '())
+  (assert (file-exists? prog.so))
+  ;; stand-alone program case
+  (delete-file prog.so)
+  (swish-build-test `(,prog.ss "-o" ,prog.so "-b" "petite") '())
+  (assert (file-exists? prog.so)))
