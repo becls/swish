@@ -38,7 +38,11 @@ shift
        (and (pair? tests) tests))]
     [incl-tags '()]
     [excl-tags '()]
-    [profile #f]
+    [profile
+     (and (equal? (getenv "PROFILE_MATS") "yes")
+          (let ([filename (path-combine "src" "${FILENAME}.profile")])
+            (close-port (open-file-to-replace filename))
+            filename))]
     [progress 'test]
     [lib-dirs '("src" ".")]
     [src-dirs '("src" ".")]))
