@@ -86,7 +86,7 @@
       [crash-terminate `#(stop crash-terminate ok ,state)]
       [throw-terminate `#(stop throw-terminate ok ,state)]
       [shutdown-reason (raise `#(shutdown reason))]
-      [shutdown-during-call '#(stop shutdown ,state)]))
+      [shutdown-during-call `#(stop shutdown ,state)]))
   (define (handle-cast msg state)
     (match msg
       [#(,from handle-cast)

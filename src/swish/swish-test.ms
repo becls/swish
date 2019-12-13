@@ -204,7 +204,7 @@
   (with-output-to-file tmp-prof void 'replace)
   (script-test swish-test-src `("--repl" ,(path-combine (output-dir) "test-repl.ss"))
     (format "~{~s\n~}"
-      '((profile:start ,tmp-prof ,tmp-prof #t)
+      `((profile:start ,tmp-prof ,tmp-prof #t)
         (for-each pretty-print (sort string<? (map symbol->string (library-exports '(swish mat)))))
         (profile:save)
         (exit)))
