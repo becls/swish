@@ -40,12 +40,16 @@
 
   (define application-exit-code 2)
 
+  (define app-identity #f)
+  (define pid1 #f)
+
   ;; intended to return short descriptive name of the application if known
   (define app:name
     (make-inherited-parameter #f
       (lambda (x)
         (unless (or (not x) (string? x))
           (bad-arg 'app:name x))
+        (when (eq? self pid1) (set! app-identity x))
         (and x (path-root (path-last x))))))
 
   ;; intended to return full path to the application script or executable, if known
@@ -162,6 +166,7 @@
       (signal-handler SIGTERM handler)]))
 
   (define started? #f)
+  (define Charon #f)
   (define ($swish-start stand-alone? args run)
     (let ([who (osi_get_executable_path)])
       (parameterize ([command-line (cons who args)]
@@ -169,6 +174,7 @@
         (cond
          [started? (run)]
          [else
+          (set! pid1 self)
           (set! started? #t)
           (base-exception-handler app-exception-handler)
           (random-seed (+ (remainder (erlang:now) (- (ash 1 32) 1)) 1))
@@ -187,6 +193,17 @@
                (app:name who)
                (app:path who))
              (trap-signals handle-signal)
+             (set! Charon
+               (spawn
+                (let ([me self])
+                  (lambda ()
+                    (let ([m (monitor me)])
+                      (receive
+                       [`(DOWN ,@m ,_ normal) 'ok]
+                       [`(DOWN ,@m ,_ ,reason ,e)
+                        (app:name app-identity)
+                        (on-exit (application:shutdown application-exit-code)
+                          (app-exception-handler e))]))))))
              (call-with-values run exit)))
           (receive)]))))
 

@@ -462,6 +462,31 @@
        seek #0# "")
      stderr)]))
 
+(isolate-mat application-shutdown4 ()
+  ;; Test for regression where application doesn't shut down when we
+  ;;  1. start a cafe,
+  ;;  2. call app:start, and
+  ;;  3. cause an exception in a process linked to the main process
+  (match
+   (catch
+    (script-test #f '()
+      (format "~{~s\n~}\n"
+        '((log-file ":memory:")
+          (app:start)
+          (spawn&link (lambda () (raise 'issue)))))
+      '("expected non-zero exit")))
+   [#(EXIT `(<os-process-failed> [exit-status 2] ,stdout ,stderr))
+    (match-regexps '("ok") stdout)
+    (match-regexps
+     '("^Exception: issue[.]$"
+       ""
+       "^Date: "
+       "^Timestamp: "
+       #0="Event: #\\(<child-end> .*\\)"
+       seek #0#
+       seek #0# "")
+     stderr)]))
+
 (meta-cond
  [(memq (machine-type) '(i3nt ti3nt a6nt ta6nt))
   ;; test manually on Windows

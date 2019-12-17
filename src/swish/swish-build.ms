@@ -667,7 +667,7 @@
   (run-fat "hook-exit" '() expected-output))
 
 (isolate-mat application-shutdown ()
-  (define event "Event: #\\(<child-end> [0-9]+ #<process [678]> 1 (normal|shutdown)")
+  (define event "Event: #\\(<child-end> [0-9]+ #<process [789]> 1 (normal|shutdown)")
   (define expected-output
     `(seek "Date:" "Timestamp:" ,event
        seek "Date:" "Timestamp:" ,event
