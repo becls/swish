@@ -149,7 +149,8 @@
             (print-banner #f)
             (flush-output-port))
           (try-import)
-          (parameterize ([waiter-prompt-string (if (opt 'quiet) "" ">")])
+          (parameterize ([waiter-prompt-string (if (opt 'quiet) "" ">")]
+                         [repl-level (+ (repl-level) 1)])
             (for-each load filenames)
             (new-cafe)))]
        [else                            ; script

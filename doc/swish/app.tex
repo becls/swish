@@ -566,6 +566,18 @@ When it starts a REPL, script, or linked program, \code{swish-start} attempts
 to import any libraries found in \code{library-list} whose library path begins
 with the symbol \code{swish}.
 
+\defineentry{repl-level}
+\begin{parameter}
+  \code{repl-level}
+\end{parameter}
+\hasvalue{} nonnegative fixnum
+
+The \code{repl-level} parameter returns the nesting depth of the
+\code{swish-start} REPL.
+The value of this parameter is initially zero; it is incremented when a
+process enters the \code{swish-start} REPL.
+It is not affected by \code{new-cafe}.
+
 \subsection{Foreign Interface}
 
 Scheme libraries that rely on shared objects must arrange

@@ -144,6 +144,9 @@
                  (library-extensions (append (library-extensions) '((".ss" . ".so"))))
                  (reset-handler (lambda () (exit 1)))
                  (void))
+               ;; adjust REPL level to account for the one we started to
+               ;; capture profile data
+               (repl-level 0)
                (on-exit (profile:save)
                  ,set-parameters
                  (apply swish-start ',script-file ',args)))

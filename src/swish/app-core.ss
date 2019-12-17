@@ -29,6 +29,7 @@
    app:name
    app:path
    application:shutdown
+   repl-level
    )
   (import
    (chezscheme)
@@ -59,6 +60,12 @@
         (unless (or (not x) (string? x))
           (bad-arg 'app:path x))
         (and x (get-real-path x)))))
+
+  (define repl-level
+    (make-process-parameter 0
+      (lambda (n)
+        (arg-check 'repl-level [n fixnum? nonnegative?])
+        n)))
 
   (define (strip-prefix string prefix)
     (define slen (string-length string))
@@ -93,7 +100,7 @@
     (display (get-output-string os) stderr)
     (fresh-line stderr)
     (unless (and (warning? c) (not (serious-condition? c)))
-      (when (and (> (#%$cafe) 0)
+      (when (and (> (repl-level) 0)
                  (interactive?)
                  (continuation-condition? (debug-condition)))
         (display "Type (debug) to enter the debugger.\n" stderr))
