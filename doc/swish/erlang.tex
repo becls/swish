@@ -1132,15 +1132,42 @@ process id, process exception state, and the accumulator value
 \end{procedure}
 \returns{} unspecified
 
-The \code{dump-stack} procedure prints information about the stack up
-to \var{max-depth} to textual output port \var{op}, which defaults to
-the current output port.
+The \code{dump-stack} procedure calls \code{walk-stack} to print information
+about the stack to textual output port \var{op}, which defaults to the current
+output port.
 
 \var{k} is a continuation, and \var{max-depth} is either the symbol
-\code{default} or a positive fixnum. The default max-depth is 10.
+\code{default} or a positive fixnum.
+See \hyperlink{walk-stack}{\code{walk-stack}} for details on the
+\var{max-depth} argument.
 
 \code{(dump-stack \var{op})} calls \code{(call/cc (lambda (\var{k})
   (dump-stack \var{k} \var{op} 'default)))}.
+
+% ----------------------------------------------------------------------------
+\defineentry{limit-stack}
+\begin{syntax}
+  \code{(limit-stack \var{e0} \var{e1} \etc)}
+\end{syntax}
+\expandsto{}
+\code{(\$limit-stack (lambda () \var{e0} \var{e1} \etc) \var{source})}
+
+The \code{limit-stack} macro adds a stack frame that may be recognized
+by \code{limit-stack?}.
+By default, \code{walk-stack} avoids descending below such frames.
+The \code{limit-stack} macro evaluates expressions \var{e0} \var{e1} \etc from
+left to right and returns the values of the last expression.
+
+% ----------------------------------------------------------------------------
+\defineentry{limit-stack?}
+\begin{procedure}
+  \code{(limit-stack? \var{x})}
+\end{procedure}
+\returns{} see below
+
+The \code{limit-stack?} procedure returns true if \var{x} is a continuation
+whose top frame is a \code{limit-stack} frame.
+Otherwise it returns \code{\#f}.
 
 % ----------------------------------------------------------------------------
 \defineentry{walk-stack}
@@ -1152,7 +1179,7 @@ the current output port.
 The \code{walk-stack} procedure walks the stack of continuation \var{k}
 by calling the \var{handle-frame} and \var{combine} procedures for each
 stack frame until
-it reaches the base of the stack,
+it reaches the base of the stack or a \code{limit-stack} frame,
 or depth reaches the optional \var{max-depth},
 or the \var{next} argument to \var{combine} is not called.
 
@@ -1165,6 +1192,11 @@ The \var{handle-frame} procedure is called with four arguments:
 \var{vars} & a list associating live free variables by name (or index) with their values
 \end{tabular}
 
+If \var{max-depth} is omitted or is the symbol \code{default}, then
+\code{walk-stack} uses the value of \code{walk-stack-max-depth} as
+\var{max-depth} and stops if recognizes a \code{limit-stack} frame.
+If \var{max-depth} is specified explicitly, then \var{walk-stack}
+does not stop at \code{limit-stack} frames.
 If \code{walk-stack} reaches a depth of \var{max-depth}, it calls
 the optional \var{truncated} procedure with \var{base} and \var{depth}.
 Otherwise, \code{walk-stack} calls the \var{combine} procedure with four arguments:
@@ -1180,6 +1212,19 @@ If \code{walk-stack} receives an invalid argument \var{val}, it calls
 \code{(bad-arg \var{who} \var{val})} with
 the symbol \code{walk-stack} as the default value for the
 optional \var{who} argument.
+The default \var{truncated} procedure simply returns the value of
+\var{base} passed in.
+
+% ----------------------------------------------------------------------------
+\defineentry{walk-stack-max-depth}
+\begin{parameter}
+  \code{walk-stack-max-depth}
+\end{parameter}
+\returns{} a nonnegative fixnum
+
+The \code{walk-stack-max-depth} parameter specifies the default maximum
+depth to which \code{walk-stack} descends when the optional \var{max-depth}
+argument is omitted or is the symbol \code{default}.
 
 % ----------------------------------------------------------------------------
 \defineentry{exit-reason->stacks}

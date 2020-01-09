@@ -39,6 +39,8 @@
    get-registered
    inherited-parameters
    kill
+   limit-stack
+   limit-stack?
    link
    make-fault
    make-inherited-parameter
@@ -67,6 +69,7 @@
    unregister
    wait-for-io
    walk-stack
+   walk-stack-max-depth
    whereis
    )
   (import
@@ -498,6 +501,26 @@
           (walk-stack k (void) dump-frame next-frame
             'dump-stack max-depth truncated))])))
 
+  (define ($limit-stack thunk source)
+    ;; thwart cp0 and ensure source is live on the stack
+    ((call-with-values thunk $limit-stack-receiver) source))
+
+  (define $limit-stack-receiver
+    (case-lambda
+     [(x) (lambda (source) x)]
+     [xs (lambda (source) (apply values xs))]))
+
+  (define-syntax (limit-stack x)
+    (syntax-case x ()
+      [(ls e0 e1 ...)
+       #`($limit-stack (lambda () e0 e1 ...)
+          #,(find-source #'ls))]))
+
+  (define (limit-stack? k)
+    (and (#3%$continuation? k)
+         (eq? (#3%$continuation-return-code k)
+           (#3%$closure-code $limit-stack))))
+
   (define (do-frame cont handle-frame)
     (let ([description (format "~s" (cont 'value))]
           [source (cont 'source-object)]
@@ -511,11 +534,18 @@
                ((fx< i 0) vars))])
       (handle-frame description source proc-source vars)))
 
+  (define walk-stack-max-depth
+    (make-parameter 10
+      (lambda (v)
+        (arg-check 'walk-stack-max-depth
+          [v fixnum? fxnonnegative?])
+        v)))
+
   (define walk-stack
     (case-lambda
      [(k base handle-frame combine)
-      (walk-stack k base handle-frame combine 'walk-stack #f
-        (lambda (base depth) 'not-called))]
+      (walk-stack k base handle-frame combine 'walk-stack 'default
+        (lambda (base depth) base))]
      [(k base handle-frame combine who max-depth truncated)
       (define in (if (symbol? who) who 'walk-stack))
       (arg-check in
@@ -523,9 +553,10 @@
         [who symbol?]
         [combine procedure?]
         [truncated procedure?])
-      (let ([max-depth
+      (let ([obey-limit? (eq? max-depth 'default)]
+            [max-depth
              (match max-depth
-               [default 10]
+               [default (walk-stack-max-depth)]
                [,n (guard (and (fixnum? n) (positive? n))) n]
                [#f (most-positive-fixnum)]
                [,_ (bad-arg in max-depth)])])
@@ -537,8 +568,10 @@
             ;; force evaluation order in case do-frame has side effects
             (let ([frame (do-frame cont handle-frame)])
               (combine frame base depth
-                (lambda (base)
-                  (loop (cont 'link) (+ depth 1) base))))])))]))
+                (if (and obey-limit? (limit-stack? (cont 'value)))
+                    (lambda (base) base)
+                    (lambda (base)
+                      (loop (cont 'link) (+ depth 1) base)))))])))]))
 
   (define (process? p) (pcb? p))
 

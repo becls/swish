@@ -364,7 +364,9 @@
     [#(EXIT #(bad-arg waiter-prompt-string 12))
      (catch (waiter-prompt-string 12))]
     [#(EXIT #(bad-arg whereis 12)) (catch (whereis 12))]
-    [#(EXIT #(bad-arg who arg)) (catch (bad-arg 'who 'arg))])
+    [#(EXIT #(bad-arg who arg)) (catch (bad-arg 'who 'arg))]
+    [#(EXIT #(bad-arg walk-stack-max-depth -1))
+     (catch (walk-stack-max-depth -1))])
    (print-char-name #t)
    (print-gensym 'pretty)
    (print-graph #t)
@@ -2757,6 +2759,24 @@
            (if (= depth 8)
                base
                (next base)))))]
+    [(,@frame0 ,@frame1 ,@frame2 base)
+     (parameterize ([walk-stack-max-depth 3])
+       (walk-stack k '(base) list
+         (lambda (frame base depth next)
+           (cons frame (next base)))))]
+    [done
+     (parameterize ([walk-stack-max-depth 0])
+       (walk-stack k 'done list
+         (lambda (frame base depth next)
+           (cons frame (next base)))))]
+    ["Stack dump truncated due to max-depth = 0.\n"
+     (let ([os (open-output-string)])
+       (parameterize ([current-output-port os] [walk-stack-max-depth 0])
+         (let f ([n 10])
+           (if (= n 0)
+               (dump-stack)
+               (list n (f (- n 1))))))
+       (get-output-string os))]
     [("#<continuation in proc4>" #f #f ,frame0-free) frame0]
     [("#<continuation in proc4>" #f #f ,frame1-free) frame1]
     [(0 1) (sort < (map car frame0-free))]
@@ -2863,6 +2883,79 @@
     [,json (stack->json k 4)]
     [,json-actual (split (json-stack->string json) #\newline)]
     [ok (compare json-expected json-actual)])
+   'ok))
+
+(mat limit-stack ()
+  (define (hidden n return)
+    (if (= n 5)
+        (limit-stack (visible n return))
+        (list n (hidden (- n 1) return))))
+  (define (visible x return)
+    (if (= x 0)
+        (call/cc return)
+        (cons x (visible (- x 1) return))))
+  (define hidden-re
+    (re "#<continuation in hidden> .*at offset [0-9]+ of .*erlang.ms$"))
+  (define visible-re
+    (re "#<continuation in visible> .*at offset [0-9]+ of .*erlang.ms$"))
+  (define (->lines json)
+    (let ([os (open-output-string)])
+      (json-stack->string os json)
+      (split (get-output-string os) #\newline)))
+  (match-let*
+   ([27 (limit-stack 27)]
+    [(a b c)
+     (call-with-values
+       (lambda () (limit-stack (values 'a 'b 'c)))
+       list)]
+    [#t (limit-stack (call/cc limit-stack?))]
+    [(#f) (limit-stack (list (call/cc limit-stack?)))]
+    [,k (call/cc (lambda (return) (hidden 10 return)))]
+    ;; omitting max-depth argument uses 'default, which respects limit-stack
+    [,json (stack->json k)]
+    [,lines (->lines json)]
+    [("")
+     (match-regexps
+      `(,visible-re
+        "  x: 1"
+        ,visible-re
+        "  x: 2"
+        ,visible-re
+        "  x: 3"
+        ,visible-re
+        "  x: 4"
+        ,visible-re
+        "  x: 5"
+        "<continuation in [$]limit-stack> .*at offset [0-9]+ of .*erlang.ss$"
+        "  (source|0): #[(]at [0-9]+ \".*erlang.ms\"[)]$")
+      lines)]
+    ;; explicit max-depth argument does not respect limit-stack
+    [,json2 (stack->json k 10)]
+    [,lines2 (->lines json2)]
+    [("")
+     (match-regexps
+      `(,visible-re
+        "  x: 1"
+        ,visible-re
+        "  x: 2"
+        ,visible-re
+        "  x: 3"
+        ,visible-re
+        "  x: 4"
+        ,visible-re
+        "  x: 5"
+        "<continuation in [$]limit-stack> .*at offset [0-9]+ of .*erlang.ss$"
+        "  (source|0): #[(]at [0-9]+ \".*erlang.ms\"[)]$"
+        ,hidden-re
+        "  n: 6"
+        ,hidden-re
+        "  n: 7"
+        ,hidden-re
+        "  n: 8"
+        ,hidden-re
+        "  n: 9"
+        "Stack dump truncated due to max-depth = 10[.]")
+      lines2)])
    'ok))
 
 (mat exit-reason->stacks ()
