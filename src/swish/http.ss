@@ -127,8 +127,8 @@
   (define (http-cache:get-content-type extension)
     (gen-server:call 'http-cache `#(get-content-type ,extension)))
 
-  (define (http-cache:get-handler method path)
-    (match (gen-server:call 'http-cache `#(get-handler ,method ,path) 'infinity)
+  (define (http-cache:get-handler request)
+    (match (gen-server:call 'http-cache `#(get-handler ,request) 'infinity)
       [#(error ,reason) (raise reason)]
       [#(ok ,result) result]))
 
@@ -161,17 +161,26 @@
           state
           (let ([state (load-watchers state)])
             ($state copy [mime-types (read-mime-types)]))))
+    (define search-extensions '(".ss" ".html"))
     (define (url->abs-paths path) ;; path starts with "/"
       (let ([path (path-combine (web-dir)
                     (substring path 1 (string-length path)))])
         (cond
          [(directory-separator? (string-ref path (- (string-length path) 1)))
-          (list (string-append path "index.ss"))]
+          (values
+           (map
+            (lambda (ext) (string-append path "index" ext))
+            search-extensions)
+           #f)]
          [(string=? (path-extension path) "")
-          (list path
-            (string-append path ".ss")
-            (path-combine path "index.ss"))]
-         [else (list path)])))
+          (values
+           (map
+            (lambda (ext) (string-append path ext))
+            search-extensions)
+           (map
+            (lambda (ext) (string-append path "/index" ext))
+            search-extensions))]
+         [else (values (list path) #f)])))
     (define (lookup-handler pages paths)
       (exists (lambda (path) (ht:ref pages path #f)) paths))
     (define (make-static-file-handler path)
@@ -201,8 +210,9 @@
       (for-each close-path-watcher ($state watchers)))
     (define (handle-call msg from state)
       (match msg
-        [#(get-handler ,method ,path)
-         (let ([paths (url->abs-paths path)])
+        [#(get-handler ,request)
+         (<request> open request (method path original-path))
+         (let-values ([(paths redirect) (url->abs-paths path)])
            (match (lookup-handler ($state pages) paths)
              [#(loaded ,handler)
               `#(reply #(ok ,handler) ,state)]
@@ -216,7 +226,17 @@
                      [abs-path (find regular-file? paths)])
                 (cond
                  [(not abs-path)
-                  `#(reply #(ok #f) ,state)]
+                  `#(reply
+                     #(ok ,(and redirect
+                                (exists
+                                 (lambda (fn)
+                                   (and (regular-file? fn)
+                                        (lambda (ip op request header params)
+                                          (http:respond op 302
+                                            `(("Location" . ,(string-append original-path "/")))
+                                            '#vu8()))))
+                                 redirect)))
+                     ,state)]
                  [(string-ci=? (path-extension abs-path) "ss")
                   (let ([pid (start-interpreter abs-path ($state cookie))])
                     `#(no-reply
@@ -398,7 +418,7 @@
       (fx- c (fx- (char->integer #\a) 10))]
      [else #f]))
 
-  (define-tuple <request> method path query)
+  (define-tuple <request> method original-path path query)
 
   (define (http:parse-request bv)
     (match (bv-match-positions bv (char->integer #\space) 2)
@@ -409,6 +429,7 @@
          (let-values ([(s3 path) (parse-encoded-string bv (fx+ s1 1) s2 #\?)])
            (<request> make
              [method (string->symbol (bv-extract-string bv 0 s1))]
+             [original-path path]
              [path path]
              [query (parse-encoded-kv bv (fx+ s3 1) s2)]))]
         [else #f])]
@@ -687,7 +708,7 @@
          [(not (validate-path path))
           (not-found op)
           (raise `#(invalid-http-path ,path))]
-         [(http-cache:get-handler method path) =>
+         [(http-cache:get-handler request) =>
           (lambda (handler)
             (limit-stack
              (handler ip op request header params))

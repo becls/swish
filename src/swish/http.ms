@@ -444,6 +444,8 @@
      (test "GET /with-index/index.ss HTTP/1.1\r\nConnection: close\r\n\r\n")]
     ["HTTP/1.1 200 \r\nContent-Length: 2\r\nCache-Control: no-cache\r\n\r\nok"
      (test "GET /with-index/index HTTP/1.1\r\nConnection: close\r\n\r\n")]
+    ["HTTP/1.1 302 \r\nContent-Length: 0\r\nCache-Control: no-cache\r\nLocation: /with-index/\r\n\r\n"
+     (test "GET /with-index HTTP/1.1\r\nConnection: close\r\n\r\n")]
 
     ;; include
     ["HTTP/1.1 200 \r\nContent-Length: 1\r\nCache-Control: no-cache\r\n\r\n1"

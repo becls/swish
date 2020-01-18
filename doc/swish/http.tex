@@ -159,8 +159,13 @@ directory of the current file.
 \begin{tupledef}{<request>}
   \argrow{method}{a symbol}
   \argrow{path}{a decoded string}
+  \argrow{original-path}{same as \var{path}}
   \argrow{query}{a decoded association list}
 \end{tupledef}
+
+The \var{original-path} is used internally when redirecting the
+browser to a new location. If user code copies the \code{<request>}
+tuple, it should not modify \var{original-path}.
 
 \defineentry{http-port-number}
 \begin{parameter}
