@@ -235,12 +235,15 @@
           ;; record revision information after loading mats, but before running mats
           (write-meta-data mo-op 'software-info (software-info))
           (write-meta-data mo-op 'date (format-rfc2822 (current-date)))
-          (write-meta-data mo-op 'timestamp (erlang:now)))
+          (write-meta-data mo-op 'timestamp (erlang:now))
+          (flush-output-port mo-op))
         (for-each
          (lambda (mat/name)
            (run-mat mat/name reporter incl-tags excl-tags))
          (or mat/names (all-mats)))
-        (when mo-op (write-meta-data mo-op 'completed #t))
+        (when mo-op
+          (write-meta-data mo-op 'completed #t)
+          (flush-output-port mo-op))
         (let-values ([(pass fail skip) (get-tally)])
           (case progress
             [none (void)]
@@ -291,7 +294,8 @@
 
   (define (make-write-summary op)
     (lambda (r)
-      (json:write op r 0)))
+      (json:write op r 0)
+      (flush-output-port op)))
 
   (define (run-mats-to-file filename)
     (define test-file (string-append "to " filename))
