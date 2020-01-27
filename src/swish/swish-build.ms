@@ -999,7 +999,9 @@
       `(seek
         "^import: found object file \".*miss\\.so\""
         seek
-        "^import: loading object file \".*miss\\.so\""
+        ;; after Chez Scheme commit b911ed47190727b0e1d6a88c0e473d1757accdcd
+        ;; we get "visiting" here instead of "loading"
+        "^import: (load|visit)ing object file \".*miss\\.so\""
         seek ;; skip new "attempting to 'revisit' previously 'visited' ..." message
         ,(pregexp-quote (format "~s" '("PDQ" "Bach")))))
     ;; now delete miss.so so using compiled library fails
