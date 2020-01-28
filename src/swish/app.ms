@@ -412,7 +412,8 @@
             [locking-up 'ok])
           (printf "armed and ready\n")
           (send (whereis 'bad-sup) 'disarm)
-          (receive (after 1000 (osi_exit 4)))))
+          ;; Travis ta6osx build occasionally takes > 5s of real time
+          (receive (after 10000 (osi_exit 4)))))
       '("expected non-zero exit")))
    [#(EXIT `(<os-process-failed> [exit-status 2] ,stdout))
     (match-regexps '(seek "armed and ready") stdout)]))
