@@ -276,12 +276,22 @@
   ((27 . 31))
 
   (pregexp-match-positions "(?<=grey)hound"
-    "the hound in the picture is not a greyhound")
-  ((38 . 43))
+    "\nthe hound in the picture is not a greyhound")
+  ((39 . 44))
 
   (pregexp-match-positions "(?<!grey)hound"
-    "the greyhound in the picture is not a hound")
-  ((38 . 43))
+    "\nthe greyhound in the picture is not a hound")
+  ((39 . 44))
+
+  (pregexp-match-positions "(?<=grey)hound"
+    "greyhound"
+    4)
+  #f
+
+  (pregexp-match-positions "(?<!grey)hound"
+    "greyhound"
+    4)
+  ((4 . 9))
 
   )
 

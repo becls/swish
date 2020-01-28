@@ -46,8 +46,6 @@
              #`(quote #,(datum->syntax #'re (pregexp s)))
              #`(pregexp pat)))]))
 
-  (define *pregexp-version* 20050502) ;;last change
-
   (define *pregexp-comment-char* #\;)
 
   (define pregexp-space-sensitive?
@@ -400,7 +398,6 @@
     (lambda (c char-class)
       (case char-class
         ((:any) (not (char=? c #\newline)))
-        ;;
         ((:alnum) (or (char-alphabetic? c) (char-numeric? c)))
         ((:alpha) (char-alphabetic? c))
         ((:ascii) (< (char->integer c) 128))
@@ -457,18 +454,15 @@
             '()))))
 
   (define pregexp-match-positions-aux
-    (lambda (re s sn start n i)
+    (lambda (re s start n i)
       (let ((identity (lambda (x) x))
             (backrefs (pregexp-make-backref-list re))
             (case-sensitive? #t))
         (let sub ((re re) (i i) (sk identity) (fk (lambda () #f)))
-          ;;(printf "sub ~s ~s\n" i re)
           (cond ((eqv? re ':bos)
-                 ;;(if (= i 0) (sk i) (fk))
                  (if (= i start) (sk i) (fk))
                  )
             ((eqv? re ':eos)
-             ;;(if (>= i sn) (sk i) (fk))
              (if (>= i n) (sk i) (fk))
              )
             ((eqv? re ':empty)
@@ -482,7 +476,6 @@
                  (fk)
                  (sk i)))
             ((and (char? re) (< i n))
-             ;;(printf "bingo\n")
              (if ((if case-sensitive? char=? char-ci=?)
                   (string-ref s i) re)
                  (sk (+ i 1)) (fk)))
@@ -518,7 +511,7 @@
                   (if (null? res) (sk i )
                       (sub (car res) i
                         (lambda (i1 )
-                          (loup-seq (cdr res) i1 ))
+                          (loup-seq (cdr res) i1))
                         fk))))
                ((:or)
                 (let loup-or ((res (cdr re)))
@@ -557,23 +550,23 @@
                          identity (lambda () #f))))
                   (if found-it? (fk) (sk i))))
                ((:lookbehind)
-                (let ((n-actual n) (sn-actual sn))
-                  (set! n i) (set! sn i)
-                  (let ((found-it?
-                         (sub (list ':seq '(:between #f 0 #f :any)
-                                (cadr re) ':eos) 0
-                           identity (lambda () #f))))
-                    (set! n n-actual) (set! sn sn-actual)
-                    (if found-it? (sk i) (fk)))))
+                (let ((found-it?
+                       (fluid-let ((n i))
+                         (let loup-lookbehind ((re (cadr re)) (i i))
+                           (sub re i (lambda (i) (= i n))
+                             (lambda ()
+                               (and (> i start)
+                                    (loup-lookbehind re (- i 1)))))))))
+                  (if found-it? (sk i) (fk))))
                ((:neg-lookbehind)
-                (let ((n-actual n) (sn-actual sn))
-                  (set! n i) (set! sn i)
-                  (let ((found-it?
-                         (sub (list ':seq '(:between #f 0 #f :any)
-                                (cadr re) ':eos) 0
-                           identity (lambda () #f))))
-                    (set! n n-actual) (set! sn sn-actual)
-                    (if found-it? (fk) (sk i)))))
+                (let ((found-it?
+                       (fluid-let ((n i))
+                         (let loup-lookbehind ((re (cadr re)) (i i))
+                           (sub re i (lambda (i) (= i n))
+                             (lambda ()
+                               (and (> i start)
+                                    (loup-lookbehind re (- i 1)))))))))
+                  (if found-it? (fk) (sk i))))
                ((:no-backtrack)
                 (let ((found-it? (sub (cadr re) i
                                    identity (lambda () #f))))
@@ -597,7 +590,7 @@
                        (q (cadddr re))
                        (could-loop-infinitely? (and maximal? (not q)))
                        (re (car (cddddr re))))
-                  (let loup-p ((k 0) (i i) )
+                  (let loup-p ((k 0) (i i))
                     (if (< k p)
                         (sub re i
                           (lambda (i1 )
@@ -632,7 +625,6 @@
                (else (pregexp-error 'pregexp-match-positions-aux))))
             ((>= i n) (fk))
             (else (pregexp-error 'pregexp-match-positions-aux))))
-        ;;(printf "done\n")
         (let ((backrefs (map cdr backrefs)))
           (and (car backrefs) backrefs)))))
 
@@ -683,8 +675,7 @@
                       (car opt-args))))
         (let loop ((i start))
           (and (<= i end)
-               (or (pregexp-match-positions-aux
-                    pat str str-len start end i)
+               (or (pregexp-match-positions-aux pat str start end i)
                    (loop (+ i 1))))))))
 
   (define pregexp-match
@@ -770,5 +761,4 @@
                 (if (memv c '(#\\ #\. #\? #\* #\+ #\| #\^ #\$
                               #\[ #\] #\{ #\} #\( #\)))
                     (cons #\\ (cons c r))
-                    (cons c r))))))))
-  )
+                    (cons c r)))))))))
