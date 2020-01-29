@@ -23,6 +23,7 @@
 (import
  (chezscheme)
  (swish mat)
+ (swish pregexp)
  (swish script-testing)
  )
 
@@ -179,10 +180,17 @@
   (define db-handle ;; hold so it's still available to log-db after db:stop
     (sqlite:open db-file
       (logor SQLITE_OPEN_READWRITE SQLITE_OPEN_CREATE)))
+  (define (fix-timestamps s)
+    ;; We need to update the timestamps so that we don't have dates more than 90
+    ;; days in the past lest the automatic pruner removes the entries.  The
+    ;; timestamps occur in the same million milliseconds, so it's an easy string
+    ;; replace.
+    (pregexp-replace* (re "\\b1572453(?=\\d{6}\\b)") s
+      (number->string (- (quotient startup 1000000) 1))))
   (process-trap-exit #t)
   (on-exit (begin (for-each stop '(log-db event-mgr)) (sqlite:close db-handle))
     (match-let*
-     ([,restore (utf8->string (read-file "src/swish/migration-test.sql"))]
+     ([,restore (fix-timestamps (utf8->string (read-file "src/swish/migration-test.sql")))]
       [#(ok ,db) (db:start&link #f db-file 'create)]
       [,_ (transaction db
             (for-each execute (remq "" (split restore #\newline))))]
