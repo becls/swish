@@ -1,0 +1,817 @@
+% Copyright (c) 1999-2015, Dorai Sitaram.
+% All rights reserved.
+
+% Permission to copy, modify, distribute, and use this work or
+% a modified copy of this work, for any purpose, is hereby
+% granted, provided that the copy includes this copyright
+% notice, and in the case of a modified copy, also includes a
+% notice of modification.  This work is provided as is, with
+% no warranty of any kind.
+
+% Modifications are copyright 2020 Beckman Coulter, Inc.
+
+% Permission is hereby granted, free of charge, to any person
+% obtaining a copy of this software and associated documentation files
+% (the "Software"), to deal in the Software without restriction,
+% including without limitation the rights to use, copy, modify, merge,
+% publish, distribute, sublicense, and/or sell copies of the Software,
+% and to permit persons to whom the Software is furnished to do so,
+% subject to the following conditions:
+%
+% The above copyright notice and this permission notice shall be
+% included in all copies or substantial portions of the Software.
+%
+% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+% EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+% MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+% NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+% BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+% ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+% CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+% SOFTWARE.
+
+\chapter {Regular Expressions}\label{chap:pregexp}
+
+\section {Introduction}
+
+The regular expressions library \code{(swish pregexp)} is a derivative
+of pregexp: Portable Regular Expressions for Scheme and Common
+Lisp~\cite{pregexp}. It provides regular expressions modeled on
+Perl's~\cite{friedl:regex,pperl} and includes such powerful directives
+as numeric and non-greedy quantifiers, capturing and non-capturing
+clustering, POSIX character classes, selective case- and
+space-insensitivity, back-references, alternation, backtrack pruning,
+positive and negative look-ahead and look-behind, in addition to the
+more basic directives familiar to all regexp users.
+
+A \emph{regexp} is a string that describes a pattern.  A regexp
+matcher tries to \emph{match} this pattern against (a portion of)
+another string, which we will call the \emph{text string}.  The text
+string is treated as raw text and not as a pattern.
+
+Most of the characters in a regexp pattern are meant to match
+occurrences of themselves in the text string.  Thus, the pattern
+\code{"abc"} matches a string that contains the characters \code{a},
+\code{b}, \code{c} in succession.
+
+In the regexp pattern, some characters act as \emph{metacharacters},
+and some character sequences act as \emph{metasequences}.  That is,
+they specify something other than their literal selves.  For example,
+in the pattern \code{"a.c"}, the characters \code{a} and \code{c} do
+stand for themselves but the \emph{metacharacter} `\code{.}'  can
+match \emph{any} character (other than newline).  Therefore, the
+pattern \code{"a.c"} matches an \code{a}, followed by \emph{any}
+character, followed by a \code{c}.
+
+If we needed to match the character `\code{.}' itself, we
+\emph{escape} it, i.e., precede it with a backslash
+(\code{\textbackslash}).  The character sequence
+\code{{\textbackslash}.} is thus a \emph{metasequence}, since it
+doesn't match itself but rather just `\code{.}'.  So, to match
+\code{a} followed by a literal `\code{.}' followed by \code{c}, we use
+the regexp pattern
+\code{"a{\textbackslash}{\textbackslash}.c"}.\footnote{The double
+  backslash is an artifact of Scheme strings, not the regexp pattern
+  itself.  When we want a literal backslash inside a Scheme string, we
+  must escape it so that it shows up in the string at all. Scheme
+  strings use backslash as the escape character, so we end up with two
+  backslashes.} Another example of a metasequence is
+\code{{\textbackslash}t}, which is a readable way to represent the tab
+character.
+
+We will call the string representation of a regexp the
+\emph{U-regexp}, where \emph{U} can be taken to mean {\em Unix-style}
+or \emph{universal}, because this notation for regexps is universally
+familiar.  Our implementation uses an intermediate tree-like
+representation called the \emph{S-regexp}, where \emph{S} can stand
+for \emph{Scheme}, \emph{symbolic}, or \emph{s-expression}.  S-regexps
+are more verbose and less readable than U-regexps, but they are much
+easier for Scheme's recursive procedures to navigate.
+
+\section {Programming Interface}
+
+% ----------------------------------------------------------------------------
+\defineentry{pregexp}
+\begin{procedure}
+  \code{(pregexp \var{regexp})}
+\end{procedure}
+\returns{} an S-regexp
+
+The \code{pregexp} procedure takes a U-regexp string \var{regexp} and
+returns an S-regexp.
+
+% ----------------------------------------------------------------------------
+\defineentry{re}
+\begin{syntax}
+  \code{(re \var{regexp})}
+\end{syntax}
+\expandsto{}
+\code{(pregexp \var{regexp})}
+
+If \var{regexp} is a literal string, the \code{re} macro expands to the
+result of evaluating \code{(pregexp\ \var{regexp})} at expand time.
+Otherwise it expands into a run-time call to \code{pregexp}.
+
+% ----------------------------------------------------------------------------
+\defineentry{pregexp-match-positions}
+\begin{procedure}
+  \code{(pregexp-match-positions \var{pat} \var{str} \opt{\var{start} \opt{\var{end}}})}
+\end{procedure}
+\returns{} \code{((\var{s}~.~\var{e}) \ldots)} or \code{\#f}
+
+The \code{pregexp-match-positions} procedure takes a regexp pattern
+\var{pat} and a text string \var{str} and returns a \emph{match} if
+the regexp matches (some part of) the text string between the
+inclusive \var{start} index (defaults to 0) and the exclusive
+\var{end} index (defaults to the length of \var{str}).
+
+The regexp may be either a U- or an S-regexp.
+\code{pregexp-match-positions} will internally compile a U-regexp to
+an S-regexp before proceeding with the matching.  If you find yourself
+calling \code{pregexp-match-positions} repeatedly with the same
+U-regexp, it may be advisable to explicitly convert the latter into an
+S-regexp once beforehand, using \code{pregexp}, to save needless
+recompilation.
+
+\code{pregexp-match-positions} returns a list of \emph{index pairs} if
+the regexp matches the string and \code{\#f} if it does not
+match. Index pair \code{(\var{s}~.~\var{e})} gives the inclusive
+starting index \var{s} and exclusive ending index \var{e} of the
+matching substring with respect to \var{str}. The first index pair
+indicates the entire match, and subsequent pairs indicate
+submatches. Some of the submatches may be \code{\#f}.
+
+% ----------------------------------------------------------------------------
+\defineentry{pregexp-match}
+\begin{procedure}
+  \code{(pregexp-match \var{pat} \var{str} \opt{\var{start} \opt{\var{end}}})}
+\end{procedure}
+\returns{} list of matching substrings or \code{\#f}
+
+The \code{pregexp-match} procedure is called like
+\code{pregexp-match-positions}, but instead of returning index pairs,
+it returns the matching substrings. The first substring is the entire
+match, and subsequent substrings are submatches, some of which may be
+\code{\#f}.
+
+% ----------------------------------------------------------------------------
+\defineentry{pregexp-split}
+\begin{procedure}
+  \code{(pregexp-split \var{pat} \var{str})}
+\end{procedure}
+\returns{} list of substrings from \var{str}
+
+The \code{pregexp-split} procedure takes two arguments, a regexp
+pattern \var{pat} and a text string \var{str}, and returns a list of
+substrings of the text string, where the pattern identifies the
+delimiter separating the substrings. The returned substrings do not
+include the delimiter.
+
+If the pattern can match an empty string, then the list of all the
+single-character substrings is returned.
+
+To identify one or more spaces as the delimiter, take care to use the
+regexp \code{" +"}, not \code{" *"}.
+
+% ----------------------------------------------------------------------------
+\defineentry{pregexp-replace}
+\begin{procedure}
+  \code{(pregexp-replace \var{pat} \var{str} \var{ins})}
+\end{procedure}
+\returns{} a string
+
+The \code{pregexp-replace} procedure replaces the matched portion of
+the text string by another string.  The first argument is the pattern
+\var{pat}, the second the text string \var{str}, and the third is the
+string to be inserted \var{ins}, which may contain back-references
+(see \S\ref{sec:pregexp-back-references}).
+
+If the pattern doesn't occur in the text string, the returned string
+is identical (\code{eq?}) to \var{str}.
+
+% ----------------------------------------------------------------------------
+\defineentry{pregexp-replace*}
+\begin{procedure}
+  \code{(pregexp-replace* \var{pat} \var{str} \var{ins})}
+\end{procedure}
+\returns{} a string
+
+The \code{pregexp-replace*} procedure replaces \emph{all} matches of
+regexp \var{pat} in the text string \var{str} by the insert string
+\var{ins}, which may contain back-references (see
+\S\ref{sec:pregexp-back-references}).
+
+As with \code{pregexp-replace}, if the pattern doesn't occur in the
+text string, the returned string is identical (\code{eq?}) to
+\var{str}.
+
+% ----------------------------------------------------------------------------
+\defineentry{pregexp-quote}
+\begin{procedure}
+  \code{(pregexp-quote \var{str})}
+\end{procedure}
+\returns{} a U-regexp
+
+The \code{pregexp-quote} procedure takes an arbitrary string \var{str}
+and returns a U-regexp string that precisely represents it.  In
+particular, characters in the input string that could serve as regexp
+metacharacters are escaped with a backslash, so that they safely match
+only themselves.
+
+\code{pregexp-quote} is useful when building a composite regexp from a
+mix of regexp strings and verbatim strings.
+
+\section {The Regexp Pattern Language}
+
+\subsection {Basic Assertions}
+
+The \emph{assertions} \code{\textasciicircum} and \code{\$} identify
+the beginning and the end of the text string respectively.  They
+ensure that their adjoining regexps match at the beginning or end of
+the text string.  Examples:
+
+\code{(pregexp-match-positions "{\textasciicircum}contact" "first contact")}
+$\Rightarrow$ \code{\#f}
+
+The regexp fails to match because \code{contact} does not occur at the
+beginning of the text string.
+
+\code{(pregexp-match-positions "laugh\$" "laugh laugh laugh laugh")}
+$\Rightarrow$ \code{((18 . 23))}.
+
+The regexp matches the \emph{last} \code{laugh}.
+
+The metasequence \code{{\textbackslash}b} asserts that a \emph{word
+  boundary} exists.
+
+\code{(pregexp-match-positions "yack{\textbackslash\textbackslash}b"
+  "yackety yack")} $\Rightarrow$ \code{((8 . 12))}
+
+The \code{yack} in \code{yackety} doesn't end at a word boundary so it
+isn't matched.  The second \code{yack} does and is.
+
+The metasequence \code{{\textbackslash}B} has the opposite effect to
+\code{{\textbackslash}b}.  It asserts that a word boundary does not
+exist.
+
+\code{(pregexp-match-positions "an{\textbackslash\textbackslash}B" "an
+  analysis")} $\Rightarrow$ \code{((3 . 5))}
+
+The \code{an} that doesn't end in a word boundary is matched.
+
+\subsection {Characters and Character Classes}
+
+Typically a character in the regexp matches the same character in the
+text string.  Sometimes it is necessary or convenient to use a regexp
+metasequence to refer to a single character.  Thus, metasequences
+\code{{\textbackslash}n}, \code{{\textbackslash}r},
+\code{{\textbackslash}t}, and \code{{\textbackslash}.}  match the
+newline, return, tab, and period characters respectively.
+
+The \emph{metacharacter} period (\code{.}) matches \emph{any}
+character other than newline.
+
+\code{(pregexp-match "p.t" "pet")} $\Rightarrow$ \code{("pet")}
+
+It also matches \code{pat}, \code{pit}, \code{pot}, \code{put}, and
+\code{p8t} but not \code{peat} or \code{pfffft}.
+
+A \emph{character class} matches any one character from a set of
+characters. A typical format for this is the \emph{bracketed character
+  class} \code{[}\ldots\code{]}, which matches any one character from
+the non-empty sequence of characters enclosed within the
+brackets.\footnote{Requiring a bracketed character class to be
+  non-empty is not a limitation, since an empty character class can be
+  more easily represented by an empty string.}  Thus
+\code{"p[aeiou]t"} matches \code{pat}, \code{pet}, \code{pit},
+\code{pot}, \code{put} and nothing else.
+
+Inside the brackets, a hyphen (\code{-}) between two characters
+specifies the ASCII range between the characters.  For example,
+\code{"ta[b-dgn-p]"} matches \code{tab}, \code{tac}, \code{tad},
+\emph{and} \code{tag}, \emph{and} \code{tan}, \code{tao}, \code{tap}.
+
+An initial caret (\code{\textasciicircum}) after the left bracket
+inverts the set specified by the rest of the contents, i.e., it
+specifies the set of characters \emph{other than} those identified in
+the brackets.  For example, \code{"do[{\textasciicircum}g]"} matches
+all three-character sequences starting with \code{do} except
+\code{dog}.
+
+Note that the metacharacter \code{\textasciicircum} inside brackets
+means something quite different from what it means outside.  Most
+other metacharacters (\code{.}, \code{*}, \code{+}, \code{?}, etc.)
+cease to be metacharacters when inside brackets, although you may
+still escape them for peace of mind.  \code{-} is a metacharacter only
+when it's inside brackets, and neither the first nor the last
+character.
+
+Bracketed character classes cannot contain other bracketed character
+classes (although they contain certain other types of character
+classes---see below).  Thus a left bracket (\code{[}) inside a
+bracketed character class doesn't have to be a metacharacter; it can
+stand for itself.  For example, \code{"[a[b]"} matches \code{a},
+\code{[}, and \code{b}.
+
+Furthermore, since empty bracketed character classes are disallowed, a
+right bracket (\code{]}) immediately occurring after the opening left
+bracket also doesn't need to be a metacharacter.  For example,
+\code{"[]ab]"} matches \code{]}, \code{a}, and \code{b}.
+
+\subsubsection {Some Frequently Used Character Classes}
+
+Some standard character classes can be conveniently represented as
+metasequences instead of as explicit bracketed
+expressions. \code{{\textbackslash}d} matches a digit using
+\code{char-numeric?}; \code{{\textbackslash}s} matches a whitespace
+character using \code{char-whitespace?}; and \code{{\textbackslash}w}
+matches a character that could be part of a word.\footnote{Following
+  regexp custom, we identify word characters as alphabetic, numeric,
+  or underscore (\code{\_}).}
+
+The upper-case versions of these metasequences stand for the
+inversions of the corresponding character classes. Thus
+\code{{\textbackslash}D} matches a non-digit, \code{{\textbackslash}S}
+a non-whitespace character, and \code{{\textbackslash}W} a non-word
+character.
+
+Remember to include a double backslash when putting these
+metasequences in a Scheme string:
+
+\code{(pregexp-match
+  "{\textbackslash\textbackslash}d{\textbackslash\textbackslash}d" "0
+  dear, 1 have 2 read catch 22 before 9")} $\Rightarrow$ \code{("22")}
+
+These character classes can be used inside a bracketed expression.
+For example, \code{"[a-z{\textbackslash\textbackslash}d]"} matches a
+lower-case letter or a digit.
+
+\subsubsection {POSIX Character Classes}
+
+A \emph{POSIX character class} is a special metasequence of the form
+\code{[:}\ldots\code{:]} that can be used only inside a bracketed
+expression. The POSIX classes supported are:
+
+\begin{center}\begin{tabular}{ll}
+\code{[:alnum:]}  & letters and digits \\
+\code{[:alpha:]}  & letters \\
+\code{[:algor:]}  & the letters \code{c}, \code{h}, \code{a} and \code{d} \\
+\code{[:ascii:]}  & 7-bit ASCII characters \\
+\code{[:blank:]}  & widthful whitespace, i.e., space and tab \\
+\code{[:cntrl:]}  & control characters, viz, those with code $< 32$ \\
+\code{[:digit:]}  & digits, same as \code{{\textbackslash}d} \\
+\code{[:graph:]}  & characters that use ink \\
+\code{[:lower:]}  & lower-case letters \\
+\code{[:print:]}  & ink-users plus widthful whitespace \\
+\code{[:space:]}  & whitespace, same as \code{{\textbackslash}s} \\
+\code{[:upper:]}  & upper-case letters \\
+\code{[:word:]}   & letters, digits, and underscore, same as \code{{\textbackslash}w} \\
+\code{[:xdigit:]} & hex digits \\
+\end{tabular}\end{center}
+
+For example, the regexp \code{"[[:alpha:]\_]"} matches a letter or
+underscore.
+
+\code{(pregexp-match "[[:alpha:]\_]" "--x--")} $\Rightarrow$ \code{("x")}
+
+\code{(pregexp-match "[[:alpha:]\_]" "--\_--")} $\Rightarrow$
+\code{("\_")}
+
+\code{(pregexp-match "[[:alpha:]\_]" "--:--")} $\Rightarrow$ \code{\#f}
+
+The POSIX class notation is valid \emph{only} inside a bracketed
+expression.  For instance, \code{[:alpha:]}, when not inside a
+bracketed expression, will \emph{not} be read as the letter class.
+Rather it is (from previous principles) the character class containing
+the characters \code{:}, \code{a}, \code{l}, \code{p}, and \code{h}.
+
+\code{(pregexp-match "[:alpha:]" "--a--")} $\Rightarrow$ \code{("a")}
+
+\code{(pregexp-match "[:alpha:]" "--\_--")} $\Rightarrow$ \code{\#f}
+
+By placing a caret (\code{\textasciicircum}) immediately after
+\code{[:}, you get the inversion of that POSIX character class.  Thus,
+  \code{[:{\textasciicircum}alpha:]} is the class containing all
+  characters except the letters.
+
+\subsection {Quantifiers}
+
+The \emph{quantifiers} \code{*}, \code{+}, and
+\code{?} match respectively: zero or more, one or more,
+and zero or one instances of the preceding subpattern.
+
+\code{(pregexp-match-positions "c[ad]*r" "cadaddadddr")} $\Rightarrow$
+\code{((0 . 11))}
+
+\code{(pregexp-match-positions "c[ad]*r" "cr")} $\Rightarrow$
+\code{((0 . 2))}
+
+\code{(pregexp-match-positions "c[ad]+r" "cadaddadddr")} $\Rightarrow$
+\code{((0 . 11))}
+
+\code{(pregexp-match-positions "c[ad]+r" "cr")} $\Rightarrow$
+\code{\#f}
+
+\code{(pregexp-match-positions "c[ad]?r" "cadaddadddr")} $\Rightarrow$
+\code{\#f}
+
+\code{(pregexp-match-positions "c[ad]?r" "cr")} $\Rightarrow$
+\code{((0 . 2))}
+
+\code{(pregexp-match-positions "c[ad]?r" "car")} $\Rightarrow$
+\code{((0 . 3))}
+
+\subsubsection {Numeric Quantifiers}
+
+You can use braces to specify much finer-tuned quantification than is
+possible with \code{*}, \code{+}, and \code{?}.
+
+The quantifier \code{\{\var{m}\}} matches exactly \var{m} instances of
+the preceding subpattern.  \var{m} must be a nonnegative integer.
+
+The quantifier \code{\{\var{m},\var{n}\}} matches at least \var{m} and
+at most \var{n} instances.  \var{m} and \var{n} are nonnegative
+integers with $\var{m} \le \var{n}$.  You may omit either or both
+numbers, in which case \var{m} defaults to 0 and \var{n} to infinity.
+
+It is evident that \code{+} and \code{?} are abbreviations for
+\code{\{1,\}} and \code{\{0,1\}} respectively.  \code{*} abbreviates
+\code{\{,\}}, which is the same as \code{\{0,\}}.
+
+\code{(pregexp-match "[aeiou]\{3\}" "vacuous")} $\Rightarrow$
+\code{("uou")}
+
+\code{(pregexp-match "[aeiou]\{3\}" "evolve")} $\Rightarrow$ \code{\#f}
+
+\code{(pregexp-match "[aeiou]\{2,3\}" "evolve")} $\Rightarrow$
+\code{\#f}
+
+\code{(pregexp-match "[aeiou]\{2,3\}" "zeugma")} $\Rightarrow$
+\code{("eu")}
+
+\subsubsection {Non-greedy Quantifiers}
+
+The quantifiers described above are \emph{greedy}, i.e., they match
+the maximal number of instances that would still lead to an overall
+match for the full pattern.
+
+\code{(pregexp-match "<.*>" "<tag1> <tag2> <tag3>")} $\Rightarrow$
+\code{("<tag1> <tag2> <tag3>")}
+
+To make these quantifiers \emph{non-greedy}, append a \code{?} to
+them.  Non-greedy quantifiers match the minimal number of instances
+needed to ensure an overall match.
+
+\code{(pregexp-match "<.*?>" "<tag1> <tag2> <tag3>")} $\Rightarrow$
+\code{("<tag1>")}
+
+The non-greedy quantifiers are respectively: \code{*?}, \code{+?},
+\code{??}, \code{\{\var{m}\}?}, and \code{\{\var{m},\var{n}\}?}.  Note
+the two uses of the metacharacter \code{?}.
+
+\subsection {Clusters}
+
+\emph{Clustering}, i.e., enclosure within parentheses
+\code{(}\ldots\code{)}, identifies the enclosed subpattern as a single
+entity.  It causes the matcher to \emph{capture} the \emph{submatch},
+or the portion of the string matching the subpattern, in addition to
+the overall match.
+
+\code{(pregexp-match "([a-z]+) ([0-9]+), ([0-9]+)" "jan 1, 1970")} \\
+$\Rightarrow$ \code{("jan 1, 1970" "jan" "1" "1970")}
+
+Clustering also causes a following quantifier to treat the entire
+enclosed subpattern as an entity.
+
+\code{(pregexp-match "(poo )*" "poo poo platter")} $\Rightarrow$
+\code{("poo poo " "poo ")}
+
+The number of submatches returned is always equal to the number of
+subpatterns specified in the regexp, even if a particular subpattern
+happens to match more than one substring or no substring at all.
+
+\code{(pregexp-match "([a-z ]+;)*" "lather; rinse; repeat;")} \\
+$\Rightarrow$ \code{("lather; rinse; repeat;" " repeat;")}
+
+Here the \code{*}-quantified subpattern matches three times, but it is
+the last submatch that is returned.
+
+It is also possible for a quantified subpattern to fail to match, even
+if the overall pattern matches.  In such cases, the failing submatch
+is represented by \code{\#f}.
+
+\begin{alltt}
+(define date-re
+  ;; match 'month year' or 'month day, year'.
+  ;; subpattern matches day, if present
+  (pregexp "([a-z]+) +([0-9]+,)? *([0-9]+)"))
+\end{alltt}
+
+\code{(pregexp-match date-re "jan 1, 1970")} $\Rightarrow$
+\code{("jan 1, 1970" "jan" "1," "1970")}
+
+\code{(pregexp-match date-re "jan 1970")} $\Rightarrow$
+\code{("jan 1970" "jan" \#f "1970")}
+
+\subsubsection {Back-references}\label{sec:pregexp-back-references}
+
+Submatches can be used in the insert string argument of the procedures
+\code{pregexp-replace} and \code{pregexp-replace*}.  The insert string
+can use \code{\textbackslash}$n$ as a \emph{back-reference} to refer
+back to the $n^\textrm{th}$ submatch, i.e., the substring that matched
+the $n^\textrm{th}$ subpattern.  \code{{\textbackslash}0} refers to
+the entire match, and it can also be specified as
+\code{\textbackslash\&}.
+
+\code{(pregexp-replace "\_(.+?)\_" "the \_nina\_, the \_pinta\_, and
+  the \_santa maria\_" "*{\textbackslash\textbackslash}1*")}
+$\Rightarrow$ \code{"the *nina*, the \_pinta\_, and the \_santa
+  maria\_"}
+
+\code{(pregexp-replace* "\_(.+?)\_" "the \_nina\_, the \_pinta\_, and
+  the \_santa maria\_" "*{\textbackslash\textbackslash}1*")}
+$\Rightarrow$ \code{"the *nina*, the *pinta*, and the *santa maria*"}
+
+\code{(pregexp-replace "({\textbackslash\textbackslash}S+)
+  ({\textbackslash\textbackslash}S+)
+  ({\textbackslash\textbackslash}S+)" "eat to live"
+  "{\textbackslash\textbackslash}3 {\textbackslash\textbackslash}2
+  {\textbackslash\textbackslash}1")} \\
+$\Rightarrow$ \code{"live to eat"}
+
+Use \code{\textbackslash\textbackslash} in the insert string to
+specify a literal backslash.  Also, \code{\textbackslash\$} stands for
+an empty string, and is useful for separating a back-reference
+\code{\textbackslash\var{n}} from an immediately following number.
+
+Back-references can also be used within the regexp pattern to refer
+back to an already matched subpattern in the pattern.
+\code{\textbackslash}$n$ stands for an exact repeat of the
+$n^\textrm{th}$ submatch.\footnote{\code{{\textbackslash}0}, which is
+  useful in an insert string, makes no sense within the regexp
+  pattern, because the entire regexp has not matched yet that you
+  could refer back to it.}
+
+\code{(pregexp-match "([a-z]+) and {\textbackslash\textbackslash}1"
+  "billions and billions")} \\
+$\Rightarrow$ \code{("billions and billions" "billions")}
+
+Note that the back-reference is not simply a repeat of the previous
+subpattern.  Rather it is a repeat of \emph{the particular substring
+  already matched by the subpattern}.
+
+In the above example, the back-reference can only match
+\code{billions}.  It will not match \code{millions}, even though the
+subpattern it harks back to---\code{([a-z]+)}---would have had no
+problem doing so:
+
+\code{(pregexp-match "([a-z]+) and {\textbackslash\textbackslash}1"
+  "billions and millions")} $\Rightarrow$ \code{\#f}
+
+The following corrects doubled words:
+
+\code{(pregexp-replace* "({\textbackslash\textbackslash}S+)
+  {\textbackslash\textbackslash}1" "now is the the time for all good
+  men to to come to the aid of of the party"
+  "{\textbackslash\textbackslash}1")} \\
+$\Rightarrow$ \code{"now is the time for all good men to come to the
+  aid of the party"}
+
+The following marks all immediately repeating patterns in a number
+string:
+
+\code{(pregexp-replace*
+  "({\textbackslash\textbackslash}d+){\textbackslash\textbackslash}1"
+  "123340983242432420980980234"
+  "{{\textbackslash\textbackslash}1,{\textbackslash\textbackslash}1}")}
+\\ $\Rightarrow$ \code{"12{3,3}40983{24,24}3242{098,098}0234"}
+
+\subsubsection {Non-capturing Clusters}
+
+It is often required to specify a cluster (typically for
+quantification) but without triggering the capture of submatch
+information.  Such clusters are called \emph{non-capturing}.  In such
+cases, use \code{(?:} instead of \code{(} as the cluster opener.  In
+the following example, the non-capturing cluster eliminates the
+directory portion of a given pathname, and the capturing cluster
+identifies the basename.
+
+\code{(pregexp-match "\textasciicircum(?:[a-z]*/)*([a-z]+)\$"
+  "/usr/local/bin/scheme")} \\
+$\Rightarrow$ \code{("/usr/local/bin/scheme" "scheme")}
+
+\subsubsection {Cloisters}
+
+The location between the \code{?} and the \code{:} of a non-capturing
+cluster is called a \emph{cloister}.\footnote{A useful, if terminally
+  cute, coinage from the abbots of Perl~\cite{pperl}.}  You can put
+\emph{modifiers} there that will cause the enclustered subpattern to
+be treated specially.  The modifier \code{i} causes the subpattern to
+match \emph{case-insensitively}:
+
+\code{(pregexp-match "(?i:hearth)" "HeartH")} $\Rightarrow$
+\code{("HeartH")}
+
+The modifier \code{x} causes the subpattern to match
+\emph{space-insensitively}, i.e., spaces and comments within the
+subpattern are ignored.  Comments are introduced as usual with a
+semicolon (\code{;}) and extend till the end of the line.  If you need
+to include a literal space or semicolon in a space-insensitized
+subpattern, escape it with a backslash.
+
+\code{(pregexp-match "(?x: a lot)" "alot")} $\Rightarrow$
+\code{("alot")}
+
+\code{(pregexp-match "(?x: a  {\textbackslash\textbackslash}  lot)" "a
+  lot")} \\
+$\Rightarrow$ \code{("a lot")}
+
+\begin{alltt}
+(pregexp-match "(?x:
+   a {\textbackslash\textbackslash} man  {\textbackslash\textbackslash}; {\textbackslash\textbackslash}   ; ignore
+   a {\textbackslash\textbackslash} plan {\textbackslash\textbackslash}; {\textbackslash\textbackslash}   ; me
+   a {\textbackslash\textbackslash} canal         ; completely
+   )"
+ "a man; a plan; a canal")
+\end{alltt}\antipar
+$\Rightarrow$ \code{("a man; a plan; a canal")}
+
+You can put more than one modifier in the cloister.
+
+\begin{alltt}
+(pregexp-match "(?ix:
+   a {\textbackslash\textbackslash} man  {\textbackslash\textbackslash}; {\textbackslash\textbackslash}   ; ignore
+   a {\textbackslash\textbackslash} plan {\textbackslash\textbackslash}; {\textbackslash\textbackslash}   ; me
+   a {\textbackslash\textbackslash} canal         ; completely
+   )"
+ "A Man; a Plan; a Canal")
+\end{alltt}\antipar
+$\Rightarrow$ \code{("A Man; a Plan; a Canal")}
+
+A minus sign before a modifier inverts its meaning.  Thus, you can use
+\code{-i} and \code{-x} in a {\em subcluster} to overturn the
+insensitivities caused by an enclosing cluster.
+
+\code{(pregexp-match "(?i:the (?-i:TeX)book)" "The TeXbook")}
+$\Rightarrow$ \code{("The TeXbook")}
+
+This regexp will allow any casing for \code{the} and \code{book} but
+insists that \code{TeX} not be differently cased.
+
+\subsection {Alternation}\label{sec:pregexp-alternation}
+
+You can specify a list of \emph{alternate} subpatterns by separating
+them by \code{|}.  The \code{|} separates subpatterns in the nearest
+enclosing cluster (or in the entire pattern string if there are no
+enclosing parentheses).
+
+\code{(pregexp-match "f(ee|i|o|um)" "a small, final fee")}
+$\Rightarrow$ \code{("fi" "i")}
+
+\begin{alltt}
+(pregexp-replace* "([yi])s(e[sdr]?|ing|ation)"
+ "it is energising to analyse an organisation pulsing with noisy organisms"
+ "{\textbackslash\textbackslash}1z{\textbackslash\textbackslash}2")
+\end{alltt}\antipar
+$\Rightarrow$ \code{"it is energizing to analyze an organization
+  pulsing with noisy organisms"}
+
+Note again that if you wish to use clustering merely to specify a list
+of alternate subpatterns but do not want the submatch, use \code{(?:}
+instead of \code{(}.
+
+\code{(pregexp-match "f(?:ee|i|o|um)" "fun for all")} $\Rightarrow$
+\code{("fo")}
+
+An important thing to note about alternation is that the leftmost
+matching alternate is picked regardless of its length.  Thus, if one
+of the alternates is a prefix of a later alternate, the latter may not
+have a chance to match.
+
+\code{(pregexp-match "call|call/cc" "call/cc")} $\Rightarrow$
+\code{("call")}
+
+To allow the longer alternate to have a shot at matching, place it
+before the shorter one:
+
+\code{(pregexp-match "call/cc|call" "call/cc")} $\Rightarrow$
+\code{("call/cc")}
+
+In any case, an overall match for the entire regexp is always
+preferred to an overall non-match.  In the following, the longer
+alternate still wins, because its preferred shorter prefix fails to
+yield an overall match.
+
+\code{(pregexp-match "(?:call|call/cc) constrained" "call/cc
+  constrained")} \\
+$\Rightarrow$ \code{("call/cc constrained")}
+
+\subsection {Backtracking}
+
+We've already seen that greedy quantifiers match the maximal number of
+times, but the overriding priority is that the overall match succeed.
+Consider
+
+\code{(pregexp-match "a*a" "aaaa")}
+
+The regexp consists of two subregexps, \code{a*} followed by \code{a}.
+The subregexp \code{a*} cannot be allowed to match all four \code{a}'s
+in the text string \code{"aaaa"}, even though \code{*} is a greedy
+quantifier.  It may match only the first three, leaving the last one
+for the second subregexp.  This ensures that the full regexp matches
+successfully.
+
+The regexp matcher accomplishes this via a process called
+\emph{backtracking}.  The matcher tentatively allows the greedy
+quantifier to match all four \code{a}'s, but then when it becomes
+clear that the overall match is in jeopardy, it \emph{backtracks} to a
+less greedy match of {\em three} \code{a}'s.  If even this fails, as
+in the call
+
+\code{(pregexp-match "a*aa" "aaaa")}
+
+the matcher backtracks even further.  Overall failure is conceded only
+when all possible backtracking has been tried with no success.
+
+Backtracking is not restricted to greedy quantifiers.  Nongreedy
+quantifiers match as few instances as possible, and progressively
+backtrack to more and more instances in order to attain an overall
+match.  There is backtracking in alternation, too, as the more
+rightward alternates are tried when locally successful leftward ones
+fail to yield an overall match.
+
+\subsubsection {Disabling Backtracking}
+
+Sometimes it is efficient to disable backtracking.  For example, we
+may wish to \emph{commit} to a choice, or we know that trying
+alternatives is fruitless.  A non-backtracking regexp is enclosed in
+\code{(?>}\ldots\code{)}.
+
+\code{(pregexp-match "(?>a+)." "aaaa")} $\Rightarrow$ \code{\#f}
+
+In this call, the subregexp \code{?>a+} greedily matches all four
+\code{a}'s, and is denied the opportunity to backtrack.  So the
+overall match is denied.  The effect of the regexp is therefore to
+match one or more \code{a}'s followed by something that is definitely
+non-\code{a}.
+
+\subsection {Looking Ahead and Behind}
+
+You can have assertions in your pattern that look {\em ahead} or
+\emph{behind} to ensure that a subpattern does or does not occur.
+These look-around assertions are specified by putting the subpattern
+checked for in a cluster whose leading characters are \code{?=} for
+positive look-ahead, \code{?!} for negative look-ahead, \code{?<=} for
+positive look-behind, and \code{?<!} for negative look-behind.  Note
+that the subpattern in the assertion does not generate a match in the
+final result.  It merely allows or disallows the rest of the match.
+
+\subsubsection {Look-ahead}
+
+Positive look-ahead (\code{?=}) peeks ahead to ensure that its
+subpattern \emph{could} match.
+
+\code{(pregexp-match-positions "grey(?=hound)"
+  "i left my grey socks at the greyhound")} \\
+$\Rightarrow$ \code{((28 . 32))}
+
+The regexp \code{"grey(?=hound)"} matches \code{grey}, but \emph{only}
+if it is followed by \code{hound}.  Thus, the first \code{grey} in the
+text string is not matched.
+
+Negative look-ahead (\code{?!}) peeks ahead to ensure that its
+subpattern could not possibly match.
+
+\code{(pregexp-match-positions "grey(?!hound)"
+  "the gray greyhound ate the grey socks")}\\
+$\Rightarrow$ \code{((27 . 31))}
+
+The regexp \code{"grey(?!hound)"} matches \code{grey}, but only if it
+is \emph{not} followed by \code{hound}.  Thus the \code{grey} just
+before \code{socks} is matched.
+
+\subsubsection {Look-behind}
+
+Positive look-behind (\code{?<=}) checks that its subpattern
+\emph{could} match immediately to the left of the current position in
+the text string.
+
+\code{(pregexp-match-positions "(?<=grey)hound"
+  "the hound is not a greyhound")} \\
+$\Rightarrow$ \code{((23 . 28))}
+
+The regexp \code{(?<=grey)hound} matches \code{hound}, but only if it
+is preceded by \code{grey}.
+
+Negative look-behind (\code{?<!}) checks that its subpattern could not
+possibly match immediately to the left.
+
+\code{(pregexp-match-positions "(?<!grey)hound"
+  "the greyhound is not a hound")} \\
+$\Rightarrow$ \code{((23 . 28))}
+
+The regexp \code{(?<!grey)hound} matches \code{hound}, but only if it
+is \emph{not} preceded by \code{grey}.
+
+Look-aheads and look-behinds can be convenient when they are not
+confusing.
