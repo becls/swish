@@ -286,7 +286,7 @@
      (guard (string=? (utf8->string bv) "GET / HTTP/1.0"))
      (catch (test "GET / HTTP/1.0\r\n\r\n"))]
     [#(EXIT http-input-limit-exceeded)
-     (catch (test (make-string 4097 #\a)))]
+     (catch (test (make-string 8193 #\a)))]
     [#(EXIT http-input-limit-exceeded)
      (catch (test (string-append
                    "GET /static/ok.txt HTTP/1.1\r\n"

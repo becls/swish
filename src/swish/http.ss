@@ -74,7 +74,7 @@
    )
 
   (define request-limit
-    (make-process-parameter 4096
+    (make-process-parameter 8192
       (lambda (x)
         (unless (and (fixnum? x) (fx> x 0))
           (bad-arg 'request-limit x))
