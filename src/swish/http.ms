@@ -29,16 +29,87 @@
  (swish http)
  (swish io)
  (swish mat)
+ (swish script-testing)
  (swish string-utils)
  (swish testing)
  (swish watcher)
  )
 
+(define (write-web-mats)
+  (define (write-exprs fn exprs)
+    (write-test-file (path-combine "web-mats" fn)
+      (lambda () (for-each pretty-print exprs))))
+
+  (write-exprs "common.ss"
+    '((define (my-respond x)
+        (http:respond op 200 '() x))))
+  (write-exprs (path-combine "include" "mat.ss")
+    '((http:include "../mat.ss")))
+  (write-exprs (path-combine "include" "rooted.ss")
+    '((http:include "/mat.ss")))
+  (write-exprs (path-combine "include" "syntax-error.ss")
+    '((http:include 12345)))
+  (write-exprs (path-combine "static" "ok.html")
+    `(,(string->symbol (html->string `(html (body (p "ok")))))))
+  (write-exprs (path-combine "static" "ok.txt")
+    '(ok))
+  (write-exprs (path-combine "with-index" "index.ss")
+    '((http:respond op 200 '() (string->utf8 "ok"))))
+  (write-exprs "mime-types"
+    '(("css" . "text/css")
+      ("gif" . "image/gif")
+      ("html" . "text/html")
+      ("ico" . "image/x-icon")
+      ("jpg" . "image/jpeg")
+      ("js" . "application/javascript")
+      ("png" . "image/png")))
+  (write-exprs "mat.ss"
+    '((http:include "common.ss")
+      (match (get-param "cmd")
+        ["echo header"
+         (my-respond
+          (string->utf8
+           (let-values ([(op get) (open-string-output-port)])
+             (write header op)
+             (get))))]
+        ["use status"
+         (http:respond op (string->number (get-param "status")) '() '#vu8())]
+        ["echo"
+         (my-respond (string->utf8 (get-param "echo")))]
+        ["echo file"
+         (match-let* (["1" (get-param "sample")]
+                      [#(<file> ,filename) (get-param "file")])
+           (my-respond (read-file filename)))]
+        ["echo unhandled"
+         (my-respond
+          (get-bytevector-n ip
+            (string->number
+             (or (find-param "count")
+                 (http:get-header "Content-Length" header)))))]
+        ["bad arg"
+         (my-respond (get-param "bad"))]
+        ["file-headers"
+         (http:respond-file op 200 '(("Cache-Control" . "no-cache")
+                                     ("Content-Type" . "text/plain"))
+           (path-combine (web-dir) "static" "ok.txt"))]
+        ["internal-error"
+         (cond
+          [(find-param "partial") =>
+           (lambda (x) (put-bytevector op (string->utf8 x)))])
+         (throw 'internal-error)]
+        ["bad read"
+         ;; consume input, but don't respond or error
+         (do ([n (string->number (get-param "count")) (- n 1)])
+             ((= n 0))
+           (get-u8 ip))]
+        ))))
+
 (define test-port 54333)
 
 (define (boot-http)
   (http-port-number test-port)
-  (web-dir (path-combine (base-dir) "src" "swish" "web-mats"))
+  (write-web-mats)
+  (web-dir (path-combine (output-dir) "web-mats"))
 
   (start-event-mgr)
   (event-mgr:set-log-handler            ; silence the event-mgr
