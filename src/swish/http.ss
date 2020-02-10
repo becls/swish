@@ -141,7 +141,7 @@
     ;; valid to be placed in the cache.
     (define-state-tuple <http-cache>
       cookie     ; integer
-      mime-types ; #f | file-extension -> content-type
+      mime-types ; #f | file-extension -> media-type
       pages      ; path -> #(loaded ,handler) | #(loading ,path ,pid ,waiters)
       watchers   ; (path-watcher ...)
       )
@@ -152,10 +152,10 @@
           (let lp ([ht empty-ht])
             (match (read ip)
               [,eof (guard (eof-object? eof)) ht]
-              [(,ext . ,content-type)
-               (guard (and (string? ext) (string? content-type)))
-               (lp (ht:set ht ext content-type))]
-              [,x (throw `#(invalid-mime-type ,x))])))))
+              [(,ext . ,media-type)
+               (guard (and (string? ext) (string? media-type)))
+               (lp (ht:set ht ext media-type))]
+              [,x (throw `#(http-invalid-media-type ,x))])))))
     (define (update-mime-types state)
       (if ($state mime-types)
           state
@@ -252,7 +252,7 @@
                   `#(reply
                      #(ok ,(lambda (ip op request header params)
                              (not-found op)
-                             (throw `#(invalid-http-method ,method ,path))))
+                             (throw `#(http-invalid-method ,method ,path))))
                      ,state)]))]))]
         [#(get-content-type ,ext)
          (let ([state (update-mime-types state)])
@@ -335,7 +335,7 @@
           (let-values ([(op get) (open-bytevector-output-port)])
             (let lp ([n 0])
               (when (fx> n limit)
-                (throw 'input-limit-exceeded))
+                (throw 'http-input-limit-exceeded))
               (let ([x (get-u8 ip)])
                 (cond
                  [(eof-object? x) (get)]
@@ -445,7 +445,7 @@
                   (bv-extract-string line (bv-next-non-lws line (fx+ colon 1))
                     (bytevector-length line)))
             (http:read-header ip (fx- limit (bytevector-length line))))]
-         [,_ (throw 'invalid-header)])]))
+         [,_ (throw 'http-invalid-header)])]))
 
   (define (multipart/form-data-boundary type)
     (match (pregexp-match (re "^multipart/form-data;\\s*boundary=(.+)$") type)
@@ -474,7 +474,7 @@
      [(http:find-header "Content-Length" header) =>
       (lambda (x)
         (unless (pregexp-match (re "^[0-9]+$") x)
-          (throw `#(invalid-content-length ,x)))
+          (throw `#(http-invalid-content-length ,x)))
         (string->number x))]
      [else #f]))
 
@@ -492,7 +492,7 @@
                pos))]
            [(starts-with? type "application/x-www-form-urlencoded")
             (when (> len (http-content-limit))
-              (throw 'content-limit-exceeded))
+              (throw 'http-content-limit-exceeded))
             (let ([content (make-bytevector len)])
               (get-chunk! ip content len)
               (values (parse-encoded-kv content 0 len) pos))]
@@ -518,7 +518,7 @@
                  (advance! ip ipos op opos)
                  (http:handle-input ip op)))]))]
        [else
-        (throw `#(unhandled-input ,x))])))
+        (throw `#(http-unhandled-input ,x))])))
 
   (define (http:read-status ip limit)
     (let ([x (read-line ip limit)])
@@ -612,7 +612,7 @@
 
   (define (http:get-header name header)
     (or (internal-find-header 'http:get-header name header)
-        (throw `#(invalid-header ,name ,header))))
+        (throw `#(http-invalid-header ,name))))
 
   (define (internal-find-param who name params)
     (unless (string? name)
@@ -626,7 +626,7 @@
 
   (define (http:get-param name params)
     (or (internal-find-param 'http:get-param name params)
-        (throw `#(invalid-param ,name ,params))))
+        (throw `#(http-invalid-param ,name))))
 
   (define (do-eval-file abs-path)
     (do-eval (read-bytevector abs-path (read-file abs-path))
@@ -707,7 +707,7 @@
         (cond
          [(not (validate-path path))
           (not-found op)
-          (raise `#(invalid-http-path ,path))]
+          (raise `#(http-invalid-path ,path))]
          [(http-cache:get-handler request) =>
           (lambda (handler)
             (limit-stack
@@ -764,7 +764,7 @@
                (eqv? (next-u8 ip) (char->integer #\return))
                (eqv? (next-u8 ip) (char->integer #\newline)))
           '()]
-         [else (throw 'invalid-multipart-boundary)])))
+         [else (throw 'http-invalid-multipart-boundary)])))
     (define (parse-next limit)
       (define header (http:read-header ip (http-header-limit)))
       (define data
@@ -799,7 +799,7 @@
     (do ([i 0 (fx+ i 1)] [bv (string->utf8 boundary)])
         [(= i (bytevector-length bv))]
       (unless (eqv? (next-u8 ip) (bytevector-u8-ref bv i))
-        (throw 'invalid-multipart-boundary)))
+        (throw 'http-invalid-multipart-boundary)))
     (parse-end (http-content-limit)))
 
   (define (parse-form-data-disposition d)
@@ -811,9 +811,9 @@
                       params)
                [(,_ ,key ,val ,params)
                 (cons (cons key val) (lp params))]
-               [#f (throw `#(invalid-content-disposition ,d))])
+               [#f (throw `#(http-invalid-content-disposition ,d))])
              '()))]
-      [#f (throw `#(invalid-content-disposition ,d))]))
+      [#f (throw `#(http-invalid-content-disposition ,d))]))
 
   (define (delete-tmp-files params)
     (for-each
@@ -853,7 +853,7 @@
         (and limit
              (if (fx> limit 0)
                  (fx- limit 1)
-                 (throw 'content-limit-exceeded))))
+                 (throw 'http-content-limit-exceeded))))
       (populate-buffer 0 0 limit))
     ;; Build partial match table
     (fxvector-set! partial 0 -1)

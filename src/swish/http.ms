@@ -109,20 +109,20 @@
       (directory-list (tmp-dir))))
   (match-let*
    (["" (test "")]
-    [#(EXIT #(unhandled-input ,bv))
+    [#(EXIT #(http-unhandled-input ,bv))
      (guard (string=? (utf8->string bv) "unhandled"))
      (catch (test "unhandled"))]
-    [#(EXIT #(unhandled-input ,bv))
+    [#(EXIT #(http-unhandled-input ,bv))
      (guard (string=? (utf8->string bv) "GET / HTTP/1.0"))
      (catch (test "GET / HTTP/1.0\r\n\r\n"))]
-    [#(EXIT input-limit-exceeded)
+    [#(EXIT http-input-limit-exceeded)
      (catch (test (make-string 4097 #\a)))]
-    [#(EXIT input-limit-exceeded)
+    [#(EXIT http-input-limit-exceeded)
      (catch (test (string-append
                    "GET /static/ok.txt HTTP/1.1\r\n"
                    (make-string 1048577 #\a) "\r\n"
                    "\r\n")))]
-    [#(EXIT content-limit-exceeded)
+    [#(EXIT http-content-limit-exceeded)
      (catch (test (string-append
                    "POST /static/ok.txt HTTP/1.1\r\n"
                    "Content-Length: 16777217\r\n"
@@ -135,13 +135,13 @@
                    "Content-Type: application/x-www-form-urlencoded\r\n"
                    "\r\n"
                    "0123")))]
-    [#(EXIT #(invalid-http-path "/.."))
+    [#(EXIT #(http-invalid-path "/.."))
      (catch (test "GET /.. HTTP/1.1\r\n\r\n"))]
-    [#(EXIT #(invalid-http-path "foo"))
+    [#(EXIT #(http-invalid-path "foo"))
      (catch (test "GET foo HTTP/1.1\r\n\r\n"))]
     [#(EXIT #(bad-arg http:respond "foo"))
      (catch (test "GET /mat?cmd=bad+arg&bad=foo HTTP/1.1\r\n\r\n"))]
-    [#(EXIT #(invalid-content-length "none"))
+    [#(EXIT #(http-invalid-content-length "none"))
      (catch (test (string-append
                    "POST /static/ok.txt HTTP/1.1\r\n"
                    "Content-Length: none\r\n"
@@ -155,7 +155,7 @@
     [(#(EXIT internal-error) . "partial-output")
      (test-error&output "GET /mat?cmd=internal-error&partial=partial-output HTTP/1.1\r\n\r\n")]
     ;; static content
-    [#(EXIT #(invalid-http-method PUT "/static/ok.txt"))
+    [#(EXIT #(http-invalid-method PUT "/static/ok.txt"))
      (catch (test "PUT /static/ok.txt HTTP/1.1\r\n\r\n"))]
     ["HTTP/1.1 200 \r\nContent-Length: 3\r\nCache-Control: max-age=3600\r\n\r\nok\n"
      (test "GET /static/ok.txt HTTP/1.1\r\nConnection: close\r\n\r\n")]
@@ -165,7 +165,7 @@
      (test "GET /static/ok.html HTTP/1.1\nConnection: close\n\n")]
 
     ;; header
-    [#(EXIT invalid-header)
+    [#(EXIT http-invalid-header)
      (catch (test (string-append
                    "GET /mat?cmd=echo+header HTTP/1.1\r\n"
                    "Host localhost\r\n\r\n")))]
@@ -351,7 +351,7 @@
              "Content-Type: multipart/form-data; boundary=----WebKitFormBoundaryRMHyBKLIXfhX3ZNy\r\n"
              "\r\n"
              "------WebKitFormBoundaryRMHyBKLIXfhX3ZNy--")))]
-    [#(EXIT invalid-multipart-boundary)
+    [#(EXIT http-invalid-multipart-boundary)
      (catch
       (test (string-append
              "GET /mat?cmd=echo+file HTTP/1.1\r\n"
@@ -359,7 +359,7 @@
              "Content-Type: multipart/form-data; boundary=----WebKitFormBoundaryRMHyBKLIXfhX3ZNy\r\n"
              "\r\n"
              "ok\r\n")))]
-    [#(EXIT invalid-multipart-boundary)
+    [#(EXIT http-invalid-multipart-boundary)
      (catch
       (test (string-append
              "GET /mat?cmd=echo+file HTTP/1.1\r\n"
@@ -367,7 +367,7 @@
              "Content-Type: multipart/form-data; boundary=----WebKitFormBoundaryRMHyBKLIXfhX3ZNy\r\n"
              "\r\n"
              "------WebKitFormBoundaryRMHyBKLIXfhX3ZNyok")))]
-    [#(EXIT #(invalid-content-disposition "none"))
+    [#(EXIT #(http-invalid-content-disposition "none"))
      (catch
       (test (string-append
              "GET /mat?cmd=echo+file HTTP/1.1\r\n"
@@ -389,7 +389,7 @@
              "\r\n"
              "1\r\n"
              "------WebKitFormBoundaryRMHyBKLIXfhX3ZNy--\r\n")))]
-    [#(EXIT #(invalid-content-disposition "form-data; name=sample"))
+    [#(EXIT #(http-invalid-content-disposition "form-data; name=sample"))
      (catch
       (test (string-append
              "GET /mat?cmd=echo+file HTTP/1.1\r\n"
@@ -411,7 +411,7 @@
              "\r\n"
              "1\r\n"
              "------WebKitFormBoundaryRMHyBKLIXfhX3ZNy--\r\n")))]
-    [#(EXIT content-limit-exceeded)
+    [#(EXIT http-content-limit-exceeded)
      (catch
       (test (string-append
              "GET /mat?cmd=echo+file HTTP/1.1\r\n"
@@ -477,7 +477,7 @@
      (catch (http:find-header 'None header))]
     ["foo" (http:find-header "Content-Type" header)]
     ["foo" (http:find-header "content-type" header)]
-    [#(EXIT #(invalid-header "None" ,@header))
+    [#(EXIT #(http-invalid-header "None"))
      (catch (http:get-header "None" header))]
     [#(EXIT #(bad-arg http:get-header None))
      (catch (http:get-header 'None header))]
@@ -488,7 +488,7 @@
      (catch (http:find-param 'None params))]
     [#f (http:find-param "VAL" params)]
     ["1" (http:find-param "val" params)]
-    [#(EXIT #(invalid-param "None" ,@params))
+    [#(EXIT #(http-invalid-param "None"))
      (catch (http:get-param "None" params))]
     [#(EXIT #(bad-arg http:get-param None))
      (catch (http:get-param 'None params))]
@@ -511,7 +511,7 @@
   (define (test input)
     (http:read-status (open-bytevector-input-port (string->utf8 input)) 4096))
   (match-let*
-   ([#(EXIT input-limit-exceeded) (catch (test (make-string 4097 #\a)))]
+   ([#(EXIT http-input-limit-exceeded) (catch (test (make-string 4097 #\a)))]
     [#f (test "")]
     [#f (test "200 OK Malformed input")]
     [#f (test "HTTP/1.1 OK 200")]
@@ -530,7 +530,7 @@
     (put-bytevector op (string->utf8 "Malformed Request\r\n\r\n"))
     (flush-output-port op)
     (receive (after 10 (throw 'no-child-log))
-      [`(<child-end> [reason #(unhandled-input ,x)])
+      [`(<child-end> [reason #(http-unhandled-input ,x)])
        (assert (string=? (utf8->string x) "Malformed Request"))])
     (close-port op))
 
@@ -584,7 +584,7 @@
       (utf8->string (simple-get "/static/ok.html"))
       (receive (after 1000 (throw 'timeout-waiting-for-cache-to-fail))
         [`(<gen-server-terminating> [name http-cache]
-            [reason #(invalid-mime-type (invalid mime type expression))])
+            [reason #(http-invalid-media-type (invalid mime type expression))])
          'ok])))
 
   ;; valid mime-types file
