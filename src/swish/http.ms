@@ -123,10 +123,8 @@
         ["no response" #t]
         ))))
 
-(define test-port 54333)
-
 (define (boot-http)
-  (http-port-number test-port)
+  (http-port-number 0)
   (write-web-mats)
   (web-dir (path-combine (output-dir) "web-mats"))
 
@@ -160,7 +158,7 @@
         [`(DOWN ,_ ,@pid ,reason) (throw reason)]))))
 
 (define (simple-tcp x)
-  (let-values ([(ip op) (connect-tcp "127.0.0.1" test-port)])
+  (let-values ([(ip op) (connect-tcp "127.0.0.1" (http:get-port-number))])
     (put-bytevector op x)
     (flush-output-port op)
     (let ([r (get-bytevector-all ip)])
@@ -629,9 +627,7 @@
 (http-mat http ()
   (capture-events)
 
-  (assert (= test-port (http:get-port-number)))
-
-  (let-values ([(ip op) (connect-tcp "127.0.0.1" test-port)])
+  (let-values ([(ip op) (connect-tcp "127.0.0.1" (http:get-port-number))])
     (put-bytevector op (string->utf8 "Malformed Request\r\n\r\n"))
     (flush-output-port op)
     (receive (after 10 (throw 'no-child-log))
@@ -639,7 +635,7 @@
        (assert (string=? (utf8->string x) "Malformed Request"))])
     (close-port op))
 
-  (let-values ([(ip op) (connect-tcp "127.0.0.1" test-port)])
+  (let-values ([(ip op) (connect-tcp "127.0.0.1" (http:get-port-number))])
     (put-bytevector op (string->utf8 "GET /mat?cmd=echo&echo=1 HTTP/1.1\r\n"))
     (http:write-header op '(("connection" . "KeEp-AlIvE")))
     (put-bytevector op (string->utf8 "GET /mat?cmd=echo&echo=2 HTTP/1.1\r\n"))
