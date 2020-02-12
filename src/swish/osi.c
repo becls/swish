@@ -466,9 +466,19 @@ static ptr write_stream_port(uptr port, ptr buffer, size_t start_index, uint32_t
 }
 
 static void close_stream_cb(uv_handle_t* handle) {
+  // This code does not check and unlock the write_callback and
+  // write_buffer because LibUV explicitly cancels write operations
+  // with UV_ECANCELED before processing this callback.
   stream_port_t* p = container_of(handle, stream_port_t, h.stream);
   ptr callback = p->close_callback;
+  ptr read_callback = p->read_callback;
+  ptr read_buffer = p->read_buffer;
   free(p);
+  if (read_callback) {
+    Sunlock_object(read_buffer);
+    Sunlock_object(read_callback);
+    osi_add_callback1(read_callback, Sfixnum(UV_EOF));
+  }
   if (callback) {
     Sunlock_object(callback);
     osi_add_callback1(callback, Sfixnum(0));

@@ -750,4 +750,78 @@
     [,@expected (format "~s" l)])
    'ok))
 
+(isolate-mat read-leak ()
+  (let* ([hostname "::1"]
+         [listener (listen-tcp hostname 0 self)]
+         [test-port (listener-port-number listener)]
+         [gbuff (make-guardian)]
+         [gproc (make-guardian)])
+    (on-exit (close-tcp-listener listener)
+      (let-values ([(cip cop) (connect-tcp hostname test-port)])
+        (on-exit (begin (close-input-port cip) (force-close-output-port cop))
+          (receive (after 5000 (throw 'timeout-connecting-tcp))
+            [#(accept-tcp ,@listener ,sip ,sop)
+             (on-exit (force-close-output-port sop)
+               (let* ([me self]
+                      [_ (gbuff (binary-port-input-buffer cip))]
+                      [pid (spawn (lambda ()
+                                    (on-exit (send me 'ran-winders)
+                                      (assert (eof-object? (get-u8 cip))))))]
+                      [_ (gproc pid)]
+                      [m (monitor pid)])
+                 (receive (after 100 'ok)) ; wait for the read to start
+                 (force-close-output-port cop)
+                 (receive (after 1000 (throw 'reader-failed-to-complete))
+                   [ran-winders
+                    (receive (after 1000 (throw 'reader-failed-to-complete))
+                      [`(DOWN ,@m ,@pid ,reason) 'ok])])))]
+            [,(msg <= #(accept-tcp-failed ,_ ,_ ,_)) (throw msg)]))))
+    (gc)
+    (assert (bytevector? (gbuff)))
+    (assert (process? (gproc)))))
+
+(isolate-mat write-leak ()
+  ;; Spawn a Swish process that blocks on (receive), and thus does not
+  ;; read from input. Then send enough data that the pipe fills up and
+  ;; the process blocks on write. Then, from the original process,
+  ;; close the output port and verify that the buffer and process are
+  ;; garbage collected.
+  (define (spawn-swish-no-read)
+    (let ([me self])
+      (spawn
+       (lambda ()
+         (let-values ([(to-stdin from-stdout from-stderr os-pid)
+                       (spawn-os-process swish-exe '() me)])
+           (send me `#(process-started ,os-pid ,to-stdin))
+           (put-bytevector to-stdin (string->utf8 "(receive)\n"))
+           (flush-output-port to-stdin)
+           (on-exit (send me 'ran-winders)
+             (let lp ()
+               (put-u8 to-stdin (char->integer #\A))
+               (send me 'not-blocked)
+               (lp))))))))
+  (let* ([gbuff (make-guardian)]
+         [gproc (make-guardian)]
+         [pid (spawn-swish-no-read)]
+         [_ (gproc pid)]
+         [m (monitor pid)])
+    (receive
+     [#(process-started ,os-pid ,op)
+      (gbuff (binary-port-output-buffer op))
+      (let lp ()
+        ;; wait for the write to fill up the pipe
+        (receive (after 100 'ok)
+          [not-blocked (lp)]))
+      (force-close-output-port op)
+      (receive (after 1000 (throw 'writer-failed-to-complete))
+        [ran-winders
+         (receive (after 1000 (throw 'writer-failed-to-complete))
+           [`(DOWN ,@m ,@pid ,reason)
+            (osi_kill* os-pid 15)
+            (receive (after 1000 (throw 'os-process-timeout))
+              [#(process-terminated ,@os-pid ,exit-status ,_) 'ok])])])])
+    (gc)
+    (assert (bytevector? (gbuff)))
+    (assert (process? (gproc)))))
+
 (hook-console-input)
