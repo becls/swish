@@ -123,13 +123,10 @@
         ["no response" #t]
         ))))
 
-(define (boot-http)
+(define (start-default-file-server)
   (http-port-number 0)
   (write-web-mats)
   (web-dir (path-combine (output-dir) "web-mats"))
-
-  (start-silent-event-mgr)
-
   (match (http-sup:start&link)
     [#(ok ,pid) pid]))
 
@@ -137,25 +134,20 @@
   (cond
    [(whereis 'http-sup) =>
     (lambda (pid)
+      (unlink pid)
       (monitor pid)
-      (receive (after 60000 (throw 'http-sup-still-running))
+      (kill pid 'shutdown)
+      (receive (after 2000 (throw 'http-sup-still-running))
         [`(DOWN ,_ ,@pid ,_) 'ok]))]))
 
 (define-syntax http-mat
   (syntax-rules ()
     [(_ name tags e1 e2 ...)
-     (mat name tags ($http-mat (lambda () (boot-http) (let () e1 e2 ...))))]))
-
-(define ($http-mat thunk)
-  (let* ([pid (spawn
-               (lambda ()
-                 (parameterize ([compile-profile #f])
-                   (thunk))))]
-         [m (monitor pid)])
-    (on-exit (shutdown-http)
-      (receive (after 300000 (kill pid 'shutdown) (throw 'timeout))
-        [`(DOWN ,_ ,@pid normal) 'ok]
-        [`(DOWN ,_ ,@pid ,reason) (throw reason)]))))
+     (isolate-mat name tags
+       (start-silent-event-mgr)
+       (on-exit (shutdown-http)
+         (parameterize ([compile-profile #f])
+           (let () e1 e2 ...))))]))
 
 (define (simple-tcp x)
   (let-values ([(ip op) (connect-tcp "127.0.0.1" (http:get-port-number))])
@@ -201,6 +193,7 @@
      [else (throw reason)])))
 
 (http-mat handlers ()
+  (start-default-file-server)
   (capture-events)
   (http-request-timeout 500)
   (when (file-directory? (tmp-dir))
@@ -565,7 +558,7 @@
     )
    'ok))
 
-(mat helpers ()
+(http-mat helpers ()
   (define header '(("Content-Length" . "bar") ("Content-Type" . "foo")))
   (define params '(("query" . "lookup") ("val" . "1")))
   (match-let*
@@ -610,7 +603,7 @@
      (catch (http:write-header #f bad-header))])
    'ok))
 
-(mat read-status ()
+(http-mat read-status ()
   (define (test input)
     (http:read-status (open-bytevector-input-port (string->utf8 input)) 4096))
   (match-let*
@@ -625,6 +618,7 @@
    'ok))
 
 (http-mat http ()
+  (start-default-file-server)
   (capture-events)
 
   (let-values ([(ip op) (connect-tcp "127.0.0.1" (http:get-port-number))])
@@ -665,6 +659,7 @@
       [`(EXIT ,@http ,@fail-msg) 'ok])))
 
 (http-mat mime-types ()
+  (start-default-file-server)
   (capture-events)
   (let* ([mime-types (path-combine (web-dir) "mime-types")]
          [mime-types.bak (string-append mime-types ".bak")])
@@ -713,6 +708,7 @@
       (or (string=? expected actual)
           (throw `#(unexpected ,expected ,actual)))))
 
+  (start-default-file-server)
   ;; cache unrelated file which uses include (coverage)
   (simple-get "/include/mat?cmd=echo&echo=1")
 
@@ -758,6 +754,7 @@
   'ok)
 
 (http-mat path-watcher-fail ()
+  (start-default-file-server)
   (capture-events)
   (let ([path (web-dir)])
     (send 'http-cache `#(path-watcher-failed ,path -1234))
