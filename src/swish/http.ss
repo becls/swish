@@ -108,7 +108,15 @@
           (bad-arg 'file-transform x))
         x)))
 
+  (define file-search-extensions
+    (make-process-parameter '(".html")
+      (lambda (x)
+        (unless (and (list? x) (andmap string? x))
+          (bad-arg 'file-search-extensions x))
+        x)))
+
   (define-options http:options
+    file-search-extensions
     file-transform
     header-limit
     media-type-handler
@@ -494,10 +502,10 @@
           state
           (let ([state (load-watchers state)])
             ($state copy [mime-types (read-mime-types)]))))
-    (define search-extensions '(".ss" ".html"))
     (define (url->abs-paths path) ;; path starts with "/"
       (let ([path (path-combine root-dir
-                    (substring path 1 (string-length path)))])
+                    (substring path 1 (string-length path)))]
+            [search-extensions (file-search-extensions)])
         (cond
          [(directory-separator? (string-ref path (- (string-length path) 1)))
           (values

@@ -139,6 +139,7 @@
     (http:configure-file-server #f 0 (web-dir)
       (http:options
        [request-timeout 500]
+       [file-search-extensions '(".ss" ".html")]
        [file-transform http:enable-dynamic-pages]))))
 
 (define (shutdown-http)
@@ -674,6 +675,10 @@
      (catch ((http:options [file-transform 'a])))]
     [#(EXIT #(bad-arg file-transform 0))
      (catch ((http:options [file-transform 0])))]
+    [#(EXIT #(bad-arg file-search-extensions a))
+     (catch ((http:options [file-search-extensions 'a])))]
+    [#(EXIT #(bad-arg file-search-extensions 0))
+     (catch ((http:options [file-search-extensions 0])))]
     [#f (http:find-header "None" header)]
     [#f (http:find-header 'None header)]
     [#(EXIT #(bad-arg http:find-header 0))
