@@ -35,6 +35,8 @@
  (swish watcher)
  )
 
+(define web-dir (make-parameter (path-combine (output-dir) "web-mats")))
+
 (define (write-web-mats)
   (define (write-exprs fn exprs)
     (write-test-file (path-combine "web-mats" fn)
@@ -132,11 +134,10 @@
         ))))
 
 (define (start-default-file-server)
-  (http-port-number 0)
   (write-web-mats)
-  (web-dir (path-combine (output-dir) "web-mats"))
-  (match (http-sup:start&link)
-    [#(ok ,pid) pid]))
+  (supervisor:start&link 'http-sup 'one-for-all 0 1
+    (http:configure-file-server #f 0 (web-dir)
+      (http:options [request-timeout 500]))))
 
 (define (shutdown-http)
   (cond
@@ -157,8 +158,34 @@
          (parameterize ([compile-profile #f])
            (let () e1 e2 ...))))]))
 
+(define (get-http-listener)
+  (match-let*
+   ([,sup (whereis 'http-sup)]
+    [(`(<child> [pid ,http-sup] [type supervisor]))
+     (supervisor:get-children sup)]
+    [,children (supervisor:get-children http-sup)]
+    [`(<child> [pid ,listener])
+     (find (lambda (x) (eq? (<child> name x) 'http-listener)) children)])
+   listener))
+
+(define http-port (make-process-parameter #f))
+
+(define (get-http-port)
+  (cond
+   [(http-port) => values]
+   [else
+    (let ([p (http:get-port-number (get-http-listener))])
+      (http-port p)
+      p)]))
+
+(define (get-cache)
+  (receive (after 1000 (throw 'timeout-waiting-for-cache-to-start))
+    [`(<child-start> ,pid ,name)
+     (guard (string=? (format "~a" name) "http-cache"))
+     pid]))
+
 (define (simple-tcp x)
-  (let-values ([(ip op) (connect-tcp "127.0.0.1" (http:get-port-number))])
+  (let-values ([(ip op) (connect-tcp "127.0.0.1" (get-http-port))])
     (put-bytevector op x)
     (flush-output-port op)
     (let ([r (get-bytevector-all ip)])
@@ -220,9 +247,10 @@
   (parse-response (test input) bytevector->sexpr))
 
 (http-mat handlers ()
+  ;; The request-timeout option should be relatively short (500ms) for
+  ;; these cases.
   (start-default-file-server)
   (capture-events)
-  (http-request-timeout 500)
   (when (file-directory? (tmp-dir))
     (for-each (lambda (x)
                 (when (ends-with? x ".tmp")
@@ -624,12 +652,22 @@
      [query "lookup"]
      [val "1"]))
   (match-let*
-   ([#(EXIT #(bad-arg http-port-number a)) (catch (http-port-number 'a))]
-    [#(EXIT #(bad-arg http-port-number -1)) (catch (http-port-number -1))]
-    [#(EXIT #(bad-arg http-request-limit a)) (catch (http-request-limit 'a))]
-    [#(EXIT #(bad-arg http-request-limit 0)) (catch (http-request-limit 0))]
-    [#(EXIT #(bad-arg http-header-limit a)) (catch (http-header-limit 'a))]
-    [#(EXIT #(bad-arg http-header-limit 0)) (catch (http-header-limit 0))]
+   ([#(EXIT #(bad-arg request-limit a))
+     (catch ((http:options [request-limit 'a])))]
+    [#(EXIT #(bad-arg request-limit 0))
+     (catch ((http:options [request-limit 0])))]
+    [#(EXIT #(bad-arg request-timeout a))
+     (catch ((http:options [request-timeout 'a])))]
+    [#(EXIT #(bad-arg request-timeout 0))
+     (catch ((http:options [request-timeout 0])))]
+    [#(EXIT #(bad-arg header-limit a))
+     (catch ((http:options [header-limit 'a])))]
+    [#(EXIT #(bad-arg header-limit 0))
+     (catch ((http:options [header-limit 0])))]
+    [#(EXIT #(bad-arg media-type-handler a))
+     (catch ((http:options [media-type-handler 'a])))]
+    [#(EXIT #(bad-arg media-type-handler 0))
+     (catch ((http:options [media-type-handler 0])))]
     [#f (http:find-header "None" header)]
     [#f (http:find-header 'None header)]
     [#(EXIT #(bad-arg http:find-header 0))
@@ -689,7 +727,7 @@
   (start-default-file-server)
   (capture-events)
 
-  (let-values ([(ip op) (connect-tcp "127.0.0.1" (http:get-port-number))])
+  (let-values ([(ip op) (connect-tcp "127.0.0.1" (get-http-port))])
     (put-bytevector op (string->utf8 "Malformed Request\r\n\r\n"))
     (flush-output-port op)
     (receive (after 10 (throw 'no-child-log))
@@ -697,7 +735,7 @@
        (assert (string=? (utf8->string x) "Malformed Request"))])
     (close-port op))
 
-  (let-values ([(ip op) (connect-tcp "127.0.0.1" (http:get-port-number))])
+  (let-values ([(ip op) (connect-tcp "127.0.0.1" (get-http-port))])
     (put-bytevector op (string->utf8 "GET /mat?cmd=echo&echo=1 HTTP/1.1\r\n"))
     (http:write-header op '(("connection" . "KeEp-AlIvE")))
     (put-bytevector op (string->utf8 "GET /mat?cmd=echo&echo=2 HTTP/1.1\r\n"))
@@ -719,7 +757,7 @@
 
   ;; fake a message indicating that accept failed
   (process-trap-exit #t)
-  (let ([http (whereis 'http-listener)]
+  (let ([http (get-http-listener)]
         [fail-msg `#(accept-tcp-failed "listener" "who" "errno")])
     (link http)
     (send http fail-msg)
@@ -733,23 +771,25 @@
          [mime-types.bak (string-append mime-types ".bak")])
     (rename-path mime-types mime-types.bak)
     (on-exit (rename-path mime-types.bak mime-types)
-      ;; no mime-types file; http-cache crashes; supervisor will restart
+      ;; no mime-types file; http-cache crashes; next request will restart
       (utf8->string (simple-get "/static/ok.html"))
-      (receive (after 1000 (throw 'timeout-waiting-for-cache-to-fail))
-        [`(<gen-server-terminating> [name http-cache]
-            [reason #(io-error ,_ uv_fs_open ,_)])
-         'ok])
+      (let ([pid (get-cache)])
+        (receive (after 1000 (throw 'timeout-waiting-for-cache-to-fail))
+          [`(<gen-server-terminating> [name ,@pid]
+              [reason #(io-error ,_ uv_fs_open ,_)])
+           'ok]))
 
-      ;; invalid mime-types file; http-cache crashes; supervisor will restart
+      ;; invalid mime-types file; http-cache crashes; next request will restart
       (write-file mime-types
         '(("css" . "text/css")
           (invalid mime type expression)
           ("html" . "text/html")))
       (utf8->string (simple-get "/static/ok.html"))
-      (receive (after 1000 (throw 'timeout-waiting-for-cache-to-fail))
-        [`(<gen-server-terminating> [name http-cache]
-            [reason #(http-invalid-media-type (invalid mime type expression))])
-         'ok])))
+      (let ([pid (get-cache)])
+        (receive (after 1000 (throw 'timeout-waiting-for-cache-to-fail))
+          [`(<gen-server-terminating> [name ,@pid]
+              [reason #(http-invalid-media-type (invalid mime type expression))])
+           'ok]))))
 
   ;; valid mime-types file
   (match-let*
@@ -824,10 +864,12 @@
 (http-mat path-watcher-fail ()
   (start-default-file-server)
   (capture-events)
-  (let ([path (web-dir)])
-    (send 'http-cache `#(path-watcher-failed ,path -1234))
+  (simple-get "/static/ok.html")        ; To start the cache
+  (let ([path (web-dir)]
+        [pid (get-cache)])
+    (send pid `#(path-watcher-failed ,path -1234))
     (receive (after 1000 (throw 'timeout-waiting-for-cache-to-fail))
-      [`(<gen-server-terminating> [name http-cache] ,reason)
+      [`(<gen-server-terminating> [name ,@pid] ,reason)
        (match reason
          [#(bad-match #(path-watcher-failed ,@path -1234) ,_)
           'ok])])))

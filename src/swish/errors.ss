@@ -109,6 +109,7 @@
       [http-invalid-multipart-boundary "Invalid HTTP multipart/form-data boundary."]
       [http-output-violation "Attempted to send too much HTTP output."]
       [http-request-timeout "Timeout waiting for HTTP request."]
+      [http-side-effecting-handler "Invalid side-effecting HTTP handler."]
       [invalid-surrogate-pair "Invalid Unicode surrogate pair"]
       [log-handler-already-set "The log handler is already set."]
       [no-process "No process."]

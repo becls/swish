@@ -677,8 +677,7 @@
      (parameterize ([base-dir dir])
        (assert (starts-with? (data-dir) dir))
        (assert (equal? (data-dir) (path-parent (log-file))))
-       (assert (starts-with? (tmp-dir) (data-dir)))
-       (assert (starts-with? (web-dir) dir))))
+       (assert (starts-with? (tmp-dir) (data-dir)))))
    'ok))
 
 (isolate-mat app-params ()

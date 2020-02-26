@@ -24,30 +24,36 @@
 (library (swish http)
   (export
    <request>
-   http-header-limit
-   http-port-number
-   http-request-limit
-   http-request-timeout
-   http-sup:start&link
+   http:add-file-server
+   http:add-server
+   http:call-url-handler
    http:call-with-form
    http:call-with-ports
+   http:compose-url-handlers
+   http:configure-file-server
+   http:configure-server
    http:find-header
    http:find-param
    http:get-content-length
    http:get-header
    http:get-param
    http:get-port-number
+   http:make-default-file-url-handler
+   http:make-default-media-type-handler
+   http:options
    http:percent-encode
    http:read-header
    http:read-status
    http:respond
    http:respond-file
    http:switch-protocol
+   http:url-handler
    http:write-header
    http:write-status
    )
   (import
    (chezscheme)
+   (swish app)
    (swish app-io)
    (swish erlang)
    (swish event-mgr)
@@ -57,6 +63,7 @@
    (swish html)
    (swish io)
    (swish json)
+   (swish meta)
    (swish osi)
    (swish pregexp)
    (swish string-utils)
@@ -64,50 +71,118 @@
    (swish watcher)
    )
 
-  (define http-port-number
-    (make-parameter #f
-      (lambda (x)
-        (unless (or (not x) (and (fixnum? x) (fx<= 0 x 65535)))
-          (bad-arg 'http-port-number x))
-        x)))
-
-  (define http-request-limit
-    (make-parameter 4096
+  (define request-limit
+    (make-process-parameter 4096
       (lambda (x)
         (unless (and (fixnum? x) (fx> x 0))
-          (bad-arg 'http-request-limit x))
+          (bad-arg 'request-limit x))
         x)))
 
   (define request-timeout
-    (make-parameter 30000
+    (make-process-parameter 30000
       (lambda (x)
         (unless (and (fixnum? x) (fx> x 0))
           (bad-arg 'request-timeout x))
         x)))
 
-  (alias http-request-timeout request-timeout)
-
-  (define http-header-limit
-    (make-parameter 1048576
+  (define header-limit
+    (make-process-parameter 1048576
       (lambda (x)
         (unless (and (fixnum? x) (fx> x 0))
-          (bad-arg 'http-header-limit x))
+          (bad-arg 'header-limit x))
         x)))
 
-  (define (http-sup:start&link)
-    (if (not (http-port-number))
-        'ignore
-        (supervisor:start&link 'http-sup 'one-for-one 10 10000
-          `(#(http-cache ,http-cache:start&link permanent 1000 worker)
-            #(http-listener ,http-listener:start&link permanent 1000 worker)))))
+  (define media-type-handler
+    (make-process-parameter (lambda (ext) #f)
+      (lambda (x)
+        (unless (procedure? x)
+          (bad-arg 'media-type-handler x))
+        x)))
 
-  (define (http-listener:start&link)
-    (define-state-tuple <http-listener> tcp-listener pid->op)
+  (define-options http:options
+    header-limit
+    media-type-handler
+    request-limit
+    request-timeout
+    )
+
+  (define-syntax http:add-file-server
+    (syntax-rules ()
+      [(_ arg ...)
+       (app-sup-spec
+        (append (app-sup-spec) (http:configure-file-server arg ...)))]))
+
+  (define http:configure-file-server
+    (case-lambda
+     [(name port dir)
+      (http:configure-file-server name port dir (http:options))]
+     [(name port dir options)
+      (let ([mth (http:make-default-media-type-handler dir)])
+        (http:configure-server name port
+          (http:make-default-file-url-handler dir)
+          (lambda ()
+            (media-type-handler mth)
+            (options))))]))
+
+  (define-syntax http:add-server
+    (syntax-rules ()
+      [(_ arg ...)
+       (app-sup-spec
+        (append (app-sup-spec) (http:configure-server arg ...)))]))
+
+  (define http:configure-server
+    (case-lambda
+     [(name port url-handler)
+      (http:configure-server name port url-handler (http:options))]
+     [(name port url-handler options)
+      (arg-check 'http:configure-server
+        [name (lambda (x) (or (eq? x #f) (symbol? x)))]
+        [port (lambda (x) (and (fixnum? x) (fx<= 0 x 65535)))]
+        [url-handler procedure?]
+        [options procedure?])
+      `(#(,(gensym "http-sup")
+          ,(lambda ()
+             (supervisor:start&link #f 'one-for-one 10 10000
+               `(#(http-listener
+                   ,(lambda ()
+                      (http-listener:start&link name self port url-handler
+                        options))
+                   permanent 1000 worker))))
+          permanent infinity supervisor))]))
+
+  (define-syntax (http:url-handler x)
+    (syntax-case x ()
+      [(k body1 body2 ...)
+       (with-implicit (k conn request header params)
+         #'(lambda (conn request header params)
+             body1 body2 ...))]))
+
+  (define (http:compose-url-handlers handlers)
+    (http:url-handler
+     (let lp ([handlers handlers])
+       (match handlers
+         [() #f]
+         [(,h . ,handlers)
+          (or (http:call-url-handler h)
+              (if (conn:output-ready? conn)
+                  (lp handlers)
+                  (throw 'http-side-effecting-handler)))]))))
+
+  (define-syntax (http:call-url-handler x)
+    (syntax-case x ()
+      [(k handler)
+       (with-implicit (k conn request header params)
+         #'(handler conn request header params))]))
+
+  (define (http-listener:start&link name sup init-port url-handler options)
+    (define-state-tuple <http-listener> tcp-listener cache-manager pid->op)
     (define (init)
       (process-trap-exit #t)
-      `#(ok ,(<http-listener> make
-               [tcp-listener (listen-tcp "::" (http-port-number) self)]
-               [pid->op (ht:make equal-hash eq? process?)])))
+      (match-let* ([#(ok ,cache-mgr) (cache-mgr:start&link sup options)])
+        `#(ok ,(<http-listener> make
+                 [tcp-listener (listen-tcp "::" init-port self)]
+                 [cache-manager cache-mgr]
+                 [pid->op (ht:make equal-hash eq? process?)]))))
     (define (terminate reason state)
       ;; Ignore the pid->op table. In the rare event that this
       ;; gen-server fails, the dispatchers can continue
@@ -122,19 +197,21 @@
       (match msg
         [#(accept-tcp ,_ ,ip ,op)
          (match-let*
-          ([,listener self]
-           [#(ok ,conn) (conn:start listener ip op)]
-           [,m (monitor conn)]
+          ([,cache-mgr ($state cache-manager)]
            [#(ok ,pid)
-            (watcher:start-child 'http-sup (gensym "http-dispatcher") 1000
+            (watcher:start-child sup (gensym "http-dispatcher") 1000
               (lambda ()
                 `#(ok ,(spawn&link
                         (lambda ()
-                          (link conn)
-                          (http:handle-input conn)
-                          (conn:stop conn))))))])
-          `#(no-reply ,($state copy* [pid->op (ht:set pid->op conn op)])))]
-        [#(accept-tcp-failed ,l ,who ,errno)
+                          (cache-manager cache-mgr)
+                          (options)
+                          (match-let*
+                           ([#(ok ,conn)
+                             (conn:start&link cache-mgr ip op options)])
+                           (http:handle-input conn url-handler options)))))))])
+          (monitor pid)
+          `#(no-reply ,($state copy* [pid->op (ht:set pid->op pid op)])))]
+        [#(accept-tcp-failed ,_ ,_ ,_)
          `#(stop ,msg ,state)]
         [`(DOWN ,_ ,pid ,_)
          (cond
@@ -144,12 +221,12 @@
              `#(no-reply ,($state copy* [pid->op (ht:delete pid->op pid)])))]
           [else
            `#(no-reply ,state)])]))
-    (gen-server:start&link 'http-listener))
+    (gen-server:start&link name))
 
-  (define (http:get-port-number)
-    (gen-server:call 'http-listener 'get-port-number))
+  (define (http:get-port-number listener)
+    (gen-server:call listener 'get-port-number))
 
-  (define (conn:start listener ip op)
+  (define (conn:start&link cache-mgr ip op options)
     (define-state-tuple <conn>
       input                     ; ready | #(advance ipos) | close
       output                    ; ready | dirty
@@ -219,17 +296,17 @@
     (define (init)
       ;; Important for the conn not to trap exits, since it may get
       ;; killed when a timeout occurs.
+      (cache-manager cache-mgr)
+      (options)
       `#(ok ,(<conn> make
                [input 'ready]
                [output 'dirty])))
     (define (terminate reason state) 'ok)
     (define (handle-call msg from state)
       (match msg
-        [#(detach-ports ,owner)
+        [detach-ports
          (advance-input state)
          `#(stop normal #(ok ,ip ,op) detached)]
-        [stop
-         `#(stop normal #(ok ok) ,state)]
         [get-request
          (let ([state (advance-input state)])
            (match (<conn> output state)
@@ -240,13 +317,13 @@
               (match (<conn> input state)
                 [close `#(reply #(ok #f) ,state)]
                 [ready
-                 (let ([x (read-line ip (http-request-limit))])
+                 (let ([x (read-line ip (request-limit))])
                    (cond
                     [(eof-object? x)
                      `#(reply #(ok #f) ,($state copy [input 'close]))]
                     [(http:parse-request x) =>
                      (lambda (request)
-                       (define header (http:read-header ip (http-header-limit)))
+                       (define header (http:read-header ip (header-limit)))
                        (define ipos
                          (cond
                           [(http:get-content-length header) =>
@@ -294,14 +371,11 @@
          `#(no-reply ,(internal-server-error state))]))
     (define (handle-cast msg state) (match msg))
     (define (handle-info msg state) (match msg))
-    (gen-server:start #f))
+    (gen-server:start&link #f))
 
   (define (conn:detach-ports who)
     (match (gen-server:call who 'detach-ports)
       [#(ok ,ip ,op) (values ip op)]))
-
-  (define (conn:stop who)
-    (unwrap (gen-server:call who 'stop)))
 
   (define (unwrap x)
     (match x
@@ -380,7 +454,7 @@
         (on-exit (delete-tmp-files data)
           (f data)))]))
 
-  (define (http-cache:start&link)
+  (define (http-cache:start&link name sup root-dir options)
     ;; The cache maintains a hash table mapping a path to a handler.
     ;; It lazily loads watchers for the web directory and all
     ;; subdirectories.  When anything other than mime-types changes,
@@ -393,9 +467,10 @@
       pages      ; path -> #(loaded ,handler) | #(loading ,path ,pid ,waiters)
       watchers   ; (path-watcher ...)
       )
+    (define cache-timeout (* 5 60 1000))
     (define empty-ht (ht:make string-ci-hash string-ci=? string?))
     (define (read-mime-types)
-      (let ([ip (open-file-to-read (path-combine (web-dir) "mime-types"))])
+      (let ([ip (open-file-to-read (path-combine root-dir "mime-types"))])
         (on-exit (close-port ip)
           (let lp ([ht empty-ht])
             (match (read ip)
@@ -411,7 +486,7 @@
             ($state copy [mime-types (read-mime-types)]))))
     (define search-extensions '(".ss" ".html"))
     (define (url->abs-paths path) ;; path starts with "/"
-      (let ([path (path-combine (web-dir)
+      (let ([path (path-combine root-dir
                     (substring path 1 (string-length path)))])
         (cond
          [(directory-separator? (string-ref path (- (string-length path) 1)))
@@ -432,23 +507,24 @@
     (define (lookup-handler pages paths)
       (exists (lambda (path) (ht:ref pages path #f)) paths))
     (define (make-static-file-handler path)
-      (lambda (conn request header params)
-        (http:respond-file conn 200 '() path)))
-    (define (start-interpreter abs-path cookie)
+      (http:url-handler
+       (http:respond-file conn 200 '() path)))
+    (define (start-evaluator abs-path cookie)
       (let ([me self])
         (match-let*
          ([#(ok ,pid)
-           (watcher:start-child 'http-sup (gensym "http-interpreter")
+           (watcher:start-child sup (gensym "http-evaluator")
              1000
              (lambda ()
                `#(ok ,(spawn&link
                        (lambda ()
                          (send me `#(load-finished ,self ,abs-path ,cookie
-                                      ,(do-eval-file abs-path))))))))])
+                                      ,(do-eval-file root-dir abs-path))))))))])
          (link pid)
          pid)))
     (define (init)
       (process-trap-exit #t)
+      (options)
       `#(ok ,(<http-cache> make
                [cookie 0]
                [mime-types #f]
@@ -463,12 +539,13 @@
          (let-values ([(paths redirect) (url->abs-paths path)])
            (match (lookup-handler ($state pages) paths)
              [#(loaded ,handler)
-              `#(reply #(ok ,handler) ,state)]
+              `#(reply #(ok ,handler) ,state ,cache-timeout)]
              [#(loading ,abs-path ,pid ,waiters)
               `#(no-reply
                  ,($state copy* [pages (ht:set pages abs-path
                                          `#(loading ,abs-path ,pid
-                                             ,(cons from waiters)))]))]
+                                             ,(cons from waiters)))])
+                 ,cache-timeout)]
              [#f
               (let* ([state (load-watchers state)]
                      [abs-path (find regular-file? paths)])
@@ -479,34 +556,37 @@
                                 (exists
                                  (lambda (fn)
                                    (and (regular-file? fn)
-                                        (lambda (conn request header params)
-                                          (http:respond conn 302
-                                            `(("Location" . ,(string-append original-path "/")))
-                                            '#vu8()))))
+                                        (http:url-handler
+                                         (http:respond conn 302
+                                           `(("Location" . ,(string-append original-path "/")))
+                                           '#vu8()))))
                                  redirect)))
-                     ,state)]
+                     ,state ,cache-timeout)]
                  [(string-ci=? (path-extension abs-path) "ss")
-                  (let ([pid (start-interpreter abs-path ($state cookie))])
+                  (let ([pid (start-evaluator abs-path ($state cookie))])
                     `#(no-reply
                        ,($state copy* [pages (ht:set pages abs-path
                                                `#(loading ,abs-path ,pid
-                                                   ,(list from)))])))]
+                                                   ,(list from)))])
+                       ,cache-timeout))]
                  [(eq? method 'GET)
                   (let ([h (make-static-file-handler abs-path)])
                     `#(reply #(ok ,h)
                         ,($state copy* [pages (ht:set pages abs-path
-                                                `#(loaded ,h))])))]
+                                                `#(loaded ,h))])
+                        ,cache-timeout))]
                  [else
                   `#(reply
-                     #(ok ,(lambda (conn request header params)
-                             (not-found conn)
-                             (throw `#(http-invalid-method ,method ,path))))
-                     ,state)]))]))]
-        [#(get-content-type ,ext)
+                     #(ok ,(http:url-handler
+                            (not-found conn)
+                            (throw `#(http-invalid-method ,method ,path))))
+                     ,state
+                     ,cache-timeout)]))]))]
+        [#(get-media-type ,ext)
          (let ([state (update-mime-types state)])
            (match (ht:ref ($state mime-types) ext #f)
-             [#f `#(reply #(error not-found) ,state)]
-             [,type `#(reply #(ok ,type) ,state)]))]))
+             [#f `#(reply #(error not-found) ,state ,cache-timeout)]
+             [,type `#(reply #(ok ,type) ,state ,cache-timeout)]))]))
     (define (handle-cast msg state) (match msg))
     (define (load-watchers state)
       (define (watch path watchers)
@@ -518,7 +598,7 @@
          (cons (watch-path path self) watchers)
          (list-directory path)))
       (if (null? ($state watchers))
-          ($state copy [watchers (watch (web-dir) '())])
+          ($state copy [watchers (watch root-dir '())])
           state))
     (define (clear-cache state)
       ($state copy*
@@ -538,12 +618,14 @@
         [watchers '()]))
     (define (handle-info msg state)
       (match msg
+        [timeout `#(stop normal ,state)]
         [#(path-changed ,path ,filename ,_)
          `#(no-reply
-            ,(if (and (string=? path (web-dir))
+            ,(if (and (string=? path root-dir)
                       (string=? filename "mime-types"))
                  ($state copy [mime-types #f])
-                 (clear-cache state)))]
+                 (clear-cache state))
+            ,cache-timeout)]
         [#(load-finished ,pid ,abs-path ,cookie ,handler)
          (match (ht:ref ($state pages) abs-path #f)
            [#(loading ,abs-path ,@pid ,waiters)
@@ -556,9 +638,10 @@
                                [pages (ht:set pages abs-path
                                         `#(loaded ,handler))])
                              ($state copy*
-                               [pages (ht:delete pages abs-path)])))]
-           [,_ `#(no-reply ,state)])]
-        [`(EXIT ,_ normal) `#(no-reply ,state)]
+                               [pages (ht:delete pages abs-path)]))
+                ,cache-timeout)]
+           [,_ `#(no-reply ,state ,cache-timeout)])]
+        [`(EXIT ,_ normal) `#(no-reply ,state ,cache-timeout)]
         [`(EXIT ,pid ,reason)
          `#(no-reply
             ,(call/cc
@@ -573,16 +656,78 @@
                         waiters)
                        (return ($state copy* [pages (ht:delete pages key)]))]
                       [,_ acc]))
-                  state))))]))
-    (gen-server:start&link 'http-cache))
+                  state)))
+            ,cache-timeout)]))
+    (gen-server:start&link name))
 
-  (define (http-cache:get-content-type extension)
-    (gen-server:call 'http-cache `#(get-content-type ,extension)))
+  (define (http-cache:get-media-type who extension)
+    (gen-server:call who `#(get-media-type ,extension)))
 
-  (define (http-cache:get-handler request)
-    (match (gen-server:call 'http-cache `#(get-handler ,request) 'infinity)
+  (define (http-cache:get-handler who request)
+    (match (gen-server:call who `#(get-handler ,request) 'infinity)
       [#(error ,reason) (raise reason)]
       [#(ok ,result) result]))
+
+  (define cache-manager (make-process-parameter #f))
+
+  (define (cache-mgr:start&link sup options)
+    (define-state-tuple <cache-mgr> path->pid pid->path)
+    (define (init)
+      `#(ok ,(<cache-mgr> make
+               [path->pid (ht:make string-hash string=? string?)]
+               [pid->path (ht:make equal-hash eq? process?)])))
+    (define (terminate reason state) 'ok)
+    (define (handle-call msg from state)
+      (match msg
+        [#(get-cache ,path)
+         (cond
+          [(ht:ref ($state path->pid) path #f) =>
+           (lambda (pid) `#(reply #(ok ,pid) ,state))]
+          [else
+           (match-let*
+            ([#(ok ,pid)
+              (watcher:start-child sup (gensym "http-cache") 1000
+                (lambda () (http-cache:start&link #f sup path options)))])
+            (monitor pid)
+            `#(reply #(ok ,pid)
+                ,($state copy*
+                   [path->pid (ht:set path->pid path pid)]
+                   [pid->path (ht:set pid->path pid path)])))])]))
+    (define (handle-cast msg state) (match msg))
+    (define (handle-info msg state)
+      (match msg
+        [`(DOWN ,_ ,pid ,_)
+         (cond
+          [(ht:ref ($state pid->path) pid #f) =>
+           (lambda (path)
+             `#(no-reply
+                ,($state copy*
+                   [path->pid (ht:delete path->pid path)]
+                   [pid->path (ht:delete pid->path pid)])))]
+          [else
+           `#(no-reply ,state)])]))
+    (gen-server:start&link #f))
+
+  (define (cache-mgr:get-cache who path)
+    (match (gen-server:call who `#(get-cache ,path))
+      [#(error ,reason) (raise reason)]
+      [#(ok ,result) result]))
+
+  (define (http:make-default-file-url-handler dir)
+    (http:url-handler
+     (let ([pid (cache-mgr:get-cache (cache-manager) dir)])
+       (cond
+        [(http-cache:get-handler pid request) =>
+         (lambda (handler)
+           (handler conn request header params))]
+        [else #f]))))
+
+  (define (http:make-default-media-type-handler dir)
+    (lambda (ext)
+      (let ([pid (cache-mgr:get-cache (cache-manager) dir)])
+        (match (http-cache:get-media-type pid ext)
+          [#(error not-found) #f]
+          [#(ok ,type) type]))))
 
   (define (read-line ip limit)
     (let ([x (lookahead-u8 ip)])
@@ -737,16 +882,16 @@
         (string->number x))]
      [else #f]))
 
-  (define (http:handle-input conn)
+  (define (http:handle-input conn url-handler options)
     (let ([request (conn:get-request conn)])
       (when request
-        (match (http:file-handler conn request)
+        (match (http:process-handler conn url-handler request)
           [#(switch-protocol ,proc)
            (guard (procedure? proc))
            (let-values ([(ip op) (conn:detach-ports conn)])
              (proc ip op))]
           [#t
-           (http:handle-input conn)]
+           (http:handle-input conn url-handler options)]
           [,other
            (raise `#(bad-return-value ,other))]))))
 
@@ -792,12 +937,11 @@
     (find-alist-val name header string-ci=?))
 
   (define (add-content-type filename header)
-    (if (find-header-alist "Content-Type" header)
-        header
-        (match (http-cache:get-content-type (path-extension filename))
-          [#(error not-found) header]
-          [#(ok ,content-type)
-           (cons (cons "Content-Type" content-type) header)])))
+    (cond
+     [(find-header-alist "Content-Type" header) header]
+     [((media-type-handler) (path-extension filename)) =>
+      (lambda (type) (cons (cons "Content-Type" type) header))]
+     [else header]))
 
   (define (add-content-length n header)
     (cons (cons "Content-Length" n) header))
@@ -839,15 +983,16 @@
     (or (internal-find-param 'http:get-param name params)
         (throw `#(http-invalid-param ,name))))
 
-  (define (do-eval-file abs-path)
+  (define (do-eval-file root-dir abs-path)
     (do-eval (read-bytevector abs-path (read-file abs-path))
+      root-dir
       (path-parent abs-path)))
 
-  (define (do-eval exprs path)
+  (define (do-eval exprs root-dir path)
     (define (http:path-root path fn)
       (and (string? fn)
-           (if (starts-with? fn "/") ; rooted
-               (web-dir)
+           (if (starts-with? fn "/")    ; rooted
+               root-dir
                path)))
     (define (http:include-help k fn path)
       (define (fail)
@@ -865,14 +1010,14 @@
                          [(k fn) (',http:include-help #'k (datum fn) ,path)]))])
          ,@exprs))
     (eval
-     `(lambda (conn request header params)
-        (define-syntax find-param
-          (syntax-rules ()
-            [(_ key) (http:find-param key params)]))
-        (define-syntax get-param
-          (syntax-rules ()
-            [(_ key) (http:get-param key params)]))
-        ,(wrap-3D-include path exprs))))
+     `(http:url-handler
+       (define-syntax find-param
+         (syntax-rules ()
+           [(_ key) (http:find-param key params)]))
+       (define-syntax get-param
+         (syntax-rules ()
+           [(_ key) (http:get-param key params)]))
+       ,(wrap-3D-include path exprs))))
 
   (define (validate-path path)
     (and (string=? (path-first path) "/")
@@ -893,7 +1038,7 @@
          (body
           (h1 "This is not the web page you are looking for."))))))
 
-  (define (http:file-handler conn request)
+  (define (http:process-handler conn url-handler request)
     (<request> open request [host method path header params])
     (system-detail <http-request>
       [pid self]
@@ -906,15 +1051,11 @@
      [(not (validate-path path))
       (not-found conn)
       (raise `#(http-invalid-path ,path))]
-     [(match
-       (try
-        (let ([handler (http-cache:get-handler request)])
-          (and handler
-               (limit-stack (handler conn request header params)))))
-       [`(catch ,reason ,e)
-        (conn:internal-server-error conn)
-        (raise e)]
-       [,result result])]
+     [(match (try (limit-stack (url-handler conn request header params)))
+        [`(catch ,_ ,e)
+         (conn:internal-server-error conn)
+         (raise e)]
+        [,result result])]
      [else
       (not-found conn)
       (raise `#(http-file-not-found ,path))]))
@@ -968,7 +1109,7 @@
           result]
          [else (throw 'http-invalid-multipart-boundary)])))
     (define (parse-next climit flimit)
-      (define header (http:read-header ip (http-header-limit)))
+      (define header (http:read-header ip (header-limit)))
       (define data
         (parse-form-data-disposition
          (http:get-header 'content-disposition header)))
@@ -997,7 +1138,7 @@
                       (bytevector-uint-ref (osi_make_uuid) 0 'little 16))))]
              [op (parameterize ([custom-port-buffer-size (ash 1 16)])
                    (open-binary-file-to-write fn))])
-        (match (catch
+        (match (try
                 (let ([n (copy-until-match ip op flimit
                            'http-file-upload-limit-exceeded)])
                   (close-port op)
@@ -1006,10 +1147,10 @@
                      [type "file"]
                      [filename fn]))
                   (parse-end climit (- flimit n))))
-          [#(EXIT ,reason)
+          [`(catch ,_ ,e)
            (force-close-output-port op)
            (delete-file fn)
-           (throw reason)]
+           (raise e)]
           [,params params])))
     ;; The boundary occurs first.
     (do ([i 0 (fx+ i 1)] [bv (string->utf8 boundary)])

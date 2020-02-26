@@ -40,7 +40,6 @@
    (swish errors)
    (swish event-mgr)
    (swish gatekeeper)
-   (swish http)
    (swish io)
    (swish log-db)
    (swish osi)
@@ -82,8 +81,7 @@
       #(statistics ,statistics:start&link
          permanent 1000 worker)
       #(gatekeeper ,gatekeeper:start&link
-         permanent 1000 worker)
-      #(http-sup ,http-sup:start&link permanent infinity supervisor)))
+         permanent 1000 worker)))
 
   (define app-sup-spec
     (make-parameter
