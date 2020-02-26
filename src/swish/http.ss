@@ -32,6 +32,8 @@
    http:compose-url-handlers
    http:configure-file-server
    http:configure-server
+   http:enable-dynamic-pages
+   http:eval-dynamic-page
    http:find-header
    http:find-param
    http:get-content-length
@@ -99,7 +101,15 @@
           (bad-arg 'media-type-handler x))
         x)))
 
+  (define file-transform
+    (make-process-parameter (lambda (path) #f)
+      (lambda (x)
+        (unless (procedure? x)
+          (bad-arg 'file-transform x))
+        x)))
+
   (define-options http:options
+    file-transform
     header-limit
     media-type-handler
     request-limit
@@ -509,7 +519,7 @@
     (define (make-static-file-handler path)
       (http:url-handler
        (http:respond-file conn 200 '() path)))
-    (define (start-evaluator abs-path cookie)
+    (define (start-evaluator abs-path cookie eval-file)
       (let ([me self])
         (match-let*
          ([#(ok ,pid)
@@ -519,7 +529,7 @@
                `#(ok ,(spawn&link
                        (lambda ()
                          (send me `#(load-finished ,self ,abs-path ,cookie
-                                      ,(do-eval-file root-dir abs-path))))))))])
+                                      ,(eval-file root-dir abs-path))))))))])
          (link pid)
          pid)))
     (define (init)
@@ -562,13 +572,15 @@
                                            '#vu8()))))
                                  redirect)))
                      ,state ,cache-timeout)]
-                 [(string-ci=? (path-extension abs-path) "ss")
-                  (let ([pid (start-evaluator abs-path ($state cookie))])
-                    `#(no-reply
-                       ,($state copy* [pages (ht:set pages abs-path
-                                               `#(loading ,abs-path ,pid
-                                                   ,(list from)))])
-                       ,cache-timeout))]
+                 [((file-transform) abs-path) =>
+                  (lambda (eval-file)
+                    (let ([pid (start-evaluator abs-path ($state cookie)
+                                 eval-file)])
+                      `#(no-reply
+                         ,($state copy* [pages (ht:set pages abs-path
+                                                 `#(loading ,abs-path ,pid
+                                                     ,(list from)))])
+                         ,cache-timeout)))]
                  [(eq? method 'GET)
                   (let ([h (make-static-file-handler abs-path)])
                     `#(reply #(ok ,h)
@@ -983,7 +995,11 @@
     (or (internal-find-param 'http:get-param name params)
         (throw `#(http-invalid-param ,name))))
 
-  (define (do-eval-file root-dir abs-path)
+  (define (http:enable-dynamic-pages path)
+    (and (string-ci=? (path-extension path) "ss")
+         http:eval-dynamic-page))
+
+  (define (http:eval-dynamic-page root-dir abs-path)
     (do-eval (read-bytevector abs-path (read-file abs-path))
       root-dir
       (path-parent abs-path)))

@@ -137,7 +137,9 @@
   (write-web-mats)
   (supervisor:start&link 'http-sup 'one-for-all 0 1
     (http:configure-file-server #f 0 (web-dir)
-      (http:options [request-timeout 500]))))
+      (http:options
+       [request-timeout 500]
+       [file-transform http:enable-dynamic-pages]))))
 
 (define (shutdown-http)
   (cond
@@ -668,6 +670,10 @@
      (catch ((http:options [media-type-handler 'a])))]
     [#(EXIT #(bad-arg media-type-handler 0))
      (catch ((http:options [media-type-handler 0])))]
+    [#(EXIT #(bad-arg file-transform a))
+     (catch ((http:options [file-transform 'a])))]
+    [#(EXIT #(bad-arg file-transform 0))
+     (catch ((http:options [file-transform 0])))]
     [#f (http:find-header "None" header)]
     [#f (http:find-header 'None header)]
     [#(EXIT #(bad-arg http:find-header 0))
