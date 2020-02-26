@@ -175,47 +175,46 @@
     (on-exit (close-port op)
       (for-each (lambda (x) (write x op) (newline op)) exprs))))
 
+(define-tuple <result> reason details output)
+
+(define (flush-errors)
+  (receive (after 10 'ok)
+    [`(<child-end>) (flush-errors)]))
+
+(define (test-error&output input)
+  (flush-errors)
+  (let* ([output (simple-tcp (string->utf8 input))]
+         [output (if (eof-object? output)
+                     output
+                     (utf8->string output))])
+    (let lp ([best #f])
+      (receive (after 100 (<result> make [reason best] [details best] [output output]))
+        [`(<child-end> [reason normal])
+         (lp (or best 'normal))]
+        [`(<child-end> ,reason ,details)
+         (<result> make [reason reason] [details details] [output output])]))))
+
+(define (test input)
+  (match-let* ([`(<result> ,reason ,details ,output)
+                (test-error&output input)])
+    (cond
+     [(eq? reason 'normal) output]
+     [(eq? reason 'exception) (throw details)]
+     [else (throw reason)])))
+
 (http-mat handlers ()
-  (define (test-error&output input)
-    (let-values ([(op get) (open-bytevector-output-port)])
-      (let* ([me self]
-             [pid
-              (spawn
-               (lambda ()
-                 (match-let*
-                  ([#(ok ,conn)
-                    (conn:start 'http-listener
-                      (open-bytevector-input-port (string->utf8 input))
-                      op)])
-                  (link conn)
-                  (http:handle-input conn)
-                  (conn:stop conn))))]
-             [m (monitor pid)])
-        (receive
-         [`(DOWN ,@m ,_ ,reason)
-          (receive (after 25 'ok))
-          (cons
-           (match reason
-             [#(EXIT ,r) reason]
-             [,_ `#(EXIT ,reason)])
-           (utf8->string (get)))]))))
-  (define (test input)
-    (match (test-error&output input)
-      [(,reason . ,output)
-       (match reason
-         [normal output]
-         [#(EXIT normal) output]
-         [#(EXIT ,reason) (throw reason)])]))
+  (capture-events)
+  (http-request-timeout 500)
   (when (file-directory? (tmp-dir))
     (for-each (lambda (x)
                 (when (ends-with? x ".tmp")
                   (delete-file (path-combine (tmp-dir) x))))
       (directory-list (tmp-dir))))
   (match-let*
-   (["" (test "")]
+   ([#(EXIT http-request-timeout) (catch (test ""))]
     [#(EXIT #(http-unhandled-input ,bv))
      (guard (string=? (utf8->string bv) "unhandled"))
-     (catch (test "unhandled"))]
+     (catch (test "unhandled\r\n"))]
     [#(EXIT #(http-unhandled-input ,bv))
      (guard (string=? (utf8->string bv) "GET / HTTP/1.0"))
      (catch (test "GET / HTTP/1.0\r\n\r\n"))]
@@ -232,7 +231,7 @@
                    "Content-Length: 16777217\r\n"
                    "Content-Type: application/x-www-form-urlencoded\r\n"
                    "\r\n")))]
-    [#(EXIT unexpected-eof)
+    [#(EXIT #(timeout ,_))
      (catch (test (string-append
                    "POST /mat?cmd=echo+form HTTP/1.1\r\n"
                    "Content-Length: 10\r\n"
@@ -252,16 +251,17 @@
                    "\r\n")))]
 
     ;; handler does not send a response, but claims it has been handled
-    [(#(EXIT http-output-violation) . "")
+    [`(<result> [reason http-output-violation] [output #!eof])
      (test-error&output "GET /mat?cmd=no+response HTTP/1.1\r\n\r\n")]
 
     ;; internal server errors
     [,internal-server-error
      "HTTP/1.1 500 \r\nContent-Length: 167\r\nCache-Control: no-cache\r\n\r\n<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>Internal server error</title></head><body><h1>The server was unable to complete the request.</h1></body></html>"]
-    [(#(EXIT internal-error) . ,@internal-server-error)
+    [`(<result> [reason internal-error] [output ,@internal-server-error])
      (test-error&output "GET /mat?cmd=internal-error HTTP/1.1\r\n\r\n")]
-    [(#(EXIT internal-error) . "partial-output")
+    [`(<result> [reason internal-error] [output "partial-output"])
      (test-error&output "GET /mat?cmd=internal-error&partial=partial-output HTTP/1.1\r\n\r\n")]
+
     ;; static content
     [#(EXIT #(http-invalid-method PUT "/static/ok.txt"))
      (catch (test "PUT /static/ok.txt HTTP/1.1\r\n\r\n"))]
@@ -335,20 +335,21 @@
      (test "GET /mat?cmd=echo&echo=%2q HTTP/1.1\r\nConnection: close\r\n\r\n")]
 
     ;; content params
-    [#(EXIT unexpected-eof)
-     (catch (test (string-append
-                   "GET /mat?cmd=echo+unhandled HTTP/1.1\r\n"
-                   "Content-Length: 256\r\n"
-                   "\r\n"
-                   "ok")))]
-    ["HTTP/1.1 200 \r\nContent-Length: 7\r\nCache-Control: no-cache\r\n\r\n0123456"
-     (test (string-append
-            "GET /mat?cmd=echo+unhandled&count=7 HTTP/1.1\r\n"
-            "Content-Length: 16\r\n"
-            "\r\n"
-            "0123456789ABCDEF"))]
-    [(#(EXIT http-input-violation) .
-      "HTTP/1.1 200 \r\nContent-Length: 17\r\nCache-Control: no-cache\r\n\r\n0123456789ABCDEFG")
+    [`(<result> [reason #(timeout ,_)] [output #!eof])
+     (test-error&output
+      (string-append
+       "GET /mat?cmd=echo+unhandled HTTP/1.1\r\n"
+       "Content-Length: 256\r\n"
+       "\r\n"
+       "ok"))]
+    [`(<result> [reason http-request-timeout] [output "HTTP/1.1 200 \r\nContent-Length: 7\r\nCache-Control: no-cache\r\n\r\n0123456"])
+     (test-error&output
+      (string-append
+       "GET /mat?cmd=echo+unhandled&count=7 HTTP/1.1\r\n"
+       "Content-Length: 16\r\n"
+       "\r\n"
+       "0123456789ABCDEF"))]
+    [`(<result> [reason http-input-violation] [output "HTTP/1.1 200 \r\nContent-Length: 17\r\nCache-Control: no-cache\r\n\r\n0123456789ABCDEFG"])
      (test-error&output
       (string-append
        "GET /mat?cmd=echo+unhandled&count=17 HTTP/1.1\r\n"
@@ -359,7 +360,7 @@
        "Content-Length: 16\r\n"
        "\r\n"
        "0123456789ABCDEF"))]
-    [(#(EXIT http-input-violation) . ,@internal-server-error)
+    [`(<result> [reason http-input-violation] [output ,@internal-server-error])
      (test-error&output
       (string-append
        "GET /mat?cmd=bad+read&count=17 HTTP/1.1\r\n"
@@ -370,12 +371,13 @@
        "Content-Length: 16\r\n"
        "\r\n"
        "0123456789ABCDEF"))]
-    ["HTTP/1.1 200 \r\nContent-Length: 2\r\nCache-Control: no-cache\r\n\r\nok"
-     (test (string-append
-            "GET /mat?cmd=echo&echo=ok HTTP/1.1\r\n"
-            "Content-Length: 16\r\n"
-            "\r\n"
-            "0123456789abcdef"))]
+    [`(<result> [reason http-request-timeout] [output "HTTP/1.1 200 \r\nContent-Length: 2\r\nCache-Control: no-cache\r\n\r\nok"])
+     (test-error&output
+      (string-append
+       "GET /mat?cmd=echo&echo=ok HTTP/1.1\r\n"
+       "Content-Length: 16\r\n"
+       "\r\n"
+       "0123456789abcdef"))]
     ["HTTP/1.1 200 \r\nContent-Length: 13\r\nCache-Control: no-cache\r\n\r\n{\"echo\":\"ok\"}"
      (test (string-append
             "POST /mat?cmd=echo+form HTTP/1.1\r\n"
@@ -384,7 +386,7 @@
             "Content-Type: application/x-www-form-urlencoded\r\n"
             "\r\n"
             "echo=ok"))]
-    [(#(EXIT http-input-violation) . ,@internal-server-error)
+    [`(<result> [reason http-input-violation] [output ,@internal-server-error])
      (test-error&output
       (string-append
        "POST /mat?cmd=bad+read&count=1 HTTP/1.1\r\n"
@@ -393,8 +395,7 @@
        "Content-Type: application/x-www-form-urlencoded\r\n"
        "\r\n"
        "don't read me"))]
-    [(#(EXIT http-input-violation) .
-      "HTTP/1.1 200 \r\nContent-Length: 10\r\nCache-Control: no-cache\r\n\r\ndon't read")
+    [`(<result> [reason http-input-violation] [output "HTTP/1.1 200 \r\nContent-Length: 10\r\nCache-Control: no-cache\r\n\r\ndon't read"])
      (test-error&output
       (string-append
        "POST /mat?cmd=echo+unhandled&count=10 HTTP/1.1\r\n"
@@ -449,14 +450,14 @@
             "\r\n"
             "\r\n"
             "------WebKitFormBoundaryRMHyBKLIXfhX3ZNy--\r\n"))]
-    [#(EXIT unexpected-eof)
-     (catch
-      (test (string-append
-             "GET /mat?cmd=echo+file HTTP/1.1\r\n"
-             "Content-Length: 44\r\n"
-             "Content-Type: multipart/form-data; boundary=----WebKitFormBoundaryRMHyBKLIXfhX3ZNy\r\n"
-             "\r\n"
-             "------WebKitFormBoundaryRMHyBKLIXfhX3ZNy--")))]
+    [`(<result> [reason #(timeout ,_)] [output #!eof])
+     (test-error&output
+      (string-append
+       "GET /mat?cmd=echo+file HTTP/1.1\r\n"
+       "Content-Length: 44\r\n"
+       "Content-Type: multipart/form-data; boundary=----WebKitFormBoundaryRMHyBKLIXfhX3ZNy\r\n"
+       "\r\n"
+       "------WebKitFormBoundaryRMHyBKLIXfhX3ZNy--"))]
     [#(EXIT http-invalid-multipart-boundary)
      (catch
       (test (string-append

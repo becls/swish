@@ -24,11 +24,10 @@
 (library (swish http)
   (export
    <request>
-   conn:start
-   conn:stop
    http-header-limit
    http-port-number
    http-request-limit
+   http-request-timeout
    http-sup:start&link
    http:call-with-form
    http:call-with-ports
@@ -38,7 +37,6 @@
    http:get-header
    http:get-param
    http:get-port-number
-   http:handle-input
    http:percent-encode
    http:read-header
    http:read-status
@@ -86,6 +84,8 @@
         (unless (and (fixnum? x) (fx> x 0))
           (bad-arg 'request-timeout x))
         x)))
+
+  (alias http-request-timeout request-timeout)
 
   (define http-header-limit
     (make-parameter 1048576
