@@ -131,6 +131,24 @@
                (get-u8 ip))
              #t))]
         ["no response" #t]
+        ["double response"
+         (define (resp x)
+           (match x
+             ["file"
+              (http:respond-file conn 200 '()
+                (path-combine (web-dir) "static" "ok.txt"))]
+             ["direct"
+              (my-respond (string->utf8 "direct"))]))
+         (resp (get-param "first"))
+         (resp (get-param "second"))]
+        ["switch-protocol"
+         (http:switch-protocol
+          (match (get-param "case")
+            ["1" 12]
+            ["2" (lambda (ip op)
+                   (put-bytevector op (string->utf8 "switched"))
+                   (flush-output-port op)
+                   (close-port op))]))]
         ))))
 
 (define (start-default-file-server)
@@ -302,6 +320,16 @@
     ;; handler does not send a response, but claims it has been handled
     [`(<result> [reason http-output-violation] [output #!eof])
      (test-error&output "GET /mat?cmd=no+response HTTP/1.1\r\n\r\n")]
+
+    ;; handlers attempting to send multiple responses
+    [`(<result> [reason http-output-violation] [output "HTTP/1.1 200 \r\nContent-Length: 3\r\nCache-Control: max-age=3600\r\n\r\nok\n"])
+     (test-error&output "GET /mat?cmd=double+response&first=file&second=file HTTP/1.1\r\n\r\n")]
+    [`(<result> [reason http-output-violation] [output "HTTP/1.1 200 \r\nContent-Length: 3\r\nCache-Control: max-age=3600\r\n\r\nok\n"])
+     (test-error&output "GET /mat?cmd=double+response&first=file&second=direct HTTP/1.1\r\n\r\n")]
+    [`(<result> [reason http-output-violation] [output "HTTP/1.1 200 \r\nContent-Length: 6\r\nCache-Control: no-cache\r\n\r\ndirect"])
+     (test-error&output "GET /mat?cmd=double+response&first=direct&second=file HTTP/1.1\r\n\r\n")]
+    [`(<result> [reason http-output-violation] [output "HTTP/1.1 200 \r\nContent-Length: 6\r\nCache-Control: no-cache\r\n\r\ndirect"])
+     (test-error&output "GET /mat?cmd=double+response&first=direct&second=direct HTTP/1.1\r\n\r\n")]
 
     ;; internal server errors
     [,internal-server-error
@@ -884,3 +912,168 @@
        (match reason
          [#(bad-match #(path-watcher-failed ,@path -1234) ,_)
           'ok])])))
+
+(http-mat composition ()
+  (define ok
+    (http:url-handler
+     (match (<request> path request)
+       ["/" (http:respond conn 200 '() (string->utf8 "ok"))]
+       [,_ #f])))
+  (define side-effector
+    (http:url-handler
+     (http:call-with-ports conn
+       (lambda (ip op)
+         (put-bytevector op (string->utf8 "fries"))))
+     #f))
+
+  (supervisor:start&link 'http-sup 'one-for-all 0 1
+    (http:configure-server #f 0
+      (http:compose-url-handlers
+       (list ok (http:compose-url-handlers '()) side-effector))
+      (http:options
+       [request-timeout 1000])))
+  (capture-events)
+  (match-let*
+   (["HTTP/1.1 200 \r\nContent-Length: 2\r\nCache-Control: no-cache\r\n\r\nok"
+     (test "GET / HTTP/1.1\r\nConnection: close\r\n\r\n")]
+    [`(<result> [reason http-side-effecting-handler]
+        [output "fries"])
+     (test-error&output "GET /side-effects HTTP/1.1\r\n\r\n")])
+   'ok))
+
+(http-mat virtual-routing ()
+  ;; As a custom url handler, process requests that start with
+  ;; "/faker" like a file request, but routed to the standard
+  ;; directory of files.
+  (write-web-mats)
+  (let ([file-handler (http:make-default-file-url-handler (web-dir))]
+        [media-type-handler (http:make-default-media-type-handler (web-dir))]
+        [prefix "/faker"])
+    (supervisor:start&link 'http-sup 'one-for-all 0 1
+      (http:configure-server #f 0
+        (http:url-handler
+         (<request> open request [path])
+         (and (starts-with? path prefix)
+              (let ([request (<request> copy request
+                               [path (substring path (string-length prefix)
+                                       (string-length path))])])
+                (http:call-url-handler file-handler)))))))
+  (capture-events)
+  (match-let*
+   ([`(<result> [reason #(http-file-not-found "/static/ok.txt")])
+     (test-error&output
+      "GET /static/ok.txt HTTP/1.1\r\nConnection: close\r\n\r\n")]
+    ["HTTP/1.1 200 \r\nContent-Length: 3\r\nCache-Control: max-age=3600\r\n\r\nok\n"
+     (test "GET /faker/static/ok.txt HTTP/1.1\r\nConnection: close\r\n\r\n")])
+   'ok))
+
+(http-mat switch-protocol ()
+  (define me self)
+  (supervisor:start&link 'http-sup 'one-for-all 0 1
+    (http:configure-server #f 0
+      (http:url-handler
+       (send me `#(connection ,conn))
+       (http:switch-protocol
+        (lambda (ip op)
+          (let ([ip (binary->utf8 ip)]
+                [op (binary->utf8 op)])
+            (let lp ()
+              (let ([x (read ip)])
+                (unless (eof-object? x)
+                  (write x op)
+                  (newline op)
+                  (flush-output-port op)
+                  (lp))))))))))
+  (capture-events)
+  (let-values ([(ip op) (connect-tcp "127.0.0.1" (get-http-port))])
+    (put-bytevector op (string->utf8 "GET / HTTP/1.1\r\n\r\n"))
+    (flush-output-port op)
+    (let* ([ip (binary->utf8 ip)]
+           [op (binary->utf8 op)]
+           [reader
+            (spawn&link
+             (lambda ()
+               (let lp ()
+                 (let ([x (read ip)])
+                   (unless (eof-object? x)
+                     (send me `#(read ,x))
+                     (lp))))))])
+      (define (check-loopback ls)
+        (for-each
+         (lambda (x)
+           (write x op)
+           (newline op))
+         ls)
+        (flush-output-port op)
+        (let lp ([ls ls])
+          (match ls
+            [() 'ok]
+            [(,n . ,rest)
+             (receive (after 100 (throw `#(failed-to-read-data ,n)))
+               [#(read ,@n) (lp rest)])])))
+
+      (check-loopback '(9 8 7 6 5))
+
+      ;; Connection should exit normally (and be collected)
+      (let ([g (make-guardian)])
+        (receive
+         [#(connection ,conn)
+          (g conn)
+          (monitor conn)
+          (receive [`(DOWN ,_ ,@conn normal) 'ok])])
+        (discard-events)
+        (gc)
+        (assert (process? (g))))
+
+      ;; I/O Continues after the connection exited
+      (check-loopback '(4 3 2 1 0)))))
+
+(http-mat switch-protocol-fail ()
+  (supervisor:start&link 'http-sup 'one-for-all 0 1
+    (http:configure-server #f 0
+      (http:url-handler
+       (http:switch-protocol 12))))
+  (capture-events)
+  (match-let*
+   ([`(<result> [reason #(bad-return-value #(switch-protocol 12))]
+        [output #!eof])
+     (test-error&output "GET / HTTP/1.1\r\n\r\n")])
+   'ok))
+
+(http-mat switch-protocol-via-files ()
+  (start-default-file-server)
+  (capture-events)
+  (match-let*
+   ([`(<result> [reason #(bad-return-value #(switch-protocol 12))]
+        [output #!eof])
+     (test-error&output "GET /mat?cmd=switch-protocol&case=1 HTTP/1.1\r\n\r\n")]
+    ["switched"
+     (test "GET /mat?cmd=switch-protocol&case=2 HTTP/1.1\r\n\r\n")])
+   'ok))
+
+(http-mat chaperone ()
+  ;; The listener closes output ports for the dispatchers. If the
+  ;; dispatcher had used on-exit, a well placed spawn&link can prevent
+  ;; its execution.
+  (define me self)
+  (supervisor:start&link 'http-sup 'one-for-all 0 1
+    (http:configure-server #f 0
+      (http:url-handler
+       (http:call-with-ports conn
+         (lambda (ip op)
+           (send me `#(op ,op))))
+       (spawn&link (lambda () (throw 'cant-catch-me)))
+       (receive (after 10 'ok))
+       (http:respond conn 200 '() (string->utf8 "ok")))))
+  (capture-events)
+  (match-let*
+   ([`(<result> [reason cant-catch-me] [output #!eof])
+     (test-error&output "GET / HTTP/1.1\r\n\r\n")])
+   (let ([g (make-guardian)])
+     (receive
+      [#(op ,op)
+       (g op)
+       (assert (port-closed? op))])
+     (discard-events)
+     (gc)
+     (assert (output-port? (g))))))

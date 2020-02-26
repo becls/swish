@@ -28,6 +28,7 @@
    assert-syntax-error
    capture-events
    delete-tree
+   discard-events
    gc
    handle-gone?
    isolate-mat
@@ -121,6 +122,10 @@
   (define (capture-events)
     (let ([me self])
       (event-mgr:add-handler (lambda (event) (send me event)))))
+
+  (define (discard-events)
+    (receive (after 0 'ok)
+      [,_ (discard-events)]))
 
   (define (cleanup-after pid deadline kill-delay)
     (let ([parent-id (process-id pid)]
