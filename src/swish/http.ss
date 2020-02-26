@@ -897,7 +897,7 @@
     (cond
      [(http:find-header 'content-length header) =>
       (lambda (x)
-        (unless (pregexp-match (re "^[0-9]+$") x)
+        (unless (pregexp-match (re "^[0-9]{1,20}$") x)
           (throw `#(http-invalid-content-length ,x)))
         (string->number x))]
      [else #f]))

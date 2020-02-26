@@ -1077,3 +1077,26 @@
      (discard-events)
      (gc)
      (assert (output-port? (g))))))
+
+(http-mat content-length ()
+  (define (test s)
+    (http:get-content-length
+     (if s
+         (json:make-object [content-length s])
+         (json:make-object))))
+  (match-let*
+   ([#(EXIT #(http-invalid-content-length "")) (catch (test ""))]
+    [#(EXIT #(http-invalid-content-length "abc")) (catch (test "abc"))]
+    [#(EXIT #(http-invalid-content-length "1a")) (catch (test "1a"))]
+    [#f (test #f)]
+    [0 (test "0")]
+    [1 (test "1")]
+    [,mpf (- (expt 2 60) 1)]
+    [,@mpf (test (number->string mpf))]
+    [,big (* mpf 10)]
+    [,@big (test (number->string big))]
+    [,too-large (* mpf 100)]
+    [,too-large-str (number->string too-large)]
+    [#(EXIT #(http-invalid-content-length ,@too-large-str))
+     (catch (test (number->string too-large)))])
+   'ok))
