@@ -14,6 +14,7 @@
 /osi.obj
 /run.o
 /run.obj
+/script-testing.so
 /sh-config
 /sha1.o
 /sha1.obj
