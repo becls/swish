@@ -284,9 +284,12 @@
     (define (respond status header content)
       (http:write-status op status)
       (http:write-header op
-        (add-content-length (bytevector-length content)
-          (add-cache-control "no-cache" header)))
-      (put-bytevector op content)
+        (let ([header (add-cache-control "no-cache" header)])
+          (if content
+              (add-content-length (bytevector-length content) header)
+              header)))
+      (when content
+        (put-bytevector op content))
       (flush-output-port op)
       #t)
 
@@ -423,10 +426,22 @@
      [(conn f timeout)
       (unwrap (gen-server:call conn `#(call-with-ports ,f) timeout))]))
 
-  (define (http:respond conn status header content)
-    (unless (bytevector? content)
-      (bad-arg 'http:respond content))
-    (unwrap (gen-server:call conn `#(respond ,status ,header ,content))))
+  (define (body-allowed? status)
+    (not (or (<= 100 status 199) (= status 204) (= status 304))))
+
+  (define http:respond
+    (case-lambda
+     [(conn status header)
+      (unwrap (gen-server:call conn `#(respond ,status ,header #f)))]
+     [(conn status header content)
+      (unless (bytevector? content)
+        (bad-arg 'http:respond content))
+      (let ([allow-body? (body-allowed? status)])
+        (when (and (not allow-body?) (> (bytevector-length content) 0))
+          (throw `#(http-no-response-body-allowed ,status)))
+        (unwrap
+         (gen-server:call conn
+           `#(respond ,status ,header ,(and allow-body? content)))))]))
 
   (define (http:respond-file conn status header filename)
     (unwrap (gen-server:call conn `#(respond-file ,status ,header ,filename))))

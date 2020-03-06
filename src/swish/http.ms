@@ -267,6 +267,9 @@
 (define (test-response input)
   (parse-response (test input) bytevector->sexpr))
 
+(define internal-server-error
+  "HTTP/1.1 500 \r\nContent-Length: 167\r\nCache-Control: no-cache\r\n\r\n<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>Internal server error</title></head><body><h1>The server was unable to complete the request.</h1></body></html>")
+
 (http-mat handlers ()
   ;; The request-timeout option should be relatively short (500ms) for
   ;; these cases.
@@ -332,8 +335,6 @@
      (test-error&output "GET /mat?cmd=double+response&first=direct&second=direct HTTP/1.1\r\n\r\n")]
 
     ;; internal server errors
-    [,internal-server-error
-     "HTTP/1.1 500 \r\nContent-Length: 167\r\nCache-Control: no-cache\r\n\r\n<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>Internal server error</title></head><body><h1>The server was unable to complete the request.</h1></body></html>"]
     [`(<result> [reason internal-error] [output ,@internal-server-error])
      (test-error&output "GET /mat?cmd=internal-error HTTP/1.1\r\n\r\n")]
     [`(<result> [reason internal-error] [output "partial-output"])
@@ -419,6 +420,8 @@
      (catch (test "GET /mat?cmd=use+status&status=99 HTTP/1.1\r\n\r\n"))]
     [#(EXIT #(bad-arg http:write-status 600))
      (catch (test "GET /mat?cmd=use+status&status=600 HTTP/1.1\r\n\r\n"))]
+    ["HTTP/1.1 101 \r\nCache-Control: no-cache\r\n\r\n"
+     (test "GET /mat?cmd=use+status&status=101 HTTP/1.1\r\nConnection: close\r\n\r\n")]
 
     ;; utf8
     ["HTTP/1.1 200 \r\nContent-Length: 6\r\nCache-Control: no-cache\r\n\r\n面条"
@@ -802,6 +805,48 @@
     (send http fail-msg)
     (receive (after 100 (throw 'timeout))
       [`(EXIT ,@http ,@fail-msg) 'ok])))
+
+(http-mat http-respond ()
+  ;; RFC7230 section 3.3.2 disallows returning Content-Length when the
+  ;; status code is 1xx, 204, or 304. The .NET Framework actually
+  ;; checks this and closes the connection on a delay without
+  ;; reason. This is particularly noticable on WebSocket connections.
+  (supervisor:start&link 'http-sup 'one-for-all 0 1
+    (http:configure-server #f 0
+      (http:url-handler
+       (let ([status (string->number (http:get-param "status" params))])
+         (match (<request> path request)
+           ["/case1"
+            (http:respond conn status '())]
+           ["/case2"
+            (http:respond conn status '() '#vu8())]
+           ["/case3"
+            (http:respond conn status '() (string->utf8 "ok"))])))))
+  (capture-events)
+  (let ()
+    (define (build-case case status)
+      (format "GET /case~a?status=~a HTTP/1.1\r\nConnection: close\r\n\r\n"
+        case status))
+    (define build-result
+      (case-lambda
+       [(status)
+        (format "HTTP/1.1 ~a \r\nCache-Control: no-cache\r\n\r\n" status)]
+       [(status str)
+        (format "HTTP/1.1 ~a \r\nContent-Length: ~a\r\nCache-Control: no-cache\r\n\r\n~a"
+          status (string-length str) str)]))
+
+    (assert (equal? (test (build-case 1 200)) (build-result 200)))
+    (assert (equal? (test (build-case 2 200)) (build-result 200 "")))
+    (assert (equal? (test (build-case 3 200)) (build-result 200 "ok")))
+    (for-each
+     (lambda (status)
+       (assert (equal? (test (build-case 1 status)) (build-result status)))
+       (assert (equal? (test (build-case 2 status)) (build-result status)))
+       (match (test-error&output (build-case 3 status))
+         [`(<result> [reason #(http-no-response-body-allowed ,@status)]
+             [output ,@internal-server-error])
+          'ok]))
+     '(100 101 199 204 304))))
 
 (http-mat mime-types ()
   (start-default-file-server)

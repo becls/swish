@@ -70,6 +70,8 @@
       [#(http-invalid-method ,method ,path) (format "Invalid HTTP method ~s for path ~s." method path)]
       [#(http-invalid-param ,name) (format "Invalid HTTP parameter: ~s." name)]
       [#(http-invalid-path ,path) (format "Invalid HTTP path: ~a." path)]
+      [#(http-no-response-body-allowed ,status)
+       (format "HTTP response body is not allowed for status code ~a." status)]
       [#(http-unhandled-input ,x) (format "Unhandled HTTP input: ~s." x)]
       [#(invalid-config-file ,config-file ,reason) (format #f "invalid config file ~s: ~a" config-file (exit-reason->english reason))]
       [#(invalid-context ,who) (format "Invalid context for ~a." who)]

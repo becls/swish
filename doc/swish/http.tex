@@ -496,17 +496,24 @@ strings. If any of its keys are not strings, exception
 
 \defineentry{http:respond}
 \begin{procedure}
-  \code{(http:respond \var{conn} \var{status} \var{header-alist} \var{content})}
+  \code{(http:respond \var{conn} \var{status} \var{header-alist} \opt{\var{content}})}
 \end{procedure}
 \returns{} \code{\#t}
 
 The \code{http:respond} procedure writes the HTTP \var{status} and
 \var{header-alist} to the connection \var{conn} using
 \code{http:write-status} and \code{http:write-header}, adding
-\code{Content-Length} to the \var{header-alist}. When
-\code{Cache-Control} is not present in \var{header-alist}, it is added
-with value \code{no-cache}. The \var{content} bytevector is then
-written, and the output port is flushed.
+\code{Content-Length} to \var{header-alist} in situations described
+below. When \code{Cache-Control} is not present in \var{header-alist},
+it is added with value \code{no-cache}. When \var{content} is a
+bytevector, it is written. Then the output port is flushed.
+
+The default value of \var{content} is \code{\#f}, which specifies that
+the \code{Content-Length} header is not added. When \var{status} is
+100--199, 204, or 304, the \code{Content-Length} header is not added,
+and if \var{content} is a bytevector, it must be empty. Otherwise, the
+\code{Content-Length} header is added with the length of
+\var{content}.
 
 \defineentry{http:respond-file}
 \begin{procedure}
