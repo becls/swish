@@ -80,13 +80,13 @@
               (put-string op "]}")
               'ok])))))))
 
-(http:respond op 200 '(("Access-Control-Allow-Origin" . "*")
-                       ("Access-Control-Max-Age" . "86400")
-                       ("Content-Type" . "application/json"))
+(http:respond conn 200 '(("Access-Control-Allow-Origin" . "*")
+                         ("Access-Control-Max-Age" . "86400")
+                         ("Content-Type" . "application/json"))
   (let-values ([(op get) (open-bytevector-output-port (make-utf8-transcoder))])
     (match (try (if (find-param "meta")
-                      (meta op)
-                      (doit op)))
+                    (meta op)
+                    (doit op)))
       [ok (get)]
       [`(catch ,reason)
        (json:object->bytevector

@@ -24,11 +24,14 @@
 (library (swish http)
   (export
    <request>
-   http-content-limit
+   conn:start
+   conn:stop
    http-header-limit
    http-port-number
    http-request-limit
    http-sup:start&link
+   http:call-with-form
+   http:call-with-ports
    http:find-header
    http:find-param
    http:get-content-length
@@ -41,6 +44,7 @@
    http:read-status
    http:respond
    http:respond-file
+   http:switch-protocol
    http:write-header
    http:write-status
    )
@@ -54,6 +58,7 @@
    (swish ht)
    (swish html)
    (swish io)
+   (swish json)
    (swish osi)
    (swish pregexp)
    (swish string-utils)
@@ -75,18 +80,18 @@
           (bad-arg 'http-request-limit x))
         x)))
 
+  (define request-timeout
+    (make-parameter 30000
+      (lambda (x)
+        (unless (and (fixnum? x) (fx> x 0))
+          (bad-arg 'request-timeout x))
+        x)))
+
   (define http-header-limit
     (make-parameter 1048576
       (lambda (x)
         (unless (and (fixnum? x) (fx> x 0))
           (bad-arg 'http-header-limit x))
-        x)))
-
-  (define http-content-limit
-    (make-parameter 4194304
-      (lambda (x)
-        (unless (and (fixnum? x) (fx> x 0))
-          (bad-arg 'http-content-limit x))
         x)))
 
   (define (http-sup:start&link)
@@ -96,41 +101,293 @@
           `(#(http-cache ,http-cache:start&link permanent 1000 worker)
             #(http-listener ,http-listener:start&link permanent 1000 worker)))))
 
-  (define (http:get-port-number)
-    (gen-server:call 'http-listener 'get-port-number))
-
   (define (http-listener:start&link)
+    (define-state-tuple <http-listener> tcp-listener pid->op)
     (define (init)
       (process-trap-exit #t)
-      `#(ok ,(listen-tcp "::" (http-port-number) self)))
-    (define (terminate reason state) (close-tcp-listener state))
+      `#(ok ,(<http-listener> make
+               [tcp-listener (listen-tcp "::" (http-port-number) self)]
+               [pid->op (ht:make equal-hash eq? process?)])))
+    (define (terminate reason state)
+      ;; Ignore the pid->op table. In the rare event that this
+      ;; gen-server fails, the dispatchers can continue
+      ;; processing. The garbage collector will clean up if necessary.
+      (close-tcp-listener ($state tcp-listener)))
     (define (handle-call msg from state)
       (match msg
-        [get-port-number `#(reply ,(listener-port-number state) ,state)]))
+        [get-port-number
+         `#(reply ,(listener-port-number ($state tcp-listener)) ,state)]))
     (define (handle-cast msg state) (match msg))
     (define (handle-info msg state)
       (match msg
         [#(accept-tcp ,_ ,ip ,op)
          (match-let*
-          ([#(ok ,pid)
-            (watcher:start-child 'http-sup (gensym "http-connection") 1000
+          ([,listener self]
+           [#(ok ,conn) (conn:start listener ip op)]
+           [,m (monitor conn)]
+           [#(ok ,pid)
+            (watcher:start-child 'http-sup (gensym "http-dispatcher") 1000
               (lambda ()
                 `#(ok ,(spawn&link
                         (lambda ()
-                          (on-exit (force-close-output-port op)
-                            (http:handle-input ip op)))))))])
-          `#(no-reply ,state))]
+                          (link conn)
+                          (http:handle-input conn)
+                          (conn:stop conn))))))])
+          `#(no-reply ,($state copy* [pid->op (ht:set pid->op conn op)])))]
         [#(accept-tcp-failed ,l ,who ,errno)
-         `#(stop ,msg ,state)]))
+         `#(stop ,msg ,state)]
+        [`(DOWN ,_ ,pid ,_)
+         (cond
+          [(ht:ref ($state pid->op) pid #f) =>
+           (lambda (op)
+             (force-close-output-port op)
+             `#(no-reply ,($state copy* [pid->op (ht:delete pid->op pid)])))]
+          [else
+           `#(no-reply ,state)])]))
     (gen-server:start&link 'http-listener))
 
-  (define (http-cache:get-content-type extension)
-    (gen-server:call 'http-cache `#(get-content-type ,extension)))
+  (define (http:get-port-number)
+    (gen-server:call 'http-listener 'get-port-number))
 
-  (define (http-cache:get-handler request)
-    (match (gen-server:call 'http-cache `#(get-handler ,request) 'infinity)
+  (define (conn:start listener ip op)
+    (define-state-tuple <conn>
+      input                     ; ready | #(advance ipos) | close
+      output                    ; ready | dirty
+      )
+    (define host (port-name ip))
+
+    (define (internal-server-error state)
+      (match ($state output)
+        [ready
+         (respond 500 '()
+           (html->bytevector
+            `(html5
+              (head
+               (meta (@ (charset "UTF-8")))
+               (title "Internal server error"))
+              (body
+               (h1 "The server was unable to complete the request.")))))
+         ($state copy [input 'close] [output 'dirty])]
+        [dirty
+         ($state copy [input 'close])]))
+
+    (define (advance-input state)
+      (match ($state input)
+        [#(advance ,ipos)
+         (when ipos
+           (let ([remaining (- ipos (port-position ip))])
+             (when (< remaining 0)
+               (internal-server-error state)
+               (throw 'http-input-violation))
+             (do ([n remaining (fx- n 1)] [b #f (get-u8 ip)])
+                 ((fx= n 0)
+                  (when (eof-object? b)
+                    (throw 'unexpected-eof))))))
+         ($state copy [input 'ready])]
+        [,_ state]))
+
+    (define (respond status header content)
+      (http:write-status op status)
+      (http:write-header op
+        (add-content-length (bytevector-length content)
+          (add-cache-control "no-cache" header)))
+      (put-bytevector op content)
+      (flush-output-port op)
+      #t)
+
+    (define (respond-file status header filename)
+      (let ([port (open-file-port filename O_RDONLY 0)])
+        (on-exit (close-osi-port port)
+          (let* ([n (get-file-size port)]
+                 [bufsize (min n (ash 1 18))]
+                 [buffer (make-bytevector bufsize)])
+            (http:write-status op status)
+            (http:write-header op
+              (add-content-length n
+                (add-cache-control "max-age=3600" ; 1 hour
+                  (add-content-type filename header))))
+            (let lp ([fp 0])
+              (when (< fp n)
+                (let ([count (read-osi-port port buffer 0 bufsize fp)])
+                  (when (eqv? count 0)
+                    (throw 'unexpected-eof))
+                  (put-bytevector op buffer 0 count)
+                  (lp (+ fp count))))))
+          (flush-output-port op)
+          #t)))
+
+    (define (init)
+      ;; Important for the conn not to trap exits, since it may get
+      ;; killed when a timeout occurs.
+      `#(ok ,(<conn> make
+               [input 'ready]
+               [output 'dirty])))
+    (define (terminate reason state) 'ok)
+    (define (handle-call msg from state)
+      (match msg
+        [#(detach-ports ,owner)
+         (advance-input state)
+         `#(stop normal #(ok ,ip ,op) detached)]
+        [stop
+         `#(stop normal #(ok ok) ,state)]
+        [get-request
+         (let ([state (advance-input state)])
+           (match (<conn> output state)
+             [ready
+              `#(reply #(error http-output-violation)
+                  ,($state copy [input 'close]))]
+             [dirty
+              (match (<conn> input state)
+                [close `#(reply #(ok #f) ,state)]
+                [ready
+                 (let ([x (read-line ip (http-request-limit))])
+                   (cond
+                    [(eof-object? x)
+                     `#(reply #(ok #f) ,($state copy [input 'close]))]
+                    [(http:parse-request x) =>
+                     (lambda (request)
+                       (define header (http:read-header ip (http-header-limit)))
+                       (define ipos
+                         (cond
+                          [(http:get-content-length header) =>
+                           (lambda (len) (+ (port-position ip) len))]
+                          [else #f]))
+                       `#(reply #(ok ,(<request> copy request
+                                        [host host]
+                                        [header header]))
+                           ,($state copy
+                              [input (if (keep-alive? header)
+                                         `#(advance ,ipos)
+                                         'close)]
+                              [output 'ready])))]
+                    [else (throw `#(http-unhandled-input ,x))]))])]))]
+        [output-ready?
+         `#(reply
+            #(ok ,(match ($state output)
+                    [ready #t]
+                    [dirty #f]))
+            ,state)]
+        [#(respond ,status ,header ,content)
+         (match ($state output)
+           [ready
+            `#(reply #(ok ,(respond status header content))
+                ,($state copy [output 'dirty]))]
+           [dirty
+            `#(reply #(error http-output-violation) ,state)])]
+        [#(respond-file ,status ,header ,filename)
+         (match ($state output)
+           [ready
+            `#(reply #(ok ,(respond-file status header filename))
+                ,($state copy [output 'dirty]))]
+           [dirty
+            `#(reply #(error http-output-violation) ,state)])]
+        [#(call-with-ports ,f)
+         (let* ([opos (port-position op)]
+                [x (try (f ip op))]
+                [output? (not (= opos (port-position op)))]
+                [state (if output? ($state copy [output 'dirty]) state)])
+           (flush-output-port op)
+           (match x
+             [`(catch ,_ ,e) `#(reply #(error ,e) ,state)]
+             [,result `#(reply #(ok ,result) ,state)]))]
+        [internal-server-error
+         `#(no-reply ,(internal-server-error state))]))
+    (define (handle-cast msg state) (match msg))
+    (define (handle-info msg state) (match msg))
+    (gen-server:start #f))
+
+  (define (conn:detach-ports who)
+    (match (gen-server:call who 'detach-ports)
+      [#(ok ,ip ,op) (values ip op)]))
+
+  (define (conn:stop who)
+    (unwrap (gen-server:call who 'stop)))
+
+  (define (unwrap x)
+    (match x
       [#(error ,reason) (raise reason)]
       [#(ok ,result) result]))
+
+  (define (conn:get-request who)
+    (match (try (gen-server:call who 'get-request (request-timeout)))
+      [`(catch #(timeout ,_)) (throw 'http-request-timeout)]
+      [,result (unwrap result)]))
+
+  (define (conn:output-ready? who)
+    (unwrap (gen-server:call who 'output-ready?)))
+
+  (define (conn:internal-server-error who)
+    ;; This is a call rather than cast to ensure the connection gets
+    ;; an opportunity to send a response if appropriate. This uses a
+    ;; short timeout in case the original failure was a timeout
+    ;; waiting for the connection.
+    (catch (gen-server:call who 'internal-server-error 100))
+    'ok)
+
+  (define http:call-with-ports
+    (case-lambda
+     [(conn f)
+      (unwrap (gen-server:call conn `#(call-with-ports ,f)))]
+     [(conn f timeout)
+      (unwrap (gen-server:call conn `#(call-with-ports ,f) timeout))]))
+
+  (define (http:respond conn status header content)
+    (unless (bytevector? content)
+      (bad-arg 'http:respond content))
+    (unwrap (gen-server:call conn `#(respond ,status ,header ,content))))
+
+  (define (http:respond-file conn status header filename)
+    (unwrap (gen-server:call conn `#(respond-file ,status ,header ,filename))))
+
+  (define (alist->json ls)
+    ;; Temporary - preparing for the future
+    (let ([r (json:make-object)])
+      (for-each
+       (lambda (p)
+         (json:set! r (string->symbol (car p)) (cdr p)))
+       ls)
+      r))
+
+  (define http:call-with-form
+    (case-lambda
+     [(conn header content-limit file-limit files f)
+      (http:call-with-form conn header content-limit file-limit files f
+        (request-timeout))]
+     [(conn header content-limit file-limit files f timeout)
+      (arg-check 'http:call-with-form
+        [header list?]
+        [content-limit (lambda (x) (and (fixnum? x) (fx>= x 0)))]
+        [file-limit (lambda (x) (and (fixnum? x) (fx>= x 0)))]
+        [files (lambda (ls) (and list? (andmap symbol? ls)))]
+        [f procedure?]
+        [timeout (lambda (x) (and (fixnum? x) (fx> x 0)))])
+      (let* ([len (http:get-content-length header)]
+             [type (or (http:find-header "Content-Type" header) "none")]
+             [data
+              (cond
+               [(not len) (json:make-object)]
+               [(multipart/form-data-boundary type) =>
+                (lambda (boundary)
+                  (http:call-with-ports conn
+                    (lambda (ip op)
+                      (parse-multipart/form-data ip
+                        (string-append "--" boundary)
+                        content-limit
+                        file-limit
+                        files))
+                    timeout))]
+               [(starts-with? type "application/x-www-form-urlencoded")
+                (when (> len content-limit)
+                  (throw 'http-content-limit-exceeded))
+                (http:call-with-ports conn
+                  (lambda (ip op)
+                    (let ([content (make-bytevector len)])
+                      (get-chunk! ip content len)
+                      (alist->json (parse-encoded-kv content 0 len))))
+                  timeout)]
+               [else (json:make-object)])])
+        (on-exit (delete-tmp-files data)
+          (f data)))]))
 
   (define (http-cache:start&link)
     ;; The cache maintains a hash table mapping a path to a handler.
@@ -184,8 +441,8 @@
     (define (lookup-handler pages paths)
       (exists (lambda (path) (ht:ref pages path #f)) paths))
     (define (make-static-file-handler path)
-      (lambda (ip op request header params)
-        (http:respond-file op 200 '() path)))
+      (lambda (conn request header params)
+        (http:respond-file conn 200 '() path)))
     (define (start-interpreter abs-path cookie)
       (let ([me self])
         (match-let*
@@ -231,8 +488,8 @@
                                 (exists
                                  (lambda (fn)
                                    (and (regular-file? fn)
-                                        (lambda (ip op request header params)
-                                          (http:respond op 302
+                                        (lambda (conn request header params)
+                                          (http:respond conn 302
                                             `(("Location" . ,(string-append original-path "/")))
                                             '#vu8()))))
                                  redirect)))
@@ -250,8 +507,8 @@
                                                 `#(loaded ,h))])))]
                  [else
                   `#(reply
-                     #(ok ,(lambda (ip op request header params)
-                             (not-found op)
+                     #(ok ,(lambda (conn request header params)
+                             (not-found conn)
                              (throw `#(http-invalid-method ,method ,path))))
                      ,state)]))]))]
         [#(get-content-type ,ext)
@@ -327,6 +584,14 @@
                       [,_ acc]))
                   state))))]))
     (gen-server:start&link 'http-cache))
+
+  (define (http-cache:get-content-type extension)
+    (gen-server:call 'http-cache `#(get-content-type ,extension)))
+
+  (define (http-cache:get-handler request)
+    (match (gen-server:call 'http-cache `#(get-handler ,request) 'infinity)
+      [#(error ,reason) (raise reason)]
+      [#(ok ,result) result]))
 
   (define (read-line ip limit)
     (let ([x (lookahead-u8 ip)])
@@ -418,7 +683,7 @@
       (fx- c (fx- (char->integer #\a) 10))]
      [else #f]))
 
-  (define-tuple <request> method original-path path query)
+  (define-tuple <request> method original-path path params host header)
 
   (define (http:parse-request bv)
     (match (bv-match-positions bv (char->integer #\space) 2)
@@ -431,7 +696,9 @@
              [method (string->symbol (bv-extract-string bv 0 s1))]
              [original-path path]
              [path path]
-             [query (parse-encoded-kv bv (fx+ s3 1) s2)]))]
+             [params (parse-encoded-kv bv (fx+ s3 1) s2)]
+             [host #f]
+             [header #f]))]
         [else #f])]
       [,_ #f]))
 
@@ -457,18 +724,6 @@
       (when (or (eof-object? count) (not (= count n)))
         (throw 'unexpected-eof))))
 
-  (define (advance! ip ipos op opos)
-    (when ipos
-      (let ([remaining (- ipos (port-position ip))])
-        (when (< remaining 0)
-          (when (= opos (port-position op))
-            (internal-server-error op))
-          (throw 'http-violation))
-        (do ([n remaining (fx- n 1)] [b #f (get-u8 ip)])
-            ((fx= n 0)
-             (when (eof-object? b)
-               (throw 'unexpected-eof)))))))
-
   (define (http:get-content-length header)
     (cond
      [(http:find-header "Content-Length" header) =>
@@ -478,47 +733,21 @@
         (string->number x))]
      [else #f]))
 
-  (define (http:get-content-params&pos ip header)
-    (cond
-     [(http:get-content-length header) =>
-      (lambda (len)
-        (let ([type (or (http:find-header "Content-Type" header) "none")]
-              [pos (+ (port-position ip) len)])
-          (cond
-           [(multipart/form-data-boundary type) =>
-            (lambda (boundary)
-              (values
-               (parse-multipart/form-data ip (string-append "--" boundary))
-               pos))]
-           [(starts-with? type "application/x-www-form-urlencoded")
-            (when (> len (http-content-limit))
-              (throw 'http-content-limit-exceeded))
-            (let ([content (make-bytevector len)])
-              (get-chunk! ip content len)
-              (values (parse-encoded-kv content 0 len) pos))]
-           [else (values '() pos)])))]
-     [else (values '() #f)]))
+  (define (http:handle-input conn)
+    (let ([request (conn:get-request conn)])
+      (when request
+        (match (http:file-handler conn request)
+          [#(switch-protocol ,proc)
+           (guard (procedure? proc))
+           (let-values ([(ip op) (conn:detach-ports conn)])
+             (proc ip op))]
+          [#t
+           (http:handle-input conn)]
+          [,other
+           (raise `#(bad-return-value ,other))]))))
 
-  (define (http:handle-input ip op)
-    (let ([x (read-line ip (http-request-limit))])
-      (cond
-       [(eof-object? x) (raise 'normal)]
-       [(http:parse-request x) =>
-        (lambda (request)
-          (match request
-            [`(<request> ,query)
-             (define header (http:read-header ip (http-header-limit)))
-             (let-values ([(params ipos)
-                           (http:get-content-params&pos ip header)])
-               (define opos (port-position op))
-               (on-exit (delete-tmp-files params)
-                 (http:file-handler ip op request header
-                   (append query params)))
-               (when (keep-alive? header)
-                 (advance! ip ipos op opos)
-                 (http:handle-input ip op)))]))]
-       [else
-        (throw `#(http-unhandled-input ,x))])))
+  (define (http:switch-protocol proc)
+    `#(switch-protocol ,proc))
 
   (define (http:read-status ip limit)
     (let ([x (read-line ip limit)])
@@ -550,15 +779,13 @@
          (display-string "\r\n" p))
        (make-utf8-transcoder))))
 
-  (define (http:respond op status header content)
-    (unless (bytevector? content)
-      (bad-arg 'http:respond content))
-    (http:write-status op status)
-    (http:write-header op
-      (add-content-length (bytevector-length content)
-        (add-cache-control "no-cache" header)))
-    (put-bytevector op content)
-    (flush-output-port op))
+  (define (find-alist-val name ls pred)
+    (cond
+     [(assp (lambda (key) (pred key name)) ls) => cdr]
+     [else #f]))
+
+  (define (find-header-alist name header)
+    (find-alist-val name header string-ci=?))
 
   (define (add-content-type filename header)
     (if (http:find-header "Content-Type" header)
@@ -575,26 +802,6 @@
     (if (http:find-header "Cache-Control" header)
         header
         (cons (cons "Cache-Control" value) header)))
-
-  (define (http:respond-file op status header filename)
-    (let ([port (open-file-port filename O_RDONLY 0)])
-      (on-exit (close-osi-port port)
-        (let* ([n (get-file-size port)]
-               [bufsize (min n (ash 1 18))]
-               [buffer (make-bytevector bufsize)])
-          (http:write-status op status)
-          (http:write-header op
-            (add-content-length n
-              (add-cache-control "max-age=3600" ; 1 hour
-                (add-content-type filename header))))
-          (let lp ([fp 0])
-            (when (< fp n)
-              (let ([count (read-osi-port port buffer 0 bufsize fp)])
-                (when (eqv? count 0)
-                  (throw 'unexpected-eof))
-                (put-bytevector op buffer 0 count)
-                (lp (+ fp count))))))
-        (flush-output-port op))))
 
   (define (keep-alive? header)
     (let ([c (http:find-header "Connection" header)])
@@ -654,7 +861,7 @@
                          [(k fn) (',http:include-help #'k (datum fn) ,path)]))])
          ,@exprs))
     (eval
-     `(lambda (ip op request header params)
+     `(lambda (conn request header params)
         (define-syntax find-param
           (syntax-rules ()
             [(_ key) (http:find-param key params)]))
@@ -672,8 +879,8 @@
               [(string=? first "..") #f]
               [else (lp (path-rest path))])))))
 
-  (define (not-found op)
-    (http:respond op 404 '()
+  (define (not-found conn)
+    (http:respond conn 404 '()
       (html->bytevector
        `(html5
          (head
@@ -682,45 +889,31 @@
          (body
           (h1 "This is not the web page you are looking for."))))))
 
-  (define (internal-server-error op)
-    (http:respond op 500 '()
-      (html->bytevector
-       `(html5
-         (head
-          (meta (@ (charset "UTF-8")))
-          (title "Internal server error"))
-         (body
-          (h1 "The server was unable to complete the request."))))))
-
-  (define (http:file-handler ip op request header params)
-    (<request> open request (method path))
+  (define (http:file-handler conn request)
+    (<request> open request [host method path header params])
     (system-detail <http-request>
       [pid self]
-      [host (port-name ip)]
+      [host host]
       [method method]
       [path path]
       [header header]
       [params params])
-    (let ([start-pos (port-position op)])
-      (match
+    (cond
+     [(not (validate-path path))
+      (not-found conn)
+      (raise `#(http-invalid-path ,path))]
+     [(match
        (try
-        (cond
-         [(not (validate-path path))
-          (not-found op)
-          (raise `#(http-invalid-path ,path))]
-         [(http-cache:get-handler request) =>
-          (lambda (handler)
-            (limit-stack
-             (handler ip op request header params))
-            (flush-output-port op))]
-         [else
-          (not-found op)
-          (raise `#(http-file-not-found ,path))]))
+        (let ([handler (http-cache:get-handler request)])
+          (and handler
+               (limit-stack (handler conn request header params)))))
        [`(catch ,reason ,e)
-        (when (= start-pos (port-position op))
-          (internal-server-error op))
+        (conn:internal-server-error conn)
         (raise e)]
-       [,_ (void)])))
+       [,result result])]
+     [else
+      (not-found conn)
+      (raise `#(http-file-not-found ,path))]))
 
   (define (http:percent-encode s)
     (define (encode bv i op)
@@ -749,37 +942,51 @@
         (throw 'unexpected-eof))
       x))
 
-  (define (parse-multipart/form-data ip boundary)
+  (define (make-bit-sink)
+    (make-custom-binary-output-port "bit-sink port"
+      (lambda (bv start n) n) #f #f #f))
+
+  (define (parse-multipart/form-data ip boundary content-limit file-limit files)
+    (define result (json:make-object))
     (define copy-until-match
       (make-copy-until-match
        (string->utf8 (string-append "\r\n" boundary))))
-    (define (parse-end limit)
+    (define (parse-end climit flimit)
       (let* ([x1 (next-u8 ip)] [x2 (next-u8 ip)])
         (cond
          [(and (eqv? x1 (char->integer #\return))
                (eqv? x2 (char->integer #\newline)))
-          (parse-next limit)]
+          (parse-next climit flimit)]
          [(and (eqv? x1 (char->integer #\-))
                (eqv? x2 (char->integer #\-))
                (eqv? (next-u8 ip) (char->integer #\return))
                (eqv? (next-u8 ip) (char->integer #\newline)))
-          '()]
+          result]
          [else (throw 'http-invalid-multipart-boundary)])))
-    (define (parse-next limit)
+    (define (parse-next climit flimit)
       (define header (http:read-header ip (http-header-limit)))
       (define data
         (parse-form-data-disposition
          (http:get-header "Content-Disposition" header)))
       (define name (http:get-param "name" data))
       (cond
-       [(http:find-param "filename" data) (parse-file name limit)]
+       [(find-alist-val "filename" data string=?)
+        (let ([key (string->symbol name)])
+          (cond
+           [(and (memq key files) (not (json:ref result key #f)))
+            (parse-file key climit flimit)]
+           [else
+            (let ([n (copy-until-match ip (make-bit-sink) flimit
+                       'http-file-upload-limit-exceeded)])
+              (parse-end climit (- flimit n)))]))]
        [else
         (let-values ([(op get) (open-bytevector-output-port)])
-          (copy-until-match ip op limit)
-          (let ([content (get)])
-            (cons (cons name (utf8->string content))
-              (parse-end (- limit (bytevector-length content))))))]))
-    (define (parse-file name limit)
+          (let* ([n (copy-until-match ip op climit
+                      'http-content-limit-exceeded)]
+                 [content (get)])
+            (json:set! result (string->symbol name) (utf8->string content))
+            (parse-end (- climit n) flimit)))]))
+    (define (parse-file key climit flimit)
       (let* ([fn (make-directory-path
                   (path-combine (tmp-dir)
                     (format "~36r.tmp"
@@ -787,9 +994,14 @@
              [op (parameterize ([custom-port-buffer-size (ash 1 16)])
                    (open-binary-file-to-write fn))])
         (match (catch
-                (copy-until-match ip op #f)
-                (close-port op)
-                (cons (cons name `#(<file> ,fn)) (parse-end limit)))
+                (let ([n (copy-until-match ip op flimit
+                           'http-file-upload-limit-exceeded)])
+                  (close-port op)
+                  (json:set! result key
+                    (json:make-object
+                     [type "file"]
+                     [filename fn]))
+                  (parse-end climit (- flimit n))))
           [#(EXIT ,reason)
            (force-close-output-port op)
            (delete-file fn)
@@ -800,7 +1012,7 @@
         [(= i (bytevector-length bv))]
       (unless (eqv? (next-u8 ip) (bytevector-u8-ref bv i))
         (throw 'http-invalid-multipart-boundary)))
-    (parse-end (http-content-limit)))
+    (parse-end content-limit file-limit))
 
   (define (parse-form-data-disposition d)
     (match (pregexp-match (re "^form-data;\\s*(.*)$") d)
@@ -816,18 +1028,20 @@
       [#f (throw `#(http-invalid-content-disposition ,d))]))
 
   (define (delete-tmp-files params)
-    (for-each
+    (vector-for-each
      (lambda (x)
-       (match x
-         [(,_ . #(<file> ,fn)) (delete-file fn)]
-         [,_ (void)]))
-     params))
+       (cond
+        [(and (json:object? x)
+              (equal? (json:ref x 'type #f) "file")
+              (json:ref x 'filename #f))
+         => delete-file]))
+     (hashtable-values params)))
 
   ;; Knuth Morris Pratt
   (define (make-copy-until-match pattern)
     (define pattern-length (bytevector-length pattern))
     (define partial (make-fxvector pattern-length))
-    (define (copy-until-match ip op limit)
+    (define (copy-until-match ip op limit err)
       (define buffer (make-bytevector pattern-length))
       (define (populate-buffer i pos limit)
         (cond
@@ -853,8 +1067,10 @@
         (and limit
              (if (fx> limit 0)
                  (fx- limit 1)
-                 (throw 'http-content-limit-exceeded))))
-      (populate-buffer 0 0 limit))
+                 (throw err))))
+      (let ([pos (port-position ip)])
+        (populate-buffer 0 0 limit)
+        (- (port-position ip) pos pattern-length)))
     ;; Build partial match table
     (fxvector-set! partial 0 -1)
     (let build ([pos 1] [cnd -1])

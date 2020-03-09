@@ -21,7 +21,7 @@
 ;;; DEALINGS IN THE SOFTWARE.
 
 (define (hosted-page page-title heads . content)
-  (http:respond op 200 '(("Content-Type" . "text/html"))
+  (http:respond conn 200 '(("Content-Type" . "text/html"))
     (html->bytevector
      `(html5
        (head

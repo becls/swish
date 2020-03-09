@@ -42,7 +42,7 @@
 
   (write-exprs "common.ss"
     '((define (my-respond x)
-        (http:respond op 200 '() x))))
+        (http:respond conn 200 '() x))))
   (write-exprs (path-combine "include" "mat.ss")
     '((http:include "../mat.ss")))
   (write-exprs (path-combine "include" "rooted.ss")
@@ -54,7 +54,7 @@
   (write-exprs (path-combine "static" "ok.txt")
     '(ok))
   (write-exprs (path-combine "with-index" "index.ss")
-    '((http:respond op 200 '() (string->utf8 "ok"))))
+    '((http:respond conn 200 '() (string->utf8 "ok"))))
   (write-exprs "mime-types"
     '(("css" . "text/css")
       ("gif" . "image/gif")
@@ -73,35 +73,54 @@
              (write header op)
              (get))))]
         ["use status"
-         (http:respond op (string->number (get-param "status")) '() '#vu8())]
+         (http:respond conn (string->number (get-param "status")) '() '#vu8())]
         ["echo"
          (my-respond (string->utf8 (get-param "echo")))]
+        ["echo form"
+         (http:call-with-form conn header 4194304 0 '()
+           (lambda (fd)
+             (my-respond (json:object->bytevector fd))))]
         ["echo file"
-         (match-let* (["1" (get-param "sample")]
-                      [#(<file> ,filename) (get-param "file")])
-           (my-respond (read-file filename)))]
+         (http:call-with-form conn header 4194304 4200288 '(file)
+           (lambda (fd)
+             (match-let*
+              (["1" (json:ref fd 'sample #f)]
+               [,ht (json:ref fd 'file #f)]
+               ["file" (json:ref ht 'type #f)]
+               [,filename (json:ref ht 'filename #f)])
+              (my-respond (read-file filename)))))]
         ["echo unhandled"
          (my-respond
-          (get-bytevector-n ip
-            (string->number
-             (or (find-param "count")
-                 (http:get-header "Content-Length" header)))))]
+          (http:call-with-ports conn
+            (lambda (ip op)
+              (get-bytevector-n ip
+                (string->number
+                 (or (find-param "count")
+                     (http:get-header "Content-Length" header)))))
+            1000))]
         ["bad arg"
          (my-respond (get-param "bad"))]
         ["file-headers"
-         (http:respond-file op 200 '(("Cache-Control" . "no-cache")
-                                     ("Content-Type" . "text/plain"))
+         (http:respond-file conn 200 '(("Cache-Control" . "no-cache")
+                                       ("Content-Type" . "text/plain"))
            (path-combine (web-dir) "static" "ok.txt"))]
         ["internal-error"
          (cond
           [(find-param "partial") =>
-           (lambda (x) (put-bytevector op (string->utf8 x)))])
+           (lambda (x)
+             (http:call-with-ports conn
+               (lambda (ip op)
+                 (put-bytevector op (string->utf8 x)))))])
          (throw 'internal-error)]
         ["bad read"
          ;; consume input, but don't respond or error
-         (do ([n (string->number (get-param "count")) (- n 1)])
-             ((= n 0))
-           (get-u8 ip))]
+         (http:call-with-ports conn
+           (lambda (ip op)
+             (do ([n (string->number (get-param "count")) (- n 1)])
+                 ((= n 0))
+               (get-u8 ip))
+             #t))]
+        ["no response" #t]
         ))))
 
 (define test-port 54333)
@@ -111,11 +130,7 @@
   (write-web-mats)
   (web-dir (path-combine (output-dir) "web-mats"))
 
-  (start-event-mgr)
-  (event-mgr:set-log-handler            ; silence the event-mgr
-   (lambda (x) x)
-   (spawn&link (lambda () (receive))))
-  (event-mgr:flush-buffer)
+  (start-silent-event-mgr)
 
   (match (http-sup:start&link)
     [#(ok ,pid) pid]))
@@ -161,18 +176,36 @@
       (for-each (lambda (x) (write x op) (newline op)) exprs))))
 
 (http-mat handlers ()
-  (define (test input)
-    (let-values ([(op get) (open-bytevector-output-port)])
-      (match (catch (http:handle-input
-                     (open-bytevector-input-port (string->utf8 input)) op))
-        [#(EXIT ,reason) (guard (not (eq? reason 'normal))) (raise reason)]
-        [,_ (utf8->string (get))])))
   (define (test-error&output input)
     (let-values ([(op get) (open-bytevector-output-port)])
-      (let ([er (catch (http:handle-input
-                        (open-bytevector-input-port (string->utf8 input))
-                        op))])
-        (cons er (utf8->string (get))))))
+      (let* ([me self]
+             [pid
+              (spawn
+               (lambda ()
+                 (match-let*
+                  ([#(ok ,conn)
+                    (conn:start 'http-listener
+                      (open-bytevector-input-port (string->utf8 input))
+                      op)])
+                  (link conn)
+                  (http:handle-input conn)
+                  (conn:stop conn))))]
+             [m (monitor pid)])
+        (receive
+         [`(DOWN ,@m ,_ ,reason)
+          (receive (after 25 'ok))
+          (cons
+           (match reason
+             [#(EXIT ,r) reason]
+             [,_ `#(EXIT ,reason)])
+           (utf8->string (get)))]))))
+  (define (test input)
+    (match (test-error&output input)
+      [(,reason . ,output)
+       (match reason
+         [normal output]
+         [#(EXIT normal) output]
+         [#(EXIT ,reason) (throw reason)])]))
   (when (file-directory? (tmp-dir))
     (for-each (lambda (x)
                 (when (ends-with? x ".tmp")
@@ -195,13 +228,13 @@
                    "\r\n")))]
     [#(EXIT http-content-limit-exceeded)
      (catch (test (string-append
-                   "POST /static/ok.txt HTTP/1.1\r\n"
+                   "POST /mat?cmd=echo+form HTTP/1.1\r\n"
                    "Content-Length: 16777217\r\n"
                    "Content-Type: application/x-www-form-urlencoded\r\n"
                    "\r\n")))]
     [#(EXIT unexpected-eof)
      (catch (test (string-append
-                   "POST /static/ok.txt HTTP/1.1\r\n"
+                   "POST /mat?cmd=echo+form HTTP/1.1\r\n"
                    "Content-Length: 10\r\n"
                    "Content-Type: application/x-www-form-urlencoded\r\n"
                    "\r\n"
@@ -218,9 +251,13 @@
                    "Content-Length: none\r\n"
                    "\r\n")))]
 
+    ;; handler does not send a response, but claims it has been handled
+    [(#(EXIT http-output-violation) . "")
+     (test-error&output "GET /mat?cmd=no+response HTTP/1.1\r\n\r\n")]
+
     ;; internal server errors
     [,internal-server-error
-      "HTTP/1.1 500 \r\nContent-Length: 167\r\nCache-Control: no-cache\r\n\r\n<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>Internal server error</title></head><body><h1>The server was unable to complete the request.</h1></body></html>"]
+     "HTTP/1.1 500 \r\nContent-Length: 167\r\nCache-Control: no-cache\r\n\r\n<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>Internal server error</title></head><body><h1>The server was unable to complete the request.</h1></body></html>"]
     [(#(EXIT internal-error) . ,@internal-server-error)
      (test-error&output "GET /mat?cmd=internal-error HTTP/1.1\r\n\r\n")]
     [(#(EXIT internal-error) . "partial-output")
@@ -310,7 +347,7 @@
             "Content-Length: 16\r\n"
             "\r\n"
             "0123456789ABCDEF"))]
-    [(#(EXIT http-violation) .
+    [(#(EXIT http-input-violation) .
       "HTTP/1.1 200 \r\nContent-Length: 17\r\nCache-Control: no-cache\r\n\r\n0123456789ABCDEFG")
      (test-error&output
       (string-append
@@ -322,7 +359,7 @@
        "Content-Length: 16\r\n"
        "\r\n"
        "0123456789ABCDEF"))]
-    [(#(EXIT http-violation) . ,@internal-server-error)
+    [(#(EXIT http-input-violation) . ,@internal-server-error)
      (test-error&output
       (string-append
        "GET /mat?cmd=bad+read&count=17 HTTP/1.1\r\n"
@@ -339,34 +376,32 @@
             "Content-Length: 16\r\n"
             "\r\n"
             "0123456789abcdef"))]
-    ["HTTP/1.1 200 \r\nContent-Length: 2\r\nCache-Control: no-cache\r\n\r\nok"
+    ["HTTP/1.1 200 \r\nContent-Length: 13\r\nCache-Control: no-cache\r\n\r\n{\"echo\":\"ok\"}"
      (test (string-append
-            "POST /mat HTTP/1.1\r\n"
+            "POST /mat?cmd=echo+form HTTP/1.1\r\n"
             "Connection: close\r\n"
-            "Content-Length: 16\r\n"
+            "Content-Length: 7\r\n"
             "Content-Type: application/x-www-form-urlencoded\r\n"
             "\r\n"
-            "cmd=echo&echo=ok"))]
-    [(#(EXIT http-violation) . ,@internal-server-error)
+            "echo=ok"))]
+    [(#(EXIT http-input-violation) . ,@internal-server-error)
      (test-error&output
       (string-append
-       "POST /mat HTTP/1.1\r\n"
+       "POST /mat?cmd=bad+read&count=1 HTTP/1.1\r\n"
        "Connection: keep-alive\r\n"
-       "Content-Length: 20\r\n"
+       "Content-Length: 0\r\n"
        "Content-Type: application/x-www-form-urlencoded\r\n"
        "\r\n"
-       "cmd=bad+read&count=1"
        "don't read me"))]
-    [(#(EXIT http-violation) .
+    [(#(EXIT http-input-violation) .
       "HTTP/1.1 200 \r\nContent-Length: 10\r\nCache-Control: no-cache\r\n\r\ndon't read")
      (test-error&output
       (string-append
-       "POST /mat HTTP/1.1\r\n"
+       "POST /mat?cmd=echo+unhandled&count=10 HTTP/1.1\r\n"
        "Connection: keep-alive\r\n"
-       "Content-Length: 27\r\n"
+       "Content-Length: 0\r\n"
        "Content-Type: application/x-www-form-urlencoded\r\n"
        "\r\n"
-       "cmd=echo+unhandled&count=10"
        "don't read me"))]
     ["HTTP/1.1 200 \r\nContent-Length: 2\r\nCache-Control: no-cache\r\n\r\nok"
      (test (string-append
@@ -541,8 +576,6 @@
     [#(EXIT #(bad-arg http-request-limit 0)) (catch (http-request-limit 0))]
     [#(EXIT #(bad-arg http-header-limit a)) (catch (http-header-limit 'a))]
     [#(EXIT #(bad-arg http-header-limit 0)) (catch (http-header-limit 0))]
-    [#(EXIT #(bad-arg http-content-limit a)) (catch (http-content-limit 'a))]
-    [#(EXIT #(bad-arg http-content-limit 0)) (catch (http-content-limit 0))]
     [#f (http:find-header "None" header)]
     [#(EXIT #(bad-arg http:find-header None))
      (catch (http:find-header 'None header))]
@@ -696,14 +729,14 @@
     `((define (noop) (void))))
   (write-file (full inc2)
     '((define (reply)
-        (http:respond op 200 '() (string->utf8 "ok")))))
+        (http:respond conn 200 '() (string->utf8 "ok")))))
 
   (check "ok")
   (check "ok")                          ; same request hits the cache
 
   (write-file (full inc2)
     '((define (reply)
-        (http:respond op 200 '() (string->utf8 "yes")))))
+        (http:respond conn 200 '() (string->utf8 "yes")))))
 
   (check "yes")
 

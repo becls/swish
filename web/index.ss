@@ -1,5 +1,5 @@
 ;; Replace this placeholder with a page suitable for your application.
-(http:respond op 200 '(("Content-Type" . "text/html"))
+(http:respond conn 200 '(("Content-Type" . "text/html"))
   (html->bytevector
    `(html5
      (head
