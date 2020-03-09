@@ -355,14 +355,14 @@
         (request-timeout))]
      [(conn header content-limit file-limit files f timeout)
       (arg-check 'http:call-with-form
-        [header list?]
+        [header json:object?]
         [content-limit (lambda (x) (and (fixnum? x) (fx>= x 0)))]
         [file-limit (lambda (x) (and (fixnum? x) (fx>= x 0)))]
         [files (lambda (ls) (and list? (andmap symbol? ls)))]
         [f procedure?]
         [timeout (lambda (x) (and (fixnum? x) (fx> x 0)))])
       (let* ([len (http:get-content-length header)]
-             [type (or (http:find-header "Content-Type" header) "none")]
+             [type (or (http:find-header 'content-type header) "none")]
              [data
               (cond
                [(not len) (json:make-object)]
@@ -703,16 +703,26 @@
       [,_ #f]))
 
   (define (http:read-header ip limit)
-    (match (read-line ip limit)
-      [#vu8() '()]
-      [,line
-       (match (bv-match-positions line (char->integer #\:) 1)
-         [(,colon)
-          (cons (cons (bv-extract-string line 0 colon)
-                  (bv-extract-string line (bv-next-non-lws line (fx+ colon 1))
-                    (bytevector-length line)))
-            (http:read-header ip (fx- limit (bytevector-length line))))]
-         [,_ (throw 'http-invalid-header)])]))
+    (let ([hdr (json:make-object)])
+      (let lp ([limit limit])
+        (match (read-line ip limit)
+          [#vu8() hdr]
+          [,line
+           (match (bv-match-positions line (char->integer #\:) 1)
+             [(,colon)
+              (let* ([len (bytevector-length line)]
+                     [k (bv-extract-string line 0 colon)]
+                     [v (bv-extract-string line
+                          (bv-next-non-lws line (fx+ colon 1))
+                          len)])
+                (json:update! hdr (string->symbol (string-downcase k))
+                  (lambda (old)
+                    (if old
+                        (string-append old "," v)
+                        v))
+                  #f)
+                (lp (fx- limit len)))]
+             [,_ (throw 'http-invalid-header)])]))))
 
   (define (multipart/form-data-boundary type)
     (match (pregexp-match (re "^multipart/form-data;\\s*boundary=(.+)$") type)
@@ -726,7 +736,7 @@
 
   (define (http:get-content-length header)
     (cond
-     [(http:find-header "Content-Length" header) =>
+     [(http:find-header 'content-length header) =>
       (lambda (x)
         (unless (pregexp-match (re "^[0-9]+$") x)
           (throw `#(http-invalid-content-length ,x)))
@@ -788,7 +798,7 @@
     (find-alist-val name header string-ci=?))
 
   (define (add-content-type filename header)
-    (if (http:find-header "Content-Type" header)
+    (if (find-header-alist "Content-Type" header)
         header
         (match (http-cache:get-content-type (path-extension filename))
           [#(error not-found) header]
@@ -799,20 +809,20 @@
     (cons (cons "Content-Length" n) header))
 
   (define (add-cache-control value header)
-    (if (http:find-header "Cache-Control" header)
+    (if (find-header-alist "Cache-Control" header)
         header
         (cons (cons "Cache-Control" value) header)))
 
   (define (keep-alive? header)
-    (let ([c (http:find-header "Connection" header)])
+    (let ([c (http:find-header 'connection header)])
       (not (and c (string-ci=? c "close")))))
 
   (define (internal-find-header who name header)
-    (unless (string? name)
-      (bad-arg who name))
-    (cond
-     [(assp (lambda (key) (string-ci=? key name)) header) => cdr]
-     [else #f]))
+    (let ([key (cond
+                [(symbol? name) name]
+                [(string? name) (string->symbol (string-downcase name))]
+                [else (bad-arg who name)])])
+      (json:ref header key #f)))
 
   (define (http:find-header name header)
     (internal-find-header 'http:find-header name header))
@@ -967,7 +977,7 @@
       (define header (http:read-header ip (http-header-limit)))
       (define data
         (parse-form-data-disposition
-         (http:get-header "Content-Disposition" header)))
+         (http:get-header 'content-disposition header)))
       (define name (http:get-param "name" data))
       (cond
        [(find-alist-val "filename" data string=?)

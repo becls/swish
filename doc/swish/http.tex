@@ -119,7 +119,7 @@ variables to a dynamic page:
   \argrow{ip}{binary input port}
   \argrow{op}{binary output port}
   \argrow{request}{a \code{<request>} tuple}
-  \argrow{header}{an association list}
+  \argrow{header}{a JSON object}
   \argrow{params}{an association list}
 \end{argtbl}
 
@@ -243,9 +243,10 @@ the server is listening on.
 
 The \code{http:find-header} procedure returns the value associated
 with \var{name} in \var{header} if present and \code{\#f}
-otherwise. Header comparisons are case-insensitive. If \var{name} is
-not a string, exception \code{\#(bad-arg http:find-header \var{name})}
-is raised.
+otherwise. Header symbol comparisons are case-sensitive thus
+\var{name} should be lower-case. Header string comparisons are
+case-insensitive. If \var{name} is not a symbol nor a string,
+exception \code{\#(bad-arg http:find-header \var{name})} is raised.
 
 \defineentry{http:get-header}
 \begin{procedure}
@@ -255,9 +256,11 @@ is raised.
 
 The \code{http:get-header} procedure returns the value associated with
 \var{name} in \var{header} if present and raises exception
-\code{\#(http-invalid-header \var{name})} otherwise. Header
-comparisons are case-insensitive. If \var{name} is not a string,
-exception \code{\#(bad-arg http:get-header \var{name})} is raised.
+\code{\#(http-invalid-header \var{name})} otherwise. Header symbol
+comparisons are case-sensive thus \var{name} should be
+lower-case. Header string comparisons are case-insensitive. If
+\var{name} is not a symbol nor a string, exception \code{\#(bad-arg
+  http:get-header \var{name})} is raised.
 
 \defineentry{http:get-content-length}
 \begin{procedure}
@@ -299,14 +302,16 @@ exception \code{\#(bad-arg http:get-param \var{name})} is raised.
 \begin{procedure}
   \code{(http:read-header \var{ip} \var{limit})}
 \end{procedure}
-\returns{} an association list
+\returns{} a JSON object
 
 The \code{http:read-header} procedure reads from the binary input
 port \var{ip} until a blank line is read.
 
-An association list is created by making a string from the characters
+A JSON object is created by making a symbol from lower-case characters
 before the first colon as the key. Non-linear white space is skipped,
-and the remaining characters are converted to a string value.
+and the remaining characters are converted to a string
+value. Duplicate message-header fields result in a single entry where
+the value is a comma-separated list.
 
 Reading beyond \var{limit} raises exception
 \code{http-input-limit-exceeded}.
@@ -800,6 +805,6 @@ This procedure is intended for use within custom writers passed in to
   \argrow{host}{the IP address of the client}
   \argrow{method}{\code{<request>} method}
   \argrow{path}{\code{<request>} path}
-  \argrow{header}{an association list}
+  \argrow{header}{a JSON object}
   \argrow{params}{an association list}
 \end{pubevent}

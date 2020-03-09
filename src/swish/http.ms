@@ -70,7 +70,15 @@
          (my-respond
           (string->utf8
            (let-values ([(op get) (open-string-output-port)])
-             (write header op)
+             (write
+              (let-values ([(keys vals) (hashtable-entries header)])
+                (define (symbol<? a b)
+                  (string<? (symbol->string a) (symbol->string b)))
+                (vector->list
+                 (vector-sort
+                  (lambda (x y) (symbol<? (car x) (car y)))
+                  (vector-map cons keys vals))))
+              op)
              (get))))]
         ["use status"
          (http:respond conn (string->number (get-param "status")) '() '#vu8())]
@@ -192,6 +200,25 @@
      [(eq? reason 'exception) (throw details)]
      [else (throw reason)])))
 
+(define-tuple <response> status header content)
+
+(define (parse-response s f)
+  (let ([ip (open-bytevector-input-port (string->utf8 s))])
+    (let* ([status (http:read-status ip 4096)]
+           [header (http:read-header ip 1048576)]
+           [len (http:get-content-length header)]
+           [content (and len (f (get-bytevector-n ip len)))])
+      (<response> make
+        [status status]
+        [header header]
+        [content content]))))
+
+(define (bytevector->sexpr b)
+  (read (open-utf8-bytevector b)))
+
+(define (test-response input)
+  (parse-response (test input) bytevector->sexpr))
+
 (http-mat handlers ()
   (start-default-file-server)
   (capture-events)
@@ -268,30 +295,59 @@
      (catch (test (string-append
                    "GET /mat?cmd=echo+header HTTP/1.1\r\n"
                    "Host localhost\r\n\r\n")))]
-    ["HTTP/1.1 200 \r\nContent-Length: 49\r\nCache-Control: no-cache\r\n\r\n((\"Connection\" . \"close\") (\"Host\" . \"localhost\"))"
-     (test (string-append
-            "GET /mat?cmd=echo+header HTTP/1.1\r\n"
-            "Connection: close\r\n"
-            "Host: localhost\r\n\r\n"))]
-    ["HTTP/1.1 200 \r\nContent-Length: 49\r\nCache-Control: no-cache\r\n\r\n((\"Connection\" . \"close\") (\"Host\" . \"localhost\"))"
-     (test (string-append
-            "GET /mat?cmd=echo+header HTTP/1.1\r\n"
-            "Connection: close\r\n"
-            "Host: \t localhost\r\n\r\n"))]
-    ["HTTP/1.1 200 \r\nContent-Length: 67\r\nCache-Control: no-cache\r\n\r\n((\"Connection\" . \"close\") (\"Host\" . \"localhost\") (\"No-Value\" . \"\"))"
-     (test
+
+    [`(<response> [content ((connection . "close") (host . "localhost"))])
+     (test-response
+      (string-append
+       "GET /mat?cmd=echo+header HTTP/1.1\r\n"
+       "Connection: close\r\n"
+       "Host: localhost\r\n\r\n"))]
+    [`(<response> [content ((connection . "close") (host . "localhost"))])
+     (test-response
+      (string-append
+       "GET /mat?cmd=echo+header HTTP/1.1\r\n"
+       "Connection: close\r\n"
+       "Host: \t localhost\r\n\r\n"))]
+    [`(<response> [content ((connection . "close") (host . "localhost")
+                            (no-value . ""))])
+     (test-response
       (string-append
        "GET /mat?cmd=echo+header HTTP/1.1\r\n"
        "Connection: close\r\n"
        "Host: localhost\r\n"
        "No-Value:\r\n\r\n"))]
-    ["HTTP/1.1 200 \r\nContent-Length: 67\r\nCache-Control: no-cache\r\n\r\n((\"Connection\" . \"close\") (\"Host\" . \"localhost\") (\"No-Value\" . \"\"))"
-     (test
+    [`(<response> [content ((connection . "close") (host . "localhost")
+                            (no-value . ""))])
+     (test-response
       (string-append
        "GET /mat?cmd=echo+header HTTP/1.1\r\n"
        "Connection: close\r\n"
        "Host: localhost\r\n"
        "No-Value: \r\n\r\n"))]
+    [`(<response> [content ((connection . "close") (host . "localhost")
+                            (repeat . "a,b,c"))])
+     ;; Repeated headers can be combined into a comma separated list
+     ;; without leading whitespace.
+     (test-response
+      (string-append
+       "GET /mat?cmd=echo+header HTTP/1.1\r\n"
+       "Connection: close\r\n"
+       "Host: localhost\r\n"
+       "Repeat: a\r\n"
+       "Repeat:   b\r\n"
+       "Repeat: \tc\r\n\r\n"))]
+    [#(EXIT http-invalid-header)
+     ;; An error is expected. RFC7230 indicates continued header lines
+     ;; is deprecated.
+     (catch
+      (test
+       (string-append
+        "GET /mat?cmd=echo+header HTTP/1.1\r\n"
+        "Connection: close\r\n"
+        "Host: localhost\r\n"
+        "Continued: a\r\n"
+        "    b\r\n"
+        "\t  c\r\n\r\n")))]
     ["HTTP/1.1 200 \r\nContent-Length: 3\r\nCache-Control: no-cache\r\nContent-Type: text/plain\r\n\r\nok\n"
      (test
       (string-append
@@ -559,7 +615,10 @@
    'ok))
 
 (http-mat helpers ()
-  (define header '(("Content-Length" . "bar") ("Content-Type" . "foo")))
+  (define header
+    (json:make-object
+     [content-length "bar"]
+     [content-type "foo"]))
   (define params '(("query" . "lookup") ("val" . "1")))
   (match-let*
    ([#(EXIT #(bad-arg http-port-number a)) (catch (http-port-number 'a))]
@@ -569,14 +628,17 @@
     [#(EXIT #(bad-arg http-header-limit a)) (catch (http-header-limit 'a))]
     [#(EXIT #(bad-arg http-header-limit 0)) (catch (http-header-limit 0))]
     [#f (http:find-header "None" header)]
-    [#(EXIT #(bad-arg http:find-header None))
-     (catch (http:find-header 'None header))]
+    [#f (http:find-header 'None header)]
+    [#(EXIT #(bad-arg http:find-header 0))
+     (catch (http:find-header 0 header))]
     ["foo" (http:find-header "Content-Type" header)]
     ["foo" (http:find-header "content-type" header)]
     [#(EXIT #(http-invalid-header "None"))
      (catch (http:get-header "None" header))]
-    [#(EXIT #(bad-arg http:get-header None))
+    [#(EXIT #(http-invalid-header None))
      (catch (http:get-header 'None header))]
+    [#(EXIT #(bad-arg http:get-header 0))
+     (catch (http:get-header 0 header))]
     ["foo" (http:get-header "Content-Type" header)]
     ["foo" (http:get-header "content-type" header)]
     [#f (http:find-param "None" params)]
