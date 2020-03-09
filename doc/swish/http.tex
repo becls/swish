@@ -20,6 +20,17 @@
 % CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 % SOFTWARE.
 
+\lstdefinelanguage{json}{
+  basicstyle=\upshape\mdseries\frenchspacing\ttfamily,
+  columns=flexible,
+  string=[s]{"}{"},
+  stringstyle=\color{blue},
+  comment=[l]{:},
+  commentstyle=\color{black},
+  escapeinside={|}{|},
+  frame=single
+}
+
 \chapter {HTTP Interface}\label{chap:http}
 
 \section {Introduction}
@@ -31,57 +42,138 @@ procedures for the HyperText Markup Language (HTML) version
 
 \section {Theory of Operation}
 
-The HTTP interface provides a supervisor, \code{http-sup}, to manage
-the \code{http-listener} gen-server, the \code{http-cache}
-gen-server, and new connection processes. This structure is
-illustrated in Figure~\ref{fig:http-tree}.
+The HTTP interface provides \code{http:add-file-server} to listen for
+connections on a TCP port and serve files from a directory and
+\code{http:add-server} to serve content via a user-defined
+procedure. These procedures configure the \code{app-sup-spec} to
+include one or more web servers in the supervision hierarchy that is
+started by \code{app:start}.
+
+Both \code{http:add-file-server} and \code{http:add-server} are
+implemented in terms of \code{http:configure-server}, which defines a
+supervisor that manages the \emph{listener} gen-server,
+\emph{dispatcher} processes, \emph{cache} gen-servers, and
+\emph{evaluator} processes. Internally, the listener starts a cache
+manager process to support evaluating and serving files. The
+dispatcher starts a connection process to manage protocol
+details. This structure is illustrated in Figure~\ref{fig:http-tree}.
 
 \begin{figure}
   \center\includegraphics{swish/http-tree.pdf}
-  \caption{\label{fig:http-tree}HTTP tree}
+  \caption{\label{fig:http-tree}HTTP supervision tree}
 \end{figure}
 
-The \code{http-listener} is a gen-server that creates a TCP listener
-using \code{listen-tcp} and accepts new connections using
-\code{accept-tcp}. For each connection, the http-listener uses its
-supervisor to spawn and link a handler process.
+The HTTP supervisor provided via \code{http:configure-server} is
+configured one-for-one with up to 10 restarts within 10 seconds.
 
-Each handler reads from its input port until a CR LF
-occurs. Well-formed input is converted to a \code{<request>} tuple,
-and the HTTP request header and any content parameters are read.
+The \emph{listener} gen-server awaits TCP connections using
+\code{listen-tcp} and accepts them using \code{accept-tcp}.  For each
+TCP connection, the listener uses its supervisor to spawn and link a
+\emph{dispatcher} process that reads each request, calls the \emph{URL
+  handler} configured for that listener, and repeats until the
+connection closes. The listener closes the associated output port when
+the dispatcher exits.
 
-When \code{Content-Length} appears in the header and
-\code{Content-Type} is \code{multipart/form-data} or
-\code{application/x-www-form-urlencoded}, the content is read and
-converted to a JSON object. Otherwise, the handler is responsible for
-reading the content. Any unread content as determined by
-\code{Content-Length} is ignored. Each uploaded file is stored in
-\code{(tmp-dir)}, and the JSON value is a JSON object with
-\code{type=file} and \code{filename=\var{filename}}.
+Each \emph{dispacher} process spawns a \emph{connection}
+gen-server. The connection is responsible for reading and parsing
+requests in a timely manner.  A connection server reads from its input
+port until a CR LF occurs.  Well-formed input is converted to a
+\code{<request>} tuple. The HTTP request header is then read and
+associated with the request.  If the connection takes more than
+\code{request-timeout} milliseconds to parse a request, the dispatcher
+fires an exception, and the TCP connection is closed.  The dispatcher
+logs the specific request, validates that the requested path does not
+include ``..'', and invokes the URL handler provided by the listener.
 
-\code{http:file-handler} is then called combining the
-\code{<request>} query parameters and content
-parameters. \code{http:file-handler} logs the specific request,
-validates that the requested path does not include ``..'', retrieves a
-page handler from the \code{http-cache}, and invokes it. A
-\emph{page handler} is a procedure which responds to a particular HTTP
-request. The output port is flushed after the page handler returns.
+For forms, the URL handler is responsible for checking the request
+method and reading form content with \code{http:call-with-form}. Any
+unread content as determined by \code{Content-Length} is ignored.
 
-After a request is processed, all uploaded files are deleted, and the
-current process and connection can be reused. Unless the
-\code{Connection} header specifies \code{close}, the system reads
-another request from the input port after skipping any unread content
-from the current request.
+After a request is processed, the current process and connection can
+be reused. Unless the \code{Connection} header specifies \code{close},
+the system reads another request from the input port after skipping
+any unread content from the current request.
 
-The \code{http-cache} is a gen-server that stores page handlers and
-provides a mapping from file extension to content type. It creates a
-directory watcher using \code{watch-directory} to invalidate the
-cache when anything in the \code{(web-dir)} tree changes.
+\subsection{URL handler and Media Type handler}\label{sec:url-handler}
 
-The \code{http-cache} considers a path that ends in ``.ss'' a
-dynamic page loaded from \code{(web-dir)}. Other paths are
-considered static and are sent directly over the connection using
+Using \code{http:add-server} or \code{http:configure-server}
+configures a web server to serve content via a URL handler that may be
+compiled into the Swish application.
+
+A \emph{URL handler}\index{URL handler} is a procedure that should
+return \code{\#t} when it processes a request, and \code{\#f}
+otherwise.
+
+To allow future extension without change to application code, the HTTP
+interface provides \code{http:url-handler} to define a handler which
+exposes the following implicit variables:
+
+\begin{argtbl}
+  \argrow{conn}{a connection process}
+  \argrow{request}{a \code{<request>} tuple}
+  \argrow{header}{a JSON object}
+  \argrow{params}{a JSON object}
+\end{argtbl}
+
+\code{http:call-url-handler} can be used to invoke a handler, and
+\code{http:compose-url-handlers} chains a sequence of handlers
+together.
+
+A \emph{media type handler} is a procedure that takes a file extension
+as input and returns a media type or \code{\#f}. The default media
+type handler always returns \code{\#f}.
+
+\subsection{Default file handling}
+
+Using \code{http:add-file-server} or \code{http:configure-file-server}
+configures a web server to serve files from a directory. These
+procedures generate a URL handler by calling
+\code{http:make-default-file-url-handler}. This handler asks the
+\emph{cache manager} gen-server for a cache responsible for the given
+directory.
+
+The \emph{cache manager} gen-server maintains the mapping of the
+top-level web directory to a \emph{cache} gen-server. If a cache does
+not exist for the given path, a new \emph{cache} gen-server is
+created.
+
+A \emph{cache} gen-server stores URL handlers and provides a mapping
+from file extension to media type. It creates a directory watcher
+using \code{watch-directory} to invalidate the cache when anything in
+the directory tree changes. It terminates after 5 minutes of
+inactivity.
+
+The optional \code{media-type-handler} is configured via
+\code{http:make-default-media-type-handler} to match the extension of
+\var{filename} case insensitively against an extension in the
+\code{mime-types} file of the configured directory. Each line of
+\code{mime-types} has the form
+\code{("\var{extension}"~.~"\var{Content-Type}")}.
+
+\subsection{Dynamic Pages}\label{sec:dynamic-pages}
+
+A \emph{dynamic page} is any file that is transformed before its
+content is sent to the browser. For example, by setting the option
+\code{file-transform} to \code{http:enable-dynamic-pages}, a path that
+ends in ``.ss'' containing a sequence of definitions followed by a
+sequence of expressions is wrapped in a URL handler and evaluated by
+the \code{eval} system procedure. The page explicitly sends a response
+via \code{http:respond} or \code{http:respond-file}.
+
+In general, a cache gen-server resolves a URL to a file path and
+checks its internal state. If a URL handler is unavailable, the
+gen-server calls the optional \code{file-transform} procedure passing
+the absolute file path.
+
+The \code{file-transform} procedure returns \code{\#f} or a
+procedure. When it returns \code{\#f}, the URL is considered static
+and is sent directly over the connection using
 \code{http:respond-file}.
+
+When it returns a procedure, the cache starts an \emph{evaluator}
+process. The evaluator process calls the procedure with the cache's
+root directory and the absolute file path. The evaluator procedure
+returns \code{\#f} or a URL handler. The cache stores the URL handler.
 
 \section {Security}
 
@@ -91,37 +183,455 @@ exploits cannot be used against the system.
 User input should be carefully checked before calling \code{eval} or
 invoking a database query.
 
-A URL which directs the system away from \code{(web-dir)} using
-``..'' could allow access to system files. \code{http:file-handler}
-explicitly checks for relative paths.
+A URL which directs the system away from a cache's root path using
+``..'' could allow access to system files. Therefore, the dispatcher
+explicitly rejects relative paths.
 
 The HTTP interface limits incoming data to protect against large
-memory allocation which may crash the system.
+memory allocation that may crash the application.
 
-The HTTP interface does not limit incoming file uploads. If the disk
-runs out of space, the handler process will exit with an I/O error.
+The HTTP interface allows individual form URL handlers to specify
+incoming data and file upload limits to protect against large memory
+allocation and running out of disk space.
 
-\section {Dynamic Pages}
+\section {Programming Interface}
 
-A dynamic page is a sequence of definitions followed by a sequence of
-expressions stored in ``.ss'' files in \code{(web-dir)}.  The
-definitions and expressions are placed in a \code{lambda} expression
-that is evaluated by the \code{interpret} system procedure.  The
-page is responsible for sending the HTTP response. The output port is
-flushed after the page handler returns.
+\begin{tupledef}{<request>}
+  \argrow{host}{a string}
+  \argrow{method}{a symbol}
+  \argrow{path}{a decoded string}
+  \argrow{original-path}{same as \var{path}}
+  \argrow{header}{a decoded JSON object}
+  \argrow{params}{a decoded JSON object}
+\end{tupledef}
 
-\section {Dynamic Page Constructs}
+The \var{original-path} is used internally when redirecting the
+browser to a new location. If user code copies the \code{<request>}
+tuple, it should not modify \var{original-path}.
 
-The evaluated \code{lambda} expression exposes the following
-variables to a dynamic page:
+\defineentry{http:configure-server}
+\defineentry{http:options}
+\begin{procedure}
+  \code{(http:configure-server \var{name} \var{port} \var{url-handler} \opt{\var{options}})}
+\end{procedure}
+\returns{} a list of child specifications (see page~\pageref{page:child-spec})
 
 \begin{argtbl}
-  \argrow{ip}{binary input port}
-  \argrow{op}{binary output port}
-  \argrow{request}{a \code{<request>} tuple}
-  \argrow{header}{a JSON object}
-  \argrow{params}{a JSON object}
+  \argrow{name}{a symbol for the listener gen-server or \code{\#f} for
+    an anonymous server}
+  \argrow{port}{a fixnum $0 \le port \le 65535$}
+  \argrow{url-handler}{a procedure}
+  \argrow{options}{see below}
 \end{argtbl}
+
+The \code{http:configure-server} procedure returns a list of
+supervisor child specifications that define an HTTP server.
+
+The specification defines a supervisor configured as one-for-one with
+up to 10 restarts every 10 seconds. The supervisor starts a listener
+gen-server. This supervisor is used to create dispatcher, cache,
+and evaluator processes.
+
+The listener is a gen-server registered as \var{name}. It accepts
+connections on the given TCP \var{port} and processes them with
+\var{url-handler}.
+
+The \var{options} can be defined using \code{(http:options
+  (\var{option} \var{value}) \etc)}. The following options may be
+used:
+
+\begin{tabular}{lrp{.5\textwidth}}
+  option & default & description \\ \hline
+
+  \code{request-limit} & 4,096 & a positive fixnum; the maximum length
+  in bytes of the first line of an HTTP request \\
+
+  \code{request-timeout} & 30,000 & a positive fixnum; the maximum
+  number of milliseconds to wait to receive an HTTP request after
+  initial connection \\
+
+  \code{header-limit} & 1,048,576 & a positive fixnum; the maximum
+  length in bytes of the HTTP request headers \\
+
+  \code{media-type-handler} & \code{(lambda (ext) \#f)} & a procedure;
+  given a file extension returns the media type of the file or
+  \code{\#f} \\
+
+  \code{file-search-extensions} & \code{'(".html")} & a list of
+  strings; a cache process uses the list to disambiguate URL paths to
+  file system paths. \\
+
+  \code{file-transform} & \code{(lambda (path) \#f)} & a procedure; a
+  cache process calls this procedure with a file path and expects an
+  evaluator procedure or \code{\#f} (see \S\ref{sec:dynamic-pages})
+\end{tabular}
+
+\defineentry{http:add-server}
+\begin{syntax}
+  \code{(http:add-server \var{arg} \ldots)}
+\end{syntax}
+
+The \code{http:add-server} macro expands to code that appends the
+result of \code{(http:configure-server \var{arg} \ldots)} to the
+\code{app-sup-spec} parameter.
+
+\defineentry{http:configure-file-server}
+\begin{procedure}
+  \code{(http:configure-file-server \var{name} \var{port} \var{dir} \opt{\var{options}})}
+\end{procedure}
+\returns{} a list of child specifications (see page~\pageref{page:child-spec})
+
+The \code{http:configure-file-server} procedure defines an HTTP server
+that provides content from the file-system rooted at \var{dir}.
+
+The \code{http:configure-file-server} procedure calls
+\code{http:configure-server} with
+\code{(http:make-default-file-url-handler \var{dir})} as the URL
+handler. If the \code{media-type-handler} option is not specified, it
+defaults to one constructed via
+\code{(http:make-default-media-type-handler \var{dir})}.
+
+\defineentry{http:add-file-server}
+\begin{syntax}
+  \code{(http:add-file-server \var{arg} \ldots)}
+\end{syntax}
+
+The \code{http:add-file-server} macro expands to code that appends the
+result of \code{(http:configure-file-server \var{arg} \ldots)} to the
+\code{app-sup-spec} parameter.
+
+\defineentry{http:make-default-file-url-handler}
+\begin{procedure}
+  \code{(http:make-default-file-url-handler \var{dir})}
+\end{procedure}
+\returns{} a URL handler
+
+The \code{http:make-default-file-url-handler} defines a URL handler
+that retrieves the cache responsible for the directory \var{dir}. It
+then looks up a URL handler from the cache for the given request. If
+found, it calls the handler and flushes the output port. Otherwise, it
+returns \code{\#f}.
+
+\defineentry{http:make-default-media-type-handler}
+\begin{procedure}
+  \code{(http:make-default-media-type-handler \var{dir})}
+\end{procedure}
+\returns{} a media type handler
+
+The \code{http:make-default-media-type-handler} defines a media type
+handler that retrieves the cache responsible for the directory
+\var{dir}. It then requests the media type for the given file
+extension. If found, the type is returned. Otherwise, it returns
+\code{\#f}.
+
+\defineentry{http:url-handler}
+\begin{syntax}
+  \code{(http:url-handler \var{body\(\sb{1}\)} \var{body\(\sb{2}\)} \etc)}
+\end{syntax}
+
+The \code{http:url-handler} macro defines a URL handler procedure
+described in Section~\ref{sec:url-handler}.
+
+\defineentry{http:call-url-handler}
+\begin{syntax}
+  \code{(http:call-url-handler \var{handler})}
+\end{syntax}
+
+The \code{http:call-url-handler} macro invokes a URL handler,
+implicitly capturing variables in scope as described in
+Section~\ref{sec:url-handler}.
+
+\defineentry{http:compose-url-handlers}
+\begin{procedure}
+  \code{(http:compose-url-handlers \var{handlers})}
+\end{procedure}
+\returns{} a URL handler
+
+The \code{http:compose-url-handlers} procedure defines a URL handler
+that takes a list of \emph{handlers} and invokes each handler, in
+order, until one returns \code{\#t}. Otherwise, it returns \code{\#f}.
+
+If a URL handler returns \code{\#f} but sends output to the
+output-port, exception \code{http-side-effecting-handler} is raised.
+
+\defineentry{http:get-port-number}
+\begin{procedure}
+  \code{(http:get-port-number \var{listener})}
+\end{procedure}
+\returns{} the listener gen-server TCP port number
+
+The \code{http:get-port-number} procedure calls \code{(gen-server:call
+  \var{listener} 'get-port-number)}. If the listener's port was
+configured to be zero, the operating system will choose an available
+port number.  \code{http:get-port-number} uses
+\code{listener-port-number} to retrieve the actual port number that
+the server is listening on.
+
+\defineentry{http:find-header}
+\begin{procedure}
+  \code{(http:find-header \var{name} \var{header})}
+\end{procedure}
+\returns{} a string \alt{} \code{\#f}
+
+The \code{http:find-header} procedure returns the value associated
+with \var{name} in JSON object \var{header} if present and \code{\#f}
+otherwise.  If \var{name} is a symbol, the lookup uses \code{eq?}.  If
+\var{name} is a string, it is first mapped to a lower-case symbol
+before performing the lookup.  Otherwise, the exception
+\code{\#(bad-arg http:find-header \var{name})} is raised.
+
+\defineentry{http:get-header}
+\begin{procedure}
+  \code{(http:get-header \var{name} \var{header})}
+\end{procedure}
+\returns{} a string
+
+The \code{http:get-header} procedure returns the value associated with
+\var{name} in JSON object \var{header} if present and raises exception
+\code{\#(http-invalid-header \var{name})} otherwise.  If \var{name} is
+a symbol, the lookup uses \code{eq?}.  If \var{name} is a string, it
+is first mapped to a lower-case symbol before performing the lookup.
+Otherwise, the exception \code{\#(bad-arg http:get-header \var{name})}
+is raised.
+
+\defineentry{http:get-content-length}
+\begin{procedure}
+  \code{(http:get-content-length \var{header})}
+\end{procedure}
+\returns{} an unsigned integer \alt{} \code{\#f}
+
+The \code{http:get-content-length} procedure returns the unsigned
+integer value associated with \code{content-length} in JSON object
+\var{header} if present and \code{\#f} otherwise. It raises exception
+\code{\#(http-invalid-content-length \var{value})} if the \var{value}
+string does not represent an unsigned integer.
+
+\defineentry{http:find-param}
+\begin{procedure}
+  \code{(http:find-param \var{name} \var{params})}
+\end{procedure}
+\returns{} a string \alt{} \code{\#f}
+
+The \code{http:find-param} procedure returns the value associated with
+\var{name} in JSON object \var{params} if present and \code{\#f}
+otherwise.  If \var{name} is a symbol, the lookup uses \code{eq?}.  If
+\var{name} is a string, it is converted to a symbol before performing
+the lookup.  Otherwise, the exception \code{\#(bad-arg http:find-param
+  \var{name})} is raised.
+
+\defineentry{http:get-param}
+\begin{procedure}
+  \code{(http:get-param \var{name} \var{params})}
+\end{procedure}
+\returns{} a string
+
+The \code{http:get-param} procedure returns the value associated with
+\var{name} in JSON object \var{params} if present and raises exception
+\code{\#(http-invalid-param \var{name})} otherwise.  If \var{name} is
+a symbol, the lookup uses \code{eq?}.  If \var{name} is a string, it
+is converted to a symbol before performing the lookup.  Otherwise, the
+exception \code{\#(bad-arg http:get-param \var{name})} is raised.
+
+\defineentry{http:read-header}
+\begin{procedure}
+  \code{(http:read-header \var{ip} \var{limit})}
+\end{procedure}
+\returns{} a JSON object
+
+The \code{http:read-header} procedure reads from the binary input port
+\var{ip} until it reads a blank line.  It creates a JSON object where
+the key is a symbol formed from the down-cased characters before the
+first colon and the value is a string formed from the characters that
+remain after skipping white space.  Duplicate message-header fields
+result in a single entry where the value is a comma-separated list.
+
+Reading beyond \var{limit} raises exception
+\code{http-input-limit-exceeded}.
+
+Failure to find a colon on any given line raises exception
+\code{http-invalid-header}.
+
+\defineentry{http:read-status}
+\begin{procedure}
+  \code{(http:read-status \var{ip} \var{limit})}
+\end{procedure}
+\returns{} number \alt{} \code{\#f}
+
+The \code{http:read-status} procedure reads the HTTP response status
+line from the binary input port \var{ip} and returns the status code
+as a number if well formed and \code{\#f} otherwise. Reading beyond
+\var{limit} raises exception \code{http-input-limit-exceeded}.
+
+\defineentry{http:write-status}
+\begin{procedure}
+  \code{(http:write-status \var{op} \var{status})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{http:write-status} procedure writes the HTTP response
+status line to the binary output port \var{op}.
+
+Unless \var{status} is a fixnum and $100 \leq \var{status} \leq 599$, the
+exception \code{\#(bad-arg http:write-status \var{status})} is
+raised.
+
+According to HTTP~\cite{RFC7230} the status line includes a
+human-readable reason phrase. The grammar shows that it can in fact be
+zero characters long; therefore, the reason phrase is not included in
+this implementation.
+
+\defineentry{http:write-header}
+\begin{procedure}
+  \code{(http:write-header \var{op} \var{header-alist})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{http:write-header} procedure writes the HTTP
+\var{header-alist} and trailing CR LF to the binary output port
+\var{op}.
+
+\var{header-alist} is an association list whose keys and values are
+strings. If any of its keys are not strings, exception
+\code{\#(bad-arg http:write-header \var{header-alist})} is raised.
+
+\defineentry{http:respond}
+\begin{procedure}
+  \code{(http:respond \var{conn} \var{status} \var{header-alist} \var{content})}
+\end{procedure}
+\returns{} \code{\#t}
+
+The \code{http:respond} procedure writes the HTTP \var{status} and
+\var{header-alist} to the connection \var{conn} using
+\code{http:write-status} and \code{http:write-header}, adding
+\code{Content-Length} to the \var{header-alist}. When
+\code{Cache-Control} is not present in \var{header-alist}, it is added
+with value \code{no-cache}. The \var{content} bytevector is then
+written, and the output port is flushed.
+
+\defineentry{http:respond-file}
+\begin{procedure}
+  \code{(http:respond-file \var{conn} \var{status} \var{header-alist} \var{filename})}
+\end{procedure}
+\returns{} \code{\#t}
+
+The \code{http:respond-file} procedure writes the HTTP \var{status}
+and \var{header-alist} to the connection \var{conn} using
+\code{http:write-status} and \code{http:write-header}, adding
+\code{Content-Length} to \var{header-alist}.  The \code{Cache-Control}
+header is added, if it is not already present, with value
+\code{max-age=3600}.  The \code{Content-Type} header is added, if it
+is not already present, by calling the \code{media-type-handler}.  The
+content of the file is streamed to the output port so that the file
+does not need to be loaded into memory. The output port is flushed.
+
+\defineentry{http:call-with-form}
+\begin{procedure}
+  \code{(http:call-with-form \var{conn} \var{header}
+    \var{content-limit} \var{file-limit} \var{files} \var{f}
+    \opt{\var{timeout}})}
+\end{procedure}
+\returns{} see below
+
+The \code{http:call-with-form} procedure checks JSON object
+\var{header} for a \code{content-type} of \code{multipart/form-data}
+or \code{application/x-www-form-urlencoded}. It parses form name/value
+pairs into a JSON object.  After parsing the form data, the function
+\var{f} is called with the JSON object. After \var{f} returns, all
+uploaded files are deleted, and the return value is passed to the
+caller.
+
+Because \code{http:call-with-form} is used inside a URL handler after
+the \code{<http-request>} event has been fired, the specific form data
+is not logged. Applications should consider the sensitivity of
+submitted data before logging.
+
+When files are sent and the form variable name appears in the
+\var{files} list, the file is stored in \code{(tmp-dir)}, and the JSON
+value is a JSON object with \code{type="file"} and
+\code{filename=\var{filename}}.
+
+For example, a form sending the variables \code{name}, \code{rank},
+and \code{image} might look like:
+
+\begin{lstlisting}[language=json,frame=none]
+{
+  "name": "Steve R",
+  "rank": "Captain",
+  "image":
+  {
+    "type": "file",
+    "filename": |\var{filename}|
+  }
+}
+\end{lstlisting}
+
+Name/value pairs count against \var{content-limit} while file data
+counts against \var{file-limit}. An exception is raised when either
+limit is exceeded.
+
+\defineentry{http:call-with-ports}
+\begin{procedure}
+  \code{(http:call-with-ports \var{conn} \var{f} \opt{\var{timeout}})}
+\end{procedure}
+\returns {} see below
+
+The \code{http:call-with-ports} procedure ignores any current
+connection state and calls \var{f} in the connection process with the
+connection's input and output ports.  Running \var{f} in the
+connection process allows the caller to timeout when input is
+unavailable. The return value of \var{f} is returned to the caller.
+
+\defineentry{http:switch-protocol}
+\begin{procedure}
+  \code{(http:switch-protocol \var{proc})}
+\end{procedure}
+\returns {} see below
+
+When used in a URL handler, \code{http:switch-protocol} returns a
+special value to control the dispatcher loop. The dispatcher detaches
+from the connection process and calls \var{proc} with the input and
+output ports.
+
+\defineentry{http:percent-encode}
+\begin{procedure}
+  \code{(http:percent-encode \var{s})}
+\end{procedure}
+\returns{} an encoded string
+
+The \code{http:percent-encode} procedure writes the characters
+\code{A}--\code{Z}, \code{a}--\code{z},
+\code{0}--\code{9}, hyphen, underscore, period, and
+\code{\~}. Other characters are converted to a \code{\%} prefix
+and two digit hexadecimal representation.
+
+\defineentry{http:enable-dynamic-pages}
+\begin{procedure}
+  \code{(http:enable-dynamic-pages \var{path})}
+\end{procedure}
+\returns{} a procedure \alt{} \code{\#f}
+
+If the file extension of \var{path} is ``.ss'', the
+\code{http:enable-dynamic-pages} procedure returns the
+\code{http:eval-dynamic-page} procedure. Otherwise, it returns
+\code{\#f}.
+
+\defineentry{http:eval-dynamic-page}
+\begin{procedure}
+  \code{(http:eval-dynamic-page \var{root-dir} \var{abs-path})}
+\end{procedure}
+\returns{} a URL handler
+
+The \code{http:eval-dynamic-page} procedure wraps a
+\code{http:url-handler} around the contents of a file, extends the
+syntax with the constructs described in
+Section~\ref{sec:dynamic-page-constructs}, and calls the \code{eval}
+system procedure.
+
+\subsection {Dynamic Page Constructs}\label{sec:dynamic-page-constructs}
+
+A dynamic page exposes the same implicit variables as a URL handler
+described in Section~\ref{sec:url-handler} as well as the following
+additional syntax.
 
 \defineentry{find-param}
 \begin{syntax}
@@ -143,7 +653,7 @@ variables to a dynamic page:
 \end{syntax}\antipar
 
 The \code{http:include} construct includes the definitions from
-\var{filename}, a path relative to \code{(web-dir)} if
+\var{filename}, a path relative to the root path of the cache if
 \var{filename} begins with a forward slash, else relative to the
 directory of the current file.
 
@@ -154,260 +664,7 @@ directory of the current file.
   so that any nested \code{http:include} expressions are processed
   relative to the directory of \var{filename}.}
 
-\section {Programming Interface}
-
-\begin{tupledef}{<request>}
-  \argrow{method}{a symbol}
-  \argrow{path}{a decoded string}
-  \argrow{original-path}{same as \var{path}}
-  \argrow{query}{a decoded JSON object}
-\end{tupledef}
-
-The \var{original-path} is used internally when redirecting the
-browser to a new location. If user code copies the \code{<request>}
-tuple, it should not modify \var{original-path}.
-
-\defineentry{http-port-number}
-\begin{parameter}
-  \code{http-port-number}
-\end{parameter}
-\hasvalue{} \code{\#f} or a fixnum $0 \le port \le 65535$
-
-The \code{http-port-number} parameter specifies whether or not
-\code{http-sup:start\&link} should start the HTTP server and,
-if started, on what port that server should listen for connections.
-
-\defineentry{http-request-limit}
-\begin{parameter}
-  \code{http-request-limit}
-\end{parameter}
-\hasvalue{} a positive fixnum
-
-The \code{http-request-limit} parameter specifies the maximum length
-in bytes of the first line of an HTTP request. It defaults to 4,096.
-
-\defineentry{http-header-limit}
-\begin{parameter}
-  \code{http-header-limit}
-\end{parameter}
-\hasvalue{} a positive fixnum
-
-The \code{http-header-limit} parameter specifies the maximum length in
-bytes of the HTTP request headers. It defaults to 1,048,576.
-
-\defineentry{http-content-limit}
-\begin{parameter}
-  \code{http-content-limit}
-\end{parameter}
-\hasvalue{} a positive fixnum
-
-The \code{http-content-limit} parameter specifies the maximum length
-in bytes of HTTP request content read by the system handlers when
-\code{Content-Type} is \code{multipart/form-data} or
-\code{application/x-www-form-urlencoded}. It defaults to
-4,194,304. The limit does not include uploaded files, because they are
-not stored in memory. For all other content types, the handler is
-responsible for enforcing appropriate limits. The system ignores any
-content unread by the handler.
-
-\defineentry{http-sup:start\&link}
-\begin{procedure}
-  \code{(http-sup:start\&link)}
-\end{procedure}
-\returns{}
-\code{\#(ok \var{pid})} \alt{} \code{\#(error \var{error})}
-
-If \code{(http-port-number)} is not \code{\#f},
-the \code{http-sup:start\&link} procedure creates a supervisor named
-\code{http-sup} using \code{supervisor:start\&link} configured
-one-for-one with up to 10 restarts every 10 seconds. The supervisor
-starts the \code{http-cache} and \code{http-listener} gen-servers.
-
-\defineentry{http:get-port-number}
-\begin{procedure}
-  \code{(http:get-port-number)}
-\end{procedure}
-\returns{} see below
-
-If the \code{(http-port-number)} is configured to be zero, the
-operating system will choose an available port
-number. \code{(http:get-port-number)} uses
-\code{listener-port-number} to retrieve the actual port number that
-the server is listening on.
-
-\defineentry{http:find-header}
-\begin{procedure}
-  \code{(http:find-header \var{name} \var{header})}
-\end{procedure}
-\returns{} a string \alt{} \code{\#f}
-
-The \code{http:find-header} procedure returns the value associated
-with \var{name} in \var{header} if present and \code{\#f}
-otherwise. Header symbol comparisons are case-sensitive thus
-\var{name} should be lower-case. Header string comparisons are
-case-insensitive. If \var{name} is not a symbol nor a string,
-exception \code{\#(bad-arg http:find-header \var{name})} is raised.
-
-\defineentry{http:get-header}
-\begin{procedure}
-  \code{(http:get-header \var{name} \var{header})}
-\end{procedure}
-\returns{} a string
-
-The \code{http:get-header} procedure returns the value associated with
-\var{name} in \var{header} if present and raises exception
-\code{\#(http-invalid-header \var{name})} otherwise. Header symbol
-comparisons are case-sensive thus \var{name} should be
-lower-case. Header string comparisons are case-insensitive. If
-\var{name} is not a symbol nor a string, exception \code{\#(bad-arg
-  http:get-header \var{name})} is raised.
-
-\defineentry{http:get-content-length}
-\begin{procedure}
-  \code{(http:get-content-length \var{header})}
-\end{procedure}
-\returns{} an unsigned integer \alt{} \code{\#f}
-
-The \code{http:get-content-length} procedure returns the unsigned
-integer value associated with \code{Content-Length} in \var{header} if
-present and \code{\#f} otherwise. It raises exception
-\code{\#(http-invalid-content-length \var{value})} if the \var{value}
-string does not represent an unsigned integer.
-
-\defineentry{http:find-param}
-\begin{procedure}
-  \code{(http:find-param \var{name} \var{params})}
-\end{procedure}
-\returns{} a string \alt{} \code{\#f}
-
-The \code{http:find-param} procedure returns the value associated with
-\var{name} in \var{params} if present and \code{\#f}
-otherwise. Parameter comparisons are case-sensitive. If \var{name} is
-not a symbol nor a string, exception \code{\#(bad-arg http:find-param
-  \var{name})} is raised.
-
-\defineentry{http:get-param}
-\begin{procedure}
-  \code{(http:get-param \var{name} \var{params})}
-\end{procedure}
-\returns{} a string
-
-The \code{http:get-param} procedure returns the value associated with
-\var{name} in \var{params} if present and raises exception
-\code{\#(http-invalid-param \var{name})} otherwise. Parameter
-comparisons are case-sensitive. If \var{name} is not a symbol nor a
-string, exception \code{\#(bad-arg http:get-param \var{name})} is
-raised.
-
-\defineentry{http:read-header}
-\begin{procedure}
-  \code{(http:read-header \var{ip} \var{limit})}
-\end{procedure}
-\returns{} a JSON object
-
-The \code{http:read-header} procedure reads from the binary input
-port \var{ip} until a blank line is read.
-
-A JSON object is created by making a symbol from lower-case characters
-before the first colon as the key. Non-linear white space is skipped,
-and the remaining characters are converted to a string
-value. Duplicate message-header fields result in a single entry where
-the value is a comma-separated list.
-
-Reading beyond \var{limit} raises exception
-\code{http-input-limit-exceeded}.
-
-Failure to find a colon on any given line raises exception
-\code{http-invalid-header}.
-
-\defineentry{http:read-status}
-\begin{procedure}
-  \code{(http:read-status \var{ip} \var{limit})}
-\end{procedure}
-\returns{} number \alt{} \code{\#f}
-
-The \code{http:read-status} procedure reads the HTTP response status
-line from the binary input port \var{op} and returns the number if
-well formed and \code{\#f} otherwise. Reading beyond \var{limit}
-raises exception \code{http-input-limit-exceeded}.
-
-\defineentry{http:write-status}
-\begin{procedure}
-  \code{(http:write-status \var{op} \var{status})}
-\end{procedure}
-\returns{} unspecified
-
-The \code{http:write-status} procedure writes the HTTP response
-status line to the binary output port \var{op}.
-
-Unless \var{status} is a fixnum and $100 \leq \var{status} \leq 599$, the
-exception \code{\#(bad-arg http:write-status \var{status})} is
-raised.
-
-According to HTTP~\cite{RFC7230} the status line includes a human
-readable reason phrase. The grammar shows that it can in fact be 0
-characters long; therefore, the reason phrase is not included in this
-implementation.
-
-\defineentry{http:write-header}
-\begin{procedure}
-  \code{(http:write-header \var{op} \var{header})}
-\end{procedure}
-\returns{} unspecified
-
-The \code{http:write-header} procedure writes the HTTP \var{header},
-and trailing CR LF to the binary output port \var{op}.
-
-\var{header} is an association list. If \var{header}'s keys are not
-strings, exception \code{\#(bad-arg http:write-header \var{header})}
-is raised.
-
-\defineentry{http:respond}
-\begin{procedure}
-  \code{(http:respond \var{op} \var{status} \var{header} \var{content})}
-\end{procedure}
-\returns{} unspecified
-
-The \code{http:respond} procedure writes the HTTP \var{status} and
-\var{header} to binary output port \var{op} using
-\code{http:write-status} and \code{http:write-header}, adding
-\code{Content-Length} to the \var{header}. When
-\code{Cache-Control} is not present in \var{header}, it is added
-with value \code{no-cache}. The \var{content} is then written, and
-the output port is flushed.
-
-\var{content} is a bytevector.
-
-\defineentry{http:respond-file}
-\begin{procedure}
-  \code{(http:respond-file \var{op} \var{status} \var{header} \var{filename})}
-\end{procedure}
-\returns{} unspecified
-
-The \code{http:respond-file} procedure writes the HTTP \var{status}
-and \var{header} to binary output port \var{op} using
-\code{http:write-status} and \code{http:write-header}, adding
-\code{Content-Length} to \var{header}.  The \code{Cache-Control}
-header is added, if it is not already present, with value
-\code{max-age=3600}. The \code{Content-Type} header is added if
-it is not already present and the extension of \var{filename} matches
-(case insensitively) an extension in the \code{mime-types} file of
-\code{(web-dir)}. Each line of \code{mime-types} has the form
-\code{("\var{extension}"~.~"\var{Content-Type}")}. The content of
-the file is streamed to the output port so that the file does not need
-to be loaded into memory. The output port is flushed.
-
-\defineentry{http:percent-encode}
-\begin{procedure}
-  \code{(http:percent-encode \var{s})}
-\end{procedure}
-\returns{} an encoded string
-
-The \code{http:percent-encode} procedure writes the characters
-\code{A}--\code{Z}, \code{a}--\code{z},
-\code{0}--\code{9}, hyphen, underscore, period, and
-\code{\~}. Other characters are converted to a \code{\%} prefix
-and two digit hexadecimal representation.
+\subsection {HyperText Markup Language}
 
 \defineentry{html:encode}
 \begin{procedure}

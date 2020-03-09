@@ -6,7 +6,7 @@
   * removed `bin-dir`
   * renamed `log-path` to `log-file`
   * renamed `tmp-path` to `tmp-dir`
-  * renamed `web-path` to `web-dir`
+  * renamed `web-path` to `web-dir`, then obsoleted
 * `(swish erlang)`
   * added `complete-io` and `wait-for-io`
   * `exit` is now `raise` to eliminate a conflict with Chez Scheme.
@@ -15,6 +15,7 @@
   * `erlang:now` no longer drifts from clock time.
 * `(swish gen-server)`
   * `define-state-record` is now `define-state-tuple`
+* `(swish http)` was revamped.
 * `(swish io)`
   * removed constants `CREATE_ALWAYS`, `CREATE_NEW`,
     `FILE_SHARE_DELETE`, `FILE_SHARE_NONE`, `FILE_SHARE_READ`,

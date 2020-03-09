@@ -1,6 +1,7 @@
 digraph G {
+  concentrate=true;
   graph [margin=0,rankdir=LR];
-  node [shape=box,fontname="Latin Modern Mono",fontsize=10];
+  node [shape=box,fontname="Latin Modern Mono",fontsize=11];
   application [label="application"];
   mainsup [label="main-sup",shape=ellipse];
   eventmgr [label="event-mgr"];
@@ -8,11 +9,6 @@ digraph G {
   eventmgrsentry [label="event-mgr-sentry"];
   statistics [label="statistics"];
   gatekeeper [label="gatekeeper"];
-  httpsup [label="http-sup",shape=ellipse];
-  httpd [label="http-listener"];
-  httpcache [label="http-cache"];
-  hc1 [label="http-connection 1",fontname="Latin Modern Roman,"];
-  hc2 [label="http-connection 2",fontname="Latin Modern Roman,"];
   application -> mainsup;
   mainsup -> application;
   mainsup -> eventmgr;
@@ -20,9 +16,4 @@ digraph G {
   mainsup -> eventmgrsentry;
   mainsup -> statistics;
   mainsup -> gatekeeper;
-  mainsup -> httpsup;
-  httpsup -> httpd;
-  httpsup -> httpcache;
-  httpsup -> hc1;
-  httpsup -> hc2;
 }

@@ -310,13 +310,13 @@ obtain an absolute path and stores the result.
 \end{parameter}
 \hasvalue{} a file-system path
 
-When called without arguments, \code{base-dir} returns the file-system path of
-the application's base directory.
-Otherwise, the base directory is set to \var{path}, which must specify the
-file-system path of a directory that exists and is writable by the application.
-Setting \code{base-dir} sets the values of \code{data-dir}, \code{log-file},
-\code{tmp-dir}, and \code{web-dir} so that they refer to locations within the
-base directory.
+When called without arguments, \code{base-dir} returns the file-system
+path of the application's base directory.  Otherwise, the base
+directory is set to \var{path}, which must specify the file-system
+path of a directory that exists and is writable by the application.
+Setting \code{base-dir} sets the values of \code{data-dir},
+\code{log-file}, and \code{tmp-dir} so that they refer to locations
+within the base directory.
 
 When the application starts, \code{base-dir} is set to the current directory.
 
@@ -356,17 +356,6 @@ in which the application can write ephemeral data.
 Applications should not assume that this directory exists, but should
 instead use \code{make-directory-path} when creating files under \code{tmp-dir}.
 Its initial value is the path to a \code{"tmp"} subdirectory of
-the directory specified by \code{base-dir}.
-
-\defineentry{web-dir}
-\begin{parameter}
-  \code{(web-dir \opt{\var{path}})}
-\end{parameter}
-\hasvalue{} a file-system path
-
-The \code{web-dir} parameter holds the file-system path of the directory
-used by the HTTP interface (see Chapter~\ref{chap:http}).
-Its initial value is the path to a \code{"web"} subdirectory of
 the directory specified by \code{base-dir}.
 
 \defineentry{include-line}

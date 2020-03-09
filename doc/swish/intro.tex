@@ -74,7 +74,7 @@ to control re-entrancy.
 \section {Supervision Tree}\label{sec:default-supervision-tree}
 
 \begin{figure}
-  \center\includegraphics[keepaspectratio,width=\textwidth]{swish/intro-sup-tree.pdf}
+  \center\includegraphics{swish/intro-sup-tree.pdf}
   \caption{\label{fig:intro-sup-tree}Supervision Tree}
 \end{figure}
 
@@ -98,9 +98,6 @@ system statistics gen-server (see Chapter~\ref{chap:stats}) that
 periodically posts a \code{<statistics>} event.  The gatekeeper
 worker is the gen-server described in Chapter~\ref{chap:gatekeeper}.
 
-The \code{http-sup} supervisor is configured one-for-one with up to 10
-restarts every 10 seconds. The \code{http-listener},
-\code{http-cache}, and http-connection processes are described in
-Chapter~\ref{chap:http}. When the \code{http-port-number} parameter is
-set to its default value of \code{\#f}, the \code{http-sup} supervisor
-is not started.
+A web server can be added to the supervision tree by calling
+\code{http:add-file-server} or \code{http:add-server} (see
+Chapter~\ref{chap:http}) before calling \code{app:start}.
