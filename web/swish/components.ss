@@ -35,7 +35,10 @@
         (div (@ (class "undocked menu"))
           ,(link "#Debugging" "Debugging")
           (div (@ (class "menu item"))
-            ,(panel "Params" `(p ,(format "~a\n" params))))))))))
+            ,(panel "Params"
+               `(pre ,(let ([op (open-output-string)])
+                        (json:write op params 0)
+                        (get-output-string op)))))))))))
 
 ;;HTML Helpers
 (define (link url anchor)

@@ -53,11 +53,11 @@ and the HTTP request header and any content parameters are read.
 When \code{Content-Length} appears in the header and
 \code{Content-Type} is \code{multipart/form-data} or
 \code{application/x-www-form-urlencoded}, the content is read and
-converted to an association list. Otherwise, the handler is
-responsible for reading the content. Any unread content as determined
-by \code{Content-Length} is ignored. Each uploaded file is stored in
-\code{(tmp-dir)}, and the association list value is \code{\#(<file>
-  \var{filename})}.
+converted to a JSON object. Otherwise, the handler is responsible for
+reading the content. Any unread content as determined by
+\code{Content-Length} is ignored. Each uploaded file is stored in
+\code{(tmp-dir)}, and the JSON value is a JSON object with
+\code{type=file} and \code{filename=\var{filename}}.
 
 \code{http:file-handler} is then called combining the
 \code{<request>} query parameters and content
@@ -120,7 +120,7 @@ variables to a dynamic page:
   \argrow{op}{binary output port}
   \argrow{request}{a \code{<request>} tuple}
   \argrow{header}{a JSON object}
-  \argrow{params}{an association list}
+  \argrow{params}{a JSON object}
 \end{argtbl}
 
 \defineentry{find-param}
@@ -160,7 +160,7 @@ directory of the current file.
   \argrow{method}{a symbol}
   \argrow{path}{a decoded string}
   \argrow{original-path}{same as \var{path}}
-  \argrow{query}{a decoded association list}
+  \argrow{query}{a decoded JSON object}
 \end{tupledef}
 
 The \var{original-path} is used internally when redirecting the
@@ -283,8 +283,8 @@ string does not represent an unsigned integer.
 The \code{http:find-param} procedure returns the value associated with
 \var{name} in \var{params} if present and \code{\#f}
 otherwise. Parameter comparisons are case-sensitive. If \var{name} is
-not a string, exception \code{\#(bad-arg http:find-param \var{name})}
-is raised.
+not a symbol nor a string, exception \code{\#(bad-arg http:find-param
+  \var{name})} is raised.
 
 \defineentry{http:get-param}
 \begin{procedure}
@@ -295,8 +295,9 @@ is raised.
 The \code{http:get-param} procedure returns the value associated with
 \var{name} in \var{params} if present and raises exception
 \code{\#(http-invalid-param \var{name})} otherwise. Parameter
-comparisons are case-sensitive. If \var{name} is not a string,
-exception \code{\#(bad-arg http:get-param \var{name})} is raised.
+comparisons are case-sensitive. If \var{name} is not a symbol nor a
+string, exception \code{\#(bad-arg http:get-param \var{name})} is
+raised.
 
 \defineentry{http:read-header}
 \begin{procedure}
@@ -806,5 +807,5 @@ This procedure is intended for use within custom writers passed in to
   \argrow{method}{\code{<request>} method}
   \argrow{path}{\code{<request>} path}
   \argrow{header}{a JSON object}
-  \argrow{params}{an association list}
+  \argrow{params}{a JSON object}
 \end{pubevent}

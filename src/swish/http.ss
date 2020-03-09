@@ -339,15 +339,6 @@
   (define (http:respond-file conn status header filename)
     (unwrap (gen-server:call conn `#(respond-file ,status ,header ,filename))))
 
-  (define (alist->json ls)
-    ;; Temporary - preparing for the future
-    (let ([r (json:make-object)])
-      (for-each
-       (lambda (p)
-         (json:set! r (string->symbol (car p)) (cdr p)))
-       ls)
-      r))
-
   (define http:call-with-form
     (case-lambda
      [(conn header content-limit file-limit files f)
@@ -383,7 +374,7 @@
                   (lambda (ip op)
                     (let ([content (make-bytevector len)])
                       (get-chunk! ip content len)
-                      (alist->json (parse-encoded-kv content 0 len))))
+                      (parse-encoded-kv content 0 len)))
                   timeout)]
                [else (json:make-object)])])
         (on-exit (delete-tmp-files data)
@@ -659,12 +650,15 @@
                 (lp (fx+ i 1))]))))))
 
   (define (parse-encoded-kv bv i end)
-    (if (fx>= i end)
-        '()
-        (let*-values
-            ([(stop key) (parse-encoded-string bv i end #\=)]
-             [(stop val) (parse-encoded-string bv (fx+ stop 1) end #\&)])
-          (cons (cons key val) (parse-encoded-kv bv (fx+ stop 1) end)))))
+    (let ([ht (json:make-object)])
+      (let lp ([i i])
+        (if (fx>= i end)
+            ht
+            (let*-values
+                ([(stop key) (parse-encoded-string bv i end #\=)]
+                 [(stop val) (parse-encoded-string bv (fx+ stop 1) end #\&)])
+              (json:set! ht (string->symbol key) val)
+              (lp (fx+ stop 1)))))))
 
   (define (decode bv i end)
     (and (fx< (fx+ i 2) end)
@@ -832,11 +826,11 @@
         (throw `#(http-invalid-header ,name))))
 
   (define (internal-find-param who name params)
-    (unless (string? name)
-      (bad-arg who name))
-    (cond
-     [(assp (lambda (key) (string=? key name)) params) => cdr]
-     [else #f]))
+    (let ([key (cond
+                [(symbol? name) name]
+                [(string? name) (string->symbol name)]
+                [else (bad-arg who name)])])
+      (json:ref params key #f)))
 
   (define (http:find-param name params)
     (internal-find-param 'http:find-param name params))
@@ -978,7 +972,7 @@
       (define data
         (parse-form-data-disposition
          (http:get-header 'content-disposition header)))
-      (define name (http:get-param "name" data))
+      (define name (find-alist-val "name" data string=?))
       (cond
        [(find-alist-val "filename" data string=?)
         (let ([key (string->symbol name)])
