@@ -786,12 +786,12 @@
 
   (define (bv-match-positions bv sep n)
     (let ([limit (bytevector-length bv)])
-      (let lp ([s 0] [e 0] [n n])
+      (let lp ([e 0] [n n])
         (cond
          [(or (fx= e limit) (fx= n 0)) '()]
          [(fx= (bytevector-u8-ref bv e) sep)
-          (cons e (lp (fx+ e 1) (fx+ e 1) (fx- n 1)))]
-         [else (lp s (fx+ e 1) n)]))))
+          (cons e (lp (fx+ e 1) (fx- n 1)))]
+         [else (lp (fx+ e 1) n)]))))
 
   (define (bv-next-non-lws bv i)
     (or (and (fx< i (bytevector-length bv))
