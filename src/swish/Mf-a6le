@@ -13,7 +13,7 @@ SwishLibs := ../../${BUILD}/bin/libosi.so ../../${BUILD}/lib/swish_kernel.o
 	$C -o $@ $^ -Wl,-E ${SystemLibs}
 
 ../../${BUILD}/bin/libosi.so: ${OsiObj} ${UvLib}/libuv.a
-	$C -shared -L"${LIBUV_LIBPATH}" -o ../../${BUILD}/bin/libosi.so ${OsiObj} -luv -luuid
+	$C -shared -L"${LIBUV_LIBPATH}" -o ../../${BUILD}/bin/libosi.so ${OsiObj} -luv -luuid -lpthread
 
 ../../${BUILD}/lib/swish_kernel.o: ${UvLib}/libuv.a run.o ${OsiObj}
 	ld -melf_x86_64 -r -X -o $@ run.o ${OsiObj} "${SCHEME_LIBPATH}"/kernel.o -L"${LIBUV_LIBPATH}" -luv
