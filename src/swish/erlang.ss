@@ -762,50 +762,37 @@
      [else (throw `#(timeout-value ,time ,src))]))
 
   (define ($receive matcher src waketime timeout-handler)
-    ;; We need to maintain the interrupt count even when yield invokes a
-    ;; continuation.
-    (define interrupts-enabled? #t)
-    (define (disable)
-      (when interrupts-enabled?
-        (disable-interrupts)
-        (set! interrupts-enabled? #f)))
-    (define (enable)
-      (when (not interrupts-enabled?)
-        (set! interrupts-enabled? #t)
-        (enable-interrupts)))
-    (dynamic-wind
-      disable
-      (lambda ()
-        (let find ([prev (pcb-inbox self)])
-          (let ([msg (q-next prev)])
-            (cond
-             [(eq? (pcb-inbox self) msg)
-              (cond
-               [(not waketime)
-                (pcb-src-set! self src)
-                (yield #f 0)
-                (pcb-src-set! self #f)
-                (find prev)]
-               [(< (erlang:now) waketime)
-                (pcb-src-set! self src)
-                (pcb-sleeping?-set! self #t)
-                (yield sleep-queue waketime)
-                (pcb-src-set! self #f)
-                (find prev)]
-               [else
-                (enable)
-                (timeout-handler)])]
-             [else
-              (enable)
-              (cond
-               [(matcher (msg-contents msg)) =>
-                (lambda (run)
-                  (remove-q msg)
-                  (run))]
-               [else
-                (disable)
-                (find msg)])]))))
-      enable))
+    (disable-interrupts)
+    (let find ([prev (pcb-inbox self)])
+      (let ([msg (q-next prev)])
+        (cond
+         [(eq? (pcb-inbox self) msg)
+          (enable-interrupts) ;; in case yield invokes a continuation
+          (cond
+           [(not waketime)
+            (pcb-src-set! self src)
+            (yield #f 0)
+            (disable-interrupts)
+            (pcb-src-set! self #f)
+            (find prev)]
+           [(< (erlang:now) waketime)
+            (pcb-src-set! self src)
+            (pcb-sleeping?-set! self #t)
+            (yield sleep-queue waketime)
+            (disable-interrupts)
+            (pcb-src-set! self #f)
+            (find prev)]
+           [else (timeout-handler)])]
+         [else
+          (enable-interrupts)
+          (cond
+           [(matcher (msg-contents msg)) =>
+            (lambda (run)
+              (remove-q msg)
+              (run))]
+           [else
+            (disable-interrupts)
+            (find msg)])]))))
 
   (define process-default-ticks 1000)
 
