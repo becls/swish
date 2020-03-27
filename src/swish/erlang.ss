@@ -361,7 +361,7 @@
 
   (define (keyboard-interrupt p)
     (unless (pcb? p)
-      (bad-arg 'interrupt p))
+      (bad-arg 'keyboard-interrupt p))
     (if (eq? p self)
         ((keyboard-interrupt-handler))
         (no-interrupts
