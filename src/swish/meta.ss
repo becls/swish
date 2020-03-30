@@ -39,6 +39,7 @@
    scdr
    snull?
    syntax-datum-eq?
+   windows?
    with-temporaries
    )
   (import (chezscheme))
@@ -167,6 +168,13 @@
         (lambda (ae)
           (rebuild x (annotation-expression ae)))]
        [else x])))
+
+  (define-syntax windows?
+    (meta-cond
+     [(memq (machine-type) '(i3nt ti3nt a6nt ta6nt))
+      (identifier-syntax #t)]
+     [else
+      (identifier-syntax #f)]))
 
   (define-syntax with-temporaries
     (syntax-rules ()

@@ -1481,6 +1481,16 @@ operation. To unblock the process, call \code{complete-io} from a
 callback function.
 
 % ----------------------------------------------------------------------------
+\defineentry{windows?}
+\begin{syntax}
+  \code{windows?}
+\end{syntax}
+\expandsto{} a boolean
+
+The \code{windows?} macro expands to \code{\#t} if the host is running
+Microsoft Windows and \code{\#f} if not.
+
+% ----------------------------------------------------------------------------
 \subsection {Tuples}
 
 For users of the concurrency model, a \emph{tuple}\index{tuple} is a
