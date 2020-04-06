@@ -892,6 +892,12 @@
 
   (define (port-number? x) (and (fixnum? x) (fx<= 0 x 65535)))
 
+  (define (@safe-get-ip-address port default)
+    (let ([addr (osi_get_ip_address* port)])
+      (cond
+       [(pair? addr) default]
+       [else addr])))
+
   (define (listen-tcp address port-number process)
     ;; Keep a weak reference to the listener in cell so that the
     ;; callback can use it.
@@ -911,7 +917,7 @@
                       (if (pair? r)
                           (send process
                             `#(accept-tcp-failed ,listener ,(car r) ,(cdr r)))
-                          (let* ([name (osi_get_ip_address r)]
+                          (let* ([name (@safe-get-ip-address r "")]
                                  [port (@make-osi-port name r)])
                             (send process
                               `#(accept-tcp ,listener ,(make-iport name port #f)
@@ -937,30 +943,28 @@
          (tcp-listeners listener #f)))))
 
   (define (connect-tcp hostname port-spec)
-    (define result
-      (begin
-        (unless (string? hostname)
-          (bad-arg 'connect-tcp hostname))
-        (unless (or (port-number? port-spec) (string? port-spec))
-          (bad-arg 'connect-tcp port-spec))
-        (void)))
-    (with-interrupts-disabled
-     (match (osi_connect_tcp* hostname
-              (if (string? port-spec) port-spec (number->string port-spec))
-              (let ([p self])
-                (lambda (r)
-                  (if (pair? r)
-                      (set! result r)
-                      (set! result (@make-osi-port (osi_get_ip_address r) r)))
-                  (complete-io p))))
-       [#t
-        (let ([name (format "[~a]:~a" hostname port-spec)])
+    (define result)
+    (unless (string? hostname)
+      (bad-arg 'connect-tcp hostname))
+    (unless (or (port-number? port-spec) (string? port-spec))
+      (bad-arg 'connect-tcp port-spec))
+    (let ([name (format "[~a]:~a" hostname port-spec)])
+      (with-interrupts-disabled
+       (match (osi_connect_tcp* hostname
+                (if (string? port-spec) port-spec (number->string port-spec))
+                (let ([p self])
+                  (lambda (r)
+                    (if (pair? r)
+                        (set! result r)
+                        (set! result (@make-osi-port (@safe-get-ip-address r name) r)))
+                    (complete-io p))))
+         [#t
           (wait-for-io name)
           (match result
             [(,who . ,errno) (io-error name who errno)]
             [,port
              (let ([name (osi-port-name port)])
-               (values (make-iport name port #f) (make-oport name port)))]))])))
+               (values (make-iport name port #f) (make-oport name port)))])]))))
 
   (define-record-type sighandler
     (nongenerative)
