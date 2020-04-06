@@ -913,7 +913,8 @@
                                  (case-lambda
                                   [() (raise 'normal)]
                                   [(x . args) (throw x)]))
-                                (reset-handler (lambda () (done 'normal)))
+                                (reset-handler
+                                 (lambda () (done (make-fault 'reset))))
                                 (thunk)
                                 'normal))])
                         ;; Process finished
