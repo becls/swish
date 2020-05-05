@@ -4,6 +4,9 @@ endif
 ifneq (,$(shell "${CC}" --help=warnings 2> /dev/null | grep cast-function-type))
   HUSH:=${HUSH} -Wno-cast-function-type
 endif
+ifneq (,$(shell "${CC}" --help=warnings 2> /dev/null | grep return-local-addr))
+  HUSH:=${HUSH} -Wno-return-local-addr
+endif
 C = ${CC} -m32 -fPIC -Wall -Wextra -Werror -O2 ${CPPFLAGS} ${CFLAGS} ${LDFLAGS}
 OsiObj=osi.o sha1.o sqlite.o sqlite3.o
 SystemLibs=-lm -ldl -lncurses -luuid -lpthread -lsystemd
