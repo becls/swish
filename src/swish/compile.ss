@@ -2,12 +2,18 @@
 (generate-inspector-information #f)
 (generate-procedure-source-information #t)
 
+(define target-file (make-parameter #f))
+
+(define (bail)
+  (cond [(target-file) => delete-file])
+  (abort))
+
 ;; jump through hoops for less verbose compile-file message
 (define swish-compile-library
   (let ([stock-compile-library (compile-library-handler)])
     (lambda (source dest)
       (printf "compiling ~a\n" source)
-      (parameterize ([compile-file-message #f])
+      (parameterize ([compile-file-message #f] [target-file dest])
         (stock-compile-library source dest)))))
 (compile-library-handler swish-compile-library)
 
@@ -129,6 +135,7 @@
   (lambda ()
     (new-cafe
      (lambda (x)
-       (reset-handler abort)
+       (keyboard-interrupt-handler bail)
+       (reset-handler bail)
        (eval x))))
   exit)
