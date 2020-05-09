@@ -58,6 +58,7 @@
 \newlength{\declheight}
 \newcommand{\makedecl}[1]{%
 \newenvironment{#1}{%
+  \begin{samepage}%
   \begin{lrbox}{\declbox}%
     \begin{minipage}[t]{\textwidth}}{%
     \end{minipage}%
@@ -69,7 +70,8 @@
   \item%
     \makebox[0pt][l]{\color{shade}\rule[-\dp\declbox]{\textwidth}{\declheight}}%
     \usebox{\declbox}%
-  \end{trivlist}}}
+  \end{trivlist}%
+  \end{samepage}}}%
 
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{0.5\baselineskip}
