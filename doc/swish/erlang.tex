@@ -863,7 +863,7 @@ the \var{handle-object} and \var{handle-field} procedures should use
 \begin{procedure}
   \code{(send \var{destination} \var{message})}
 \end{procedure}
-\returns{} \var{message}
+\returns{} unspecified
 
 The \code{send} procedure sends \var{message} to a process or
 registered name, \var{destination}.  If \var{destination} is not a
@@ -2644,7 +2644,7 @@ the Erlang queue module~\cite{queue-ref}.
 \begin{procedure}
   \code{(queue:empty? \var{q})}
 \end{procedure}
-\returns{} \code{\#t} if \var{q} is a queue, \code{\#f} otherwise
+\returns{} \code{\#t} if \var{q} is \code{queue:empty}, \code{\#f} otherwise
 
 % ----------------------------------------------------------------------------
 \defineentry{queue:get}

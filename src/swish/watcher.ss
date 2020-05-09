@@ -45,5 +45,6 @@
        (when (eq? (<child> restart-type x) 'watch-only)
          (supervisor:terminate-child watcher (<child> name x))
          (supervisor:delete-child watcher (<child> name x))))
-     (supervisor:get-children watcher)))
+     (supervisor:get-children watcher))
+    (void))
   )
