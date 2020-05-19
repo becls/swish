@@ -91,6 +91,7 @@
    signal-handler
    signal-handler-count
    spawn-os-process
+   spawn-os-process-detached
    stat-directory?
    stat-regular-file?
    tcp-listener-count
@@ -852,6 +853,13 @@
            (make-iport name (@make-osi-port name from-stderr) #t))
          os-pid)]
        [(,who . ,errno) (io-error path who errno)])))
+
+  (define (spawn-os-process-detached path args)
+    (unless (and (list? args) (for-all string? args))
+      (bad-arg 'spawn-os-process-detached args))
+    (match (osi_spawn_detached* path args)
+      [(,who . ,errno) (io-error path who errno)]
+      [,os-pid os-pid]))
 
   ;; TCP/IP Ports
 

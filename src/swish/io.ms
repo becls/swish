@@ -184,7 +184,13 @@
     [(osi_spawn . ,_)
      (osi_spawn* "*" '(0) (lambda (os-pid exit-status term-signal) 'ok))]
     [(osi_spawn . ,_)
-     (osi_spawn* "*" '("x" . 0) (lambda (os-pid exit-status term-signal) 'ok))])
+     (osi_spawn* "*" '("x" . 0) (lambda (os-pid exit-status term-signal) 'ok))]
+    [#(EXIT #(io-error "*!*" uv_spawn ,_))
+     (catch (spawn-os-process-detached "*!*" '()))]
+    [(osi_spawn_detached . ,_)
+     (osi_spawn_detached* "*" '(0))]
+    [(osi_spawn_detached . ,_)
+     (osi_spawn_detached* "*" '("x" . 0))])
    'ok))
 
 (isolate-mat files ()

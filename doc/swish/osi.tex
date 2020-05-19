@@ -529,6 +529,17 @@ When the process exits, the callback list \code{(\var{callback}
 integer exit status, and \var{term-signal} is the integer termination
 signal or 0 if the process did not terminate because of a signal.
 
+\defineentry{osi\_spawn\_detached}
+\begin{function}
+  \code{ptr osi\_spawn\_detached(const char* \var{path}, ptr \var{args});}
+\end{function}
+
+The \code{osi\_spawn\_detached} function uses the \code{uv\_spawn}
+function to create a process with the list of string-valued \var{args}
+and the \code{UV\_PROCESS\_DETACHED} flag set. It returns an integer
+identifying the process when the process has been successfully created
+and an error pair otherwise.
+
 \defineentry{osi\_get\_pid}
 \begin{function}
   \code{int osi\_get\_pid();}

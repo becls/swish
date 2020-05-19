@@ -617,9 +617,11 @@ static void free_argv(char** argv) {
 
 static void process_exit_cb(uv_process_t* process, int64_t exit_status, int term_signal) {
   ptr callback = (ptr)process->data;
-  osi_add_callback3(callback, Sinteger32(process->pid), Sinteger64(exit_status), Sinteger32(term_signal));
-  Sunlock_object(callback);
-  process->data = 0;
+  if (callback) {
+    osi_add_callback3(callback, Sinteger32(process->pid), Sinteger64(exit_status), Sinteger32(term_signal));
+    Sunlock_object(callback);
+    process->data = 0;
+  }
   uv_close((uv_handle_t*)process, close_handle_data_cb);
 }
 
@@ -886,6 +888,54 @@ ptr osi_spawn(const char* path, ptr args, ptr callback) {
   Svector_set(r, 2, Sunsigned((uptr)err_port));
   Svector_set(r, 3, Sinteger32(p->pid));
   return r;
+}
+
+ptr osi_spawn_detached(const char* path, ptr args) {
+  int argc = string_list_length(args);
+  if (argc < 0)
+    return osi_make_error_pair("osi_spawn_detached", UV_EINVAL);
+  // Build argument list
+  char** argv = (char**)malloc((argc + 2) * sizeof(char*));
+  if (!argv)
+    return osi_make_error_pair("osi_spawn_detached", UV_ENOMEM);
+  {
+    char** arg = argv;
+    *arg++ = (char*)path;
+    ptr x = args;
+    while (Spairp(x)) {
+      size_t l;
+      if (!(*arg++ = osi_string_to_utf8(Scar(x), &l)))
+        break;
+      x = Scdr(x);
+    }
+    *arg = NULL;
+  }
+  // Spawn the process
+  uv_process_t* p = malloc_container(uv_process_t);
+  if (!p) {
+    free_argv(argv);
+    return osi_make_error_pair("osi_spawn_detached", UV_ENOMEM);
+  }
+  uv_process_options_t options = {
+    .exit_cb = process_exit_cb,
+    .file = path,
+    .args = argv,
+    .env = NULL,
+    .cwd = NULL,
+    .flags = UV_PROCESS_DETACHED,
+    .stdio_count = 0,
+    .stdio = NULL,
+    .uid = 0,
+    .gid = 0
+  };
+  p->data = 0;
+  int rc = uv_spawn(osi_loop, p, &options);
+  free_argv(argv);
+  if (rc < 0) {
+    uv_close((uv_handle_t*)p, close_handle_data_cb);
+    return osi_make_error_pair("uv_spawn", rc);
+  }
+  return Sinteger32(p->pid);
 }
 
 ptr osi_kill(int pid, int signum) {

@@ -2516,6 +2516,22 @@ If \code{osi\_spawn} returns error pair \code{(\var{who}
   \var{errno})} is raised.
 
 % ----------------------------------------------------------------------------
+\defineentry{spawn-os-process-detached}
+\begin{procedure}
+  \code{(spawn-os-process-detached \var{path} \var{args})}
+\end{procedure}
+\returns{} an integer operating-system process identifier
+
+The \code{spawn-os-process-detached} procedure calls
+\code{osi\_spawn\_detached} to spawn an operating system process with
+the string \var{path} and list of string-valued \var{args}.  It
+returns an integer operating-system process identifier.
+
+If \code{osi\_spawn\_detached} returns error pair \code{(\var{who}
+  . \var{errno})}, exception \code{\#(io-error \var{path} \var{who}
+  \var{errno})} is raised.
+
+% ----------------------------------------------------------------------------
 \defineentry{stat-directory?}
 \begin{procedure}
   \code{(stat-directory? \var{x})}

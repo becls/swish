@@ -100,14 +100,16 @@
    osi_reset_statement
    osi_reset_statement*
    osi_set_quantum
-   osi_start_signal
-   osi_start_signal*
-   osi_stop_signal
-   osi_stop_signal*
    osi_spawn
    osi_spawn*
+   osi_spawn_detached
+   osi_spawn_detached*
+   osi_start_signal
+   osi_start_signal*
    osi_step_statement
    osi_step_statement*
+   osi_stop_signal
+   osi_stop_signal*
    osi_unlink
    osi_unlink*
    osi_watch_path
@@ -170,6 +172,7 @@
   ;; Process
   (fdefine osi_exit (status int) void)
   (define-osi osi_spawn (path string) (args ptr) (callback ptr))
+  (define-osi osi_spawn_detached (path string) (args ptr))
   (define-osi osi_kill (pid int) (signum int))
 
   ;; File System
