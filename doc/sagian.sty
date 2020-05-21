@@ -22,7 +22,7 @@
 
 \NeedsTeXFormat{LaTeX2e}
 \ProvidesPackage{sagian}
-\RequirePackage{alltt,amsmath,float,fullpage,index,longtable,wrapfig,xspace}
+\RequirePackage{alltt,amsmath,float,fullpage,imakeidx,longtable,wrapfig,xspace}
 \RequirePackage[hyperindex]{hyperref}
 \RequirePackage[T1]{fontenc}
 \RequirePackage{lmodern}
@@ -125,29 +125,6 @@
     \addcontentsline{toc}{chapter}{List of Tables}
     \listoftables}{}}
 
-% Print the index, but first, override \theindex environment
-% with one that adds an entry to the table of contents before
-% deferring to the previous \theindex environment.
-% Have the table of contents addition happen within \theindex
-% environment so that if there are no items in that index,
-% it does not show up in the table of contents.
-\newcommand{\tocprintindex}[1]{
-  % Don't forget the extra layer of { } scoping to hide our crimes.
-  {
-  \let\prevtheindex\theindex
-  \let\endprevtheindex\endtheindex
-  \renewenvironment{theindex}{
-    \edef\indexname{\the\@nameuse{idxtitle@\@indextype}}
-    \clearpage\phantomsection
-    \addcontentsline{toc}{chapter}{\indexname}
-    \begin{prevtheindex}
-  }{
-    \end{prevtheindex}
-  }
-  \printindex[#1]
-  }
-}
-
 \newenvironment{sagianbook}[3]{
   \title{#1}
   \author{#2}
@@ -158,7 +135,7 @@
   \tocbibliography{reference}
   \toclistoffigures
   \toclistoftables
-  \tocprintindex{default}
+  \printindex
   }
 
 \newcommand{\defineentry}[1]{\index{#1@\code{#1}}}

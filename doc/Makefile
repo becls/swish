@@ -18,7 +18,7 @@ font.conf:
 	@echo '<?xml version="1.0"?>' > $@
 	@echo '<!DOCTYPE fontconfig SYSTEM "fonts.dtd">' >> $@
 	@echo '<fontconfig>' >> $@
-	@echo "  <dir>$$(dirname $$(kpsewhere lmroman10-regular.otf))</dir>" >> $@
+	@echo "  <dir>$$(dirname $$(kpsewhich lmroman10-regular.otf))</dir>" >> $@
 	@echo '</fontconfig>' >> $@
 
 swish :=\

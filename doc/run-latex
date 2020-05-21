@@ -71,11 +71,6 @@ alert()
 
 update_indices()
 {
-  if grep -F -asq "$1.idx" "$1.log"
-  then
-    ${MODE} makeindex -q "$1.idx" -o "$1.ind"
-    changed=yes
-  fi
   if grep -F -asq "$1.thm" "$1.log"
   then
     changed=yes
