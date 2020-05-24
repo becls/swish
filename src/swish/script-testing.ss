@@ -84,7 +84,7 @@
                 [out-time (mtime out)])
            (when (or (not out-time) (time>? in-time out-time))
              (copy-file in out))))
-       '("libuv.dll" "sqlite3.dll" "osi.dll"))))
+       '("uv.dll" "sqlite3.dll" "osi.dll"))))
 
   (define-tuple <os-process-failed> command args stdout stderr exit-status)
 

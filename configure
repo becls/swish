@@ -26,7 +26,6 @@ fi
 
 help=no
 PREFIX=
-PYTHON=
 SCHEME=
 CUSTOMPATH=
 CUSTOMHEAPDIRS=
@@ -88,9 +87,6 @@ while [ $# != 0 ]; do
     --prefix=*)
       setoption "PREFIX" "--prefix=" "$1"
       ;;
-    --python=*)
-      setoption "PYTHON" "--python=" "$1"
-      ;;
     --scheme=*)
       setoption "SCHEME" "--scheme=" "$1"
       ;;
@@ -138,31 +134,10 @@ resolve() {
   eval "${_var}=$(quote "${_resolved}")"
 }
 
-
-if [ "${Windows}" = "yes" ]; then
-  resolve "PYTHON" "--python=" "${FSROOT}/c/Python27/python.exe"
-else
-  resolve "PYTHON" "--python=" "python2.7"
-fi
 resolve "SCHEME" "--scheme=" "scheme"
 
 if no_errors; then
   SCHEME="$(realpath "${SCHEME}")"
-  if [ "${Windows}" = "yes" ]; then
-    set +e
-    ACTUAL="$("${PYTHON}" -c "import sys; print sys.version_info.major, sys.version_info.minor, sys.platform;" 2>&1)"
-    case "${ACTUAL}" in
-      2\ 7\ win*)
-      set -e
-      ;;
-      *)
-      err "Please install a Windows version of Python 2.7 to build libuv."
-      err "Tried ${PYTHON} to no avail."
-      err "Got: ${ACTUAL}"
-      ;;
-    esac
-    PYTHON="$(cygpath -aw "${PYTHON}")"
-  fi
 fi
 
 if [ -n "${PREFIX}" ]; then
@@ -179,7 +154,6 @@ notilde() {
 }
 
 notilde "PREFIX"
-notilde "PYTHON"
 notilde "SCHEME"
 
 if [ "${help}" = "yes" ]; then
@@ -190,7 +164,6 @@ if [ "${help}" = "yes" ]; then
   echo "taking into account the following options."
   echo ""
   echo " --prefix=<pathname>  install directory base (${PREFIX})"
-  echo " --python=<pathname>  python 2.7 executable for libuv build (${PYTHON})"
   echo " --scheme=<pathname>  Chez Scheme executable (${SCHEME})"
   echo " CC=<C compiler name>             optional C compiler name (${MYCC})"
   echo " CPPFLAGS=<C preprocessor flags>  additional C preprocessor flags (${MYCPPFLAGS})"
@@ -388,13 +361,10 @@ SWISH_LIBPATH="${BASE}/build/release/bin"
 LIBUV_INCLUDE="${BASE}/libuv/include"
 case "${CONFIG_UNAME}" in
   CYGWIN_NT-* | MINGW64_NT-* | MSYS_NT-*)
-    UvLib=libuv/Release
-    ;;
-  Darwin)
     UvLib=libuv/build/Release
     ;;
   *)
-    UvLib=libuv/out/Release/obj.target
+    UvLib=libuv/build
     ;;
 esac
 LIBUV_LIBPATH="${BASE}/${UvLib}"
@@ -422,7 +392,6 @@ add "DLLSUFFIX:=${DLLSUFFIX}"
 add "INSTALLROOT:=${PREFIX}"
 add "BASE_MACHINE_TYPE:=${BASE_MACHINE_TYPE}"
 add "MACHINE_TYPE:=${MACHINE_TYPE}"
-add "PYTHON:=${PYTHON}"
 add "SCHEME:=${SCHEME}"
 if [ -n "${SCHEMEHEAPDIRS:-}" ]; then
   add "SCHEMEHEAPDIRS:=${SCHEMEHEAPDIRS:-}"
@@ -462,7 +431,7 @@ add "          \"build/profile\""
 add "          \"build/release\")"
 add "      \"bin\"))"
 if [ "${Windows}" = "yes" ]; then
-add "  (load-shared-object (path-combine dir \"libuv${DLLSUFFIX}\"))"
+add "  (load-shared-object (path-combine dir \"uv${DLLSUFFIX}\"))"
 add "  (load-shared-object (path-combine dir \"sqlite3${DLLSUFFIX}\"))"
 add "  (load-shared-object (path-combine dir \"osi${DLLSUFFIX}\"))"
 else
@@ -523,6 +492,3 @@ add "include Mf-${BASE_MACHINE_TYPE}"
 add "include Mf-base"
 
 git submodule update --init
-if [ ! -d libuv/build/gyp ]; then
-    git clone --depth 1 https://github.com/chromium/gyp.git libuv/build/gyp
-fi

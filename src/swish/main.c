@@ -96,7 +96,7 @@ int wmain(int argc, wchar_t* argv[], wchar_t* envp[]) {
 
   // Find application directory
   wchar_t name[32768];
-  DWORD max_len = _countof(name) - reserve(DLL(libuv), DLL(sqlite3), DLL(osi));
+  DWORD max_len = _countof(name) - reserve(DLL(uv), DLL(sqlite3), DLL(osi));
   DWORD name_len = GetModuleFileNameW(NULL, name, _countof(name));
   if ((name_len == 0) || (name_len > max_len)) {
     fwprintf(stderr, L"GetModuleFileName failed\n");
@@ -112,7 +112,7 @@ int wmain(int argc, wchar_t* argv[], wchar_t* envp[]) {
   load_library(XDLL(SCHEME_LIB));
 
   // Load Swish DLLs by absolute path
-  wcscpy(filepart, DLL(libuv));
+  wcscpy(filepart, DLL(uv));
   load_library(name);
   wcscpy(filepart, DLL(sqlite3));
   load_library(name);

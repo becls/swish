@@ -2,13 +2,13 @@ C=../vs 32 cl /nologo /Ox /MD /W3 /Zi
 LD=../vs 32 link /nologo /nodefaultlib:libcmt /debug:full /libpath:"../../${BUILD}/bin" /libpath:"${SCHEME_LIBPATH}"
 OsiObj=osi.obj run.obj sha1.obj sqlite.obj
 SystemLibs=rpcrt4.lib ole32.lib advapi32.lib User32.lib
-SwishLibs := ../../${BUILD}/bin/libuv.dll ../../${BUILD}/bin/sqlite3.dll ../../${BUILD}/bin/osi.dll
+SwishLibs := ../../${BUILD}/bin/uv.dll ../../${BUILD}/bin/sqlite3.dll ../../${BUILD}/bin/osi.dll
 
-../../${BUILD}/bin/swish.exe: main.obj
-	${LD} /out:$@ /subsystem:console main.obj ${SystemLibs}
+../../${BUILD}/bin/swish.exe: main.obj ../../${BUILD}/bin/uv.lib
+	${LD} /out:$@ /subsystem:console main.obj ${SystemLibs} uv.lib
 
-../../${BUILD}/bin/osi.dll: ${OsiObj} ../../${BUILD}/bin/libuv.lib ../../${BUILD}/bin/sqlite3.lib
-	${LD} /dll /out:$@ ${OsiObj} ${SCHEME_LIB_PREFIX}.lib libuv.lib sqlite3.lib
+../../${BUILD}/bin/osi.dll: ${OsiObj} ../../${BUILD}/bin/uv.lib ../../${BUILD}/bin/sqlite3.lib
+	${LD} /dll /out:$@ ${OsiObj} ${SCHEME_LIB_PREFIX}.lib uv.lib sqlite3.lib
 
 %.obj: %.c osi.h swish.h ${UvInclude}
 	$C /DSCHEME_LIB=${SCHEME_LIB_PREFIX} /I"${SCHEME_INCLUDE}" /I"${LIBUV_INCLUDE}" /c $<
@@ -19,11 +19,12 @@ sqlite3.obj: sqlite3.h sqlite3.c
 ../../${BUILD}/bin/sqlite3.dll ../../${BUILD}/bin/sqlite3.lib: sqlite3.obj
 	${LD} /dll /out:../../${BUILD}/bin/sqlite3.dll sqlite3.obj
 
-../../libuv/Release/libuv.dll: ${UvInclude}
-	-cd ../../libuv; MSYS_NO_PATHCONV=1 PYTHON="${PYTHON}" cmd.exe /c vcbuild.bat release vs2017 x86 shared
+${UvLib}/uv.dll: Mf-i3nt
+	cd ../../libuv && rm -rf build && mkdir build && cd build && ../../src/vs 32 cmake ..
+	../vs 32 cmake --build ../../libuv/build --config Release --target uv
 
-../../${BUILD}/bin/libuv.dll ../../${BUILD}/bin/libuv.lib: ${UvLib}/libuv.dll ${UvLib}/libuv.lib | build-dirs
-	cp -f ${UvLib}/libuv.{dll,exp,lib,pdb} ../../${BUILD}/bin
+../../${BUILD}/bin/uv.dll ../../${BUILD}/bin/uv.lib: ${UvLib}/uv.dll ${UvLib}/uv.lib | build-dirs
+	cp -f ${UvLib}/uv.{dll,exp,lib} ../../${BUILD}/bin
 
 io-constants.exe: io-constants.c ${UvInclude}
 	$C /I"${LIBUV_INCLUDE}" io-constants.c
@@ -31,17 +32,17 @@ io-constants.exe: io-constants.c ${UvInclude}
 SHLIBTEST := shlibtest.dll
 ${SHLIBTEST}: shlibtest.c ${SwishLibs}
 	$C -c $< /I"${LIBUV_INCLUDE}" /I"${SCHEME_INCLUDE}" /I"${SWISH_INCLUDE}"
-	${LD} /dll /out:$@ shlibtest.obj ${SCHEME_LIB_PREFIX}.lib libuv.lib osi.lib
+	${LD} /dll /out:$@ shlibtest.obj ${SCHEME_LIB_PREFIX}.lib uv.lib osi.lib
 
 TESTREQUEST := test-request.dll
 ${TESTREQUEST}: test-request.c ${SwishLibs}
 	$C -c $< /I"${LIBUV_INCLUDE}" /I"${SCHEME_INCLUDE}" /I"${SWISH_INCLUDE}"
-	${LD} /dll /out:$@ test-request.obj ${SCHEME_LIB_PREFIX}.lib libuv.lib osi.lib
+	${LD} /dll /out:$@ test-request.obj ${SCHEME_LIB_PREFIX}.lib uv.lib osi.lib
 
 platform-clean:
 	rm -f ../../${BUILD}/bin/osi.{dll,exp,ilk,lib,pdb} osi.obj sqlite.obj io-constants.{exe,obj}
 	rm -f ../../${BUILD}/bin/sqlite3.{dll,exp,ilk,lib,pdb}
-	rm -f ../../${BUILD}/bin/libuv.{dll,exp,lib,pdb}
+	rm -f ../../${BUILD}/bin/uv.{dll,exp,lib}
 	rm -f ../../${BUILD}/bin/swish.{exe,exp,ilk,lib,pdb}
 	rm -f io-constants.{exe,ilk,obj,pdb}
 	rm -f sha1.obj
@@ -51,4 +52,4 @@ platform-clean:
 	rm -f vc140.pdb
 
 pristine: clean
-	rm -rf sqlite3.obj ../../libuv/Release
+	rm -rf sqlite3.obj ../../libuv/build

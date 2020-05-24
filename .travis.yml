@@ -59,25 +59,21 @@ jobs:
       before_script:
         - git config core.autocrlf false; rm .git/index; git reset --hard
         - choco install make -y
-        - choco install python2 -y
     - env: TARGET_MACHINE=ti3nt
       os: windows
       before_script:
         - git config core.autocrlf false; rm .git/index; git reset --hard
         - choco install make -y
-        - choco install python2 -y
     - env: TARGET_MACHINE=a6nt
       os: windows
       before_script:
         - git config core.autocrlf false; rm .git/index; git reset --hard
         - choco install make -y
-        - choco install python2 -y
     - env: TARGET_MACHINE=ta6nt
       os: windows
       before_script:
         - git config core.autocrlf false; rm .git/index; git reset --hard
         - choco install make -y
-        - choco install python2 -y
 dist: bionic
 script:
   - .travis/get-chez-scheme.sh

@@ -42,52 +42,31 @@ is not thread safe and should be used from the main thread only.
 
 ## Linux
 
-- Chez Scheme 9.5.2 or later
+- Chez Scheme 9.5.2
 - GCC, the GNU Compiler Collection
-- GNU C++ compiler for libuv
 - GNU make
-- Python 2.7 for libuv
+- GNU C++ compiler for libuv
+- cmake for libuv
 - libsystemd-dev and uuid-dev packages
+- graphviz, texlive, texlive-latex-recommended, and texlive-latex-extra packages for building the documentation
 
 ## Mac
 
-- Chez Scheme 9.5.2 or later
-- dot (can be installed through homebrew using `brew install graphviz`)
-- pdflatex (can be installed through homebrew using `brew cask install mactex`)
+- Chez Scheme 9.5.2
 - ginstall and realpath (can be installed through homebrew using `brew install coreutils`)
 - XCode and the command-line tools must be set
   (Xcode->Preferences->Locations->command line tools)
-- Latin Modern fonts from LaTeX (can be installed with Font Book from a location like `/usr/local/texlive/2019/texmf-dist/fonts/opentype/public/lm`)
+- dot (can be installed through homebrew using `brew install graphviz`)
+- pdflatex (can be installed through homebrew using `brew cask install mactex`)
+- Latin Modern fonts from LaTeX (can be installed with Font Book from a location like `/usr/local/texlive/2020/texmf-dist/fonts/opentype/public/lm`)
 
 ## Windows
 
-- Chez Scheme 9.5.2 or later
+- Chez Scheme 9.5.2
 - Cygwin or MinGW/MSYS with bash, git, graphviz, grep, perl, texlive,
   GNU make, etc.
 - Microsoft Visual Studio 2017 with Visual C++
-- Python 2.7 for Windows in C:\Python27 (see below for other options)
 - Put scheme in PATH.
-
-### Building on Windows with Miniconda Python
-
-- Install [Python 2.7](https://conda.io/miniconda.html)
-- Provide the path to the python2.7 executable as an argument to the configure script:
-
-  ```
-  ./configure --python=~/Miniconda2/python.exe
-  ```
-
-### Building on Windows with Anaconda Python
-
-- Make an [environment containing Python 2.7](https://conda.io/docs/user-guide/tasks/manage-python.html#installing-a-different-version-of-python)
-
-  `conda create -n py27 python=2.7 anaconda`
-
-- Provide the path to the python2.7 executable as an argument to the configure script:
-
-  ```
-  ./configure --python=~/Anaconda3/envs/py27/python.exe
-  ```
 
 # Stand-alone Swish Applications
 
@@ -114,7 +93,7 @@ On Linux and macOS, you can deploy your application's executable and
 boot file.
 
 On Windows, your install should include the application's executable
-and boot file, `osi.dll`, `libuv.dll`, `sqlite3.dll`, Chez Scheme's
+and boot file, `osi.dll`, `uv.dll`, `sqlite3.dll`, Chez Scheme's
 `csv952.dll`, and Microsoft's C Runtime Library `vcruntime140.dll`.
 
 Developers writing stand-alone applications should clone the Swish
