@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e -o pipefail
-CSROOT=$PWD/chez/$TARGET_MACHINE
+CSROOT=$PWD/ChezScheme/$TARGET_MACHINE
 export SCHEMEHEAPDIRS=$CSROOT/boot/$TARGET_MACHINE
 echo 'travis_fold:start:Swish'
 echo Building Swish...
