@@ -261,6 +261,16 @@
          [(k0 k1 ...) e0 e1 ...] ...
          [else (match target)]))]))
 
+;; Chez Scheme's compile-compressed parameter was removed during 9.5.3
+;; development and replaced by fasl-compressed, but it appears we don't need to
+;; disable fasl compression in more recent versions.
+(define-syntax (with-legacy-compile-compressed-false x)
+  (syntax-case x ()
+    [(_ e)
+     (if (top-level-bound? 'compile-compressed)
+         #'(parameterize ([compile-compressed #f]) e)
+         #'e)]))
+
 (define (parse-library lib)
   (parameterize ([library-directories lib])
     (library-directories)))
@@ -623,13 +633,14 @@
                    (cons swish-core-library-filename rt-libs))]
               [_ (library-setup swish-wpo? libdirs rt-libs)]
               [other-libs
-               ;; load-compiled-from-port fails if given compressed
-               ;; - note that (port-file-compressed! ip) works only for file ports,
-               ;;   and does not work for bytevector-input-ports
+               ;; load-compiled-from-port fails in Chez Scheme 9.5.2 if given
+               ;; compressed input, so we disable compression in that case
+               ;; - note that (port-file-compressed! ip) works only for file
+               ;;   ports, and does not work for bytevector-input-ports
                ;; - not a problem because compile-to-file will compress us later
-               (parameterize ([compile-compressed #f])
-                 (resolve-missing-libs 'stand-alone rt-libs
-                   (do-compile source-fn output-fn swish-wpo? target-type)))]
+               (with-legacy-compile-compressed-false
+                (resolve-missing-libs 'stand-alone rt-libs
+                  (do-compile source-fn output-fn swish-wpo? target-type)))]
               [app-boot (platform-boot-file output-fn)]
               [compiled-code
                (let ([ip (open-binary-file-to-read output-fn)])

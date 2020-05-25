@@ -42,7 +42,7 @@ is not thread safe and should be used from the main thread only.
 
 ## Linux
 
-- Chez Scheme 9.5.2
+- Chez Scheme 9.5.2 or 9.5.3
 - GCC, the GNU Compiler Collection
 - GNU make
 - GNU C++ compiler for libuv
@@ -52,7 +52,7 @@ is not thread safe and should be used from the main thread only.
 
 ## Mac
 
-- Chez Scheme 9.5.2
+- Chez Scheme 9.5.2 or 9.5.3
 - ginstall and realpath (can be installed through homebrew using `brew install coreutils`)
 - XCode and the command-line tools must be set
   (Xcode->Preferences->Locations->command line tools)
@@ -62,7 +62,7 @@ is not thread safe and should be used from the main thread only.
 
 ## Windows
 
-- Chez Scheme 9.5.2
+- Chez Scheme 9.5.2 or 9.5.3
 - Cygwin or MinGW/MSYS with bash, git, graphviz, grep, perl, texlive,
   GNU make, etc.
 - Microsoft Visual Studio 2017 with Visual C++
