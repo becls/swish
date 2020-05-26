@@ -67,15 +67,15 @@
   (zero-exit (swish-test "--help")
     '("Usage:"
       seek
-      "progress <mode>"
+      "<spec> .* directory .* suite"
       seek
-      "<spec> .* directory .* suite"))
+      "progress <mode>"))
   (zero-exit (swish-test "-h all")
     '("Usage:"
       seek
-      "progress <mode>"
-      seek
       "<spec> .* directory .* suite"
+      seek
+      "progress <mode>"
       seek
       "By default,"
       seek
@@ -90,6 +90,8 @@
    '("swish-test Version (?:\\d+\\.){2}\\d+ \\([[:xdigit:]dirty-]+\\)")))
 
 (isolate-mat check-options ()
+  (nonzero-exit (swish-test "--progress pilgrim")
+    '() "invalid --progress pilgrim")
   (nonzero-exit (swish-test "--coverage foo")
     '() "--coverage requires --load-profile or --save-profile")
   ;; check for required options before complaining about missing file
@@ -1034,6 +1036,73 @@
     (zero-exit
      (swish-test "--load-results " aggregate.json)
      summary-output)
+    (let ([expected
+           `(,(string-append (pregexp-quote test-file) ".* fail")
+             ,(string-append (pregexp-quote test-file2) ".* no tests")
+             ,(string-append (pregexp-quote test-file3) ".* fail")
+             ,(string-append (pregexp-quote "incomplete.ms") ".* no tests")
+             ,@summary-output)])
+      ;; --progress suite with --harvest
+      (zero-exit
+       (swish-test
+        "--harvest " mo-path1 " " mo-path2 " " mo-path3 " " incomplete " "
+        "--progress " "suite")
+       expected)
+      ;; --progress suite with --load-results
+      (zero-exit
+       (swish-test
+        "--progress " "suite "
+        "--load-results " aggregate.json)
+       expected))
+    (let ([expected
+           `(,(pregexp-quote test-file)
+             seek
+             " pass .*TEST1"
+             " SKIP .*TEST2"
+             " FAIL .*TEST3"
+             seek
+             "Tests run: 2   Pass: 1   Fail: 1   Skip: 1"
+             seek
+             ,(pregexp-quote test-file2)
+             seek
+             "Tests run: 0   Pass: 0   Fail: 0   Skip: 0"
+             seek
+             ,(pregexp-quote test-file3)
+             seek
+             " FAIL .*zero"
+             seek
+             "Tests run: 1   Pass: 0   Fail: 1   Skip: 0"
+             seek
+             ,(pregexp-quote "incomplete.ms")
+             seek
+             "Tests run: 0   Pass: 0   Fail: 0   Skip: 0"
+             seek
+             ,@summary-output)])
+      ;; --progress test with --harvest
+      (zero-exit
+       (swish-test
+        "--harvest " mo-path1 " " mo-path2 " " mo-path3 " " incomplete " "
+        "--progress " "test")
+       expected)
+      ;; --progress test with --load-results
+      (zero-exit
+       (swish-test
+        "--progress " "test "
+        "--load-results " aggregate.json)
+       expected))
+    (let ([expected '(seek "Some test suite did not complete")])
+      ;; --progress none with --harvest
+      (zero-exit
+       (swish-test
+        "--harvest " mo-path1 " " mo-path2 " " mo-path3 " " incomplete " "
+        "--progress " "none")
+       expected)
+      ;; --progress none with --load-results
+      (zero-exit
+       (swish-test
+        "--progress " "none "
+        "--load-results " aggregate.json)
+       expected))
     ;; --load-results and --report generating HTML output prints same summary
     (zero-exit
      (swish-test "--load-results " aggregate.json " --report " aggregate.html)

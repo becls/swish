@@ -41,13 +41,13 @@
   (cli-specs
    [incl-tags --tag (list "<tag>") "run only the tests with this tag"]
    [excl-tags --not (list "<tag>") "exclude tests with this tag"]
-   [progress --progress (string "<mode>") "<mode>={test|suite|none}"]
    [test-run --test-run (string "<UUID>")
     "use the specified <UUID> to identify the test run instead of generating one"]
    [specs (list . "<spec>") "directory | suite [{test | -t test} ...]"]))
 
 (define test-and-report-cli
   (cli-specs
+   [progress --progress (string "<mode>") "<mode>={test|suite|none}"]
    [load-prof --load-profile (list "<file>" "<file>" ...)
     "load the specified profile(s)"]
    [save-prof --save-profile (string "<file>")
@@ -592,15 +592,6 @@
             (div (@ (class "vscroll"))
               (table (@ (id "content"))))))))))
 
-(define (console-summary mat-data* reporting?)
-  (let-values ([(pass fail skip completed attempted) (summarize-results mat-data*)])
-    (when reporting?
-      (printf "Tests run: ~s   Pass: ~s   Fail: ~s   Skip: ~s\n\n"
-        (+ pass fail) pass fail skip))
-    (let ([incomplete (- attempted completed)])
-      (unless (zero? incomplete)
-        (printf "*** Some test suite~p did not complete ***\n\n" incomplete)))))
-
 (define (if-exists fn) (and (regular-file? fn) fn))
 
 (define (get-test-files x)
@@ -743,11 +734,13 @@
         [include (or (opt 'include) '())]
         [save-prof (opt 'save-prof)]
         [load-prof (opt 'load-prof)]
-        [progress (string->symbol (or (opt 'progress) "test"))]
+        [progress (cond [(opt 'progress) => string->symbol] [else #f])]
         [report (opt 'report)]
         [coverage (opt 'coverage)]
         [pre-specs (extract-pre-specs (or (opt 'specs) '()))])
     (check-report-format report 'report)
+    (unless (memq progress '(#f test suite none))
+      (fail "invalid ~a ~s" (option-named 'progress) progress))
     (cond
      [(and load-prof (not (or save-prof coverage)))
       (fail "~a requires ~a or ~a"
@@ -796,7 +789,7 @@
                  [incl-tags incl-tags]
                  [excl-tags excl-tags]
                  [profile save-prof]
-                 [progress progress]
+                 [progress (or progress 'test)]
                  [lib-dirs (library-directories)]
                  [src-dirs (source-directories)])
                specs)))
@@ -889,7 +882,11 @@
           (if (profile:dump-html (or save-prof load-prof) coverage include exclude)
               (printf "see ~a\n" (path->file-uri (get-real-path coverage)))
               (printf "no profile to dump\n")))
-        (console-summary summary (or report coverage (opt 'load-results) (opt 'harvest)))
+        (summarize-results summary
+          (cond
+           [(or (opt 'harvest) (opt 'load-results)) (or progress 'summary)]
+           [(or report coverage) 'summary]
+           [else 'none]))
         (when (opt 'info)
           (let ([ht (make-eq-hashtable)])
             (define (sym<? a b) (string<? (symbol->string a) (symbol->string b)))
