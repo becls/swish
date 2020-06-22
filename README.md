@@ -7,7 +7,10 @@ fault-tolerant programs with message-passing concurrency. It uses the
 Chez Scheme programming language and embeds concepts from the Erlang
 programming language. Swish also provides a web server.
 
-# [Design](https://becls.github.io/swish/swish.pdf)
+# Design
+
+The latest design document can be found
+[here](https://becls.github.io/swish/swish.pdf).
 
 Swish uses [libuv](http://libuv.org) for cross-platform asynchronous
 I/O.
