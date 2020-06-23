@@ -408,14 +408,7 @@
    (swish-test "--progress test " test-file " " common-name)
    (list
     'seek
-    ;; suites appear in sorted order
-    (pregexp-quote common-name-file)
-    "[-]+" " Result * Test name * Message *" "[-]+"
-    " *pass *t1"
-    " *FAIL *t2"
-    "[-]+"
-    "Tests run: 2   Pass: 1   Fail: 1   Skip: 0"
-    'seek
+    ;; suites appear in command-line order
     (pregexp-quote test-file)
     "[-]+" " Result * Test name * Message *" "[-]+"
     (format " *pass *~a" (pregexp-quote (symbol->string common-name)))
@@ -423,7 +416,14 @@
     " *FAIL *a2"
     " *FAIL *a3"
     "[-]+"
-    "Tests run: 4   Pass: 2   Fail: 2   Skip: 0"))
+    "Tests run: 4   Pass: 2   Fail: 2   Skip: 0"
+    'seek
+    (pregexp-quote common-name-file)
+    "[-]+" " Result * Test name * Message *" "[-]+"
+    " *pass *t1"
+    " *FAIL *t2"
+    "[-]+"
+    "Tests run: 2   Pass: 1   Fail: 1   Skip: 0"))
   (zero-exit
    ;; common-name explicitly identified as a test
    ;; zero exit means:
@@ -448,6 +448,275 @@
    '()
    "swish-test: expected directory or suite: \"does-not-exist-as-file-or-directory\"")
   )
+
+(isolate-mat test-order ()
+  (define test-setup
+    (write-test-file "test-setup.ss"
+      (lambda ()
+        (for-each pretty-print
+          '((import (swish mat))
+            ;; side-effect so we can confirm tests ran in specified order vs.
+            ;; results reported in a particular order
+            (define tested
+              (let ([mats '()])
+                (case-lambda
+                 [() (reverse mats)]
+                 [(x) (set! mats (cons x mats))]))))))))
+  (define test-file1
+    (write-test-file "test-file1.ms"
+      (lambda ()
+        (for-each pretty-print
+          `((include ,test-setup)
+            (mat t1 () (tested 't1))
+            (mat t2 () (tested 't2) (assert #f)) ;; failing test shouldn't affect order
+            (mat t3 () (tested 't3))
+            (mat t123 () (match (tested) [(t1 t2 t3) 'ok]))
+            (mat t132 () (match (tested) [(t1 t3 t2) 'ok]))
+            (mat t321 () (match (tested) [(t3 t2 t1) 'ok]))
+            (mat t112233 () (match (tested) [(t1 t1 t2 t2 t3 t3) 'ok]))
+            (mat t312213 () (match (tested) [(t3 t1 t2 t2 t1 t3) 'ok])))))))
+  (define test-file2
+    (write-test-file "test-file2.ms"
+      (lambda ()
+        (for-each pretty-print
+          `((include ,test-setup)
+            (mat a1 () (tested 'a1) (assert #f)) ;; failing test shouldn't affect order
+            (mat a2 () (tested 'a2))
+            (mat a3 () (tested 'a3) (assert #f)) ;; failing test shouldn't affect order
+            (mat a123 () (match (tested) [(a1 a2 a3) 'ok]))
+            (mat a321 () (match (tested) [(a3 a2 a1) 'ok]))
+            (mat a232 () (match (tested) [(a2 a3 a2) 'ok]))
+            (mat a11 () (match (tested) [(a1 a1) 'ok]))
+            (mat a33321 () (match (tested) [(a3 a3 a3 a2 a1) 'ok])))))))
+  ;; suites run in order they appear in file if not specified on command line
+  (nonzero-exit
+   (swish-test "--progress test " test-file1)
+   (list
+    'seek
+    (pregexp-quote test-file1)
+    "[-]+" " Result * Test name * Message *" "[-]+"
+    " *pass *t1"
+    " *FAIL *t2"
+    " *pass *t3"
+    " *pass *t123"
+    " *FAIL *t132"
+    " *FAIL *t321"
+    " *FAIL *t112233"
+    " *FAIL *t312213"
+    "[-]+"
+    "Tests run: 8   Pass: 3   Fail: 5   Skip: 0"))
+  ;; run a subset of the tests in the order they appear within the file
+  (nonzero-exit
+   (swish-test "--progress test " test-file1 " t1 t2 t3 t123")
+   (list
+    'seek
+    (pregexp-quote test-file1)
+    "[-]+" " Result * Test name * Message *" "[-]+"
+    " *pass *t1"
+    " *FAIL *t2"
+    " *pass *t3"
+    " *pass *t123"
+    "[-]+"
+    "Tests run: 4   Pass: 3   Fail: 1   Skip: 0"))
+  ;; run a subset of the tests in an order that differs from that within the file
+  (nonzero-exit
+   (swish-test "--progress test " test-file1 " t1 t3 t2 t132")
+   (list
+    'seek
+    (pregexp-quote test-file1)
+    "[-]+" " Result * Test name * Message *" "[-]+"
+    " *pass *t1"
+    " *pass *t3"
+    " *FAIL *t2"
+    " *pass *t132"
+    "[-]+"
+    "Tests run: 4   Pass: 3   Fail: 1   Skip: 0"))
+  ;; run a subset of the tests with duplicates
+  (nonzero-exit
+   (swish-test "--progress test " test-file1 " t1 t1 t2 t2 t3 t3 t112233")
+   (list
+    'seek
+    (pregexp-quote test-file1)
+    "[-]+" " Result * Test name * Message *" "[-]+"
+    " *pass *t1"
+    " *pass *t1"
+    " *FAIL *t2"
+    " *FAIL *t2"
+    " *pass *t3"
+    " *pass *t3"
+    " *pass *t112233"
+    "[-]+"
+    "Tests run: 7   Pass: 5   Fail: 2   Skip: 0"))
+  ;; run a different subset of the tests with duplicates
+  (nonzero-exit
+   (swish-test "--progress test " test-file1 " t3 t1 t2 t2 t1 t3 t312213")
+   (list
+    'seek
+    (pregexp-quote test-file1)
+    "[-]+" " Result * Test name * Message *" "[-]+"
+    " *pass *t3"
+    " *pass *t1"
+    " *FAIL *t2"
+    " *FAIL *t2"
+    " *pass *t1"
+    " *pass *t3"
+    " *pass *t312213"
+    "[-]+"
+    "Tests run: 7   Pass: 5   Fail: 2   Skip: 0"))
+  ;; run a subset of tests from one suite with all tests from second suite
+  (nonzero-exit
+   (swish-test "--progress test " test-file1 " t321 t3 t2 t1 t321 " test-file2)
+   (list
+    'seek
+    (pregexp-quote test-file1)
+    "[-]+" " Result * Test name * Message *" "[-]+"
+    " *FAIL *t321"
+    " *pass *t3"
+    " *FAIL *t2"
+    " *pass *t1"
+    " *pass *t321"
+    "[-]+"
+    "Tests run: 5   Pass: 3   Fail: 2   Skip: 0"
+    'seek
+    (pregexp-quote test-file2)
+    "[-]+" " Result * Test name * Message *" "[-]+"
+    " *FAIL *a1"
+    " *pass *a2"
+    " *FAIL *a3"
+    " *pass *a123"
+    " *FAIL *a321"
+    " *FAIL *a232"
+    " *FAIL *a11"
+    " *FAIL *a33321"
+    "[-]+"
+    "Tests run: 8   Pass: 2   Fail: 6   Skip: 0"))
+  ;; same as above, but flip order of suites
+  (nonzero-exit
+   (swish-test "--progress test " test-file2 " " test-file1 " t321 t3 t2 t1 t321")
+   (list
+    'seek
+    (pregexp-quote test-file2)
+    "[-]+" " Result * Test name * Message *" "[-]+"
+    " *FAIL *a1"
+    " *pass *a2"
+    " *FAIL *a3"
+    " *pass *a123"
+    " *FAIL *a321"
+    " *FAIL *a232"
+    " *FAIL *a11"
+    " *FAIL *a33321"
+    "[-]+"
+    "Tests run: 8   Pass: 2   Fail: 6   Skip: 0"
+    'seek
+    (pregexp-quote test-file1)
+    "[-]+" " Result * Test name * Message *" "[-]+"
+    " *FAIL *t321"
+    " *pass *t3"
+    " *FAIL *t2"
+    " *pass *t1"
+    " *pass *t321"
+    "[-]+"
+    "Tests run: 5   Pass: 3   Fail: 2   Skip: 0"))
+  ;; run subsets of each suite
+  (nonzero-exit
+   (swish-test "--progress test " test-file2 " a1 a1 a11 " test-file1 " t1 t3 t2 t132")
+   (list
+    'seek
+    (pregexp-quote test-file2)
+    "[-]+" " Result * Test name * Message *" "[-]+"
+    " *FAIL *a1"
+    " *FAIL *a1"
+    " *pass *a11"
+    "[-]+"
+    "Tests run: 3   Pass: 1   Fail: 2   Skip: 0"
+    'seek
+    (pregexp-quote test-file1)
+    "[-]+" " Result * Test name * Message *" "[-]+"
+    " *pass *t1"
+    " *pass *t3"
+    " *FAIL *t2"
+    " *pass *t132"
+    "[-]+"
+    "Tests run: 4   Pass: 3   Fail: 1   Skip: 0"))
+  ;; different subsets of each suite, with suites repeated;
+  ;; also hit case where we run full suite after subset of same suite
+  (nonzero-exit
+   (swish-test "--progress test "
+     test-file2 " a3 a3 a3 a2 a1 a33321 "
+     test-file1 " t1 t3 t2 t132 "
+     test-file1 " "
+     test-file2 " a2 a3 a2 a232 ")
+   (list
+    'seek
+    (pregexp-quote test-file2)
+    "[-]+" " Result * Test name * Message *" "[-]+"
+    " *FAIL *a3"
+    " *FAIL *a3"
+    " *FAIL *a3"
+    " *pass *a2"
+    " *FAIL *a1"
+    " *pass *a33321"
+    "[-]+"
+    "Tests run: 6   Pass: 2   Fail: 4   Skip: 0"
+    'seek
+    (pregexp-quote test-file1)
+    "[-]+" " Result * Test name * Message *" "[-]+"
+    " *pass *t1"
+    " *pass *t3"
+    " *FAIL *t2"
+    " *pass *t132"
+    "[-]+"
+    "Tests run: 4   Pass: 3   Fail: 1   Skip: 0"
+    'seek
+    (pregexp-quote test-file1)
+    "[-]+" " Result * Test name * Message *" "[-]+"
+    " *pass *t1"
+    " *FAIL *t2"
+    " *pass *t3"
+    " *pass *t123"
+    " *FAIL *t132"
+    " *FAIL *t321"
+    " *FAIL *t112233"
+    " *FAIL *t312213"
+    "[-]+"
+    "Tests run: 8   Pass: 3   Fail: 5   Skip: 0"
+    'seek
+    (pregexp-quote test-file2)
+    "[-]+" " Result * Test name * Message *" "[-]+"
+    " *pass *a2"
+    " *FAIL *a3"
+    " *pass *a2"
+    " *pass *a232"
+    "[-]+"
+    "Tests run: 4   Pass: 3   Fail: 1   Skip: 0"))
+  ;; run subset of suite after full suite
+  (nonzero-exit
+   (swish-test "--progress test "
+     test-file2 " "
+     test-file2 " a2 a3 a2 a232 ")
+   (list
+    'seek
+    (pregexp-quote test-file2)
+    "[-]+" " Result * Test name * Message *" "[-]+"
+    " *FAIL *a1"
+    " *pass *a2"
+    " *FAIL *a3"
+    " *pass *a123"
+    " *FAIL *a321"
+    " *FAIL *a232"
+    " *FAIL *a11"
+    " *FAIL *a33321"
+    "[-]+"
+    "Tests run: 8   Pass: 2   Fail: 6   Skip: 0"
+    'seek
+    (pregexp-quote test-file2)
+    "[-]+" " Result * Test name * Message *" "[-]+"
+    " *pass *a2"
+    " *FAIL *a3"
+    " *pass *a2"
+    " *pass *a232"
+    "[-]+"
+    "Tests run: 4   Pass: 3   Fail: 1   Skip: 0")))
 
 (isolate-mat report-results ()
   (define report-file (path-combine (output-dir) "report.html"))

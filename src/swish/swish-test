@@ -607,49 +607,45 @@
 (define (->report-filename filename)
   (string-append filename ".mo"))
 
-(define (extract-suites specs)
-  (let ([ht (make-hashtable string-hash string=?)])
-    (define (add-suite suite)
-      (when (may-have-mats? suite)
-        (hashtable-update! ht suite
-          (lambda (old)
-            (or old (make-hashtable string-hash string=?)))
-          #f)))
-    (let lp ([specs specs])
-      (cond
-       [(null? specs)
-        (let-values ([(keys vals) (hashtable-entries ht)])
-          (vector->list
-           (vector-map
-            (lambda (suite test-set)
-              (cons suite
-                (map string->symbol (vector->list (hashtable-keys test-set)))))
-            keys vals)))]
-       [(get-test-files (car specs)) =>
-        (lambda (files)
-          (for-each add-suite files)
-          (lp (cdr specs)))]
-       [(get-test-suite (car specs)) =>
-        (lambda (suite)
-          (add-suite suite)
-          (let ([tt (hashtable-ref ht suite #f)])
-            (define (add-test test)
-              (hashtable-set! tt test #t))
-            (let lp2 ([ls (cdr specs)])
-              (match ls
-                [() (lp ls)]
-                [("-t") (fail "option expects value: -t")]
-                [("-t" ,test . ,rest)
-                 (add-test test)
-                 (lp2 rest)]
-                [(,test . ,rest)
-                 (guard (not (or (directory? test) (get-test-suite test))))
-                 (add-test test)
-                 (lp2 rest)]
-                [,rest
-                 (lp rest)]))))]
-       [else
-        (fail "expected directory or suite: ~s" (car specs))]))))
+(define-tuple <pre-spec> suite test)
+
+(define (extract-pre-specs specs)
+  (define out (make-hashtable values =))
+  (define (add-suite! suite)
+    (when (may-have-mats? suite)
+      (hashtable-set! out (hashtable-size out)
+        (<pre-spec> make [suite suite] [test #f]))))
+  (define (add-test! suite test)
+    (hashtable-set! out (hashtable-size out)
+      (<pre-spec> make [suite suite] [test test])))
+  (let lp ([specs specs])
+    (cond
+     [(null? specs)
+      (vector->list
+       (vector-map cdr
+         (vector-sort (lambda (a b) (< (car a) (car b)))
+           (hashtable-cells out))))]
+     [(get-test-files (car specs)) =>
+      (lambda (files)
+        (for-each add-suite! files)
+        (lp (cdr specs)))]
+     [(get-test-suite (car specs)) =>
+      (lambda (suite)
+        (let lp2 ([added? #f] [ls (cdr specs)])
+          (match ls
+            [("-t") (fail "option expects value: -t")]
+            [("-t" ,test . ,rest)
+             (add-test! suite test)
+             (lp2 #t rest)]
+            [(,test . ,rest)
+             (guard (not (or (directory? test) (get-test-suite test))))
+             (add-test! suite test)
+             (lp2 #t rest)]
+            [,rest
+             (unless added? (add-suite! suite))
+             (lp rest)])))]
+     [else
+      (fail "expected directory or suite: ~s" (car specs))])))
 
 (define (harvest from*)
   (let ([ht (make-hashtable string-hash string=?)])
@@ -733,8 +729,7 @@
         [progress (string->symbol (or (opt 'progress) "test"))]
         [report (opt 'report)]
         [coverage (opt 'coverage)]
-        [suites (sort (lambda (s1 s2) (string<? (car s1) (car s2)))
-                  (extract-suites (or (opt 'specs) '())))])
+        [pre-specs (extract-pre-specs (or (opt 'specs) '()))])
     (check-report-format report 'report)
     (cond
      [(and load-prof (not (or save-prof coverage)))
@@ -747,22 +742,21 @@
         (option-named 'coverage)
         (option-named 'load-prof)
         (option-named 'save-prof))]
-     [(and report (not (or (opt 'harvest) (opt 'load-results) (pair? suites))))
+     [(and report (not (or (opt 'harvest) (opt 'load-results) (pair? pre-specs))))
       (fail "~a requires ~a or ~a or a set of tests to run (~a)"
         (option-named 'report)
         (option-named 'harvest)
         (option-named 'load-results)
         (option-named 'files))]
-     [(and (opt 'harvest) (pair? suites))
+     [(and (opt 'harvest) (pair? pre-specs))
       (fail "~a conflicts with ~a"
         (option-named 'harvest)
         (option-named 'files))]
-     [(and (opt 'load-results) (pair? suites))
+     [(and (opt 'load-results) (pair? pre-specs))
       (fail "~a conflicts with ~a"
         (option-named 'load-results)
         (option-named 'files))])
-    (let ([test-files (map car suites)]
-          [test-run
+    (let ([test-run
            (uuid->string ;; normalize to swish's format
             (cond
              [(opt 'test-run) =>
@@ -772,7 +766,36 @@
                    (fail "invalid ~a UUID ~a" (option-named 'test-run) s)]
                   [,uuid uuid]))]
              [else (osi_make_uuid)]))])
-      (define report-files (map ->report-filename test-files))
+      (define (combine-specs pre-specs)
+        (define (flush curr-suite tests specs)
+          (if (not curr-suite)
+              specs
+              (cons
+               (<test-spec> make
+                 [test-file curr-suite]
+                 [test-run test-run]
+                 [report-file (->report-filename curr-suite)]
+                 [tests (and (pair? tests) (map string->symbol (reverse tests)))]
+                 [incl-tags incl-tags]
+                 [excl-tags excl-tags]
+                 [profile save-prof]
+                 [progress progress]
+                 [lib-dirs (library-directories)]
+                 [src-dirs (source-directories)])
+               specs)))
+        (let combine ([ps pre-specs] [curr-suite #f] [tests '()])
+          (match ps
+            [() (flush curr-suite tests '())]
+            [(`(<pre-spec> [suite ,@curr-suite] ,test) . ,rest)
+             (guard test)
+             (combine rest curr-suite (cons test tests))]
+            [(`(<pre-spec> ,suite ,test) . ,rest)
+             (flush curr-suite tests
+               (if test
+                   (combine rest suite (list test))
+                   (flush suite #f
+                     (combine rest #f '()))))])))
+      (define test-specs (combine-specs pre-specs))
       (define status 0)
       (define no-tests '())
       (define full-load-filenames
@@ -789,6 +812,7 @@
            (fail "~a ~a failed (~a)" (option-named 'save-prof) save-prof
              (exit-reason->english reason))]
           [,op (close-port op)]))
+      (define report-files)
       (cond
        [(and load-prof save-prof)
         (let ([add-to-profile
@@ -809,27 +833,21 @@
                        (fail "cannot load profile data from ~a" user-supplied-name)]))))
               (profile:stop))))]
        [save-prof (truncate-profile)])
-      (foreach ([suite/test suites] [report-file report-files])
-        ($init-mat-output-file report-file (car suite/test) test-run))
-      (foreach ([suite/test suites] [report-file report-files])
-        (let ([suite (car suite/test)]
-              [tests (cdr suite/test)])
-          (match (run-test-spec swish
-                   (<test-spec> make
-                     [test-file suite]
-                     [test-run test-run]
-                     [report-file report-file]
-                     [tests (and (pair? tests) tests)]
-                     [incl-tags incl-tags]
-                     [excl-tags excl-tags]
-                     [profile save-prof]
-                     [progress progress]
-                     [lib-dirs (library-directories)]
-                     [src-dirs (source-directories)]))
-            [ran (void)]
-            [fail (set! status 1)]
-            [skip (set! status 1)]
-            [no-tests (set! no-tests (cons suite no-tests))])))
+      (let ([done (make-hashtable string-hash string=?)])
+        (foreach ([spec test-specs])
+          (match spec
+            [`(<test-spec> ,test-file ,report-file ,test-run)
+             (unless (hashtable-contains? done test-file)
+               (hashtable-set! done test-file report-file)
+               ($init-mat-output-file report-file test-file test-run))]))
+        (set! report-files
+          (vector->list (vector-sort string<? (hashtable-values done)))))
+      (foreach ([spec test-specs])
+        (match (run-test-spec swish spec)
+          [ran (void)]
+          [fail (set! status 1)]
+          [skip (set! status 1)]
+          [no-tests (set! no-tests (cons (<test-spec> test-file spec) no-tests))]))
       (let ([summary
              (cond
               [(opt 'load-results) =>
