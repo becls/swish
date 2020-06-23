@@ -83,7 +83,7 @@
         (match (pregexp-match-positions regex s i)
           [(,_ (,from . ,to))
            (f (substring s from to))
-           (scan (+ to 1))]
+           (scan to)]
           [#f (void)])))))
 
 (define (add-export! ht e)
