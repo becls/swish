@@ -74,6 +74,11 @@ jobs:
       before_script:
         - git config core.autocrlf false; rm .git/index; git reset --hard
         - choco install make -y
+    - env: TARGET_MACHINE=a6nt
+      os: windows
+      before_script:
+        - git config core.autocrlf false; rm .git/index; git reset --hard
+        - choco install make -y
     - env: TARGET_MACHINE=a6nt CHEZ_BRANCH=master
       os: windows
       before_script:
