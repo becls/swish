@@ -20,6 +20,7 @@
 ;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 ;;; DEALINGS IN THE SOFTWARE.
 
+#!chezscheme
 (library (swish event-mgr-notify)
   (export
    event-mgr:notify
@@ -60,7 +61,8 @@
   (define (informative-exit-reason? reason)
     (and
      (match reason
-       [`(&fault-condition ,reason ,k) (or k (abnormal? reason))]
+       [`(&fault-condition ,reason ,k)
+        (or (#%$continuation? k) (abnormal? reason))]
        [,_ (abnormal? reason)])
      #t))
 

@@ -163,7 +163,7 @@
             [,_ #f])))
     (define (cons-k r k*)
       (let ([k (get-k r)])
-        (if k (cons k k*) k*)))
+        (if (#%$continuation? k) (cons k k*) k*)))
     (define (add-stack k* reason)
       (match reason
         [`(&fault-condition [reason ,r] ,inner*)

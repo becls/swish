@@ -3282,15 +3282,22 @@
     [() (exit-reason->stacks 'none-here)]
     [() (exit-reason->stacks '(nor here))]
     [() (exit-reason->stacks 404)]
+    [() (exit-reason->stacks (make-fault/no-cc 'nada))]
     ;; no stack from catch
     [,e0 (catch (clop 3))]
     [() (exit-reason->stacks e0)]
     [#(EXIT zero!) e0]
     [`(catch zero!) e0]
     [`(catch zero! zero!) e0]
+    ;; we do get a stack from make-fault
+    [(,k0)
+     (guard (#%$continuation? k0))
+     (exit-reason->stacks (make-fault 'one))]
     ;; we do get a stack from try
     [,e1 (try (clop 3))]
-    [(,k) (exit-reason->stacks e1)]
+    [(,k)
+     (guard (#%$continuation? k))
+     (exit-reason->stacks e1)]
     [(("#<continuation in clop>" (n . 1))
       ("#<continuation in clop>" (n . 2))
       ("#<continuation in clop>" (n . 3))
@@ -3415,6 +3422,16 @@
      (dump k1 4)]
     )
    'ok)
+  (match-let* ;; make-fault and make-fault/no-cc combinations
+   ([,e0 (make-fault 'outer (make-fault/no-cc 'inner))]
+    [(,k0)
+     (guard (#%$continuation? k0))
+     (exit-reason->stacks e0)]
+    [,e1 (make-fault/no-cc 'outer (make-fault 'inner))]
+    [(,k1)
+     (guard (#%$continuation? k1))
+     (exit-reason->stacks e1)])
+   'ok)
   )
 
 (define (condition-equal? a b)
@@ -3537,6 +3554,36 @@
      e1]
     [#t (#%$continuation? k0)]
     [#t (#%$continuation? k1)]
+    [ok
+     (call/cc
+      (lambda (return)
+        (define (my-exit-reason->english x)
+          ;; should call exit-reason->english on reason within &fault-condition
+          (match x
+            [cold (return 'ok)]
+            [,_ (swish-exit-reason->english x)]))
+        (parameterize ([current-exit-reason->english my-exit-reason->english])
+          (exit-reason->english e1)
+          'nope)))])
+   'ok))
+
+(mat make-fault/no-cc ()
+  (match-let*
+   ([,e0 (make-fault/no-cc 'flak)]
+    [`(catch flak) e0]
+    [`(catch flak ,@e0) e0]
+    [(no-raise ,e1) (list 'no-raise (make-fault/no-cc 'cold e0))]
+    [`(catch cold) e1]
+    [`(catch cold ,@e1) e1]
+    [`(&fault-condition
+       [reason cold]
+       [inner* (`(&fault-condition [reason flak] [inner* ()] [k ,k0]))]
+       [k ,k1])
+     e1]
+    [#f (#%$continuation? k0)]
+    [#f (#%$continuation? k1)]
+    [no-cc k0]
+    [no-cc k1]
     [ok
      (call/cc
       (lambda (return)

@@ -46,6 +46,7 @@
    limit-stack?
    link
    make-fault
+   make-fault/no-cc
    make-inherited-parameter
    make-process-parameter
    match
@@ -302,6 +303,7 @@
 
   ($import-internal
    make-fault
+   make-fault/no-cc
    &fault-condition fault-condition-reason fault-condition? make-fault-condition
    EXIT-msg EXIT-msg? EXIT-msg-pid EXIT-msg-reason make-EXIT-msg
    DOWN-msg DOWN-msg? DOWN-msg-monitor DOWN-msg-pid DOWN-msg-reason make-DOWN-msg)

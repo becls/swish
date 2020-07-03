@@ -51,6 +51,16 @@
      [(reason) ($with-fault-condition reason '() values)]
      [(reason inner) ($with-fault-condition reason (list inner) values)]))
 
+  (define make-fault/no-cc
+    (case-lambda
+     ;; We use 'no-cc for k here to distinguish faults constructed by
+     ;; make-fault or throw from those introduced by normalize-exit-reason
+     ;; or by ->fault-condition in try. We use this distinction to determine
+     ;; how to bind the err field in the match extension for exit-reason that
+     ;; is used in the match extensions for catch, DOWN, and EXIT.
+     [(reason) (make-fault-condition 'no-cc reason '())]
+     [(reason inner) (make-fault-condition 'no-cc reason (list inner))]))
+
   (define-record-type EXIT-msg
     (nongenerative)
     (sealed #t)
