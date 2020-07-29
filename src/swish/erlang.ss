@@ -39,6 +39,7 @@
    dump-stack
    erlang:now
    get-registered
+   global-process-id
    inherited-parameters
    keyboard-interrupt
    kill
@@ -673,6 +674,12 @@
       [#(waiting-indefinitely ,src)
        (display-string "waiting indefinitely" op)
        (print-src src op)]))
+
+  (define (global-process-id pid)
+    ($import-internal get-session-id)
+    (unless (pcb? pid)
+      (bad-arg 'global-process-id pid))
+    (format "~@[~d~]:~d" (get-session-id) (pcb-id pid)))
 
   (define process-id
     (case-lambda
@@ -1646,7 +1653,7 @@
   (record-writer (record-type-descriptor pcb)
     (lambda (r p wr)
       (display-string "#<process " p)
-      (wr (pcb-id r) p)
+      (display-string (global-process-id r) p)
       (let ([name (pcb-name r)])
         (when name
           (write-char #\space p)

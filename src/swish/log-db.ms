@@ -53,8 +53,9 @@
     [#vu8(1 2 3) (coerce '#vu8(1 2 3))]
     ["bar" (coerce 'bar)]
     ["gensym" (coerce (gensym "gensym"))]
-    [,n (guard (and (integer? n) (> n 0)))
-      (coerce (spawn (lambda () 'ok)))]
+    [,pid (spawn (lambda () 'ok))]
+    [,expected (global-process-id pid)]
+    [,@expected (coerce pid)]
     ["Mon, 2 Feb 2015 01:02:03 +0000" (coerce (make-date 0 3 2 1 2 2 2015 0))]
     [ok (check-condition
          (condition
@@ -71,7 +72,7 @@
             ([(,stack0 . ,_) stacks]
              [#t (json:object? stack0)]
              [10 (json:ref stack0 'truncated 'wrong)]
-             [12 (json:ref stack0 'depth #f)]
+             [,n (guard (> n 10)) (json:ref stack0 'depth #f)]
              [(,f0 . ,_) (json:ref stack0 'frames '())]
              [,s (json:ref f0 'description 'bad)]
              [#t (starts-with? s "#<system continuation in")])
@@ -103,7 +104,7 @@
             ([(,stack0) stacks]
              [#t (json:object? stack0)]
              [10 (json:ref stack0 'truncated 'wrong)]
-             [15 (json:ref stack0 'depth #f)]
+             [,n (guard (> n 10)) (json:ref stack0 'depth #f)]
              [(,f0 ,f1 ,f2 ,f3 . ,_) (json:ref stack0 'frames 0)]
              [ok (check-frame f0 0 "#<continuation in loop1>" '())]
              [ok (check-frame f1 1 "#<continuation in loop1>" '(("m" "2") ("n" "2")))]
@@ -256,7 +257,7 @@
      (match-let*
       ([,@orig-child
         (transaction 'log-db
-          (execute "select id, name, supervisor, restart_type, type, shutdown, start, duration, killed, reason from child order by rowid"))]
+          (execute "select 0+ltrim(id,':'), name, 0+ltrim(supervisor,':'), restart_type, type, shutdown, start, duration, killed, reason from child order by rowid"))]
        [,@orig-gen-server-debug
         (transaction 'log-db
           (execute "select timestamp, duration, type, 0+ltrim(client,':'), 0+ltrim(server,':'), message, state, reply from gen_server_debug order by rowid"))]
@@ -265,7 +266,7 @@
           (execute "select timestamp, name, last_message, state, reason from gen_server_terminating order by rowid"))]
        [,@orig-http-request
         (transaction 'log-db
-          (execute "select timestamp, pid, host, method, path, header, params from http_request order by rowid"))]
+          (execute "select timestamp, 0+ltrim(pid,':'), host, method, path, header, params from http_request order by rowid"))]
        [,@orig-statistics
         (transaction 'log-db
           (execute "select timestamp, date, reason, bytes_allocated, osi_bytes_used, sqlite_memory,
@@ -278,7 +279,7 @@
                          cpu, real, bytes, gc_count, gc_cpu, gc_real, gc_bytes from statistics order by rowid"))]
        [,@orig-supervisor-error-primary
         (transaction 'log-db
-          (execute "select timestamp, supervisor, error_context, child_pid, child_name from supervisor_error order by rowid"))]
+          (execute "select timestamp, 0+ltrim(supervisor,':'), error_context, 0+ltrim(child_pid,':'), child_name from supervisor_error order by rowid"))]
        [(#(,reason1) #(,reason2)) orig-supervisor-error-reason]
        [#(error ,reason1) (read (open-input-string reason1))]
        [(#(,@reason1) #(,@reason2))

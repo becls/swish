@@ -24,6 +24,12 @@
   (export $import-internal)
   (import (scheme))
 
+  (define session-id #f)
+  (define (get-session-id) session-id)
+  (define (set-session-id! n)
+    (unless session-id
+      (set! session-id n)))
+
   (define-record-type (&fault-condition make-fault-condition fault-condition?)
     ;; use define-record to seal &fault-condition
     (nongenerative)

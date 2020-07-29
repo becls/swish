@@ -23,6 +23,7 @@
 #!chezscheme
 (library (swish log-db)
   (export
+   $migrate-pid-columns
    <event-logger>
    coerce
    create-table
@@ -43,6 +44,7 @@
    (swish errors)
    (swish event-mgr)
    (swish events)
+   (swish internal)
    (swish io)
    (swish json)
    (swish osi)
@@ -85,16 +87,6 @@
      [(name version)
       (execute "insert or replace into version (name, version) values (?, ?)"
         (symbol->string name) version)]))
-
-  (define next-child-id 1)
-
-  (define process->child-id
-    (let ([ht (make-weak-eq-hashtable)])
-      (lambda (x)
-        (let ([id (cdr (eq-hashtable-cell ht x next-child-id))])
-          (when (= next-child-id id)
-            (set! next-child-id (+ id 1)))
-          id))))
 
   (define log-db:instance-id #f)
 
@@ -188,7 +180,7 @@
      [(real? x) (inexact x)]
      [(bytevector? x) x]
      [(symbol? x) (symbol->string x)]
-     [(process? x) (process->child-id x)]
+     [(process? x) (global-process-id x)]
      [(date? x) (format-rfc2822 x)]
      [(condition? x)
       (parameterize ([print-graph #t] [print-level 3] [print-length 6])
@@ -290,21 +282,62 @@
                        [(arg ...) args])
            #'(db:log 'log-db query (coerce arg) ...)))]))
 
+  (define (change-column-type table old-type new-type columns convert-column)
+    (define (get-column-specs table)
+      (map (lambda (x)
+             (match x
+               [#(,cid ,name ,type ,notnull ,dflt_value ,pk ,hidden)
+                ;; we don't handle complicated cases
+                (match-let* ([#f dflt_value] [0 pk] [0 notnull] [0 hidden])
+                  (list name type))]))
+        (execute (format "pragma table_xinfo([~a])" table))))
+    (define (create-table name col-specs)
+      (format "create table [~a] (~:{[~a] ~a~:^, ~})" name col-specs))
+    (define (change-type col-specs)
+      (map (lambda (x)
+             (match x
+               [(,column ,type)
+                (guard (member column columns))
+                (assert (equal? type old-type))
+                (list column new-type)]
+               [,x x]))
+        col-specs))
+    (define (convert col-specs)
+      (map (lambda (x)
+             (match x
+               [(,column ,_)
+                (guard (member column columns))
+                (convert-column column)]
+               [(,col ,type) (format "[~a]" col)]))
+        col-specs))
+    (let ([col-specs (get-column-specs table)])
+      (execute (format "alter table [~a] rename to [~a_orig]" table table))
+      (execute (create-table table (change-type col-specs)))
+      (execute (format "insert into [~a] select ~{~a~^, ~} from [~a_orig] order by rowid"
+                 table (convert col-specs) table))
+      (execute (format "drop table [~a_orig]" table))))
+
+  (define ($migrate-pid-columns table . columns)
+    (change-column-type table "integer" "text" columns
+      (lambda (column)
+        (format "case when [~a] is null then null else ':' || [~a] end"
+          column column))))
+
   (module (swish-event-logger)
     (define schema-name 'swish)
-    (define schema-version "2019-10-18")
+    (define schema-version "2020-09-01")
 
     (define-simple-events create-simple-tables log-simple-event
       (<child-end>
        (timestamp integer)
-       (pid integer)
+       (pid text)
        (killed integer)
        (reason text)
        (details text))
       (<child-start>
        (timestamp integer)
-       (supervisor integer)
-       (pid integer)
+       (supervisor text)
+       (pid text)
        (name text)
        (restart-type text)
        (type text)
@@ -313,8 +346,8 @@
        (timestamp integer)
        (duration integer)
        (type integer)
-       (client integer)
-       (server integer)
+       (client text)
+       (server text)
        (message text)
        (state text)
        (reply text))
@@ -327,7 +360,7 @@
        (details text))
       (<http-request>
        (timestamp integer)
-       (pid integer)
+       (pid text)
        (host text)
        (method text)
        (path text)
@@ -351,11 +384,11 @@
        (gc-bytes integer))
       (<supervisor-error>
        (timestamp integer)
-       (supervisor integer)
+       (supervisor text)
        (error-context text)
        (reason text)
        (details text)
-       (child-pid integer)
+       (child-pid text)
        (child-name text))
       (<system-attributes>
        (timestamp integer)
@@ -388,9 +421,10 @@
 
       (create-simple-tables)
 
-      ;; next-child-id
-      (match-let* ([(#(,id)) (execute "select max(pid) from child_start")])
-        (set! next-child-id (+ (or id 0) 1)))
+      ;; session-id
+      (match-let* ([(#(,id)) (execute "select max(rowid) from system_attributes")])
+        ($import-internal set-session-id!)
+        (set-session-id! (+ (or id 0) 1)))
 
       (execute "drop view if exists child")
       (execute "create view child as select T1.pid as id, T1.name, T1.supervisor, T1.restart_type, T1.type, T1.shutdown, T1.timestamp as start, T2.timestamp - T1.timestamp as duration, T2.killed, T2.reason, T2.details from child_start T1 left outer join child_end T2 on T1.pid=T2.pid")
@@ -435,6 +469,15 @@
     (define (upgrade-db)
       (match (log-db:version schema-name)
         [,@schema-version (create-db)]
+        ["2019-10-18"
+         (execute "drop view if exists child")
+         ($migrate-pid-columns "child_start" "pid" "supervisor")
+         ($migrate-pid-columns "child_end" "pid")
+         ($migrate-pid-columns "http_request" "pid")
+         ($migrate-pid-columns "supervisor_error" "child_pid" "supervisor")
+         ($migrate-pid-columns "gen_server_debug" "client" "server")
+         (log-db:version schema-name "2020-09-01")
+         (upgrade-db)]
         ["2019-06-26"
          (define chunk-size 1000)
          (define op (open-output-string))

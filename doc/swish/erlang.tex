@@ -926,6 +926,23 @@ a process, exception \code{\#(bad-arg process-id \var{process})} is
 raised.
 
 % ----------------------------------------------------------------------------
+\defineentry{global-process-id}
+\begin{procedure}
+  \code{(global-process-id \var{process})}
+\end{procedure}
+\returns{} a string; see below
+
+The \code{global-process-id} procedure returns a string of the form
+\code{"\var{session-id}:\var{process-id}"}.
+The \var{process-id} is the \code{process-id} of \var{process}.
+If the \hyperref[chap:log-db]{\code{log-db}} gen-server has been started, then
+\var{session-id} is an integer session identifier that is unique in that
+database instance.
+Otherwise, \var{session-id} is omitted.
+If \var{process} is not a process, exception \code{\#(bad-arg global-process-id
+\var{process})} is raised.
+
+% ----------------------------------------------------------------------------
 \defineentry{process-name}
 \begin{procedure}
   \code{(process-name \opt{\var{process}})}

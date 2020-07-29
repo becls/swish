@@ -385,6 +385,7 @@
     [#(EXIT #(bad-arg print-precision -3)) (catch (print-precision -3))]
     [#(EXIT #(bad-arg print-radix 1)) (catch (print-radix 1))]
     [#(EXIT #(bad-arg process-id 12)) (catch (process-id 12))]
+    [#(EXIT #(bad-arg global-process-id 12)) (catch (global-process-id 12))]
     [#(EXIT #(bad-arg process-name 12)) (catch (process-name 12))]
     [#(EXIT #(bad-arg register 12)) (catch (register (gensym) 12))]
     [#(EXIT #(bad-arg register 12)) (catch (register 12 'bad))]
@@ -3608,10 +3609,10 @@
   ;; pcb
   (match-let*
    ([,pid (spawn&link (lambda () (receive)))]
-    [,expected0 (format "#<process ~a>" (process-id pid))]
+    [,expected0 (format "#<process ~a>" (global-process-id pid))]
     [,@expected0 (format "~s" pid)]
     [#t (register 'coverage pid)]
-    [,expected1 (format "#<process ~a coverage>" (process-id pid))]
+    [,expected1 (format "#<process ~a coverage>" (global-process-id pid))]
     [,@expected1 (format "~s" pid)]
     [#t (unregister 'coverage)]
     [,@expected0 (format "~s" pid)])
