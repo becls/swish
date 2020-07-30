@@ -287,6 +287,9 @@ used:
   number of milliseconds to wait to receive an HTTP request after
   initial connection \\
 
+  \code{response-timeout} & 60,000 & a positive fixnum; the maximum
+  number of milliseconds to allow the server to send a response \\
+
   \code{header-limit} & 1,048,576 & a positive fixnum; the maximum
   length in bytes of the HTTP request headers \\
 
@@ -533,7 +536,7 @@ strings. If any of its keys are not strings, exception
 
 \defineentry{http:respond}
 \begin{procedure}
-  \code{(http:respond \var{conn} \var{status} \var{header-alist} \opt{\var{content}})}
+  \code{(http:respond \var{conn} \var{status} \var{header-alist} \opt{\var{content} \opt{\var{timeout}}})}
 \end{procedure}
 \returns{} \code{\#t}
 
@@ -552,9 +555,11 @@ and if \var{content} is a bytevector, it must be empty. Otherwise, the
 \code{Content-Length} header is added with the length of
 \var{content}.
 
+The default value of \var{timeout} is \code{(response-timeout)}.
+
 \defineentry{http:respond-file}
 \begin{procedure}
-  \code{(http:respond-file \var{conn} \var{status} \var{header-alist} \var{filename})}
+  \code{(http:respond-file \var{conn} \var{status} \var{header-alist} \var{filename} \opt{\var{timeout}})}
 \end{procedure}
 \returns{} \code{\#t}
 
@@ -567,6 +572,8 @@ header is added, if it is not already present, with value
 is not already present, by calling the \code{media-type-handler}.  The
 content of the file is streamed to the output port so that the file
 does not need to be loaded into memory. The output port is flushed.
+
+The default value of \var{timeout} is \code{(response-timeout)}.
 
 \defineentry{http:call-with-form}
 \begin{procedure}
@@ -613,6 +620,8 @@ Name/value pairs count against \var{content-limit} while file data
 counts against \var{file-limit}. An exception is raised when either
 limit is exceeded.
 
+The default value of \var{timeout} is \code{(request-timeout)}.
+
 \defineentry{http:call-with-ports}
 \begin{procedure}
   \code{(http:call-with-ports \var{conn} \var{f} \opt{\var{timeout}})}
@@ -624,6 +633,8 @@ connection state and calls \var{f} in the connection process with the
 connection's input and output ports.  Running \var{f} in the
 connection process allows the caller to timeout when input is
 unavailable. The return value of \var{f} is returned to the caller.
+
+The default value of \var{timeout} is 5000 milliseconds.
 
 \defineentry{http:switch-protocol}
 \begin{procedure}

@@ -695,6 +695,10 @@
      (catch ((http:options [request-timeout 'a])))]
     [#(EXIT #(bad-arg request-timeout 0))
      (catch ((http:options [request-timeout 0])))]
+    [#(EXIT #(bad-arg response-timeout a))
+     (catch ((http:options [response-timeout 'a])))]
+    [#(EXIT #(bad-arg response-timeout 0))
+     (catch ((http:options [response-timeout 0])))]
     [#(EXIT #(bad-arg header-limit a))
      (catch ((http:options [header-limit 'a])))]
     [#(EXIT #(bad-arg header-limit 0))
@@ -1123,6 +1127,25 @@
      (discard-events)
      (gc)
      (assert (output-port? (g))))))
+
+(http-mat response-timeout ()
+  (define bytes (make-bytevector (- (expt 2 29) 1)))
+  (supervisor:start&link 'http-sup 'one-for-all 0 1
+    (http:configure-server #f 0
+      (http:url-handler
+       (http:respond conn 200 '() bytes))
+      (http:options
+       [response-timeout 15])))
+  (capture-events)
+  (let-values ([(ip op) (connect-tcp "127.0.0.1" (get-http-port))])
+    (put-bytevector op (string->utf8 "GET / HTTP/1.1\r\n\r\n"))
+    (flush-output-port op)
+    ;; grab a few bytes, but otherwise don't read. This will cause the
+    ;; server to fill up the network queue and eventually wait. This
+    ;; causes the response-timeout to trigger.
+    (do ([i 0 (+ i 1)]) ((= i 10)) (get-u8 ip))
+    (receive (after 2000 (throw 'failed-to-timeout))
+      [`(<child-end> [reason #(timeout ,_)]) 'ok])))
 
 (http-mat content-length ()
   (define (test s)

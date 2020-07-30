@@ -87,6 +87,13 @@
           (bad-arg 'request-timeout x))
         x)))
 
+  (define response-timeout
+    (make-process-parameter 60000
+      (lambda (x)
+        (unless (and (fixnum? x) (fx> x 0))
+          (bad-arg 'response-timeout x))
+        x)))
+
   (define header-limit
     (make-process-parameter 1048576
       (lambda (x)
@@ -122,6 +129,7 @@
     media-type-handler
     request-limit
     request-timeout
+    response-timeout
     )
 
   (define-syntax http:add-file-server
@@ -432,8 +440,11 @@
   (define http:respond
     (case-lambda
      [(conn status header)
-      (unwrap (gen-server:call conn `#(respond ,status ,header #f)))]
+      (unwrap
+       (gen-server:call conn `#(respond ,status ,header #f) (response-timeout)))]
      [(conn status header content)
+      (http:respond conn status header content (response-timeout))]
+     [(conn status header content timeout)
       (unless (bytevector? content)
         (bad-arg 'http:respond content))
       (let ([allow-body? (body-allowed? status)])
@@ -441,10 +452,17 @@
           (throw `#(http-no-response-body-allowed ,status)))
         (unwrap
          (gen-server:call conn
-           `#(respond ,status ,header ,(and allow-body? content)))))]))
+           `#(respond ,status ,header ,(and allow-body? content))
+           timeout)))]))
 
-  (define (http:respond-file conn status header filename)
-    (unwrap (gen-server:call conn `#(respond-file ,status ,header ,filename))))
+  (define http:respond-file
+    (case-lambda
+     [(conn status header filename)
+      (http:respond-file conn status header filename (response-timeout))]
+     [(conn status header filename timeout)
+      (unwrap
+       (gen-server:call conn `#(respond-file ,status ,header ,filename)
+         timeout))]))
 
   (define http:call-with-form
     (case-lambda
