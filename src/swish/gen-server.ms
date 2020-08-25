@@ -82,6 +82,7 @@
       [stop `#(stop stopped ok ,state)]
       [crash (raise 'crashed)]
       [throw (throw 'fit)]
+      [return-fault `#(reply ,(make-fault 'boom) ,state)]
       [native-exception (car 'apple)]
       [crash-terminate `#(stop crash-terminate ok ,state)]
       [throw-terminate `#(stop throw-terminate ok ,state)]
@@ -486,7 +487,11 @@
     [#(ok ,pid) (start&link-server 'my-test-name '())]
     [ok (gen-server:call 'my-test-name 'started?)]
     [#(EXIT #(shutdown #(gen-server call (my-test-name shutdown-during-call))))
-     (catch (gen-server:call 'my-test-name 'shutdown-during-call))])
+     (catch (gen-server:call 'my-test-name 'shutdown-during-call))]
+
+    ;; server returns a fault, and fault is thrown in caller
+    [#(ok ,pid) (start&link-server 'my-test-name '())]
+    [#(EXIT boom) (catch (gen-server:call 'my-test-name 'return-fault))])
    'ok))
 
 (isolate-mat cast ()

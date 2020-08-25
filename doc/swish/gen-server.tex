@@ -192,6 +192,9 @@ a timeout is specified. If the caller catches the failure and
 continues running, the caller must be prepared for a possible late
 reply from the server.
 
+When the reply is a fault condition, the fault is thrown in the
+calling process.
+
 \code{gen-server:call} exits if the server terminates while the
 client is waiting for a reply. When that happens, the client exits for
 the same reason as the server.

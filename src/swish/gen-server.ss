@@ -222,21 +222,12 @@
           [reason reason]
           [details details]))))
 
-  (define (failed-call reason e context)
-    (throw `#(,reason #(gen-server call ,context)) e))
-
   (define gen-server:call
     (case-lambda
-     [(server request timeout)
-      (match (try (do-call server request timeout))
-        [#(ok ,res) res]
-        [`(catch ,reason ,e)
-         (failed-call reason e `(,server ,request ,timeout))])]
      [(server request)
-      (match (try (do-call server request 5000))
-        [#(ok ,res) res]
-        [`(catch ,reason ,e)
-         (failed-call reason e `(,server ,request))])]))
+      (do-call server request 5000 #f)]
+     [(server request timeout)
+      (do-call server request timeout #t)]))
 
   (define-syntax no-interrupts
     (syntax-rules ()
@@ -247,9 +238,14 @@
 
   (define debug-table (make-weak-eq-hashtable))
 
-  (define (do-call server request timeout)
+  (define (do-call server request timeout timeout?)
+    (define (failed-call reason e)
+      (let ([context (if timeout?
+                         (list server request timeout)
+                         (list server request))])
+        (throw `#(,reason #(gen-server call ,context)) e)))
     (let* ([pid (if (symbol? server)
-                    (or (whereis server) (raise 'no-process))
+                    (or (whereis server) (failed-call 'no-process #f))
                     server)]
            [m (monitor pid)]
            [debug (no-interrupts (eq-hashtable-ref debug-table pid #f))]
@@ -260,16 +256,18 @@
          (demonitor&flush m)
          (when debug
            (debug-report 6 debug start self pid request #f 'timeout))
-         (raise 'timeout))
+         (failed-call 'timeout #f))
        [#(,@m ,reply)
         (demonitor&flush m)
         (when debug
           (debug-report 5 debug start self pid request #f reply))
-        `#(ok ,reply)]
+        (match reply
+          [`(catch ,reason ,e) (throw e)]
+          [,_ reply])]
        [`(DOWN ,@m ,_ ,reason ,err)
         (when debug
           (debug-report 6 debug start self pid request #f reason))
-        (raise err)])))
+        (failed-call reason err)])))
 
   (define (gen-server:cast server request)
     (catch (send server `#($gen-cast ,request)))
