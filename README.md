@@ -1,11 +1,12 @@
-[![Build Status](https://travis-ci.org/becls/swish.svg?branch=master)](https://travis-ci.org/becls/swish)
+[![Build Status](https://travis-ci.org/becls/swish.svg?branch=dev)](https://travis-ci.org/becls/swish)
 
 # Swish Concurrency Engine
 
 The Swish Concurrency Engine is a framework used to write
 fault-tolerant programs with message-passing concurrency. It uses the
-Chez Scheme programming language and embeds concepts from the Erlang
-programming language. Swish also provides a web server.
+[Chez Scheme](https://cisco.github.io/ChezScheme) programming language
+and embeds concepts from the Erlang programming language. Swish also
+provides a web server.
 
 # Design
 
