@@ -45,7 +45,7 @@ is not thread safe and should be used from the main thread only.
 
 ## Linux
 
-- Chez Scheme 9.5.2 or 9.5.3
+- Chez Scheme 9.5.4 or 9.5.5
 - GCC, the GNU Compiler Collection
 - GNU make
 - GNU C++ compiler for libuv
@@ -55,7 +55,7 @@ is not thread safe and should be used from the main thread only.
 
 ## Mac
 
-- Chez Scheme 9.5.2 or 9.5.3
+- Chez Scheme 9.5.4 or 9.5.5
 - ginstall and realpath (can be installed through homebrew using `brew install coreutils`)
 - XCode and the command-line tools must be set
   (Xcode->Preferences->Locations->command line tools)
@@ -65,7 +65,7 @@ is not thread safe and should be used from the main thread only.
 
 ## Windows
 
-- Chez Scheme 9.5.2 or 9.5.3
+- Chez Scheme 9.5.4 or 9.5.5
 - Cygwin or MinGW/MSYS with bash, git, graphviz, grep, perl, texlive,
   GNU make, etc.
 - Microsoft Visual Studio 2017 with Visual C++
@@ -97,7 +97,7 @@ boot file.
 
 On Windows, your install should include the application's executable
 and boot file, `osi.dll`, `uv.dll`, `sqlite3.dll`, Chez Scheme's
-`csv952.dll`, and Microsoft's C Runtime Library `vcruntime140.dll`.
+`csv954.dll`, and Microsoft's C Runtime Library `vcruntime140.dll`.
 
 Developers writing stand-alone applications should clone the Swish
 repository and run `configure`.  Swish's source repository provides

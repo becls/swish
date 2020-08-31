@@ -542,20 +542,6 @@
   (swish-build-test `("-o" ,prog-compiled ,prog "--rtlib" ,libname "-L" ,libdir) '())
   (run-thin "rtlib-prog" '() '("abc: def")))
 
-;; TODO remove workaround once we move to Chez Scheme 9.5.4 containing
-;; f5fd9d144b68af26244855c7c2f34be97298deea
-(define (workaround-952 exprs)
-  ;; We wrap the expressions in (module () ...)
-  ;; so that the input is a definition, which prevents
-  ;; top-level-program from converting this into
-  ;;   (letrec* ([t1 (printf ...)]
-  ;;             [t2 (swish-start "--version")])
-  ;;     (void))
-  ;; which would fail since swish-start returns zero values
-  ;; to a context that expects one (but may fail only if
-  ;; cp0 is disabled, as when running profiled mats).
-  `(module () ,@exprs))
-
 (isolate-mat rtlibs-output ()
   (define rto-lib
     (write-example "rto-lib"
@@ -567,12 +553,11 @@
   (define rto-library (string-append rto-lib ".library"))
   (define rto-main
     (write-example "rto-main"
-      (list
-       (workaround-952
-        `((import (rto-lib) (scheme))
+      `((begin
+          (import (rto-lib) (scheme))
           (printf "~a ~a\n" x y)
           (waiter-prompt-string "")
-          (new-cafe))))))
+          (new-cafe)))))
   (define rto-out (output-file "rto-main"))
   (swish-build-test `("-o" ,rto-library "--library" ,rto-lib) '())
   ;; thin app omits petite.boot, swish-core.library, and swish.library despite --rtlib swish
@@ -1156,8 +1141,8 @@
       (lambda ()
         (printf "#! /usr/bin/env swish\n")
         (pretty-print
-         (workaround-952
-          `((printf "Hello from ")
+         `(begin
+            (printf "Hello from ")
             (match-let*
              ([ok (begin (swish-start "--version") 'ok)]
               [ok (begin (swish-start "--help") 'ok)]
@@ -1187,7 +1172,7 @@
                                  [console-input-port (open-input-string ,outer-script-input)])
                     (swish-start ,outer-script "noodle" "soup"))))])
              (printf "~a\n" (app:name))
-             (printf "okay\n"))))))))
+             (printf "okay\n")))))))
   (define (expected-output who extra-stderr)
     `(;; ==stdin==
       ;; swish-start --version
@@ -1318,10 +1303,9 @@
         ;; cases do try-import so script we load can work
         (printf "#! /usr/bin/env swish\n")
         (pretty-print
-         (workaround-952
-          `(;; cd so we can use relative path to keep Windows happy
+         `(begin ;; cd so we can use relative path to keep Windows happy
             (cd (path-parent (app:path)))
-            (apply swish-start (command-line-arguments))))))))
+            (apply swish-start (command-line-arguments)))))))
   (define importer.ss (path-last importer.ss-full-path))
   (define importer (path-root importer.ss))
   (define expected-output-core

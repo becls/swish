@@ -824,7 +824,7 @@
          (receive (after 1000 (throw 'writer-failed-to-complete))
            [`(DOWN ,@m ,@pid ,reason)
             (osi_kill* os-pid 15)
-            (receive (after 1000 (throw 'os-process-timeout))
+            (receive (after 10000 (throw 'os-process-timeout))
               [#(process-terminated ,@os-pid ,exit-status ,_) 'ok])])])])
     (gc)
     (assert (bytevector? (gbuff)))
