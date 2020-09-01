@@ -225,10 +225,11 @@
 (load-this-exposing '(->exit-status))
 
 (import
+ (swish app-core)
  (swish mat)
  (swish profile)
  (swish testing)
- (swish app-core))
+ )
 
 (mat coverage ()
   (match-let*
