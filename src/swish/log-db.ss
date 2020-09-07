@@ -354,6 +354,7 @@
       (<gen-server-terminating>
        (timestamp integer)
        (name text)
+       (pid text)
        (last-message text)
        (state text)
        (reason text)
@@ -476,6 +477,7 @@
          ($migrate-pid-columns "http_request" "pid")
          ($migrate-pid-columns "supervisor_error" "child_pid" "supervisor")
          ($migrate-pid-columns "gen_server_debug" "client" "server")
+         (execute "alter table gen_server_terminating add column pid text default null")
          (log-db:version schema-name "2020-09-01")
          (upgrade-db)]
         ["2019-06-26"

@@ -250,10 +250,10 @@
       [,_ (link pid)]
       [ok (receive (after 10 'ok))]     ; give it a moment to start
       [,_ (kill pid 'stopped)]
-      [,name/pid (or name pid)]
       [(`(EXIT ,@pid stopped)
         `(<gen-server-terminating>
-          [name ,@name/pid]
+          [name ,@name]
+          [pid ,@pid]
           [last-message `(EXIT ,@me stopped)]
           [reason stopped]))
        (flush-msgs)])
@@ -277,11 +277,11 @@
       [,_ (link pid)]
       [ok (receive (after 10 'ok))]     ; give it a moment to start
       [,_ (kill pid 'stopped)]
-      [,name/pid (or name pid)]
       [(#(parent #f)
         `(EXIT ,@pid stopped)
         `(<gen-server-terminating>
-          [name ,@name/pid]
+          [name ,@name]
+          [pid ,@pid]
           [last-message `(EXIT ,@me stopped)]
           [reason stopped]))
        (flush-msgs)])
@@ -313,7 +313,7 @@
     [,_ (kill pid 'stopped)]
     [(#(,@pid on-exit-fired)
       `(EXIT ,@pid stopped)
-      `(<gen-server-terminating> [name ,@pid] [reason stopped]))
+      `(<gen-server-terminating> [pid ,@pid] [reason stopped]))
      (flush-msgs)])
    'ok))
 
@@ -342,7 +342,7 @@
     [#(EXIT #(crashed ,_)) (catch (gen-server:call pid 'crash))])
 
    (receive
-    [`(<gen-server-terminating> [name ,@pid]
+    [`(<gen-server-terminating> [pid ,@pid]
         [last-message crash]
         [state crash-state]
         [reason crashed]
@@ -361,7 +361,7 @@
     [ok (gen-server:call pid 'crash-terminate)])
 
    (receive
-    [`(<gen-server-terminating> [name ,@pid]
+    [`(<gen-server-terminating> [pid ,@pid]
         [last-message crash-terminate]
         [state crash-state]
         [reason crashed])
@@ -394,7 +394,7 @@
      (catch (gen-server:call pid 'native-exception))])
 
    (receive
-    [`(<gen-server-terminating> [name ,@pid]
+    [`(<gen-server-terminating> [pid ,@pid]
         [last-message native-exception]
         [state ignorance]
         [reason exception]
@@ -415,7 +415,7 @@
      (catch (gen-server:call pid 'throw))])
 
    (receive
-    [`(<gen-server-terminating> [name ,@pid]
+    [`(<gen-server-terminating> [pid ,@pid]
         [last-message throw]
         [state bliss]
         [reason fit]
@@ -434,7 +434,7 @@
     [ok (gen-server:call pid 'throw-terminate)])
 
    (receive
-    [`(<gen-server-terminating> [name ,@pid]
+    [`(<gen-server-terminating> [pid ,@pid]
         [last-message throw-terminate]
         [state crash-state]
         [reason terminated]
@@ -546,7 +546,7 @@
           [#(,@pid terminated objection) 'ok])])
    (receive (after 1000 (throw 'no-event))
      [`(<gen-server-terminating>
-        [name ,@pid]
+        [pid ,@pid]
         [last-message #(,@self raise objection)]
         [state #(,@self report-termination)]
         [reason objection]) 'ok])
@@ -569,7 +569,7 @@
      (exit-reason->english c)])
    (receive (after 1000 (throw 'no-event))
      [`(<gen-server-terminating>
-        [name ,@pid]
+        [pid ,@pid]
         [last-message #(,@self native-exception)]
         [state #(,@self report-termination)]
         [reason exception]
@@ -591,7 +591,7 @@
           [#(,@pid terminated heavy-object) 'ok])])
    (receive (after 1000 (throw 'no-event))
      [`(<gen-server-terminating>
-        [name ,@pid]
+        [pid ,@pid]
         [last-message #(,@self throw heavy-object)]
         [state #(,@self report-termination)]
         [reason heavy-object]) 'ok])

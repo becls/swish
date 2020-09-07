@@ -64,6 +64,7 @@
   (define-tuple <gen-server-terminating>
     timestamp
     name
+    pid
     last-message
     state
     reason

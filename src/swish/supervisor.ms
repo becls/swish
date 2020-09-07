@@ -273,7 +273,7 @@
      (get-events 0)]
     [,_ (send pid2 `(raise ruckus))]
     [(`(<gen-server-terminating>
-        [name ,@pid2]
+        [pid ,@pid2]
         [last-message (raise ruckus)]
         [state ()]
         [reason ruckus]
@@ -302,7 +302,7 @@
      (get-events 0)]
     [,_ (send pid1 `(raise objection))]
     [(`(<gen-server-terminating>
-        [name ,@pid1]
+        [pid ,@pid1]
         [last-message (raise objection)]
         [state ()]
         [reason objection]
@@ -332,7 +332,7 @@
      (get-events 0)]
     [,_ (send pid1 `(throw ball ,oops))]
     [(`(<gen-server-terminating>
-        [name ,@pid1]
+        [pid ,@pid1]
         [last-message (throw ball ,@oops)]
         [state ()]
         [reason ball]

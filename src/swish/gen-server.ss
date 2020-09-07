@@ -87,7 +87,7 @@
             timeout))]))
 
   (define ($enter-loop iface state timeout)
-    (loop (process-parent) (or (process-name) self) iface state
+    (loop (process-parent) (process-name) iface state
       (resolve-timeout timeout)))
 
   (define (start name iface init-args)
@@ -116,10 +116,10 @@
       (match (try (do-init iface init-args))
         [#(ok ,state)
          (reply `#(ok ,self))
-         (loop parent (or name self) iface state 'infinity)]
+         (loop parent name iface state 'infinity)]
         [#(ok ,state ,timeout)
          (reply `#(ok ,self))
-         (loop parent (or name self) iface state (resolve-timeout timeout))]
+         (loop parent name iface state (resolve-timeout timeout))]
         [#(stop ,reason)
          (reply `#(error ,reason))
          (raise reason)]
@@ -217,6 +217,7 @@
       (let-values ([(reason details) (normalize-exit-reason reason err)])
         (system-detail <gen-server-terminating>
           [name name]
+          [pid self]
           [last-message msg]
           [state state]
           [reason reason]

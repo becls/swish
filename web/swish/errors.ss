@@ -60,16 +60,16 @@
   (let ([limit (integer-param "limit" 0 params)]
         [offset (integer-param "offset" 0 params)]
         [child-sql "SELECT id, name, supervisor, restart_type, type, shutdown, datetime(start/1000,'unixepoch','localtime') as start, duration, killed, reason, details as message, NULL as stacks FROM child WHERE message IS NOT NULL ORDER BY id DESC"]
-        [gen-sql "SELECT datetime(timestamp/1000,'unixepoch','localtime') as timestamp, name, last_message, state, reason, details as message, NULL as stacks  FROM gen_server_terminating ORDER BY ROWID DESC"]
+        [gen-sql "SELECT datetime(timestamp/1000,'unixepoch','localtime') as timestamp, pid, name, last_message, state, reason, details as message, NULL as stacks  FROM gen_server_terminating ORDER BY ROWID DESC"]
         [super-sql "SELECT datetime(timestamp/1000,'unixepoch','localtime') as timestamp, supervisor, error_context, reason, child_pid, child_name, details as message, NULL as stacks FROM supervisor_error ORDER BY ROWID DESC"]
         [sql (string-param "sql" params)]
         [child-func  (lambda (id name supervisor restart-type type shutdown start duration killed reason details _ignore)
                        (let-values ([(message stacks) (get-message-and-stacks details)])
                          (list id name supervisor restart-type type shutdown start (nice-duration duration)
                            (if (eqv? killed 1) "Y" "n") reason message stacks)))]
-        [gen-func  (lambda (timestamp name last-message state reason details _ignore)
+        [gen-func  (lambda (timestamp pid name last-message state reason details _ignore)
                      (let-values ([(message stacks) (get-message-and-stacks details)])
-                       (list timestamp name last-message state reason message stacks)))]
+                       (list timestamp pid name last-message state reason message stacks)))]
         [super-func  (lambda (timestamp supervisor error-context reason child-pid child-name details _ignore)
                        (let-values ([(message stacks) (get-message-and-stacks details)])
                          (list timestamp supervisor error-context

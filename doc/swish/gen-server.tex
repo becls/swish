@@ -316,6 +316,7 @@ All generic servers send the event manager the following event:
 \begin{pubevent}{<gen-server-terminating>}
   \argrow{timestamp}{the time the event occured}
   \argrow{name}{the name of the server}
+  \argrow{pid}{the server process}
   \argrow{last-message}{the last message received by the server}
   \argrow{state}{the last state passed into \code{terminate}}
   \argrow{reason}{the reason for termination}

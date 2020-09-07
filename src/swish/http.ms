@@ -864,7 +864,7 @@
       (utf8->string (simple-get "/static/ok.html"))
       (let ([pid (get-cache)])
         (receive (after 1000 (throw 'timeout-waiting-for-cache-to-fail))
-          [`(<gen-server-terminating> [name ,@pid]
+          [`(<gen-server-terminating> [pid ,@pid]
               [reason #(io-error ,_ uv_fs_open ,_)])
            'ok]))
 
@@ -876,7 +876,7 @@
       (utf8->string (simple-get "/static/ok.html"))
       (let ([pid (get-cache)])
         (receive (after 1000 (throw 'timeout-waiting-for-cache-to-fail))
-          [`(<gen-server-terminating> [name ,@pid]
+          [`(<gen-server-terminating> [pid ,@pid]
               [reason #(http-invalid-media-type (invalid mime type expression))])
            'ok]))))
 
@@ -958,7 +958,7 @@
         [pid (get-cache)])
     (send pid `#(path-watcher-failed ,path -1234))
     (receive (after 1000 (throw 'timeout-waiting-for-cache-to-fail))
-      [`(<gen-server-terminating> [name ,@pid] ,reason)
+      [`(<gen-server-terminating> [pid ,@pid] ,reason)
        (match reason
          [#(bad-match #(path-watcher-failed ,@path -1234) ,_)
           'ok])])))
