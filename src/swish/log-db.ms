@@ -206,6 +206,9 @@
       [,orig-http-request
        (transaction db
          (execute "select * from http_request order by rowid"))]
+      [,http-join-1
+       "select c.duration, h.path from http_request h inner join child c on h.pid = c.id order by h.rowid asc"]
+      [,orig-http-join-1-results (transaction db (execute http-join-1))]
       [,orig-statistics
        (transaction db
          ;; several columns were dropped and some were added in 90f445b0c67339f27f61bc813b942a81c8fa1bf8
@@ -229,6 +232,19 @@
       [,orig-version
        (transaction db
          (execute "select * from version order by rowid"))]
+      [,supervisor-query1
+       "select c.name, c.start, c.duration, c.killed, s.error_context from child c inner join supervisor_error s on c.supervisor = s.supervisor order by c.name desc"]
+      [,supervisor-query1-result (transaction db (execute supervisor-query1))]
+      [,supervisor-query2
+       "select c.name, c.start, c.duration, c.killed, s.error_context from child c inner join supervisor_error s on c.id = s.child_pid order by c.name desc"]
+      [,supervisor-query2-result (transaction db (execute supervisor-query2))]
+      [,gs-debug-query
+       (string-append
+        "select d.type, d.message, d.reply, cc.name, cs.name from gen_server_debug d "
+        "inner join child cc on cc.id = d.client "
+        "inner join child cs on cs.id = d.server "
+        "order by d.rowid asc")]
+      [,gs-debug-query-result (transaction db (execute gs-debug-query))]
       [,_ (db:stop db)]
       [#(ok ,log-db)
        (parameterize ([log-file db-file])
@@ -243,7 +259,7 @@
           (execute "select id, name, supervisor, restart_type, type, shutdown, start, duration, killed, reason from child order by rowid"))]
        [,@orig-gen-server-debug
         (transaction 'log-db
-          (execute "select timestamp, duration, type, client, server, message, state, reply from gen_server_debug order by rowid"))]
+          (execute "select timestamp, duration, type, 0+ltrim(client,':'), 0+ltrim(server,':'), message, state, reply from gen_server_debug order by rowid"))]
        [,@orig-gen-server-terminating
         (transaction 'log-db
           (execute "select timestamp, name, last_message, state, reason from gen_server_terminating order by rowid"))]
@@ -263,11 +279,11 @@
        [,@orig-supervisor-error-primary
         (transaction 'log-db
           (execute "select timestamp, supervisor, error_context, child_pid, child_name from supervisor_error order by rowid"))]
-       [(#(,reason)) orig-supervisor-error-reason]
-       [#(error ,reason) (read (open-input-string reason))]
-       [(#(,@reason))
+       [(#(,reason1) #(,reason2)) orig-supervisor-error-reason]
+       [#(error ,reason1) (read (open-input-string reason1))]
+       [(#(,@reason1) #(,@reason2))
         (transaction 'log-db
-          (execute "select json_extract(details, '$.message') from supervisor_error order by rowid"))]
+          (execute "select ifnull(json_extract(details, '$.message'), reason) from supervisor_error order by rowid"))]
        [,@orig-system-attributes
         (transaction 'log-db
           ;; N.B. filter out entry added when we did log-db:setup during the test
@@ -280,7 +296,12 @@
        [(#("instance" ,instance-id) #("swish" ,original-schema)) orig-version]
        [(#("instance" ,@instance-id) #("swish" ,new-schema))
         (transaction 'log-db
-          (execute "select name, version from version order by rowid"))])
+          (execute "select name, version from version order by rowid"))]
+       [,@supervisor-query1-result (transaction 'log-db (execute supervisor-query1))]
+       [,@supervisor-query2-result (transaction 'log-db (execute supervisor-query2))]
+       [,@gs-debug-query-result (transaction 'log-db (execute gs-debug-query))]
+       [,@orig-http-join-1-results (transaction 'log-db (execute http-join-1))]
+       )
       'ok))))
 
 (isolate-mat bad-args ()
