@@ -69,7 +69,7 @@ is not thread safe and should be used from the main thread only.
 - Chez Scheme 9.5.4 or 9.5.5
 - Cygwin or MinGW/MSYS with bash, git, graphviz, grep, perl, texlive,
   GNU make, etc.
-- Microsoft Visual Studio 2017 with Visual C++
+- Microsoft Visual Studio 2019 or 2017 with Visual C++
 - Put scheme in PATH.
 
 # Stand-alone Swish Applications

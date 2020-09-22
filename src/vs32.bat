@@ -4,6 +4,22 @@ if not "%Applications%" == "" goto win64
 set Applications=%ProgramFiles%
 :win64
 
+:: Visual Studio 2019 Enterprise
+set BATDIR=%Applications%\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build
+if exist "%BATDIR%\vcvarsall.bat" goto found
+
+:: Visual Studio 2019 Professional
+set BATDIR=%Applications%\Microsoft Visual Studio\2019\Professional\VC\Auxiliary\Build
+if exist "%BATDIR%\vcvarsall.bat" goto found
+
+:: Visual Studio 2019 Community
+set BATDIR=%Applications%\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build
+if exist "%BATDIR%\vcvarsall.bat" goto found
+
+:: Visual Studio 2019 BuildTools
+set BATDIR=%Applications%\Microsoft Visual Studio\2019\BuildTools\VC\Auxiliary\Build
+if exist "%BATDIR%\vcvarsall.bat" goto found
+
 :: Visual Studio 2017 Enterprise
 set BATDIR=%Applications%\Microsoft Visual Studio\2017\Enterprise\VC\Auxiliary\Build
 if exist "%BATDIR%\vcvarsall.bat" goto found
@@ -20,11 +36,7 @@ if exist "%BATDIR%\vcvarsall.bat" goto found
 set BATDIR=%Applications%\Microsoft Visual Studio\2017\BuildTools\VC\Auxiliary\Build
 if exist "%BATDIR%\vcvarsall.bat" goto found
 
-:: Visual Studio 2015
-set BATDIR=%VS140COMNTOOLS%..\..\VC
-if exist "%BATDIR%\vcvarsall.bat" goto found
-
-echo Visual Studio 2017 or 2015 must be installed.
+echo Visual Studio 2019 or 2017 must be installed.
 exit 1
 
 :found
