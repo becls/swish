@@ -59,7 +59,7 @@
 (define (dispatch)
   (let ([limit (integer-param "limit" 0 params)]
         [offset (integer-param "offset" 0 params)]
-        [child-sql "SELECT id, name, supervisor, restart_type, type, shutdown, datetime(start/1000,'unixepoch','localtime') as start, duration, killed, reason, details as message, NULL as stacks FROM child WHERE message IS NOT NULL ORDER BY id DESC"]
+        [child-sql "SELECT id, name, supervisor, restart_type, type, shutdown, datetime(start/1000,'unixepoch','localtime') as start, duration, killed, reason, details as message, NULL as stacks FROM child WHERE message IS NOT NULL ORDER BY rowid DESC"]
         [gen-sql "SELECT datetime(timestamp/1000,'unixepoch','localtime') as timestamp, pid, name, last_message, state, reason, details as message, NULL as stacks  FROM gen_server_terminating ORDER BY ROWID DESC"]
         [super-sql "SELECT datetime(timestamp/1000,'unixepoch','localtime') as timestamp, supervisor, error_context, reason, child_pid, child_name, details as message, NULL as stacks FROM supervisor_error ORDER BY ROWID DESC"]
         [sql (string-param "sql" params)]
