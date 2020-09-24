@@ -231,13 +231,14 @@ ignores all failures. The server will process the request using
   \argrow{reply}{any Scheme datum}
 \end{argtbl}
 
-\code{gen-server:reply} can be used by a server to explicitly send a
-\var{reply} to a \var{client} that called \code{gen-server:call}.
+A server can use \code{gen-server:reply} to send a
+\var{reply} to a \var{client} that called \code{gen-server:call}
+and is blocked awaiting a reply.
 
-In some situations, a server cannot reply immediately to a client. In
-such cases, the \var{from} argument inside \code{handle-call} is
-stored, and \code{no-reply} is returned.  Later,
-\code{gen-server:reply} can be called using that \var{from} value as
+In some situations, a server cannot reply immediately to a client.
+In such cases, \code{handle-call} may store the \var{from} argument
+and return \code{no-reply}. Later, the server can call
+\code{gen-server:reply} using that \var{from} value as
 \var{client}. The \var{reply} is the return value of the
 \code{gen-server:call} in this case.
 
@@ -399,9 +400,9 @@ directly. \code{handle-info} will not be called. The server must use
   \argrow{reason}{any Scheme datum}
 \end{argtbl}
 
-\code{(init \var{arg} \etc)} is called from a new server process and
-must complete before \code{gen-server:start\&link} or
-\code{gen-server:start} returns.
+\code{(init \var{arg} \etc)} is called from a new server process
+started by a call to \code{gen-server:start\&link} or \code{gen-server:start}.
+Calls to those procedures block until \code{init} returns.
 
 A successful \code{init} returns \code{\#(ok \var{state}
   \opt{\var{timeout}})}. The \var{state} is then maintained
@@ -412,7 +413,7 @@ returning \code{\#(stop \var{reason})}. The server will then fail to
 start using this \var{reason}. \code{terminate} will not be called
 as the server has not properly started.
 
-\code{init} may specify \code{ignore}. The server will then exit
+\code{init} may return \code{ignore}. The server will then exit
 with reason \code{normal}, and \code{gen-server:start\&link} will
 return \code{ignore}. This is used to inform a
 supervisor that the server is not necessary
