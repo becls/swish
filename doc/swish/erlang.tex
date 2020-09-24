@@ -2936,6 +2936,17 @@ string \var{s} starts with string \var{p} using case-insensitive
 comparisons.
 
 % ----------------------------------------------------------------------------
+\defineentry{trim-whitespace}
+\begin{procedure}
+  \code{(trim-whitespace \var{s})}
+\end{procedure}
+\returns{} a string
+
+The \code{trim-whitespace} procedure returns a string in which
+any leading or trailing whitespace in \var{s} has been removed.
+Internal whitespace is not affected.
+
+% ----------------------------------------------------------------------------
 \defineentry{symbol-append}
 \begin{procedure}
   \code{(symbol-append . \var{ls})}
