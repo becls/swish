@@ -86,7 +86,7 @@
 
 (define (wrap indent . texts)
   (wrap-text (current-output-port)
-    (- (help-wrap-width) indent) indent indent (join texts #\space)))
+    (- (help-wrap-width) indent) indent indent texts))
 
 (define report-formats '(("json" . json) ("html" . html) ("htm" . html)))
 

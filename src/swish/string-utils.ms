@@ -173,8 +173,10 @@
     [,@s (wt 0 0 0 s)]
     [,s (join '("This will wrap" "and tab\twill" "fit as single" "character.") #\newline)]
     [,@s (wt 14 0 0 (join (split s #\newline) #\space))]
-    [,s (join '("0 1 2" "3 4 5" "6 7 8" "9") #\newline)]
+    [,ls '("0 1 2" "3 4 5" "6 7 8" "9")]
+    [,s (join ls #\newline)]
     [,@s (wt 5 0 0 "0 1 2 3 4 5 6 7 8 9")]
+    [,@s (wt 5 0 0 ls)]
     [,in "This      string contains    consecutive      spaces."]
     [,s (join '("This string" "contains" "consecutive" "spaces.") #\newline)]
     [,@s (wt 11 0 0 in)]
@@ -186,13 +188,13 @@
     ["" (wt 999 0 0 "                         ")]
     ["\r\na b c \r\n" ;; \r is just another character, not a line marker
      (wt 10 0 0 "\r\n    a    b    c    \r\n")]
-    [,in
-     (join
-      '("This did not need to wrap, since we had plenty of room."
-        "Even more text here that will also go on the same line."
-        "Wow, this is going to be a pretty long line.")
-      #\space)]
+    [,ls
+     '("This did not need to wrap, since we had plenty of room."
+       "Even more text here that will also go on the same line."
+       "Wow, this is going to be a pretty long line.")]
+    [,in (join ls #\space)]
     [,@in (wt 1000 0 0 in)]
+    [,@in (wt 1000 0 0 ls)]
     ["   Hi\nmom" (wt 0 3 0 "Hi mom")]
     ["   Hi\n mom" (wt 0 3 1 "Hi mom")]
     [" Hi\n   mom" (wt 0 1 3 "Hi mom")]
@@ -202,7 +204,11 @@
     ["  Hi\n  mom" (wt 0 2 2 "Hi mom")]
     ["  Hi\n  mom\n  and\n  dad" (wt 0 2 2 "Hi mom and dad")]
     ["     Hi\n  mom\n  and\n  dad\n  just\n  two?"
-     (wt 0 5 2 "Hi mom and\ndad\njust\ntwo?")])
+     (wt 0 5 2 "Hi mom and\ndad\njust\ntwo?")]
+    ["" (wt 10 0 0 "")]
+    ["" (wt 10 0 0 '())]
+    ["" (wt 10 0 0 "    ")]
+    ["" (wt 10 0 0 '("" " " "   " " " ""))])
    'ok))
 
 (mat oxford-comma ()

@@ -144,10 +144,10 @@
             (substring s start (fx+ i 1)))]))
     (find-start s 0 (string-length s)))
 
-  (define (extract text)
-    (let lp ([start 0] [acc '()])
+  (define (extract text acc)
+    (let lp ([start 0] [acc acc])
       (match (pregexp-match-positions (re "[^ \\n]+| |\\n") text start)
-        [#f (reverse acc)]
+        [#f acc]
         [((,start . ,end))
          (let ([s (substring text start end)])
            (lp end
@@ -171,7 +171,20 @@
                (cons 'ws rest)))])))
 
   (define (wrap-text op width initial-indent subsequent-indent text)
-    (let lp ([ls (minimize-whitespace (extract text))]
+    (arg-check 'wrap-text
+      [op output-port? textual-port?]
+      [width fixnum? fxnonnegative?]
+      [initial-indent fixnum? fxnonnegative?]
+      [subsequent-indent fixnum? fxnonnegative?]
+      [text (lambda (x) (or (string? x) (list? x)))])
+    (let lp ([ls (minimize-whitespace
+                  (reverse
+                   (if (string? text)
+                       (extract text '())
+                       (fold-left
+                        (lambda (ls s)
+                          (cons 'ws (extract s ls)))
+                        '() text))))]
              [pos 0] [indent initial-indent] [indent? #t])
       (match ls
         [() (void)]

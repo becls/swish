@@ -2947,6 +2947,23 @@ any leading or trailing whitespace in \var{s} has been removed.
 Internal whitespace is not affected.
 
 % ----------------------------------------------------------------------------
+\defineentry{wrap-text}
+\begin{procedure}
+  \code{(wrap-text \var{op} \var{width} \var{initial-indent} \var{subsequent-indent} \var{text})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{wrap-text} procedure writes the given \var{text} to the textual output
+port \var{op} after collapsing spaces that separate words. The first line is
+indented by \var{initial-indent} spaces. Subsequent lines are indented by
+\var{subsequent-indent} spaces. If possible, \code{wrap-text} breaks lines that
+would exceed \var{width}. Newlines and tabs are preserved, but tabs are
+treated as if they were the width of a single character.
+
+The \var{text} argument may be a string or a list of strings. If \var{text}
+is a list, it is treated as if it were the string obtained via \code{(join \var{text} \#{\textbackslash}space).}
+
+% ----------------------------------------------------------------------------
 \defineentry{symbol-append}
 \begin{procedure}
   \code{(symbol-append . \var{ls})}

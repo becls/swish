@@ -125,7 +125,7 @@
 
 (define (wrap indent . texts)
   (wrap-text (current-output-port)
-    (- (help-wrap-width) indent) indent indent (join texts #\space)))
+    (- (help-wrap-width) indent) indent indent texts))
 
 (define-syntax example
   (syntax-rules ()
@@ -150,7 +150,7 @@
 
 (define (list-item item . texts)
   (printf "~4@a " item)
-  (wrap-text (current-output-port) (- (help-wrap-width) 6) 0 5 (join texts #\space))
+  (wrap-text (current-output-port) (- (help-wrap-width) 6) 0 5 texts)
   (newline))
 
 (define (usage short? sections ht)
