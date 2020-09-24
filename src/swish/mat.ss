@@ -33,9 +33,11 @@
    mat-data-results
    mat-data?
    mat-result-message
+   mat-result-sstats
    mat-result-stacks
    mat-result-tags
    mat-result-test
+   mat-result-test-file
    mat-result-type
    mat-result?
    run-mat
