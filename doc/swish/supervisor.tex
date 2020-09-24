@@ -85,7 +85,8 @@ itself terminates and is restarted.
 \begin{itemize}
   \item \code{strategy} defines how the supervisor processes a child
     termination: \code{one-for-one} or \code{one-for-all}.
-  \item \code{intensity} is the maximum restart intensity.
+  \item \code{intensity} is the maximum restart intensity for all
+    children within the period.
   \item \code{period} is the maximum restart period in milliseconds.
   \item \code{children} is a list of \code{<child>} tuples with
     the most recently started child first.
@@ -358,6 +359,20 @@ server, \code{\#f} may be specified.
   \prodrow{\var{start-specs}}{(\var{child-spec} \etc)}
 \end{grammar}
 
+\defineentry{supervisor:validate-start-specs}
+\begin{procedure}
+  \code{(supervisor:validate-start-specs \var{specs})}
+\end{procedure}
+\returns{}
+\code{\#f} $|$
+\var{reason}
+
+The \code{supervisor:validate-start-specs} procedure takes a list
+of child specifications and checks them in order. If it encounters
+an invalid child specification, \code{supervisor:validate-start-specs}
+returns a reason suitable as input to \code{exit-reason->english}.
+Otherwise it returns \code{\#f}.
+
 \defineentry{supervisor:start-child}
 \begin{procedure}
   \code{(supervisor:start-child \var{supervisor} \var{child-spec})}
@@ -415,6 +430,7 @@ The \code{supervisor:delete-child} procedure calls
 This procedure terminates the child process identified by
 \var{name}. The child specification must exist, but the child process
 does not need be running.
+Terminating a child does not cause a restart.
 
 The \code{supervisor:terminate-child} procedure calls
 \code{(gen-server:call \var{supervisor} \#(terminate-child
