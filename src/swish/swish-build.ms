@@ -615,7 +615,7 @@
                    [stdout ()]
                    [stderr ,stderr]))
           (match-regexps '(seek "application shutdown due to \\(exit foo\\)") stderr)])]))
-  ;; Attempt to call exit with a non-numeric exit code and is
+  ;; Attempt to call exit with a non-numeric exit code is
   ;; confusing enough that we output a message with the
   ;; console-event-handler.
   (define non-numeric-exit
