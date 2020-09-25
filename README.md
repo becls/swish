@@ -19,6 +19,11 @@ I/O.
 Although Swish can be run in threaded Chez Scheme for convenience, it
 is not thread safe and should be used from the main thread only.
 
+# Versioning
+
+Swish follows the [semantic versioning](http://semver.org/)
+scheme, starting with 2.0.0 to avoid confusion with internal projects.
+
 # Notes
 
 1. install the prerequisites (see Build System Requirements)

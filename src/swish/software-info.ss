@@ -52,12 +52,8 @@
                    #'(not-found filename))))))]))
 
   (software-product-name 'swish "Swish")
-  (software-version 'swish "0.0.0")
-  (software-revision 'swish
-    (include-line "swish/git.revision"
-      (lambda (fn)
-        (warningf 'software-info.ss "file ~s not found at compile time" fn)
-        #f)))
+  (software-version 'swish (include-line "swish/swish-version.include"))
+  (software-revision 'swish (include-line "swish/swish-revision.include"))
 
   (software-product-name 'chezscheme "Chez Scheme")
   (software-version 'chezscheme
@@ -66,10 +62,7 @@
                     (format "~{~a~^.~}" (call-with-values scheme-version-number list)))])
       scheme-version))
   (software-revision 'chezscheme
-    (include-line "swish/chezscheme.revision"
-      (lambda (fn)
-        (warningf 'software-info.ss "file ~s not found at compile time" fn)
-        #f)))
+    (include-line "swish/chezscheme-revision.include"))
   (json:set! info '(chezscheme machine-type) (symbol->string (machine-type)))
   )
 
@@ -78,8 +71,8 @@
 (import (swish mat) (swish software-info))
 
 (mat software-revision ()
-  (define swish-hash (include-line "swish/git.revision"))
-  (define chezscheme-hash (include-line "swish/chezscheme.revision"))
+  (define swish-hash (include-line "swish/swish-revision.include"))
+  (define chezscheme-hash (include-line "swish/chezscheme-revision.include"))
   (define (symbol<? a b) (string<? (symbol->string a) (symbol->string b)))
   (match-let*
    ([#f (software-revision 'xyz)]

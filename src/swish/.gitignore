@@ -1,7 +1,6 @@
 /Makefile
 /Mf-config
-/chezscheme.revision
-/git.revision
+/chezscheme-revision.include
 /io-constants
 /io-constants.exe
 /io-constants.ilk
@@ -30,6 +29,8 @@
 /sqlite.obj
 /sqlite3.o
 /sqlite3.obj
+/swish-revision.include
+/swish-version.include
 /swish_kernel.o
 /test-request.dll
 /test-request.dylib

@@ -26,8 +26,12 @@ swish :=\
   swish/event-mgr-events.pdf\
   swish/http-tree.pdf\
   swish/intro-sup-tree.pdf\
+  ../src/swish/swish-version.include\
 
 swish.pdf: $(swish)
+
+../src/swish/swish-version.include: ../src/swish/swish.h
+	make -C ../src/swish swish-version.include
 
 .PHONY: clean
 clean:

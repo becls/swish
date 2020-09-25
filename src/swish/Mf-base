@@ -1,6 +1,7 @@
 .PHONY: all build-dirs clean platform-clean ready reminders submodules
 
-SETUP := Makefile submodules build-dirs git.revision chezscheme.revision
+SETUP := Makefile submodules build-dirs \
+         chezscheme-revision.include swish-revision.include swish-version.include
 CORE := ../../${BUILD}/bin/swish${EXESUFFIX} ../../${BUILD}/bin/swish.boot ../../${BUILD}/bin/swish.library
 AUXLIB := ../../${BUILD}/lib/swish/mat.so ../../${BUILD}/lib/swish/profile.so ../../${BUILD}/lib/swish/testing.so ../../${BUILD}/lib/swish/internal-testing.so
 
@@ -22,17 +23,20 @@ build-dirs:
 
 all: ready ${CORE} ${AUXLIB} ${REMINDERS}
 
-%.revision: %.tmp-revision
+%.include: %.tmp-include
 	@if cmp --quiet "$@" "$<"; then \
 	  rm "$<"; \
 	else \
 	  mv "$<" "$@"; touch software-info.ss; echo "$@ changed"; \
 	fi
 
-git.tmp-revision:
+swish-revision.tmp-include:
 	@git describe --always --match none --abbrev=40 --dirty > "$@"
 
-chezscheme.tmp-revision:
+swish-version.tmp-include: swish.h
+	@sed -n 's/^#define SWISH_VERSION "\([0-9a-z."]*\)"/\1/p' swish.h > "$@"
+
+chezscheme-revision.tmp-include:
 	@if [ ! -f "${SCHEME_REVISION_PATH}/revision" ]; then \
 	  echo '<unknown>' > "$@"; \
 	else \
@@ -81,8 +85,9 @@ clean: platform-clean
 	rm -f ../../${BUILD}/lib/swish/*.wpo
 	rm -f ${SwishLibs}
 	rm -f ${SHLIBTEST}
-	rm -f chezscheme.revision
-	rm -f git.revision
+	rm -f chezscheme-revision.include
+	rm -f swish-revision.include
+	rm -f swish-version.include
 	rm -f io-constants.ss io-constants${EXESUFFIX}
 	rm -f ../*.ss.html ../mat-report.html ../server-profile.html
 	rm -f *.mo *.ms.html *.ss.html

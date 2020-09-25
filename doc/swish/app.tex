@@ -82,21 +82,24 @@ SomeCamelCaseIdentifiersAreHardToRead
 To provide arguments to the Swish executable before the script filename, add
 the \sopt{S} option to \code{env} and add the desired arguments after
 \code{swish}.
-Here the \lopt{} option tells Swish to start a REPL after loading the script.
-\codebegin
+Here the \code{-q} option suppresses the startup message and sets the prompt to
+the empty string, and the \lopt{} option tells Swish to start a REPL after
+loading the script.
+\codebegin\fixtilde
 $ cat howdy
-#!/usr/bin/env -S swish \lopt{}
+#!/usr/bin/env -S swish -q \lopt{}
 (printf "Howdy, Folks!{\textbackslash}n")
-(pretty-print (command-line-arguments))
+(printf "prompt: ~s{\textbackslash}n" (waiter-prompt-string))
+(printf "command-line: ~s{\textbackslash}n" (command-line-arguments))
 $ chmod +x howdy
 $ ./howdy
-
-Swish Version 0.0.0
 Howdy, Folks!
-("--" "./howdy")
-> (+ 2 3)
+prompt: ""
+command-line: ("-q" "--" "./howdy")
+(waiter-prompt-string "yes?")
+yes? (+ 2 3)
 5
-> (exit)
+yes? (exit)
 \codeend
 
 % to show boot search while loading script:
@@ -596,10 +599,9 @@ This simplifies a process that can otherwise be complicated
 by the fact that Chez Scheme invokes a library lazily as soon as
 one of its exports may be referenced.
 
-To see how these procedures are decoupled, consider the following REPL
+To see how these procedures are decoupled, consider the following Swish REPL
 transcript on a 64-bit Linux machine:
 \codebegin
-Swish Version 0.0.0
 > (provide-shared-object 'libc "/lib64/libc.so.6")
 > (foreign-entry? "fork")
 #f
@@ -617,7 +619,6 @@ without first calling \code{provide-shared-object}
 because we explicitly wrote the value of \code{app:config} to the location
 specified by \code{app:config-filename} before exiting the original REPL.
 \codebegin
-Swish Version 0.0.0
 > (foreign-entry? "fork")
 #f
 > (require-shared-object "libc")
