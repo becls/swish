@@ -44,6 +44,7 @@
    [help -h --help (list "[<section>]" ...)
     (format "display help, <section>={~{~a~^|~}}" help-sections)]
    [version --version bool "print version information"]
+   [info --info bool "display software-info"]
    ))
 
 (define library-cli
@@ -573,6 +574,19 @@
  [(opt 'help) =>
   (lambda (sections)
     (usage #f (map string->symbol sections) (opt)))]
+ [(opt 'info)
+  (json:write (current-output-port)
+    (json:make-object
+     [software-info (software-info)]
+     [uname
+      (match (get-uname)
+        [`(<uname> ,system ,release ,version ,machine)
+         (json:make-object
+          [system system]
+          [release release]
+          [version version]
+          [machine machine])])])
+    0)]
  [(opt 'version)
   (printf "~a Version ~a (~a)\n" who
     (software-version 'swish)

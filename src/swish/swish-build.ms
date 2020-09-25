@@ -105,6 +105,25 @@
   (swish-build-test '("--version")
     '("swish-build Version (?:\\d+\\.){2}\\d+ \\([[:xdigit:]dirty-]+\\)")))
 
+(isolate-mat info ()
+  (swish-build-test '("--info")
+    (map pregexp-quote
+      (split
+       (trim-whitespace
+        (json:object->string
+         (json:make-object
+          [software-info (software-info)]
+          [uname
+           (match (get-uname)
+             [`(<uname> ,system ,release ,version ,machine)
+              (json:make-object
+               [system system]
+               [release release]
+               [version version]
+               [machine machine])])])
+         0))
+       #\newline))))
+
 (isolate-mat required-arguments ()
   (define testfile
     (write-example "triv"
