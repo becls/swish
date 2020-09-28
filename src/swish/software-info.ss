@@ -70,6 +70,7 @@
       (lambda (fn)
         (warningf 'software-info.ss "file ~s not found at compile time" fn)
         #f)))
+  (json:set! info '(chezscheme machine-type) (symbol->string (machine-type)))
   )
 
 #!eof mats
@@ -112,7 +113,7 @@
          (software-version)))]
     [#f (json:ref (software-info) '(abc version) #f)]
     [,@swish-hash (json:ref (software-info) '(swish revision) #f)]
-    [#(product-name revision version)
+    [#(machine-type product-name revision version)
      (vector-sort symbol<?
        (hashtable-keys
         (json:ref (software-info) 'chezscheme #f)))]
