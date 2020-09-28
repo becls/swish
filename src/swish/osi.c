@@ -1083,6 +1083,20 @@ uint64_t osi_get_hrtime(void) {
   return uv_hrtime();
 }
 
+ptr osi_get_uname(void) {
+  uv_utsname_t buf;
+  int rc = uv_os_uname(&buf);
+  if (rc)
+    return osi_make_error_pair("uv_os_uname", rc);
+  ptr v = Smake_vector(5,0);
+  Svector_set(v, 0, Sstring_to_symbol("<uname>"));
+  Svector_set(v, 1, Sstring_utf8(buf.sysname, -1));
+  Svector_set(v, 2, Sstring_utf8(buf.release, -1));
+  Svector_set(v, 3, Sstring_utf8(buf.version, -1));
+  Svector_set(v, 4, Sstring_utf8(buf.machine, -1));
+  return v;
+}
+
 int osi_is_quantum_over(void) {
   return (uv_hrtime() >= g_threshold) ? 1 : 0;
 }

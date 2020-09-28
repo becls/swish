@@ -70,6 +70,7 @@
    osi_get_temp_directory
    osi_get_temp_directory*
    osi_get_time
+   osi_get_uname
    osi_interrupt_database
    osi_is_quantum_over
    osi_kill
@@ -157,6 +158,7 @@
   (fdefine osi_get_hrtime unsigned-64)
   (fdefine osi_get_pid int)
   (fdefine osi_get_time unsigned-64)
+  (fdefine osi_get_uname ptr)
   (fdefine osi_is_quantum_over boolean)
   (fdefine osi_list_uv_handles ptr)
   (define-osi osi_make_uuid)

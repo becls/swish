@@ -338,6 +338,23 @@ for the given error number.
 The \code{osi\_get\_hostname} function returns the host name from
 \code{uv\_os\_gethostname}.
 
+\defineentry{osi\_get\_uname}
+\begin{function}
+  \code{ptr osi\_get\_uname(void);}
+\end{function}
+
+The \code{osi\_get\_uname} function returns a \code{<uname>} tuple
+of the values retrieved by \code{uv\_os\_uname}.
+
+\defineentry{\code{<uname>}}\label{uname-tuple}
+\begin{tuple}\code{<uname>}\end{tuple}\antipar
+\begin{argtbl}
+  \argrow{system}{operating system name as a string}
+  \argrow{release}{operating system release as a string}
+  \argrow{version}{operating system version as a string}
+  \argrow{machine}{hardware architecture identifier as a string}
+\end{argtbl}
+
 \defineentry{osi\_get\_hrtime}
 \begin{function}
   uint64\_t \code{osi\_get\_hrtime(void);}

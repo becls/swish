@@ -61,6 +61,7 @@ EXPORT ptr osi_get_hostname(void);
 EXPORT uint64_t osi_get_hrtime(void);
 EXPORT int osi_get_pid(void);
 EXPORT uint64_t osi_get_time(void);
+EXPORT ptr osi_get_uname(void);
 EXPORT void osi_init(void);
 EXPORT int osi_is_quantum_over(void);
 EXPORT ptr osi_list_uv_handles(void);

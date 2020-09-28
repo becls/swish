@@ -1823,6 +1823,16 @@ with error pair \code{(\var{who} . \var{errno})}, exception
 \code{\#(io-error \var{path} \var{who} \var{errno})} is raised.
 
 % ----------------------------------------------------------------------------
+\defineentry{get-uname}
+\begin{procedure}
+  \code{(get-uname)}
+\end{procedure}
+\returns{} a \code{<uname>} tuple
+
+The \code{get-uname} procedure returns a \hyperref[uname-tuple]{\code{<uname>}}
+tuple of information about the operating system.
+
+% ----------------------------------------------------------------------------
 \defineentry{hook-console-input}
 \begin{procedure}
   \code{(hook-console-input)}

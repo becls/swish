@@ -24,6 +24,7 @@
 (library (swish io)
   (export
    <stat>
+   <uname>
    binary->utf8
    close-osi-port
    close-path-watcher
@@ -39,6 +40,7 @@
    get-real-path
    get-source-offset
    get-stat
+   get-uname
    hook-console-input
    io-error
    list-directory
@@ -860,6 +862,11 @@
     (match (osi_spawn_detached* path args)
       [(,who . ,errno) (io-error path who errno)]
       [,os-pid os-pid]))
+
+  ;; System interface
+
+  (define-tuple <uname> system release version machine)
+  (define (get-uname) (osi_get_uname))
 
   ;; TCP/IP Ports
 

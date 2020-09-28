@@ -71,6 +71,7 @@ static void swish_init(void) {
   add_foreign(osi_get_tcp_listener_port);
   add_foreign(osi_get_temp_directory);
   add_foreign(osi_get_time);
+  add_foreign(osi_get_uname);
   add_foreign(osi_hash_data);
   add_foreign(osi_init);
   add_foreign(osi_interrupt_database);
