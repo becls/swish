@@ -19,6 +19,9 @@ coverage: src/swish/Makefile
 	@PROFILE_MATS=yes $(MAKE) -C src/swish mat-prereq
 	@PROFILE_MATS=yes ./src/run-mats
 
+check-astyle:
+	@(astyle --project $$(git ls-files '*.c' '*.h' | grep -v 'sqlite3'))
+
 check-docs: src/swish/Makefile
 	@(cd src; ./go check-docs -uD -e '^osi_.*\*' -e '^[A-Z_]+' -e '^pregexp.*' -e '^\$$[a-z-]+' ../doc)
 

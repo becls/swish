@@ -1,5 +1,5 @@
 align-pointer=type
-align-reference=name
+align-reference=type
 convert-tabs
 indent=spaces=2
 keep-one-line-blocks

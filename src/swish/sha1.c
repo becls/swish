@@ -58,9 +58,9 @@ static uint32_t addTemp;
                                         : (context)->Corrupted )
 
 /* Local Function Prototypes */
-static void SHA1ProcessMessageBlock(SHA1Context *context);
-static void SHA1Finalize(SHA1Context *context, uint8_t Pad_Byte);
-static void SHA1PadMessage(SHA1Context *context, uint8_t Pad_Byte);
+static void SHA1ProcessMessageBlock(SHA1Context* context);
+static void SHA1Finalize(SHA1Context* context, uint8_t Pad_Byte);
+static void SHA1PadMessage(SHA1Context* context, uint8_t Pad_Byte);
 
 /*
  *  SHA1Reset
@@ -77,8 +77,7 @@ static void SHA1PadMessage(SHA1Context *context, uint8_t Pad_Byte);
  *      sha Error Code.
  *
  */
-int SHA1Reset(SHA1Context *context)
-{
+int SHA1Reset(SHA1Context* context) {
   if (!context) return shaNull;
 
   context->Length_High = context->Length_Low = 0;
@@ -117,9 +116,8 @@ int SHA1Reset(SHA1Context *context)
  *      sha Error Code.
  *
  */
-int SHA1Input(SHA1Context *context,
-    const uint8_t *message_array, unsigned length)
-{
+int SHA1Input(SHA1Context* context,
+              const uint8_t* message_array, unsigned length) {
   if (!context) return shaNull;
   if (!length) return shaSuccess;
   if (!message_array) return shaNull;
@@ -131,7 +129,7 @@ int SHA1Input(SHA1Context *context,
       *message_array;
 
     if ((SHA1AddLength(context, 8) == shaSuccess) &&
-      (context->Message_Block_Index == SHA1_Message_Block_Size))
+        (context->Message_Block_Index == SHA1_Message_Block_Size))
       SHA1ProcessMessageBlock(context);
 
     message_array++;
@@ -159,21 +157,20 @@ int SHA1Input(SHA1Context *context,
  * Returns:
  *   sha Error Code.
  */
-int SHA1FinalBits(SHA1Context *context, uint8_t message_bits,
-    unsigned int length)
-{
+int SHA1FinalBits(SHA1Context* context, uint8_t message_bits,
+                  unsigned int length) {
   static uint8_t masks[8] = {
-      /* 0 0b00000000 */ 0x00, /* 1 0b10000000 */ 0x80,
-      /* 2 0b11000000 */ 0xC0, /* 3 0b11100000 */ 0xE0,
-      /* 4 0b11110000 */ 0xF0, /* 5 0b11111000 */ 0xF8,
-      /* 6 0b11111100 */ 0xFC, /* 7 0b11111110 */ 0xFE
+    /* 0 0b00000000 */ 0x00, /* 1 0b10000000 */ 0x80,
+    /* 2 0b11000000 */ 0xC0, /* 3 0b11100000 */ 0xE0,
+    /* 4 0b11110000 */ 0xF0, /* 5 0b11111000 */ 0xF8,
+    /* 6 0b11111100 */ 0xFC, /* 7 0b11111110 */ 0xFE
   };
 
   static uint8_t markbit[8] = {
-      /* 0 0b10000000 */ 0x80, /* 1 0b01000000 */ 0x40,
-      /* 2 0b00100000 */ 0x20, /* 3 0b00010000 */ 0x10,
-      /* 4 0b00001000 */ 0x08, /* 5 0b00000100 */ 0x04,
-      /* 6 0b00000010 */ 0x02, /* 7 0b00000001 */ 0x01
+    /* 0 0b10000000 */ 0x80, /* 1 0b01000000 */ 0x40,
+    /* 2 0b00100000 */ 0x20, /* 3 0b00010000 */ 0x10,
+    /* 4 0b00001000 */ 0x08, /* 5 0b00000100 */ 0x04,
+    /* 6 0b00000010 */ 0x02, /* 7 0b00000001 */ 0x01
   };
 
   if (!context) return shaNull;
@@ -184,7 +181,7 @@ int SHA1FinalBits(SHA1Context *context, uint8_t message_bits,
 
   SHA1AddLength(context, length);
   SHA1Finalize(context,
-    (uint8_t) ((message_bits & masks[length]) | markbit[length]));
+               (uint8_t) ((message_bits & masks[length]) | markbit[length]));
 
   return context->Corrupted;
 }
@@ -209,9 +206,8 @@ int SHA1FinalBits(SHA1Context *context, uint8_t message_bits,
  *   sha Error Code.
  *
  */
-int SHA1Result(SHA1Context *context,
-    uint8_t Message_Digest[SHA1HashSize])
-{
+int SHA1Result(SHA1Context* context,
+               uint8_t Message_Digest[SHA1HashSize]) {
   int i;
 
   if (!context) return shaNull;
@@ -247,11 +243,10 @@ int SHA1Result(SHA1Context *context,
  *   single character names, were used because those were the
  *   names used in the Secure Hash Standard.
  */
-static void SHA1ProcessMessageBlock(SHA1Context *context)
-{
+static void SHA1ProcessMessageBlock(SHA1Context* context) {
   /* Constants defined in FIPS 180-3, section 4.2.1 */
   const uint32_t K[4] = {
-      0x5A827999, 0x6ED9EBA1, 0x8F1BBCDC, 0xCA62C1D6
+    0x5A827999, 0x6ED9EBA1, 0x8F1BBCDC, 0xCA62C1D6
   };
   int        t;               /* Loop counter */
   uint32_t   temp;            /* Temporary word value */
@@ -278,37 +273,37 @@ static void SHA1ProcessMessageBlock(SHA1Context *context)
   E = context->Intermediate_Hash[4];
 
   for (t = 0; t < 20; t++) {
-    temp = SHA1_ROTL(5,A) + SHA_Ch(B, C, D) + E + W[t] + K[0];
+    temp = SHA1_ROTL(5, A) + SHA_Ch(B, C, D) + E + W[t] + K[0];
     E = D;
     D = C;
-    C = SHA1_ROTL(30,B);
+    C = SHA1_ROTL(30, B);
     B = A;
     A = temp;
   }
 
   for (t = 20; t < 40; t++) {
-    temp = SHA1_ROTL(5,A) + SHA_Parity(B, C, D) + E + W[t] + K[1];
+    temp = SHA1_ROTL(5, A) + SHA_Parity(B, C, D) + E + W[t] + K[1];
     E = D;
     D = C;
-    C = SHA1_ROTL(30,B);
+    C = SHA1_ROTL(30, B);
     B = A;
     A = temp;
   }
 
   for (t = 40; t < 60; t++) {
-    temp = SHA1_ROTL(5,A) + SHA_Maj(B, C, D) + E + W[t] + K[2];
+    temp = SHA1_ROTL(5, A) + SHA_Maj(B, C, D) + E + W[t] + K[2];
     E = D;
     D = C;
-    C = SHA1_ROTL(30,B);
+    C = SHA1_ROTL(30, B);
     B = A;
     A = temp;
   }
 
   for (t = 60; t < 80; t++) {
-    temp = SHA1_ROTL(5,A) + SHA_Parity(B, C, D) + E + W[t] + K[3];
+    temp = SHA1_ROTL(5, A) + SHA_Parity(B, C, D) + E + W[t] + K[3];
     E = D;
     D = C;
-    C = SHA1_ROTL(30,B);
+    C = SHA1_ROTL(30, B);
     B = A;
     A = temp;
   }
@@ -340,8 +335,7 @@ static void SHA1ProcessMessageBlock(SHA1Context *context)
  *   sha Error Code.
  *
  */
-static void SHA1Finalize(SHA1Context *context, uint8_t Pad_Byte)
-{
+static void SHA1Finalize(SHA1Context* context, uint8_t Pad_Byte) {
   int i;
   SHA1PadMessage(context, Pad_Byte);
   /* message may be sensitive, clear it out */
@@ -376,8 +370,7 @@ static void SHA1Finalize(SHA1Context *context, uint8_t Pad_Byte)
  * Returns:
  *   Nothing.
  */
-static void SHA1PadMessage(SHA1Context *context, uint8_t Pad_Byte)
-{
+static void SHA1PadMessage(SHA1Context* context, uint8_t Pad_Byte) {
   /*
    * Check to see if the current message block is too small to hold
    * the initial padding bits and length.  If so, we will pad the

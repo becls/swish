@@ -189,7 +189,7 @@ static ptr read_fs_port(uptr port, ptr buffer, size_t start_index, uint32_t size
   req->buffer = buffer;
   req->callback = callback;
   uv_buf_t buf = {
-    .base = (char*) &Sbytevector_u8_ref(buffer, start_index),
+    .base = (char*)& Sbytevector_u8_ref(buffer, start_index),
     .len = size
   };
   int rc = uv_fs_read(osi_loop, &req->fs, p->file, &buf, 1, offset, rw_fs_cb);
@@ -212,7 +212,7 @@ static ptr write_fs_port(uptr port, ptr buffer, size_t start_index, uint32_t siz
   req->buffer = buffer;
   req->callback = callback;
   uv_buf_t buf = {
-    .base = (char*) &Sbytevector_u8_ref(buffer, start_index),
+    .base = (char*)& Sbytevector_u8_ref(buffer, start_index),
     .len = size
   };
   int rc = uv_fs_write(osi_loop, &req->fs, p->file, &buf, 1, offset, rw_fs_cb);
@@ -452,7 +452,7 @@ static ptr write_stream_port(uptr port, ptr buffer, size_t start_index, uint32_t
   p->write_size = size;
   p->write_callback = callback;
   uv_buf_t buf = {
-    .base = (char*) &Sbytevector_u8_ref(p->write_buffer, start_index),
+    .base = (char*)& Sbytevector_u8_ref(p->write_buffer, start_index),
     .len = size
   };
   int rc = uv_write(&(p->write_req), &(p->h.stream), &buf, 1, write_stream_cb);
@@ -1088,7 +1088,7 @@ ptr osi_get_uname(void) {
   int rc = uv_os_uname(&buf);
   if (rc)
     return osi_make_error_pair("uv_os_uname", rc);
-  ptr v = Smake_vector(5,0);
+  ptr v = Smake_vector(5, 0);
   Svector_set(v, 0, Sstring_to_symbol("<uname>"));
   Svector_set(v, 1, Sstring_utf8(buf.sysname, -1));
   Svector_set(v, 2, Sstring_utf8(buf.release, -1));
