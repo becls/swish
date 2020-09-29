@@ -68,11 +68,17 @@
          [ok
           (let ([now (current-date)])
             (event-mgr:flush-buffer)
-            (system-detail <system-attributes>
-              [date (current-date)]
-              [software-info (software-info)]
-              [machine-type (symbol->string (machine-type))]
-              [computer-name (osi_get_hostname)])
+            (match (get-uname)
+              [`(<uname> ,system ,release ,version ,machine)
+               (system-detail <system-attributes>
+                 [date (current-date)]
+                 [software-info (software-info)]
+                 [machine-type (symbol->string (machine-type))]
+                 [computer-name (osi_get_hostname)]
+                 [os-system system]
+                 [os-release release]
+                 [os-version version]
+                 [os-machine machine])])
             'ignore)]
          [,error error])]
       [,error error]))
@@ -325,7 +331,7 @@
 
   (module (swish-event-logger)
     (define schema-name 'swish)
-    (define schema-version "2020-09-01")
+    (define schema-version "2020-10-01")
 
     (define-simple-events create-simple-tables log-simple-event
       (<child-end>
@@ -396,7 +402,11 @@
        (date text)
        (software-info text)
        (machine-type text)
-       (computer-name text))
+       (computer-name text)
+       (os-system text)
+       (os-release text)
+       (os-version text)
+       (os-machine text))
       (<transaction-retry>
        (timestamp integer)
        (database text)
@@ -470,6 +480,13 @@
     (define (upgrade-db)
       (match (log-db:version schema-name)
         [,@schema-version (create-db)]
+        ["2020-09-01"
+         (execute "alter table system_attributes add column os_system text default null")
+         (execute "alter table system_attributes add column os_release text default null")
+         (execute "alter table system_attributes add column os_version text default null")
+         (execute "alter table system_attributes add column os_machine text default null")
+         (log-db:version schema-name "2020-10-01")
+         (upgrade-db)]
         ["2019-10-18"
          (execute "drop view if exists child")
          ($migrate-pid-columns "child_start" "pid" "supervisor")

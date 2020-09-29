@@ -106,7 +106,11 @@
     date
     software-info
     machine-type
-    computer-name)
+    computer-name
+    os-system
+    os-release
+    os-version
+    os-machine)
   (define-tuple <transaction-retry>
     timestamp
     database
