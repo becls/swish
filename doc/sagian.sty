@@ -58,6 +58,7 @@
 \newlength{\declheight}
 \newcommand{\makedecl}[1]{%
 \newenvironment{#1}{%
+  \pagebreak[0]%
   \begin{samepage}%
   \begin{lrbox}{\declbox}%
     \begin{minipage}[t]{\textwidth}}{%
