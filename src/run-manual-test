@@ -22,6 +22,7 @@ fi
 
 if [ "1" = "$1" ]; then
 echo "== Case 1"
+mkdir -p data/tmp
 cat << 'EOF' > data/tmp/manual-test-case
 (begin
   (app:start)
@@ -34,6 +35,7 @@ fi
 
 if [ "2" = "$1" ]; then
 echo "== Case 2"
+mkdir -p data/tmp
 cat << 'EOF' > data/tmp/manual-test-case
 (begin
   (app:start)
@@ -46,6 +48,7 @@ fi
 
 if [ "3" = "$1" ]; then
 echo "== Case 3"
+mkdir -p data/tmp
 rm -f data/tmp/output.log
 cat << 'EOF' > data/tmp/manual-test-case
 (begin
