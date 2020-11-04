@@ -3771,3 +3771,101 @@
       "^#<continuation> +: "
       "^debug> "
       "done")))
+
+;; once in a blue moon this will catch a regression in $receive
+;; that shows up as curious gen-server behavior; typically need
+;; to save it to a separate mat file and run it repeatedly
+(isolate-mat tempt-fate ()
+  (define server
+    (spawn&link
+     (lambda ()
+       (let lp ()
+         (match (receive [,x x])
+           [(message ,from ,cookie)
+            (send from `(reply ,cookie))
+            (lp)]
+           [quit (void)])))))
+  (define (do-call server)
+    (let ([m (monitor self)])
+      (send server `(message ,self ,m))
+      (receive [(reply ,@m) 'ok])))
+  (do ([i 1000000 (fx- i 1)]) ((fx= i 0))
+    ;; jostle tick count
+    (let spin ([n (random 1000)])
+      (when (fx> n 0)
+        (spin (fx- n 1))))
+    (do-call server)))
+
+(isolate-mat keyboard-interrupt ()
+  (define test self)
+  (define runner
+    (spawn&link
+     (lambda ()
+       (define count 0)
+       (keyboard-interrupt-handler
+        (lambda ()
+          (set! count (+ count 1))
+          (send test `(got ,count))))
+       (let lp () (when (fx< count 3) (lp))))))
+  (define innocent-bystander
+    (spawn&link
+     (lambda ()
+       (keyboard-interrupt-handler
+        (lambda () (throw 'unexpected)))
+       (let lp () (lp)))))
+  (match-let*
+   ([ok (receive (after 500 (keyboard-interrupt runner) 'ok))]
+    [(got 1) (receive [,x x])]
+    [nothing (receive (after 100 'nothing) [,x x])]
+    [ok (receive (after 500 (keyboard-interrupt runner) 'ok))]
+    [(got 2) (receive [,x x])]
+    [nothing (receive (after 100 'nothing) [,x x])]
+    [ok (receive (after 500 (keyboard-interrupt runner) 'ok))]
+    [(got 3) (receive [,x x])]
+    [nothing (receive (after 100 'nothing) [,x x])]
+    [,m (monitor runner)]
+    [`(DOWN ,@m ,@runner normal) (receive [,x x])])
+   'ok))
+
+;; make sure $receive resumes where it left off in scanning the queue
+(isolate-mat message-order ()
+  (define test self)
+  (define target 'circle)
+  (define p
+    (spawn
+     (lambda ()
+       (let f ()
+         (receive
+          [(,@target ,payload) (send test `(target-acquired ,payload))]
+          [#(,x) (send test `(got ,x)) (f)]))
+       (send test 'moving-on)
+       (receive
+        [(,@target ,payload)
+         (send test `(subsequent-receive ,payload))]))))
+  ;; first message remains in p's queue since target does not match
+  (send p '(square first-message))
+  (send p '#(1))
+  (send p 'unclaimed) ;; not matched, remains in queue
+  (send p '#(2))
+  (send p '#(3))
+  (match-let*
+   ([(got 1) (receive [,x x])]
+    [(got 2) (receive [,x x])]
+    [(got 3) (receive [,x x])]
+    ;; p made it through its queue and blocks waiting for a matching message
+    [#(waiting-indefinitely ,_)
+     (with-process-details p
+       (lambda (id name spawned state)
+         state))]
+    ;; change the target so first message could also match
+    [,_ (set! target 'square)]
+    ;; send p some matching messages
+    [,_ (send p (list target 'new-message))]
+    [,_ (send p (list target 'incorrect))]
+    ;; p wakes to find the new message. Since it is resuming a receive that
+    ;; blocked, it should not reconsider messages it has already scanned.
+    [(target-acquired new-message) (receive [,x x])]
+    [moving-on (receive [,x x])]
+    ;; p's new call to receive restarts at head of queue
+    [(subsequent-receive first-message) (receive [,x x])])
+   'ok))

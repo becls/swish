@@ -776,22 +776,21 @@
       (let ([msg (q-next prev)])
         (cond
          [(eq? (pcb-inbox self) msg)
-          (enable-interrupts) ;; in case yield invokes a continuation
           (cond
            [(not waketime)
             (pcb-src-set! self src)
-            (yield #f 0)
-            (disable-interrupts)
+            (@yield-preserving-interrupts #f 0)
             (pcb-src-set! self #f)
             (find prev)]
            [(< (erlang:now) waketime)
             (pcb-src-set! self src)
             (pcb-sleeping?-set! self #t)
-            (yield sleep-queue waketime)
-            (disable-interrupts)
+            (@yield-preserving-interrupts sleep-queue waketime)
             (pcb-src-set! self #f)
             (find prev)]
-           [else (timeout-handler)])]
+           [else
+            (enable-interrupts)
+            (timeout-handler)])]
          [else
           (enable-interrupts)
           (cond
@@ -845,42 +844,55 @@
            #x1FFFFFFF)]))
 
   (define (yield queue precedence)
-    (let ([prev-sic (- (disable-interrupts) 1)])
-      (@event-check)
-      (when (alive? self)
-        (pcb-winders-set! self (#%$current-winders))
-        (pcb-exception-state-set! self (current-exception-state)))
-      (#%$current-winders '())
+    (@yield queue precedence (disable-interrupts)))
 
-      ;; snap the continuation
-      (call/1cc
-       (lambda (k)
-         (when (alive? self)
-           (pcb-cont-set! self k)
+  (define (@yield-preserving-interrupts queue precedence)
+    ;; If this process is interrupted, @yield should invoke the keyboard
+    ;; interrupt handler with interrupts enabled. Since we're called with
+    ;; interrupts disabled, we maintain this by disabling interrupts if
+    ;; @yield returns after it enables interrupts.
+    (disable-interrupts)
+    (@yield queue precedence (enable-interrupts))
+    (disable-interrupts))
+
+  ;; called with interrupts disabled, but may enable interrupts after restarting
+  ;; the new process
+  (define (@yield queue precedence disable-count)
+    (@event-check)
+    (when (alive? self)
+      (pcb-winders-set! self (#%$current-winders))
+      (pcb-exception-state-set! self (current-exception-state)))
+    (#%$current-winders '())
+
+    ;; snap the continuation
+    (call/1cc
+     (lambda (k)
+       (when (alive? self)
+         (pcb-cont-set! self k)
+         (cond
+          [queue (@enqueue self queue precedence)]
+          [(enqueued? self) (remove-q self)]))
+
+       ;; context switch
+       (pcb-sic-set! self disable-count)
+       (let ([p (q-next run-queue)])
+         (when (eq? p run-queue)
+           (panic 'run-queue-empty))
+         (set-self! (remove-q p)))
+
+       ;; adjust system interrupt counter for the new process
+       (let loop ([next-sic (pcb-sic self)])
+         (unless (fx= next-sic disable-count)
            (cond
-            [queue (@enqueue self queue precedence)]
-            [(enqueued? self) (remove-q self)]))
+            [(fx> next-sic disable-count)
+             (disable-interrupts)
+             (loop (fx- next-sic 1))]
+            [else
+             (enable-interrupts)
+             (loop (fx+ next-sic 1))])))
 
-         ;; context switch
-         (pcb-sic-set! self prev-sic)
-         (let ([p (q-next run-queue)])
-           (when (eq? p run-queue)
-             (panic 'run-queue-empty))
-           (set-self! (remove-q p)))
-
-         ;; adjust system interrupt counter for the new process
-         (let loop ([sic (pcb-sic self)])
-           (unless (fx= sic prev-sic)
-             (cond
-              [(fx> sic prev-sic)
-               (disable-interrupts)
-               (loop (fx- sic 1))]
-              [else
-               (enable-interrupts)
-               (loop (fx+ sic 1))])))
-
-         ;; Restart the process
-         ((pcb-cont self) (void)))))
+       ;; Restart the process
+       ((pcb-cont self) (void))))
 
     ;; Restart point
     (#%$current-winders (pcb-winders self))

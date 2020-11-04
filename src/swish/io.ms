@@ -830,4 +830,139 @@
     (assert (bytevector? (gbuff)))
     (assert (process? (gproc)))))
 
+(define (current-disable-count)
+  (#%$tc-field 'disable-count (#%$tc)))
+
+;; test keyboard-interrupt for pid blocked on I/O
+(isolate-mat keyboard-interrupt-wait-for-io ()
+  (define listener (listen-tcp "::1" 0 self))
+  (define test-port (listener-port-number listener))
+  (define interrupts '())
+  (define test self)
+  (define message "This is a test")
+  (define pid
+    (spawn&link
+     (lambda ()
+       (keyboard-interrupt-handler
+        (lambda ()
+          ;; no reset here, so return from handler, but check disable count
+          (set! interrupts (cons (current-disable-count) interrupts))))
+       (let-values ([(cip cop) (connect-tcp "::1" test-port)])
+         (clear-input-port cip)
+         (send test (utf8->string (get-bytevector-all cip)))
+         (assert (= 0 (current-disable-count)))))))
+  (receive
+   [#(accept-tcp ,@listener ,sip ,sop)
+    (match-let*
+     ([0 (current-disable-count)]
+      ;; pid eventually waiting for I/O
+      [ok (let wait ()
+            (with-process-details pid
+              (lambda (id name created status)
+                (match status
+                  [#(waiting-for ,_io) 'ok]
+                  [,_ (receive (after 200 (wait)))]))))]
+      [0 (current-disable-count)]
+      ;; keyboard interrupts left pending while waiting for I/O
+      [ok
+       (do ([i 0 (+ i 1)]) ((= i 5) 'ok)
+         (receive (after 200 'ok))
+         (keyboard-interrupt pid))]
+      [ok (receive (after 200 'ok))]
+      ;; still waiting for I/O
+      [(,_ #f ,_ #(waiting-for ,_io)) (with-process-details pid list)]
+      [() interrupts]
+      [0 (current-disable-count)]
+      ;; send output and unblock
+      [ok
+       (begin
+         (put-bytevector sop (string->utf8 message))
+         (flush-output-port sop)
+         (close-port sop)
+         (receive (after 200 'ok)))]
+      [0 (current-disable-count)]
+      ;; pid was interrupted during an I/O operation
+      [(1) interrupts])
+     'ok)])
+  (receive [,@message 'ok]))
+
+;; test keyboard-interrupt for pid blocked on receive
+(isolate-mat keyboard-interrupt-receive ()
+  (define test (gensym "this test"))
+  (define inputs
+    (list
+     '(pretty-print 'start-loop-1)
+     '(let f () (pretty-print 'ping) (receive (after 10000 (f))))
+     `(newline)
+     `(send ',test 'continue)
+     '(pretty-print 'start-loop-2)
+     '(let f () (pretty-print 'pong) (receive (after 10000 (f))))
+     `(newline)
+     '(keyboard-interrupt-handler
+       (lambda ()
+         (printf "disable-count is ~s\n" (current-disable-count))))
+     `(send ',test 'continue)
+     '(receive [quit 'ok])))
+  (define pid
+    (spawn&link
+     (lambda ()
+       (define op (open-output-string))
+       (parameterize ([console-output-port op]
+                      [current-output-port op]
+                      [console-input-port
+                       (make-custom-textual-input-port "always r"
+                         (lambda (s start n)
+                           (assert (> n 2))
+                           ;; always respond with 'r' to reset from break> prompt
+                           (string-copy! "r\n" 0 s start 2)
+                           2)
+                         #f #f #f)]
+                      [waiter-prompt-and-read
+                       (lambda (depth)
+                         (match inputs
+                           [(,x . ,rest) (set! inputs rest) x]
+                           [() #!eof]))])
+         (send test 'start)
+         (new-cafe))
+       (send test (get-output-string op)))))
+  (define (wait-until-sleeping pid)
+    (let wait ()
+      (with-process-details pid
+        (lambda (id name created status)
+          (match status
+            [#(sleep-up-to ,_seconds ,_src) 'ok]
+            [,_ (receive (after 100 (wait)))])))))
+  (register test self)
+  (match-let*
+   ([0 (current-disable-count)]
+    [ok (receive [start 'ok])]
+    [0 (current-disable-count)]
+    ;; pid eventually sleeping in receive
+    [ok (wait-until-sleeping pid)]
+    ;; interrupt first loop
+    [,_ (keyboard-interrupt pid)]
+    [ok (receive [continue 'ok])]
+    [0 (current-disable-count)]
+    [ok (wait-until-sleeping pid)]
+    ;; interrupt second loop
+    [,_ (keyboard-interrupt pid)]
+    [0 (current-disable-count)]
+    [ok (receive [continue 'ok])]
+    ;; interrupt the receive
+    [,_ (keyboard-interrupt pid)]
+    [,_ (send pid 'quit)]
+    [("start-loop-1"
+      "ping"
+      "break>"
+      "start-loop-2"
+      "pong"
+      "break>"
+      "disable-count is 0"
+      "ok")
+     (remq ""
+       (map trim-whitespace
+         (split (receive [,x x]) #\newline)))])
+   'ok))
+
+
 (hook-console-input)
