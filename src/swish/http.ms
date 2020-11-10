@@ -897,6 +897,14 @@
   (define (full fn)
     (path-combine (web-dir) fn))
 
+  (define watcher (watch-path (web-dir) self))
+
+  (define (wait-for-change-to target)
+    (receive
+     [#(path-changed ,path ,filename ,events)
+      (unless (and (equal? target filename) (> events 1))
+        (wait-for-change-to target))]))
+
   (define (check s)
     (sleep-ms 10)
     (let ([expected (format "HTTP/1.1 200 \r\nContent-Length: ~a\r\nCache-Control: no-cache\r\n\r\n~a"
@@ -924,10 +932,17 @@
   (check "ok")
   (check "ok")                          ; same request hits the cache
 
+  ;; drain messages
+  (wait-for-change-to inc2)
+
   (write-file (full inc2)
     '((define (reply)
         (http:respond conn 200 '() (string->utf8 "yes")))))
 
+  ;; once our process gets the path-changed notification, there's a
+  ;; better chance that the http cache process will see it in time;
+  ;; this has been a problem on OSX
+  (wait-for-change-to inc2)
   (check "yes")
 
   ;; cache a file that includes inc2 (coverage)
@@ -941,6 +956,7 @@
     `((http:include ,inc2)
       (reply)))
 
+  (wait-for-change-to file1)
   (check "yes")
 
   (delete-file (full file1))
@@ -948,6 +964,7 @@
   (delete-file (full inc1))
   (delete-file (full inc2))
   (delete-file (full inc3))
+  (close-path-watcher watcher)
   'ok)
 
 (http-mat path-watcher-fail ()
