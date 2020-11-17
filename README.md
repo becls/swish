@@ -63,8 +63,8 @@ scheme, starting with 2.0.0 to avoid confusion with internal projects.
 
 - Chez Scheme 9.5.4 or 9.5.5
 - ginstall and realpath (can be installed through homebrew using `brew install coreutils`)
-- XCode and the command-line tools must be set
-  (Xcode->Preferences->Locations->command line tools)
+- cmake for libuv (can be installed through homebrew using `brew install cmake`)
+- XCode Command Line Tools
 - dot (can be installed through homebrew using `brew install graphviz`)
 - pdflatex (can be installed through homebrew using `brew cask install mactex`)
 - Latin Modern fonts from LaTeX (can be installed with Font Book from a location like `/usr/local/texlive/2020/texmf-dist/fonts/opentype/public/lm`)
