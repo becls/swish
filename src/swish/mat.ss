@@ -33,6 +33,7 @@
    mat-data-results
    mat-data?
    mat-result-message
+   mat-result-meta-data
    mat-result-sstats
    mat-result-stacks
    mat-result-tags
@@ -40,6 +41,7 @@
    mat-result-test-file
    mat-result-type
    mat-result?
+   mat:add-annotation!
    run-mat
    run-mats
    run-mats-to-file
@@ -110,6 +112,7 @@
      (<- (lambda (x) (map string->symbol x)))]
     [type (-> symbol->string) (<- string->symbol)]
     message
+    meta-data
     stacks
     [sstats
      (->
@@ -156,19 +159,22 @@
         (and (pair? excl-tags) (present (%mat-tags mat) excl-tags))))
 
   (define (do-run-mat mat reporter incl-tags excl-tags)
-    (let* ([skip (and (skip? mat incl-tags excl-tags) 'skip)]
-           [before (statistics)]
-           [result
-            (or skip
-                (let ([ignore #f])
-                  (guard (e [else (list 'fail e ignore)])
-                    (call/cc
-                     (lambda (k)
-                       (set! ignore k)
-                       ((%mat-test mat))))
-                    'pass)))])
-      (reporter (%mat-name mat) (%mat-tags mat) result
-        (sstats-difference (statistics) before))))
+    (parameterize ([mat-annotations '()])
+      (let* ([skip (and (skip? mat incl-tags excl-tags) 'skip)]
+             [before (statistics)]
+             [result
+              (or skip
+                  (let ([ignore #f])
+                    (guard (e [else (list 'fail e ignore)])
+                      (call/cc
+                       (lambda (k)
+                         (set! ignore k)
+                         (mat-start-time (erlang:now))
+                         ((%mat-test mat))))
+                      'pass)))])
+        (mat-end-time (erlang:now))
+        (reporter (%mat-name mat) (%mat-tags mat) result
+          (sstats-difference (statistics) before)))))
 
   (define (present tags tag-list)
     (ormap (lambda (tag) (memq tag tag-list)) tags))
@@ -210,6 +216,40 @@
               [os-version version])]))))
     (void))
 
+  (define mat-annotations (make-parameter #f))
+  (define mat-start-time (make-parameter #f))
+  (define mat-end-time (make-parameter #f))
+
+  (define-syntax (mat:add-annotation! x)
+    (syntax-case x ()
+      [(_ expr)
+       #`(add-annotation! #,(find-source x) expr)]))
+
+  (define (add-annotation! src datum)
+    (let ([timestamp (erlang:now)])
+      (with-interrupts-disabled
+       (let ([anno (mat-annotations)])
+         (unless anno
+           (errorf 'mat:add-annotation! "must be called only while running a mat"))
+         (mat-annotations
+          (cons
+           (json:make-object
+            [src
+             (match src
+               [#(at ,bfp ,path) (json:make-object [bfp bfp] [path path])]
+               [#f #f])]
+            [timestamp timestamp]
+            [value datum])
+           anno))))))
+
+  (define-json result-meta-data start-time end-time annotations)
+
+  (define (get-result-meta-data)
+    (make-result-meta-data
+     (mat-start-time)
+     (mat-end-time)
+     (reverse (mat-annotations))))
+
   (define $run-mats
     (case-lambda
      [(mat/names) ($run-mats mat/names #f '() '() #f 'test) (void)]
@@ -220,12 +260,13 @@
         (define (reporter name tags result sstats)
           (define r
             (case (result-type result)
-              [(pass skip) (make-mat-result test-file name tags result "" '() sstats)]
+              [(pass skip) (make-mat-result test-file name tags result "" (get-result-meta-data) '() sstats)]
               [(fail)
                (match (cdr result)
                  [(,e ,ignore)
                   (make-mat-result test-file name tags 'fail
                     (exit-reason->english e)
+                    (get-result-meta-data)
                     (map stack->json (remq ignore (exit-reason->stacks e)))
                     sstats)])]
               [else (errorf '$run-mats "unknown result ~s" result)]))

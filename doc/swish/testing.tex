@@ -80,6 +80,21 @@ following defaults:
 \end{tabular}
 
 % ----------------------------------------------------------------------------
+\defineentry{mat:add-annotation"!}
+\begin{syntax}
+  \code{(mat:add-annotation! \var{expr})}
+\end{syntax}
+\returns{} unspecified
+
+The \code{mat:add-annotation!} macro extends the list of annotations recorded in
+the \code{meta-data} for the mat result of the current mat.
+Each annotation records the \code{erlang:now} timestamp,
+the source for the call site, if available, and
+the value of \var{expr}, which must evaluate to a valid JSON datum.
+This macro must be called only within the dynamic extent of a running mat.
+See \hyperref[load-results]{\code{load-results}} for more information.
+
+% ----------------------------------------------------------------------------
 \defineentry{add-mat}
 \begin{procedure}
   \code{(add-mat \var{name} \var{tags} \var{test})}
@@ -152,6 +167,7 @@ The \code{for-each-mat} procedure calls \code{(\var{procedure}
   \code{(load-results \var{filename})}
 \end{procedure}
 \returns{} a JSON object
+\phantomsection\label{load-results}
 
 The \code{load-results} procedure reads the contents of the file
 specified by string \var{filename} and returns a JSON object
@@ -189,8 +205,16 @@ following keys:
 
 Each result is a JSON object with the following keys:
 
+\newcolumntype{L}[1]{>{\raggedright\let\newline\\\arraybackslash\hspace{0pt}}p{#1}}
 \begin{tabular}{lp{4.6in}}
   \code{message} & error message from failing test, or empty string \\
+  \code{meta-data} & a JSON object that contains: \\
+  & \begin{tabular}{lL{3.5in}}
+      \code{annotations} & an ordered list of JSON objects recording data from
+        \code{mat:add-annotation!}, \\
+      \code{start-time} & \code{(erlang:now)} at the start of the test, and \\
+      \code{end-time} & \code{(erlang:now)} at the end of the test \\
+    \end{tabular} \\
   \code{sstats} & a JSON object representing the \code{sstats-difference} for the test \\
   \code{stacks} & if test failed with exception \var{e}, then\\
                 & \code{(map stack->json (exit-reason->stacks \var{e}))} \\
