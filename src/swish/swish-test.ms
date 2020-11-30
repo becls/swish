@@ -772,9 +772,11 @@
             (mat hangry () (throw 'tantrum))
             (mat deep () (flub 100 'deep))
             (mat shallow () (flub 1 "a fit")))))))
-  (define (check results test-name type tags message check-stack)
+  (define (check data test-name type tags message check-stack)
     (match-let*
-     ([,mr (find (lambda (mr) (equal? test-name (mat-result-test mr))) results)]
+     ([,results (mat-data-results data)]
+      [,suite-start (json:ref (mat-data-meta-data data) 'timestamp #f)]
+      [,mr (find (lambda (mr) (equal? test-name (mat-result-test mr))) results)]
       [#t (mat-result? mr)]
       [,@type (mat-result-type mr)]
       [,@tags (mat-result-tags mr)]
@@ -782,6 +784,10 @@
       [#t (or (not check-stack)
               (check-stack
                (map json-stack->string (mat-result-stacks mr))))])
+     (when suite-start
+       (let ([mat-start-time (json:ref (mat-result-meta-data mr) 'start-time #f)]
+             [mat-end-time (json:ref (mat-result-meta-data mr) 'end-time #f)])
+         (assert (<= suite-start mat-start-time mat-end-time))))
      'ok))
   (define mo-path1 (string-append test-file ".mo"))
   (define mo-path2 (string-append test-file2 ".mo"))
@@ -815,12 +821,11 @@
    'ok)
   ;; check .mo results file
   (let ([data (load-results mo-path1)])
-    (let ([results (mat-data-results data)])
-      (check results 'TEST1 'pass '(good) "" #f)
-      (check results 'TEST2 'fail '(tag1 tag2)
-        (format "Exception: failed assertion #f at line 3, char 32 of ~a." test-file)
-        #f)
-      (check results 'TEST3 'fail '() "Exception in cdr: 17 is not a pair." #f))
+    (check data 'TEST1 'pass '(good) "" #f)
+    (check data 'TEST2 'fail '(tag1 tag2)
+      (format "Exception: failed assertion #f at line 3, char 32 of ~a." test-file)
+      #f)
+    (check data 'TEST3 'fail '() "Exception in cdr: 17 is not a pair." #f)
     (match-let*
      ([,meta (mat-data-meta-data data)]
       ;; (meta-data completed)
@@ -881,9 +886,8 @@
   (nonzero-exit
    (swish-test test-file3)
    '(seek "Exception in bug: didn't handle zero"))
-  (let* ([data (load-results mo-path3)]
-         [results (mat-data-results data)])
-    (check results 'zero 'fail '() "Exception in bug: didn't handle zero."
+  (let ([data (load-results mo-path3)])
+    (check data 'zero 'fail '() "Exception in bug: didn't handle zero."
       (lambda (actual-formatted)
         (equal? actual-formatted
           (list
@@ -896,12 +900,11 @@
    ([ok (nonzero-exit (swish-test test-file4)
           '(seek "Tests run: 3   Pass: 0   Fail: 3   Skip: 0"))]
     [,data (load-results mo-path4)]
-    [,results (mat-data-results data)]
     [,max-depth 10]
     [,where (format "#<continuation in flub> at offset 78 of ~a" test-file4)]
     [,trunc-prefix "Stack dump truncated due to max-depth = "]
     [,trunc (format "~a~a." trunc-prefix max-depth)])
-   (check results 'hangry 'fail '() "tantrum"
+   (check data 'hangry 'fail '() "tantrum"
      (lambda (actual-formatted)
        (match-let*
         ([(,str) actual-formatted]
@@ -909,7 +912,7 @@
          [(,_) (pregexp-match "#<continuation> at offset 116 of .*test-report4.ms"
                  first)])
         #t)))
-   (check results 'deep 'fail '() "deep"
+   (check data 'deep 'fail '() "deep"
      (lambda (actual-formatted)
        (match-let* ([(,str) actual-formatted])
          (equal? (split str #\newline)
@@ -918,13 +921,14 @@
                  ls
                  (expect (- n 1)
                    `(,where ,(format "  n: ~s" n) ,@ls))))))))
-   (match-let* ([,mr (find (lambda (mr) (eq? 'deep (mat-result-test mr))) results)]
+   (match-let* ([,results (mat-data-results data)]
+                [,mr (find (lambda (mr) (eq? 'deep (mat-result-test mr))) results)]
                 [(,stack0) (mat-result-stacks mr)]
                 [,@max-depth (json:ref stack0 'truncated 'wrong)]
                 [(,fr0 . ,_) (json:ref stack0 'frames '())]
                 [,depth (json:ref stack0 'depth "missing")])
      (assert (> depth 100)))
-   (check results 'shallow 'fail '() "a fit"
+   (check data 'shallow 'fail '() "a fit"
      (lambda (actual-formatted)
        (match-let* ([(,str) actual-formatted]
                     [,lines (split str #\newline)])
@@ -1133,6 +1137,43 @@
    '()
    "swish-test: cannot load results from.*report1.html: Unexpected input at position")
   )
+
+(isolate-mat annotation ()
+  (define anno.ms
+    (write-test-file "anno.ms"
+      (lambda ()
+        (for-each pretty-print
+          `((import (swish mat))
+            (define (f n)
+              (let lp ([n n] [ls '()])
+                (mat:add-annotation! (json:make-object [n n] [ls ls]))
+                (if (= n 0)
+                    ls
+                    (lp (- n 1) (cons n ls)))))
+            (mat one ()
+              (mat:add-annotation! "before")
+              (assert (equal? '(1 2 3 4) (f 4)))
+              (mat:add-annotation! "after")))))))
+  (define anno.ms.mo (string-append anno.ms ".mo"))
+  (define (make-ref field) (lambda (o) (json:ref o field #f)))
+  (zero-exit
+   (swish-test anno.ms)
+   '(seek "Tests run: 1   Pass: 1   Fail: 0   Skip: 0"))
+  (match-let*
+   ([,data (load-results anno.ms.mo)]
+    [(,result) (mat-data-results data)]
+    [,annotations (json:ref (mat-result-meta-data result) 'annotations #f)]
+    ;; check value field
+    [("before" ,a4 ,a3 ,a2 ,a1 ,a0 "after") (map (make-ref 'value) annotations)]
+    [(4 3 2 1 0) (map (make-ref 'n) (list a4 a3 a2 a1 a0))]
+    [() (json:ref a4 'ls #f)]
+    [(4) (json:ref a3 'ls #f)]
+    [(3 4) (json:ref a2 'ls #f)]
+    [(2 3 4) (json:ref a1 'ls #f)]
+    [(1 2 3 4) (json:ref a0 'ls #f)])
+   ;; check timestamp field; timestamps are non-decreasing since
+   ;; we record annotations in the order they were added
+   (assert (apply <= (map (make-ref 'timestamp) annotations)))))
 
 (isolate-mat incomplete ()
   (define abort.ms
