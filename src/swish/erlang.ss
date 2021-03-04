@@ -1112,7 +1112,18 @@
   (define make-inherited-parameter
     (case-lambda
      [(initial filter)
-      (add-inherited (make-process-parameter initial filter))]
+      ;; To reduce overhead in inherit-parameters, the internal inherited
+      ;; parameter does not call the filter. Instead, we return a wrapper that
+      ;; calls the provided filter when user code sets the parameter. The
+      ;; inherit-parameters code then propagates these filtered values into
+      ;; spawned processes.
+      (unless (procedure? filter)
+        (bad-arg 'make-inherited-parameter filter))
+      (let ([no-filter-param (make-process-parameter (filter initial))])
+        (add-inherited no-filter-param)
+        (case-lambda
+         [() (no-filter-param)]
+         [(v) (no-filter-param (filter v))]))]
      [(initial)
       (add-inherited (make-process-parameter initial))]))
 

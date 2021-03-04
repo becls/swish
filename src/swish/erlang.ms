@@ -421,7 +421,10 @@
     [#(EXIT #(bad-arg with-process-details polychlorinated-byphenyl))
      (catch (with-process-details 'polychlorinated-byphenyl values))]
     [#(EXIT #(bad-arg with-process-details "spill beans"))
-     (catch (with-process-details self "spill beans"))])
+     (catch (with-process-details self "spill beans"))]
+    [#(EXIT #(bad-arg make-inherited-parameter rain))
+     (catch (make-inherited-parameter 'gentle 'rain))]
+    )
    (print-char-name #t)
    (print-gensym 'pretty)
    (print-graph #t)
@@ -1013,7 +1016,45 @@
         [ok (receive (after 1000 'timeout) ["abc" 'ok])]
         [,_ (gc)]
         [("abc" "xyz" #f) (list (g1) (g2) (g3))])
-       'ok))))
+       'ok)))
+  (parameterize ([inherited-parameters '()])
+    ;; test inherited parameter with filter
+    (match-let*
+     ([`(catch #(bad-arg good one))
+       ;; be sure to call filter on the initial value
+       (try
+        (make-inherited-parameter 'one
+          (lambda (x)
+            (bad-arg 'good x))))]
+      [,call-count 0]
+      [,p (make-inherited-parameter 7
+            (lambda (n)
+              (set! call-count (+ call-count 1))
+              (unless (number? n) (bad-arg 'p n))
+              n))]
+      [1 call-count]
+      [7 (p)]
+      [1 call-count]
+      [,_ (p 11)]
+      [11 (p)]
+      [2 call-count]
+      ;; filter rejects invalid value
+      [`(catch #(bad-arg p five)) (try (p 'five))]
+      [11 (p)]
+      [3 call-count]
+      ;; check that we do not call filter in spawn and friends
+      [,pid (spawn values)]
+      [,pid (spawn&link values)]
+      [3 call-count]
+      [,me self]
+      [,pid (spawn (lambda () (p 100) (send me (cons self (p)))))]
+      [(,@pid . 100) (receive [,x x])]
+      [4 call-count]
+      [,pid (spawn&link (lambda () (p 200) (send me (cons self (p)))))]
+      [(,@pid . 200) (receive [,x x])]
+      [5 call-count]
+      )
+     'ok)))
 
 (isolate-mat monitor-raise ()
   (process-trap-exit #t)

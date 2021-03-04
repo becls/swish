@@ -1426,13 +1426,17 @@ been redefined to use \code{make-process-parameter}:
 \end{parameter}
 \hasvalue{} a list of process-parameter procedures
 
-The \code{inherited-parameters} parameter contains a list of
-process parameters whose values are propagated into spawned
+The \code{inherited-parameters} parameter contains a list of procedures
+representing process parameters whose values are propagated into spawned
 processes.
 Before creating a process, \code{spawn} and \code{spawn\&link}
 record the current values of the \code{inherited-parameters}
 and install these values in the new process just before it calls
 the thunk.
+For efficiency, \code{spawn} and \code{spawn\&link} do not re-apply a
+parameter's \var{filter} when installing these values in the new process.
+These values are already filtered, since the filter, if any, is called
+when a parameter is set.
 
 % -------------------------------------------------------------------------
 \defineentry{make-inherited-parameter}
