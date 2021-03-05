@@ -1,5 +1,15 @@
 # Change Log
 
+## 2021-03-08 Version 2.0.2 (Stable)
+
+### Bug Fixes
+
+Fixed a performance bug. When installing the values of inherited parameters,
+`spawn` and `spawn&link` called parameter filters, if any, when they should not
+have, since those values were already filtered when the parameters were set.
+This was particularly significant for the inherited `app:path` parameter, where
+the filter makes an expensive call to `get-real-path`.
+
 ## 2020-11-09 Version 2.0.1 (Stable)
 
 ### Bug Fixes
