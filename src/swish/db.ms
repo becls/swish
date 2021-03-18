@@ -52,7 +52,7 @@
             (let ([x (bitwise-ior
                       (bitwise-arithmetic-shift 1 i)
                       (bitwise-arithmetic-shift 1 j))])
-              (cons* x (bitwise-not x) ls))
+              (cons* x (bitwise-not x) (twos i (+ j 1) ls)))
             (twos (+ i 1) 0 ls))
         ls))
   (twos 1 0 (ones 0 '(0 -1))))
