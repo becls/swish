@@ -28,6 +28,7 @@ shift
 (reset-handler abort)
 (import (swish mat) (swish profile) (swish testing))
 (cd "..")
+(\$init-mat-output-file "src/${FILENAME}.mo" "src/${FILENAME}" (uuid->string (osi_make_uuid)))
 (\$run-test-spec
   (<test-spec> make
     [test-file "src/${FILENAME}"]
