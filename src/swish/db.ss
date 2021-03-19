@@ -111,7 +111,10 @@
     (gen-server:call who 'filename))
 
   (define (db:log who sql . bindings)
-    (gen-server:cast who (<log> make [sql sql] [bindings bindings])))
+    (gen-server:cast who
+      (<log> make
+        [sql sql]
+        [mbindings (sqlite:marshal-bindings-no-check bindings)])))
 
   (define (db:transaction who f)
     (gen-server:call who `#(transaction ,f) 'infinity))
@@ -144,7 +147,7 @@
 
   (define-state-tuple <db-state> filename db cache queue worker)
 
-  (define-tuple <log> sql bindings)
+  (define-tuple <log> sql mbindings)
 
   (define current-database (make-process-parameter #f))
   (define statement-cache (make-process-parameter #f))
@@ -270,9 +273,9 @@
           (do ([ls logs (cdr ls)]
                [i 0 (+ i 1)])
               ((null? ls))
-            (match-let* ([`(<log> ,sql ,bindings) (car ls)])
+            (match-let* ([`(<log> ,sql ,mbindings) (car ls)])
               (vector-set! vstmt i (get-statement sql))
-              (vector-set! vbind i (sqlite:marshal-bindings-no-check bindings))))
+              (vector-set! vbind i mbindings)))
           (execute-with-retry-on-busy "BEGIN IMMEDIATE")
           (sqlite:bulk-execute vstmt vbind)
           (execute-with-retry-on-busy "COMMIT")

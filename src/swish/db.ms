@@ -620,7 +620,7 @@
              (pregexp-quote "#(<log>") "\\s+"
              (format "(#[0-9]=~a|#[0-9]#)" (pregexp-quote sql))
              "\\s+"
-             (pregexp-quote (format "(~s)" datum))
+             (pregexp-quote (format "#<bindings ~s>" datum))
              (pregexp-quote ")")))
           output)))
       data))))
