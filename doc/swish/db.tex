@@ -700,6 +700,17 @@ expanded with the binding values for the statement record instance
 The \code{sqlite:finalize} procedure finalizes the statement record
 instance \var{stmt}.
 
+\defineentry{sqlite:get-bindings}
+\begin{procedure}
+  \code{(sqlite:get-bindings \var{bindings})}
+\end{procedure}
+\returns{} a vector or \code{\#f}
+
+The \code{sqlite:get-bindings} procedure returns a vector of the values
+marshaled in the \var{bindings} record instance via \code{sqlite:marshal-bindings},
+or \code{\#f} if the record has been unmarshaled by
+\code{sqlite:unmarshal-bindings}.
+
 \defineentry{sqlite:interrupt}
 \begin{procedure}
   \code{(sqlite:interrupt \var{db})}

@@ -43,6 +43,8 @@
    osi_finalize_statement
    osi_finalize_statement*
    osi_get_argv
+   osi_get_bindings
+   osi_get_bindings*
    osi_get_bytes_used
    osi_get_callbacks
    osi_get_error_text
@@ -258,6 +260,7 @@
   (define-osi osi_finalize_statement (statement uptr))
   (define-osi osi_bind_statement (statement uptr) (index int) (datum ptr))
   (define-osi osi_clear_statement_bindings (statement uptr))
+  (define-osi osi_get_bindings (mbindings uptr))
   (define-osi osi_get_last_insert_rowid (database uptr))
   (define-osi osi_get_statement_columns (statement uptr))
   (define-osi osi_get_statement_expanded_sql (statement uptr))

@@ -379,6 +379,38 @@ int set_binding(binding_t* b, ptr datum) {
   }
 }
 
+ptr get_binding(binding_t* b) {
+  switch (b->type) {
+  case SQLITE_NULL:
+    return Sfalse;
+  case SQLITE_INTEGER:
+    return Sinteger64(b->i);
+  case SQLITE_FLOAT:
+    return Sflonum(b->d);
+  case SQLITE_TEXT:
+    return Sstring_utf8(b->utf8, b->size);
+  case SQLITE_BLOB: {
+    ptr bv = Smake_bytevector(b->size, 0);
+    memcpy(Sbytevector_data(bv), b->blob, b->size);
+    return bv;
+  }
+  default:
+    return osi_make_error_pair("osi_get_binding", UV_EINVAL);
+  }
+}
+
+ptr osi_get_bindings(uptr mbindings) {
+  bindings_t* b = (bindings_t*)mbindings;
+  ptr v = Smake_vector(b->len, Sfixnum(0));
+  for (int i = 0; i < b->len; ++i) {
+    ptr x = get_binding(&b->bindings[i]);
+    if (Spairp(x))
+      return x;
+    Svector_set(v, i, x);
+  }
+  return v;
+}
+
 void free_binding(binding_t* b) {
   switch (b->type) {
   case SQLITE_TEXT:

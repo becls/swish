@@ -54,6 +54,7 @@
    sqlite:execute
    sqlite:expanded-sql
    sqlite:finalize
+   sqlite:get-bindings
    sqlite:interrupt
    sqlite:last-insert-rowid
    sqlite:marshal-bindings
@@ -454,7 +455,7 @@
       (lambda (b) 0)
       (lambda (b) (sqlite:unmarshal-bindings b))
       (lambda (op b handle)
-        (fprintf op "  ~d\n" handle))))
+        (fprintf op "  ~d: ~s\n" handle (sqlite:get-bindings b)))))
 
   (define bindings-count (foreign-handle-count 'bindings))
   (define print-bindings (foreign-handle-print 'bindings))
@@ -478,6 +479,11 @@
        (when handle
          (match (osi_unmarshal_bindings* handle)
            [#t (bindings-guardian mbindings #f)])))))
+
+  (define (sqlite:get-bindings mbindings)
+    (with-interrupts-disabled
+     (let ([handle (bindings-handle mbindings)])
+       (and handle (osi_get_bindings handle)))))
 
   (define (db-error who error detail)
     (throw `#(db-error ,who ,error ,detail)))
@@ -715,6 +721,21 @@
 
   (record-writer (record-type-descriptor bindings)
     (lambda (r p wr)
-      (display-string "#<bindings>" p)))
+      (cond
+       [(sqlite:get-bindings r) =>
+        (lambda (bindings)
+          (display-string "#<bindings" p)
+          (let ([vlen (vector-length bindings)]
+                [limit (print-length)])
+            (do ([i 0 (fx+ i 1)])
+                ((cond
+                  [(fx= i vlen)]
+                  [(and limit (fx= i limit))
+                   (display-string " ..." p)]
+                  [else #f]))
+              (display-string " " p)
+              (wr (vector-ref bindings i) p)))
+          (display-string ">" p))]
+       [else (display-string "#<bindings>" p)])))
 
   )

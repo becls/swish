@@ -339,6 +339,12 @@
      ;; make coverage does not attribute the exception to bindings-handle.
      (pregexp-match "Exception( in bindings-handle|): 1 is not of type #<record type bindings>."
        (exit-reason->english reason))]
+    [#(EXIT ,reason)
+     (catch (sqlite:get-bindings 'ties))]
+    [(,_ ,_)
+     ;; make coverage does not attribute the exception to bindings-handle.
+     (pregexp-match "Exception( in bindings-handle|): ties is not of type #<record type bindings>."
+       (exit-reason->english reason))]
     ;; check int64 error during sqlite:marshal-bindings
     [,too-large (ash 1 64)]
     [,expected-error
@@ -459,16 +465,22 @@
            'ok))))))
 
 (mat bindings ()
-  (let ([count (bindings-count)])
-    (let ([b1 (sqlite:marshal-bindings '(#f 1 2.34 "text" #vu8(1 2 3 4)))]
-          [b2 (sqlite:marshal-bindings '#(#f 1 2.34 "text" #vu8(1 2 3 4)))])
+  (let ([count (bindings-count)]
+        [vals '#(#f 1 2.34 "text" #vu8(1 2 3 4))])
+    (let ([b1 (sqlite:marshal-bindings (vector->list vals))]
+          [b2 (sqlite:marshal-bindings vals)])
       (on-exit (begin (sqlite:unmarshal-bindings b1)
                       (sqlite:unmarshal-bindings b2))
         (let ([op (open-output-string)])
           (print-bindings op)
-          (match (split (get-output-string op) #\newline)
-            [(,one ,two . ,_) 'ok])
-          (assert (= (bindings-count) (+ count 2))))))))
+          (let ([pat (format "  [0-9]+: ~a" (pregexp-quote (format "~s" vals)))])
+            (match-regexps `(seek ,pat seek ,pat)
+              (split (get-output-string op) #\newline)))
+          (assert (= (bindings-count) (+ count 2))))
+        (match-let*
+         ([,@vals (sqlite:get-bindings b1)]
+          [,@vals (sqlite:get-bindings b2)])
+         'ok)))))
 
 (mat invalid-bindings ()
   (let ([count (bindings-count)])
@@ -624,9 +636,14 @@
     [,@db-expected (format "~s" db)]
     [,stmt-expected (format "#<statement ~a ~s>" db-expected "select 123")]
     [,@stmt-expected (format "~s" stmt)]
-    [,mbindings (sqlite:marshal-bindings '(123))]
-    [,mb-expected "#<bindings>"]
-    [,@mb-expected (format "~s" mbindings)]
+    [,mbindings (sqlite:marshal-bindings '(#vu8(1 2 3 4 5 6 7) 123 #f 98.6 "test"))]
+    ["#<bindings #vu8(1 2 3 4 5 6 7) 123 #f 98.6 \"test\">"
+     (format "~s" mbindings)]
+    ["#<bindings #vu8(1 2 3 4 5 6 7) 123 #f 98.6 \"test\">"
+     (parameterize ([print-level 2]) (format "~s" mbindings))]
+    ["#<bindings #vu8(1 2 ...) 123 ...>"
+     (parameterize ([print-length 2]) (format "~s" mbindings))]
     [,_ (sqlite:unmarshal-bindings mbindings)]
+    ["#<bindings>" (format "~s" mbindings)]
     )
    'ok))

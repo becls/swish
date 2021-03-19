@@ -54,6 +54,7 @@ static void swish_init(void) {
   add_foreign(osi_finalize_statement);
   add_foreign(osi_get_SHA1);
   add_foreign(osi_get_argv);
+  add_foreign(osi_get_bindings);
   add_foreign(osi_get_bytes_used);
   add_foreign(osi_get_callbacks);
   add_foreign(osi_get_error_text);
@@ -94,11 +95,11 @@ static void swish_init(void) {
   add_foreign(osi_rename);
   add_foreign(osi_reset_statement);
   add_foreign(osi_set_quantum);
-  add_foreign(osi_start_signal);
-  add_foreign(osi_stop_signal);
   add_foreign(osi_spawn);
   add_foreign(osi_spawn_detached);
+  add_foreign(osi_start_signal);
   add_foreign(osi_step_statement);
+  add_foreign(osi_stop_signal);
   add_foreign(osi_unlink);
   add_foreign(osi_unmarshal_bindings);
   add_foreign(osi_watch_path);

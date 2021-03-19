@@ -1148,6 +1148,17 @@ handle to the internal structure.
 An error pair is returned when the internal structure cannot be allocated or the
 \var{bindings} cannot be mapped to SQLite data types.
 
+\defineentry{osi\_get\_bindings}
+\begin{function}
+  \code{ptr osi\_get\_bindings(uptr \var{mbindings});}
+\end{function}
+
+The \code{osi\_get\_bindings} function allocates a vector
+containing a copy of each Scheme datum marshaled into \var{mbindings}
+by \code{osi\_marshal\_bindings}.
+It is an error to call \code{osi\_get\_bindings} on \var{mbindings}
+after calling \code{osi\_unmarshal\_bindings} on \var{mbindings}.
+
 \defineentry{osi\_unmarshal\_bindings}
 \begin{function}
   \code{ptr osi\_unmarshal\_bindings(uptr \var{mbindings});}

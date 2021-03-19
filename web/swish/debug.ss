@@ -88,6 +88,12 @@
 
 (print-graph #t)
 
+;; Allow some control over the print-bindings aspect of print-foreign-handles.
+(print-length
+ (cond
+  [(http:find-param 'print-length params) => string->number]
+  [else #f]))
+
 (hosted-page "Debug" '()
   `(style
      "input.collapsoid { display: none; }"
