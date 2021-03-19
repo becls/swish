@@ -202,8 +202,7 @@
   (define (get-timeout state)
     (cond
      [($state worker) 'infinity]
-     [(cache-waketime ($state cache)) =>
-      (lambda (waketime) (max (- waketime (erlang:now)) 0))]
+     [(cache-waketime ($state cache))]
      [else 'infinity]))
 
   (define (update state)
