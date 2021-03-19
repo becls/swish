@@ -292,6 +292,7 @@
           (match-let*
            ([4 (catch (sqlite:last-insert-rowid db))]
             ["select * from foo where x=? or y=? order by rowid asc" (sqlite:sql s)]
+            [ok (receive (after 1 'ok))] ;; force later timestamp for db2 and s2 for foreign-handle printing
             [(2 2)
              (catch (let ([op (open-output-string)]
                           [db2 (sqlite:open ":memory:" SQLITE_OPEN_READWRITE)])
@@ -299,7 +300,20 @@
                         (let ([s2 (sqlite:prepare db2 "create table foo(x)")])
                           (on-exit (sqlite:finalize s2)
                             (print-databases op)
+                            (match-regexps
+                             (map
+                              (lambda (db)
+                                (format "[0-9]+: :memory: opened ~s" (database-create-time db)))
+                              (list db db2))
+                             (split (get-output-string op) #\newline))
                             (print-statements op)
+                            (match-regexps
+                             (map
+                              (lambda (s)
+                                (format "[0-9]+: [0-9]+ ~a prepared [0-9]+"
+                                  (pregexp-quote (statement-sql s))))
+                              (list s s2))
+                             (split (get-output-string op) #\newline))
                             (list (database-count) (statement-count)))))))]
             [#("x" "y") (catch (sqlite:columns s))]
             ["select * from foo where x=NULL or y=NULL order by rowid asc"
