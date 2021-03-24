@@ -267,7 +267,7 @@
   (let ([db (sqlite:open ":memory:" SQLITE_OPEN_READWRITE)])
     (on-exit (sqlite:close db)
       (execute-sql db "create table foo(x, y)")
-      (let ([s (sqlite:prepare db "select * from foo where x=? or y=?")])
+      (let ([s (sqlite:prepare db "select * from foo where x=? or y=? order by rowid asc")])
         (on-exit (sqlite:finalize s)
           (for-each
            (lambda (x)
@@ -278,7 +278,7 @@
            '(0 1))
           (match-let*
            ([4 (catch (sqlite:last-insert-rowid db))]
-            ["select * from foo where x=? or y=?" (sqlite:sql s)]
+            ["select * from foo where x=? or y=? order by rowid asc" (sqlite:sql s)]
             [(2 2)
              (catch (let ([op (open-output-string)]
                           [db2 (sqlite:open ":memory:" SQLITE_OPEN_READWRITE)])
@@ -289,15 +289,15 @@
                             (print-statements op)
                             (list (database-count) (statement-count)))))))]
             [#("x" "y") (catch (sqlite:columns s))]
-            ["select * from foo where x=NULL or y=NULL"
+            ["select * from foo where x=NULL or y=NULL order by rowid asc"
              (catch (sqlite:expanded-sql s))]
-            ["select * from foo where x=0 or y=1"
+            ["select * from foo where x=0 or y=1 order by rowid asc"
              (catch (sqlite:bind s '(0 1)) (sqlite:expanded-sql s))]
             [#(0 0) (catch (sqlite:step s))]
             [#(0 1) (catch (sqlite:step s))]
             [#(1 1) (catch (sqlite:step s))]
             [#f (catch (sqlite:step s))]
-            ["select * from foo where x=NULL or y=NULL"
+            ["select * from foo where x=NULL or y=NULL order by rowid asc"
              (catch (sqlite:clear-bindings s) (sqlite:expanded-sql s))]
             [#(0 1) (catch (sqlite:bind s '(1 1)) (sqlite:step s))]
             [#(EXIT #(db-error step (sqlite3_step -6000009 . "interrupted") ,_))
