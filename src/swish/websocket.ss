@@ -214,7 +214,7 @@
       ;; concurrent processes.
       (let ([bv (make-bytevector 8)])
         (lambda (ip)
-          (unless (= (get-bytevector-some! ip bv 0 8) 8)
+          (unless (eqv? (get-bytevector-n! ip bv 0 8) 8)
             (throw 'unexpected-eof))
           (bytevector-u64-ref bv 0 'big))))
 
@@ -576,3 +576,36 @@
   (define (ws:close who)
     (gen-server:cast who 'close))
   )
+
+#!eof mats
+
+(load-this-exposing '(ws:read-loop maximum-message-size))
+
+(import
+ (swish websocket))
+
+(isolate-mat read-partial-u64 ()
+  ;; If the code accidently uses get-bytevector-some, and the payload
+  ;; size lands on a boundary that requires an additional read, this
+  ;; code will fail with an unexpected-eof.
+  (let* ([me self]
+         [message "Hello"]
+         [payload (map char->integer (string->list message))]
+         [data-bv
+          (u8-list->bytevector
+           `(129                              ; final packet, string
+             127                              ; 64-bit size
+             0 0 0 0 0 0 0 ,(length payload)  ; payload size
+             ,@payload                        ; new packet
+             136 0)                           ; closing packet, 0 size
+           )]
+         [ip (make-custom-binary-input-port "paused-input"
+               (let ([index 0])
+                 (lambda (bv start n)
+                   (bytevector-copy! data-bv index bv start 1)
+                   (set! index (+ index 1))
+                   1))
+               #f #f #f)])
+    (ws:read-loop ip (maximum-message-size)
+      (lambda (msg) (send me msg)))
+    (receive [,@message 'ok])))
