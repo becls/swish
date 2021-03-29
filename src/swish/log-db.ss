@@ -66,20 +66,19 @@
                (lambda (event) (log-event loggers event))
                (whereis 'log-db))
          [ok
-          (let ([now (current-date)])
-            (event-mgr:flush-buffer)
-            (match (get-uname)
-              [`(<uname> ,system ,release ,version ,machine)
-               (system-detail <system-attributes>
-                 [date (current-date)]
-                 [software-info (software-info)]
-                 [machine-type (symbol->string (machine-type))]
-                 [computer-name (osi_get_hostname)]
-                 [os-system system]
-                 [os-release release]
-                 [os-version version]
-                 [os-machine machine])])
-            'ignore)]
+          (event-mgr:flush-buffer)
+          (match (get-uname)
+            [`(<uname> ,system ,release ,version ,machine)
+             (system-detail <system-attributes>
+               [date (current-date)]
+               [software-info (software-info)]
+               [machine-type (symbol->string (machine-type))]
+               [computer-name (osi_get_hostname)]
+               [os-system system]
+               [os-release release]
+               [os-version version]
+               [os-machine machine])])
+          'ignore]
          [,error error])]
       [,error error]))
 
