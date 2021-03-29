@@ -31,6 +31,19 @@
  (swish testing)
  )
 
+(define (stop-event-mgr)
+  (cond
+   [(whereis 'event-mgr) => (lambda (pid) (kill pid 'kill))]
+   [else 'ok]))
+
+(define-syntax db-mat
+  (syntax-rules ()
+    [(_ name settings e0 e1 ...)
+     (isolate-mat name settings
+       (stop-event-mgr)
+       (start-silent-event-mgr)
+       (let () e0 e1 ...))]))
+
 (define-syntax (echo-sql x)
   (syntax-case x ()
     [(k sql)
@@ -145,7 +158,7 @@
 
 (print-unicode #f)
 
-(isolate-mat marshal ()
+(db-mat marshal ()
   (define goodies
     (append '(#f) (make-integers 63) (make-doubles) (make-strings)
       (make-blobs)))
@@ -166,7 +179,7 @@
        1 goodies))
     (db:stop db)))
 
-(isolate-mat m1 ()
+(db-mat m1 ()
   (match-let*
    ([#(ok ,db) (db:start&link #f ":memory:" 'create)]
     [":memory:" (db:filename db)]
@@ -224,7 +237,7 @@
     (send db 'timeout)
     (db:stop db))))
 
-(isolate-mat errors ()
+(db-mat errors ()
   (capture-events)
   (process-trap-exit #t)
   (match-let*
@@ -345,13 +358,13 @@
     "invalid SQL term")
    'ok))
 
-(isolate-mat db-guardian ()
+(db-mat db-guardian ()
   (let ([g (make-guardian)])
     (g (sqlite:open ":memory:" (+ SQLITE_OPEN_READWRITE SQLITE_OPEN_CREATE)))
     (gc)
     (assert (handle-gone? (g)))))
 
-(isolate-mat db-open ()
+(db-mat db-open ()
   (match-let*
    ([,filename (path-combine (data-dir) "test-db.db3")]
     [#(ok ,file) (db:start&link #f filename 'create)]
@@ -377,7 +390,7 @@
     (db:stop file)
     (catch (remove-file filename)))))
 
-(isolate-mat retry ()
+(db-mat retry ()
   (capture-events)
   (match-let*
    ([,db-uri "file::memory:?cache=shared"]
@@ -404,7 +417,54 @@
       (guard (> count 0))
       'ok])))
 
-(isolate-mat record-writers ()
+(isolate-mat crash ()
+  ;; Explicitly not using db-mat form because we want to build an
+  ;; event-mgr that dumps output to the console.
+  (stop-event-mgr)
+  (start-event-mgr)
+  (capture-events)
+  (process-trap-exit #t)
+  (match-let*
+   ([,op (open-output-string)]
+    [,_ (console-error-port op)]
+    [,_ (console-output-port op)]
+    [#(ok ,db) (db:start&link #f ":memory:" 'create)]
+    [,me self]
+    [,pid
+     (spawn
+      (lambda ()
+        (transaction db
+          (send me `(in-transaction . ,self))
+          ;; block while test populates db queue
+          (receive [permission 'ok]))))]
+    [,waiting-pid (receive [(in-transaction . ,waiting-pid) waiting-pid])]
+    ;; no such table
+    [,sql "insert into test(x) values(?)"]
+    [,data '(42 3.7 "asdf" #f #vu8(7 6 5))]
+    [,_ (for-each (lambda (x) (db:log db sql x)) data)]
+    [,_ (send db 'crash)]
+    ;; unblock the transaction
+    [,_ (send waiting-pid 'permission)])
+   (receive [`(EXIT ,@db #(db-error prepare ,_ ,_)) 'ok])
+   (event-mgr:flush-buffer)
+   (receive [`(<gen-server-terminating> [pid ,@db] ,state) 'ok])
+   (let ([output (get-output-string op)])
+     ;; look for data passed to db:log in the stack dump
+     (for-each
+      (lambda (datum)
+        (assert
+         (pregexp-match
+          (parameterize ([print-level 0])
+            (string-append
+             (pregexp-quote "#(log") "\\s+"
+             (format "(#[0-9]=~a|#[0-9]#)" (pregexp-quote sql))
+             "\\s+"
+             (pregexp-quote (format "(~s)" datum))
+             (pregexp-quote ")")))
+          output)))
+      data))))
+
+(db-mat record-writers ()
   ;; database and statement
   (match-let*
    ([,db (sqlite:open ":memory:" SQLITE_OPEN_READONLY)]
@@ -416,5 +476,3 @@
     [,stmt-expected (format "#<statement ~a ~s>" db-expected "select 123")]
     [,@stmt-expected (format "~s" stmt)])
    'ok))
-
-(start-silent-event-mgr)
