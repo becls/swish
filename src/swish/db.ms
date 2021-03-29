@@ -353,6 +353,13 @@
      (catch (sqlite:marshal-bindings (list too-large)))]
     [,@expected-error (exit-reason->english reason)]
     [#(EXIT ,reason)
+     (with-db [db ":memory:" SQLITE_OPEN_READWRITE]
+       (execute-sql db "create table data(x)")
+       (let ([s (sqlite:prepare db "insert into data(x) values(?)")])
+         (on-exit (sqlite:finalize s)
+           (catch (sqlite:execute s (list too-large))))))]
+    [,@expected-error (exit-reason->english reason)]
+    [#(EXIT ,reason)
      (catch (sqlite:marshal-bindings (vector too-large)))]
     [,@expected-error (exit-reason->english reason)]
     ;; check int64 error during sqlite:bind
@@ -443,6 +450,14 @@
             [#(0 1) (catch (sqlite:step s))]
             [#(1 1) (catch (sqlite:step s))]
             [#f (catch (sqlite:step s))]
+            ;; vector for bindings
+            [(#(0 1) #(1 1)) (sqlite:execute s '#(4 1))]
+            ;; marshaled bindings for bindings
+            [,bound (sqlite:marshal-bindings '(1 3))]
+            [(#(1 0) #(1 1)) (sqlite:execute s bound)]
+            ["select * from foo where x=NULL or y=NULL order by rowid asc"
+             (sqlite:expanded-sql s)]
+            [,_ (sqlite:unmarshal-bindings bound)]
             ["select * from foo where x=NULL or y=NULL order by rowid asc"
              (catch (sqlite:clear-bindings s) (sqlite:expanded-sql s))]
             [#(0 1) (catch (sqlite:bind s '(1 1)) (sqlite:step s))]
@@ -450,6 +465,48 @@
              (catch (sqlite:interrupt db) (sqlite:step s))]
             [#(EXIT #(db-error prepare ,_ ,_))
              (catch (sqlite:prepare db "insert"))]
+            ;; too many arguments for statement: list case
+            [#(EXIT #(osi-error osi_bind_statement sqlite3_bind_int64 (-6000025 . "column index out of range")))
+             (catch (sqlite:bind s '(1 2 3 4)))]
+            ;; omit some arguments for statement: list case
+            ["select * from foo where x=7 or y=NULL order by rowid asc"
+             (catch
+              (sqlite:clear-bindings s)
+              (sqlite:bind s '(7))
+              (sqlite:expanded-sql s))]
+            ;; too many arguments for statement: marshaled bindings case
+            [,mbindings (sqlite:marshal-bindings '(1 2 3 4))]
+            [#(EXIT #(osi-error osi_bind_statement_bindings sqlite3_bind_int64 (-6000025 . "column index out of range")))
+             (on-exit (sqlite:unmarshal-bindings mbindings)
+               (catch (sqlite:execute s mbindings)))]
+            ;; omit some arguments for statement: marshaled bindings case
+            [,mbindings (sqlite:marshal-bindings '(11))]
+            [() ;; no rows with null y
+             (on-exit (sqlite:unmarshal-bindings mbindings)
+               (sqlite:clear-bindings s)
+               (sqlite:execute s mbindings))]
+            ["select * from foo where x=NULL or y=NULL order by rowid asc"
+             (sqlite:expanded-sql s)]
+            ;; mbindings can be collected after sqlite:execute returns
+            [,g (make-guardian)]
+            [(#(0 0) #(0 1))
+             (on-exit (gc)
+               (let ([mbindings (sqlite:marshal-bindings '(0 7))])
+                 (g mbindings)
+                 (sqlite:execute s mbindings)))]
+            [#t (bindings? (g))]
+            ;; clear-bindings works
+            ["select * from foo where x=NULL or y=NULL order by rowid asc"
+             (begin
+               (sqlite:clear-bindings s)
+               (sqlite:expanded-sql s))]
+            ;; don't crash if mbindings unmarshaled after sqlite:execute
+            [,mbindings (sqlite:marshal-bindings '("text" "string"))]
+            [() (sqlite:execute s mbindings)]
+            ["select * from foo where x=NULL or y=NULL order by rowid asc"
+             (begin
+               (sqlite:unmarshal-bindings mbindings)
+               (sqlite:expanded-sql s))]
             ;; Close the database
             [ok (catch (sqlite:close db) 'ok)]
             [#(EXIT #(osi-error osi_bind_statement osi_bind_statement ,_))

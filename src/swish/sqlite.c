@@ -560,6 +560,20 @@ static int bind_bindings(statement_t* s, bindings_t* b, const char** who) {
   return rc;
 }
 
+ptr osi_bind_statement_bindings(uptr statement, uptr mbindings) {
+  statement_t* s = (statement_t*)statement;
+  bindings_t* b = (bindings_t*)mbindings;
+  if (!s->database)
+    return osi_make_error_pair("osi_bind_statement_bindings", UV_EINVAL);
+  if (s->database->busy)
+    return osi_make_error_pair("osi_bind_statement_bindings", UV_EBUSY);
+  const char* who = NULL;
+  int rc = bind_bindings(s, b, &who);
+  if (SQLITE_OK != rc)
+    return make_sqlite_error(who, rc, s->database->db);
+  return Strue;
+}
+
 ptr osi_clear_statement_bindings(uptr statement) {
   statement_t* s = (statement_t*)statement;
   if (!s->database)

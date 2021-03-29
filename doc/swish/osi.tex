@@ -1045,11 +1045,21 @@ statement is finalized regardless of the return value.
 \end{function}
 
 The \code{osi\_bind\_statement} function maps the Scheme \var{datum}
-to SQLite and binds it to the \var{statement} at the zero-based SQL
+to SQLite and binds it to the prepared \var{statement} at the zero-based SQL
 parameter \var{index}.  It returns \code{\#t} when successful and an
 error pair otherwise. The error pair \code{(osi\_bind\_statement
   . \textrm{UV\_EINVAL})} is returned when \code{datum} cannot be
 mapped to SQLite.
+
+\defineentry{osi\_bind\_statement\_bindings}
+\begin{function}
+  \code{ptr osi\_bind\_statement\_bindings(uptr \var{statement}, uptr \var{mbindings});}
+\end{function}
+
+The \code{osi\_bind\_statement\_bindings} binds the marshaled
+bindings \var{mbindings} to the prepared \var{statement}.
+It returns \code{\#t} when successful and an
+error pair otherwise.
 
 \defineentry{osi\_clear\_statement\_bindings}
 \begin{function}

@@ -117,7 +117,7 @@ guardian via \code{make-foreign-handle-guardian}.
   (fields
    (immutable ht)
    (mutable waketime)
-   (mutable lazy-statements)))
+   (mutable lazy-objects)))
   \end{alltt}\antipar
   The \code{waketime} is the next time the cache will attempt to
   remove dead entries.
@@ -154,9 +154,9 @@ guardian via \code{make-foreign-handle-guardian}.
   \code{\#(db-error prepare \var{error} \var{sql})}, where
   \var{error} is a SQLite error pair.
 
-  The \code{lazy-statements} list contains \code{statement}
-  records created by \code{lazy-execute}. These statements are
-  finalized when a transaction completes.
+  The \code{lazy-objects} list contains \code{statement}
+  and marshaled \code{bindings} records created by \code{lazy-execute}.
+  These records are finalized when a transaction completes.
 
 \end{itemize}
 
@@ -403,9 +403,11 @@ provided to \code{db:transaction}.
 A new SQLite statement is created from \var{sql} using
 \code{osi\_prepare\_statement} so that the statement won't interfere with
 any other queries. The statement is added to the
-\code{lazy-statements} list of the \code{statement-cache} and is
-finalized when the transaction completes.  The \var{bindings} are then
-applied using \code{osi\_bind\_statement}. A thunk is returned which, when
+\code{lazy-objects} list of the \code{statement-cache} and is
+finalized when the transaction completes.  The \var{bindings} are marshaled
+via \code{sqlite:marshal-bindings}. The resulting bindings record instance
+is added to the \code{lazy-objects} list and applied
+using \code{osi\_bind\_statement\_bindings}. A thunk is returned which, when
 called, executes the statement using \code{osi\_step\_statement}. The thunk
 returns one row of data or \code{\#f}.
 
@@ -676,11 +678,18 @@ for the statement record instance \var{stmt}.
 \end{procedure}
 \returns{} a list of rows where each row is a vector of data in column order
 
-The \code{sqlite:execute} procedure calls \code{(sqlite:bind
-  \var{stmt} \var{bindings})} to bind any variables and then
-iteratively calls \code{(sqlite:step \var{stmt})} to build the
-resulting list of rows. It resets the statement when the procedure
-exits.
+The \code{sqlite:execute} procedure binds any variables in statement
+record instance \var{stmt} and then calls \code{(sqlite:step
+  \var{stmt})} repeatedly to build the resulting list of rows.
+If \var{bindings} is a marshaled bindings record instance,
+then \code{sqlite:execute} calls \code{osi\_bind\_statement\_bindings}
+to bind variables in the statement.
+Otherwise it calls \code{sqlite:marshal-bindings}
+before binding the variables and calls \code{sqlite:unmarshal-bindings}
+before returning.
+As a result, \code{sqlite:execute} accepts as \var{bindings} a list,
+a vector, or a marshaled bindings record instance.
+When the procedure exits, it resets the statement and clears the bindings.
 
 \defineentry{sqlite:expanded-sql}
 \begin{procedure}

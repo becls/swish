@@ -41,6 +41,7 @@ static void (* g_aux_init)(void) = NULL;
 static void swish_init(void) {
 #define add_foreign(sym) Sforeign_symbol(#sym, (void *)sym)
   add_foreign(osi_bind_statement);
+  add_foreign(osi_bind_statement_bindings);
   add_foreign(osi_bulk_execute);
   add_foreign(osi_chmod);
   add_foreign(osi_clear_statement_bindings);

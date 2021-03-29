@@ -179,7 +179,7 @@
     (let ([x (try (flush state))])
       (vector-for-each (lambda (e) (sqlite:finalize (entry-stmt e)))
         (hashtable-values (cache-ht ($state cache))))
-      (finalize-lazy-statements ($state cache))
+      (finalize-lazy-objects ($state cache))
       (sqlite:close ($state db))
       (match x
         [`(catch ,reason ,e) (raise e)]
@@ -256,11 +256,11 @@
         (execute-with-retry-on-busy "BEGIN IMMEDIATE")
         (match (try (limit-stack (f)))
           [`(catch ,reason ,e)
-           (finalize-lazy-statements cache)
+           (finalize-lazy-objects cache)
            (execute-with-retry-on-busy "ROLLBACK")
            (gen-server:reply from `#(error ,e))]
           [,result
-           (finalize-lazy-statements cache)
+           (finalize-lazy-objects cache)
            (execute-with-retry-on-busy "COMMIT")
            (gen-server:reply from `#(ok ,result))]))))
 
@@ -334,7 +334,7 @@
     (fields
      (immutable ht)
      (mutable waketime)
-     (mutable lazy-statements))
+     (mutable lazy-objects))
     (protocol
      (lambda (new)
        (lambda ()
@@ -366,9 +366,14 @@
             (cache-waketime-set! cache (+ (erlang:now) cache-timeout)))
           stmt)])))
 
-  (define (finalize-lazy-statements cache)
-    (for-each sqlite:finalize (cache-lazy-statements cache))
-    (cache-lazy-statements-set! cache '()))
+  (define (finalize-lazy-objects cache)
+    (for-each
+     (lambda (x)
+       (match x
+         [`(statement) (sqlite:finalize x)]
+         [`(bindings) (sqlite:unmarshal-bindings x)]))
+     (cache-lazy-objects cache))
+    (cache-lazy-objects-set! cache '()))
 
   (define (remove-dead-entries cache)
     (let ([dead (- (erlang:now) cache-timeout)]
@@ -567,6 +572,12 @@
         ((null? ls))
       (osi_bind_statement (statement-handle stmt) i (car ls))))
 
+  (define (sqlite:bind-mbindings stmt mbindings)
+    (match stmt
+      [`(statement [handle ,stmt-handle])
+       (osi_reset_statement* stmt-handle)
+       (osi_bind_statement_bindings stmt-handle (bindings-handle mbindings))]))
+
   (define (sqlite:clear-bindings stmt)
     (osi_clear_statement_bindings (statement-handle stmt)))
 
@@ -591,13 +602,23 @@
      result))
 
   (define (sqlite:execute stmt bindings)
-    (sqlite:bind stmt bindings)
-    (on-exit (osi_reset_statement* (statement-handle stmt))
-      (let lp ()
-        (let ([row (sqlite:step stmt)])
-          (if row
-              (cons row (lp))
-              '())))))
+    (define mbindings
+      (if (bindings? bindings)
+          bindings
+          (sqlite:marshal-bindings bindings)))
+    (define unmarshal? (not (eq? bindings mbindings)))
+    (on-exit
+     (begin
+       (osi_reset_statement* (statement-handle stmt))
+       (sqlite:clear-bindings stmt)
+       (when unmarshal?
+         (sqlite:unmarshal-bindings mbindings)))
+     (sqlite:bind-mbindings stmt mbindings)
+     (let lp ()
+       (let ([row (sqlite:step stmt)])
+         (if row
+             (cons row (lp))
+             '())))))
 
   (define (sqlite:bulk-execute stmts mbindings)
     (define result)
@@ -633,10 +654,11 @@
 
   (define ($lazy-execute sql bindings)
     (let* ([cache (statement-cache)]
-           [stmt (sqlite:prepare (current-database) sql)])
-      (cache-lazy-statements-set! cache
-        (cons stmt (cache-lazy-statements cache)))
-      (sqlite:bind stmt bindings)
+           [stmt (sqlite:prepare (current-database) sql)]
+           [mbindings (sqlite:marshal-bindings bindings)])
+      (cache-lazy-objects-set! cache
+        (list* stmt mbindings (cache-lazy-objects cache)))
+      (sqlite:bind-mbindings stmt mbindings)
       (lambda () (sqlite:step stmt))))
 
   (define parse-sql

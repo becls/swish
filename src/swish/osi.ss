@@ -25,6 +25,8 @@
   (export
    osi_bind_statement
    osi_bind_statement*
+   osi_bind_statement_bindings
+   osi_bind_statement_bindings*
    osi_bulk_execute
    osi_bulk_execute*
    osi_chmod
@@ -259,6 +261,7 @@
   (define-osi osi_prepare_statement (database uptr) (sql ptr) (callback ptr))
   (define-osi osi_finalize_statement (statement uptr))
   (define-osi osi_bind_statement (statement uptr) (index int) (datum ptr))
+  (define-osi osi_bind_statement_bindings (statement uptr) (mbindings uptr))
   (define-osi osi_clear_statement_bindings (statement uptr))
   (define-osi osi_get_bindings (mbindings uptr))
   (define-osi osi_get_last_insert_rowid (database uptr))
