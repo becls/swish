@@ -108,10 +108,11 @@ top-level-value \code{\$suspend}.
 The JSON object in the \code{foreign-handles} field contains at least the following entries:
 
 \begin{tabular}{ll}
+ \code{bindings} & {number of live marshaled SQLite bindings} \\
  \code{databases} & {number of open SQLite databases} \\
  \code{osi-ports} & {number of open osi-ports} \\
  \code{path-watchers} & {number of open path watchers} \\
- \code{statements} & {number of allocated SQLite statements} \\
+ \code{statements} & {number of unfinalized SQLite statements} \\
  \code{tcp-listeners} & {number of open TCP/IP listeners} \\
 \end{tabular}
 

@@ -126,6 +126,9 @@ EXPORT ptr osi_reset_statement(uptr statement);
 EXPORT ptr osi_step_statement(uptr statement, ptr callback);
 EXPORT void osi_interrupt_database(uptr database);
 EXPORT ptr osi_get_sqlite_status(int operation, int resetp);
+EXPORT ptr osi_bulk_execute(ptr statements, ptr mbindings, ptr callback);
+EXPORT ptr osi_marshal_bindings(ptr bindings);
+EXPORT ptr osi_unmarshal_bindings(uptr mbindings);
 
 #define TRANSLATE_SQLITE_ERRNO(x) (-(6000000 + x))
 
@@ -214,3 +217,4 @@ EXPORT ptr osi_get_sqlite_status(int operation, int resetp);
 
 #define container_of(p, t, member) ((t*)((char*)(p)-offsetof(t, member)))
 #define malloc_container(t) ((t*)malloc(sizeof(t)))
+#define malloc_array(t, n) ((t*)malloc(sizeof(t) * n))

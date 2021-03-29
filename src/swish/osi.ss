@@ -25,6 +25,8 @@
   (export
    osi_bind_statement
    osi_bind_statement*
+   osi_bulk_execute
+   osi_bulk_execute*
    osi_chmod
    osi_chmod*
    osi_clear_statement_bindings
@@ -84,6 +86,8 @@
    osi_make_directory*
    osi_make_uuid
    osi_make_uuid*
+   osi_marshal_bindings
+   osi_marshal_bindings*
    osi_open_database
    osi_open_database*
    osi_open_fd
@@ -113,6 +117,8 @@
    osi_stop_signal*
    osi_unlink
    osi_unlink*
+   osi_unmarshal_bindings
+   osi_unmarshal_bindings*
    osi_watch_path
    osi_watch_path*
    osi_write_port
@@ -259,4 +265,7 @@
   (define-osi osi_step_statement (statement uptr) (callback ptr))
   (fdefine osi_interrupt_database (database uptr) void)
   (define-osi osi_get_sqlite_status (operation int) (reset? boolean))
+  (define-osi osi_bulk_execute (statements ptr) (mbindings ptr) (callback ptr))
+  (define-osi osi_marshal_bindings (ls ptr))
+  (define-osi osi_unmarshal_bindings (mbindings uptr))
   )

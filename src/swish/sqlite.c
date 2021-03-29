@@ -22,6 +22,31 @@
 
 #include "osi.h"
 
+typedef struct statement_s statement_t;
+
+typedef struct binding_s {
+  int type;
+  union {
+    sqlite3_int64 i;
+    double d;
+    char* utf8;
+    void* blob;
+  };
+  size_t size;
+} binding_t;
+
+typedef struct bindings_s {
+  int len;
+  binding_t bindings[];
+} bindings_t;
+
+typedef struct bulk_s {
+  int count;
+  statement_t** statements;
+  bindings_t** mbindings;
+  const char* who;
+} bulk_t;
+
 typedef struct database_s {
   sqlite3* db;
   struct statement_s* statement;
@@ -35,6 +60,7 @@ typedef struct database_s {
   union {
     char* sql;
     sqlite3_stmt* stmt;
+    bulk_t* bulk;
   };
   int sql_len;
   int sqlite_rc;
@@ -311,12 +337,135 @@ ptr osi_finalize_statement(uptr statement) {
   return Strue;
 }
 
+int scheme_to_sql_type(ptr datum) {
+  if (Sfalse == datum)
+    return SQLITE_NULL;
+  if (Sfixnump(datum) || Sbignump(datum))
+    return SQLITE_INTEGER;
+  if (Sflonump(datum))
+    return SQLITE_FLOAT;
+  if (Sstringp(datum))
+    return SQLITE_TEXT;
+  if (Sbytevectorp(datum))
+    return SQLITE_BLOB;
+  return -1;
+}
+
+int set_binding(binding_t* b, ptr datum) {
+  int type = scheme_to_sql_type(datum);
+  b->type = type;
+  switch (type) {
+  case SQLITE_NULL:
+    return 0;
+  case SQLITE_INTEGER:
+    b->i = Sinteger64_value(datum);
+    return 0;
+  case SQLITE_FLOAT:
+    b->d = Sflonum_value(datum);
+    return 0;
+  case SQLITE_TEXT:
+    b->utf8 = osi_string_to_utf8(datum, &b->size);
+    return b->utf8 ? 0 : UV_ENOMEM;
+  case SQLITE_BLOB:
+    b->size = Sbytevector_length(datum);
+    void* blob = malloc_array(uint8_t, b->size);
+    if (!blob)
+      return UV_ENOMEM;
+    memcpy(blob, Sbytevector_data(datum), b->size);
+    b->blob = blob;
+    return 0;
+  default:
+    return UV_EINVAL;
+  }
+}
+
+void free_binding(binding_t* b) {
+  switch (b->type) {
+  case SQLITE_TEXT:
+    if (b->utf8) {
+      free(b->utf8);
+      b->utf8 = NULL;
+    }
+    return;
+  case SQLITE_BLOB:
+    if (b->blob) {
+      free(b->blob);
+      b->blob = NULL;
+    }
+    return;
+  default:
+    return;
+  }
+}
+
+ptr osi_marshal_bindings(ptr bindings) {
+  if (Snullp(bindings) || Spairp(bindings)) {
+    int len = 0;
+    for (ptr p = bindings; p != Snil; p=Scdr(p))
+      ++len;
+
+    bindings_t* mbindings = (bindings_t*)malloc(sizeof(bindings_t)+len*sizeof(binding_t));
+    if (!mbindings)
+      return osi_make_error_pair("osi_marshal_bindings", UV_ENOMEM);
+
+    mbindings->len = len;
+    int i = 0;
+    for (ptr p=bindings; p != Snil; p=Scdr(p), ++i) {
+      binding_t* b = &mbindings->bindings[i];
+      ptr datum = Scar(p);
+      int rc = set_binding(b, datum);
+      if (rc) {
+        for (int j=0; j < i; ++j) {
+          free_binding(&mbindings->bindings[j]);
+        }
+        free(mbindings);
+        return osi_make_error_pair("osi_marshal_bindings", rc);
+      }
+    }
+    return Sunsigned((uptr)mbindings);
+  } else if (Svectorp(bindings)) {
+    int len = Svector_length(bindings);
+
+    bindings_t* mbindings = (bindings_t*)malloc(sizeof(bindings_t)+len*sizeof(binding_t));
+    if (!mbindings)
+      return osi_make_error_pair("osi_marshal_bindings", UV_ENOMEM);
+
+    mbindings->len = len;
+    for (int i=0; i < len; ++i) {
+      binding_t* b = &mbindings->bindings[i];
+      ptr datum = Svector_ref(bindings, i);
+      int rc = set_binding(b, datum);
+      if (rc) {
+        for (int j=0; j < i; ++j) {
+          free_binding(&mbindings->bindings[j]);
+        }
+        free(mbindings);
+        return osi_make_error_pair("osi_marshal_bindings", rc);
+      }
+    }
+    return Sunsigned((uptr)mbindings);
+  }
+  return osi_make_error_pair("osi_marshal_bindings", UV_EINVAL);
+}
+
+ptr osi_unmarshal_bindings(uptr mbindings) {
+  bindings_t* b = (bindings_t*)mbindings;
+  for (int i=0; i < b->len; ++i) {
+    free_binding(&b->bindings[i]);
+  }
+  free(b);
+  return Strue;
+}
+
 ptr osi_bind_statement(uptr statement, int index, ptr datum) {
   statement_t* s = (statement_t*)statement;
   if (!s->database)
     return osi_make_error_pair("osi_bind_statement", UV_EINVAL);
   if (s->database->busy)
     return osi_make_error_pair("osi_bind_statement", UV_EBUSY);
+  // For strings and blobs, the data must live beyond the scope of
+  // this call, so we ask SQLite to copy them. This is in contrast to
+  // the bindings in bind_bindings.
   int rc;
   const char* who;
   if (Sfalse == datum) {
@@ -343,6 +492,40 @@ ptr osi_bind_statement(uptr statement, int index, ptr datum) {
   if (SQLITE_OK != rc)
     return make_sqlite_error(who, rc, s->database->db);
   return Strue;
+}
+
+static int bind_bindings(statement_t* s, bindings_t* b, const char** who) {
+  // For strings and blobs, the memory is managed by the lifetime of
+  // the binding_t records, so we do not ask SQLite to copy them. This
+  // is in contrast to the bindings in osi_bind_statement.
+  int rc = SQLITE_OK;
+  *who = NULL;
+  for (int j=0; j < b->len; ++j) {
+    binding_t* curr = &b->bindings[j];
+    switch (curr->type) {
+    case SQLITE_NULL:
+      *who = "sqlite3_bind_null";
+      rc = sqlite3_bind_null(s->stmt, j+1);
+      break;
+    case SQLITE_INTEGER:
+      *who = "sqlite3_bind_int64";
+      rc = sqlite3_bind_int64(s->stmt, j+1, curr->i);
+      break;
+    case SQLITE_FLOAT:
+      *who = "sqlite3_bind_double";
+      rc = sqlite3_bind_double(s->stmt, j+1, curr->d);
+      break;
+    case SQLITE_TEXT:
+      *who = "sqlite3_bind_text64";
+      rc = sqlite3_bind_text64(s->stmt, j+1, curr->utf8, curr->size, SQLITE_STATIC, SQLITE_UTF8);
+      break;
+    case SQLITE_BLOB:
+      *who = "sqlite3_bind_blob";
+      rc = sqlite3_bind_blob64(s->stmt, j+1, curr->blob, curr->size, SQLITE_STATIC);
+      break;
+    }
+  }
+  return rc;
 }
 
 ptr osi_clear_statement_bindings(uptr statement) {
@@ -488,4 +671,114 @@ ptr osi_get_sqlite_status(int operation, int resetp) {
   Svector_set(v, 0, Sinteger64(current));
   Svector_set(v, 1, Sinteger64(highwater));
   return v;
+}
+
+static void bulk_worker(void* arg) {
+  database_t* d = (database_t*)arg;
+  bulk_t* bulk = d->bulk;
+  statement_t** statements = bulk->statements;
+  bindings_t** bindings = bulk->mbindings;
+
+  d->sqlite_rc = SQLITE_OK;
+  for (int i=0; i < bulk->count; ++i) {
+    statement_t* s = statements[i];
+    sqlite3_reset(s->stmt);
+    int rc = bind_bindings(s, bindings[i], &bulk->who);
+    if (SQLITE_OK != rc) {
+      d->sqlite_rc = rc;
+      return;
+    }
+
+    rc = sqlite3_step(s->stmt);
+    switch (rc) {
+    case SQLITE_OK:
+    case SQLITE_DONE:
+    case SQLITE_ROW:
+      break;
+    default:
+      d->sqlite_rc = rc;
+      return;
+    }
+
+    sqlite3_clear_bindings(s->stmt);
+    sqlite3_reset(s->stmt);
+  }
+}
+
+static void bulk_cb(uv_async_t* handle) {
+  database_t* d = container_of(handle, database_t, async);
+  ptr callback = d->callback;
+  d->busy = 0;
+  d->callback = Svoid;
+  Sunlock_object(callback);
+  bulk_t* bulk = d->bulk;
+  d->bulk = NULL;
+  const char* who = bulk->who;
+  free(bulk->mbindings);
+  free(bulk->statements);
+  free(bulk);
+
+  int rc = d->sqlite_rc;
+  ptr arg;
+  switch (rc) {
+  case SQLITE_OK:
+  case SQLITE_DONE:
+  case SQLITE_ROW:
+    arg = Strue;
+    break;
+  default:
+    arg = make_sqlite_error(who ? who : "osi_bulk_execute", rc, d->db);
+    break;
+  }
+  osi_add_callback1(callback, arg);
+}
+
+ptr osi_bulk_execute(ptr statements, ptr mbindings, ptr callback) {
+  if (!Svectorp(statements) ||
+      !Svectorp(mbindings) ||
+      (Svector_length(statements) != Svector_length(mbindings)))
+    return osi_make_error_pair("osi_bulk_execute", UV_EINVAL);
+  if (Svector_length(statements) < 1)
+    return osi_make_error_pair("osi_bulk_execute", UV_EINVAL);
+
+  uptr statement = (uptr)Sunsigned_value(Svector_ref(statements, 0));
+  statement_t* s = (statement_t*)statement;
+  database_t* d = s->database;
+  if (!d)
+    return osi_make_error_pair("osi_bulk_execute", UV_EINVAL);
+  if (d->busy)
+    return osi_make_error_pair("osi_bulk_execute", UV_EBUSY);
+
+  bulk_t* bulk = malloc_container(bulk_t);
+  if (!bulk)
+    return osi_make_error_pair("osi_bulk_execute", UV_ENOMEM);
+  int count = Svector_length(statements);
+  bulk->count = count;
+  bulk->statements = malloc_array(statement_t*, count);
+  if (!bulk->statements) {
+    free(bulk);
+    return osi_make_error_pair("osi_bulk_execute", UV_ENOMEM);
+  }
+  bulk->mbindings = malloc_array(bindings_t*, count);
+  if (!bulk->mbindings) {
+    free(bulk->statements);
+    free(bulk);
+    return osi_make_error_pair("osi_bulk_execute", UV_ENOMEM);
+  }
+  bulk->who = NULL;
+
+  for (int i=0; i < count; ++i) {
+    bulk->statements[i] = (statement_t*)Sunsigned_value(Svector_ref(statements, i));
+    bulk->mbindings[i] = (bindings_t*)Sunsigned_value(Svector_ref(mbindings, i));
+  }
+  Slock_object(callback);
+  uv_mutex_lock(&(d->mutex));
+  d->async.data = bulk_cb;
+  d->busy = 1;
+  d->work = bulk_worker;
+  d->callback = callback;
+  d->bulk = bulk;
+  uv_mutex_unlock(&(d->mutex));
+  uv_cond_signal(&(d->cond));
+  return Strue;
 }

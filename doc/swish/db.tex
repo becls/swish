@@ -196,8 +196,8 @@ processes the following message:
 
 \antipar\begin{itemize}
 
-\item \code{\#(log \var{sql} \var{bindings})}: Add this tuple to
-  the queue. Process the queue.
+\item \code{\#(<log> \var{sql} \var{bindings})}: Add this tuple to the
+  queue. Process the queue.
 
 \end{itemize}
 
@@ -232,6 +232,13 @@ transaction is complete.
 A commit threshold of 10,000 was chosen because it was large enough to
 minimize the cost of a transaction but small enough to execute simple
 queries in less than one second.
+
+Version 2.1.0 adds the concept of marshaled bindings. Bindings are
+copied into the C heap. The resulting handle is wrapped in a Scheme
+record and registered with a guardian via
+\code{make-foreign-handle-guardian}. The database worker process uses
+marshaled bindings to invoke \code{sqlite:bulk-execute} when processing log
+messages.
 
 \section {Programming Interface}
 
@@ -323,8 +330,8 @@ The \code{db:filename} procedure calls \code{(gen-server:call
 \code{ok}
 
 The \code{db:log} procedure calls \code{(gen-server:cast \var{who}
-  \#(log \var{sql} \var{bindings}))}.  \var{sql} is a SQL string, and
-\var{bindings} is a list of values to be bound in the query.
+  \#(<log> \var{sql} \var{bindings}))}.  \var{sql} is a SQL string,
+and \var{bindings} is a list of values to be bound in the query.
 Because \code{db:log} does not wait for a reply from the server, any
 error in processing the request will crash the server.
 
@@ -583,6 +590,36 @@ unfinalized statements to textual output port \var{op}, which defaults
 to the current output port.
 This is the procedure returned by \code{(foreign-handle-print\ 'statements)}.
 
+\defineentry{bindings?}
+\begin{procedure}
+  \code{(bindings? \var{x})}
+\end{procedure}
+\returns{} a boolean
+
+The \code{bindings?} procedure determines whether or not the datum
+\var{x} is a marshaled bindings record instance.
+
+\defineentry{bindings-count}
+\begin{procedure}
+  \code{(bindings-count)}
+\end{procedure}
+\returns{} the number of live marshaled bindings records
+
+The \code{bindings-count} procedure returns the number of live marshaled
+bindings records.
+This is the procedure returned by \code{(foreign-handle-count\ 'bindings)}.
+
+\defineentry{print-bindings}
+\begin{procedure}
+  \code{(print-bindings \opt{\var{op}})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{print-bindings} procedure prints information about all
+live marshaled bindings records to textual output port \var{op}, which
+defaults to the current output port.
+This is the procedure returned by \code{(foreign-handle-print\ 'bindings)}.
+
 \defineentry{sqlite:bind}
 \begin{procedure}
   \code{(sqlite:bind \var{stmt} \var{bindings})}
@@ -592,6 +629,18 @@ This is the procedure returned by \code{(foreign-handle-print\ 'statements)}.
 The \code{sqlite:bind} procedure binds the variables in statement
 record instance \var{stmt} with the list of \var{bindings}. It resets
 the statement before binding the variables.
+
+\defineentry{sqlite:bulk-execute}
+\begin{procedure}
+  \code{(sqlite:bulk-execute \var{stmts} \var{mbindings})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{sqlite:bulk-execute} procedure extracts the handles of the
+vectors \var{stmts} and \var{mbindings} and calls
+\code{osi\_bulk\_execute}.  \var{stmts} is a vector of statement
+record instances, and \var{mbindings} is a vector of corresponding
+marshaled bindings record instances.
 
 \defineentry{sqlite:clear-bindings}
 \begin{procedure}
@@ -672,6 +721,18 @@ most recent successful insert into a rowid table or virtual table on
 the database associated with database record instance \var{db}. It
 returns 0 if no such insert has occurred.
 
+\defineentry{sqlite:marshal-bindings}
+\begin{procedure}
+  \code{(sqlite:marshal-bindings \var{bindings})}
+\end{procedure}
+\returns{} a marshaled bindings record instance
+
+The \code{sqlite:marshal-bindings} procedure returns a marshaled
+bindings record instance for the provided list or vector of
+\var{bindings}. The \code{sqlite:marshal-bindings} procedure registers
+the marshaled bindings record with a foreign-handle guardian using the
+type name \code{bindings}.
+
 \defineentry{sqlite:open}
 \begin{procedure}
   \code{(sqlite:open \var{filename} \var{flags})}
@@ -717,3 +778,13 @@ the statement record instance \var{stmt}.
 The \code{sqlite:step} procedure steps the statement record instance
 \var{stmt} and returns the next row vector in column order or
 \code{\#f} if there are no more rows.
+
+\defineentry{sqlite:unmarshal-bindings}
+\begin{procedure}
+  \code{(sqlite:unmarshal-bindings \var{mbindings})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{sqlite:unmarshal-bindings} procedure deallocates the memory
+associated with the marshaled bindings record instance
+\var{mbindings}.

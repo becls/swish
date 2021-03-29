@@ -41,6 +41,7 @@ static void (* g_aux_init)(void) = NULL;
 static void swish_init(void) {
 #define add_foreign(sym) Sforeign_symbol(#sym, (void *)sym)
   add_foreign(osi_bind_statement);
+  add_foreign(osi_bulk_execute);
   add_foreign(osi_chmod);
   add_foreign(osi_clear_statement_bindings);
   add_foreign(osi_close_SHA1);
@@ -82,6 +83,7 @@ static void swish_init(void) {
   add_foreign(osi_listen_tcp);
   add_foreign(osi_make_directory);
   add_foreign(osi_make_uuid);
+  add_foreign(osi_marshal_bindings);
   add_foreign(osi_open_SHA1);
   add_foreign(osi_open_database);
   add_foreign(osi_open_fd);
@@ -98,6 +100,7 @@ static void swish_init(void) {
   add_foreign(osi_spawn_detached);
   add_foreign(osi_step_statement);
   add_foreign(osi_unlink);
+  add_foreign(osi_unmarshal_bindings);
   add_foreign(osi_watch_path);
   add_foreign(osi_write_port);
   if (g_aux_init) g_aux_init();

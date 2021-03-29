@@ -179,6 +179,91 @@
        1 goodies))
     (db:stop db)))
 
+(db-mat marshal-bulk ()
+  (define goodies
+    (append '(#f) (make-integers 63) (make-doubles) (make-strings)
+      (make-blobs)))
+  (with-db [db ":memory:" SQLITE_OPEN_READWRITE]
+    (execute-sql db "create table data(x)")
+    (let ([stmt (sqlite:prepare db "insert into data(x) values(?)")])
+      (on-exit (sqlite:finalize stmt)
+        (let* ([rows (length goodies)]
+               [stmts (make-vector rows stmt)]
+               [bindings (list->vector
+                          (map
+                           (lambda (x)
+                             (sqlite:marshal-bindings (list x)))
+                           goodies))])
+          (on-exit (vector-for-each sqlite:unmarshal-bindings bindings)
+            (execute-sql db "BEGIN IMMEDIATE")
+            (sqlite:bulk-execute stmts bindings)
+            (execute-sql db "COMMIT")))
+        (let ()
+          (define (check x result)
+            (match result
+              [(#(,@x)) 'ok]
+              [,_ (errorf 'check "~s didn't match: ~s\n" x result)]))
+          (fold-left
+           (lambda (id x)
+             (check x (execute-sql db "select x from data where rowid=?" id))
+             (+ id 1))
+           1 goodies))))))
+
+;; wrong number of bindings for statement
+(db-mat bulk-execute ()
+  (with-db [db ":memory:" SQLITE_OPEN_READWRITE]
+    (execute-sql db "create table data(x)")
+    (let ([stmt (sqlite:prepare db "insert into data(x) values(?)")])
+      (on-exit (sqlite:finalize stmt)
+        (let ([stmts (vector stmt)]
+              [bindings (vector (sqlite:marshal-bindings (list 1 2)))])
+          (on-exit (vector-for-each sqlite:unmarshal-bindings bindings)
+            (execute-sql db "BEGIN IMMEDIATE")
+            (match-let*
+             ([#(EXIT #(db-error bulk-execute ,_ ,_))
+               (catch (sqlite:bulk-execute stmts bindings))])
+             (execute-sql db "COMMIT"))))))))
+
+;; empty vectors to bulk-execute
+(mat bulk-execute-empty ()
+  (match (try (sqlite:bulk-execute '#() '#()))
+    [`(catch #(osi-error osi_bulk_execute ,_ ,_))
+     'ok]))
+
+;; mismatched vectors to bulk-execute
+(db-mat bulk-execute-mismatch ()
+  (with-db [db ":memory:" SQLITE_OPEN_READWRITE]
+    (execute-sql db "create table data(x integer unique)")
+    (let ([stmt (sqlite:prepare db "insert into data(x) values(?)")]
+          [bind (sqlite:marshal-bindings (list 4))])
+      (on-exit (begin (sqlite:finalize stmt) (sqlite:unmarshal-bindings bind))
+        (let ([stmts (make-vector 24 stmt)]
+              [bindings (make-vector 7 bind)])
+          (execute-sql db "BEGIN IMMEDIATE")
+          (match-let*
+           ([#(EXIT #(osi-error osi_bulk_execute ,_ ,_))
+             (catch (sqlite:bulk-execute stmts bindings))])
+           (execute-sql db "COMMIT")))))))
+
+;; violate a constraint during insert
+(db-mat bulk-execute-violate-constraint ()
+  (with-db [db ":memory:" SQLITE_OPEN_READWRITE]
+    (execute-sql db "create table data(x integer unique)")
+    (let ([stmt (sqlite:prepare db "insert into data(x) values(?)")]
+          [bind (sqlite:marshal-bindings (list 4))])
+      (on-exit (begin (sqlite:finalize stmt) (sqlite:unmarshal-bindings bind))
+        (execute-sql db "insert into data(x) values(3)")
+        (let ([stmts (make-vector 7 stmt)]
+              [bindings (make-vector 7 bind)])
+          (execute-sql db "BEGIN IMMEDIATE")
+          (match-let*
+           ([#(EXIT #(db-error bulk-execute ,_ ,_))
+             (catch (sqlite:bulk-execute stmts bindings))]
+            [() (execute-sql db "COMMIT")]
+            [(#(3) #(4))
+             (execute-sql db "select x from data order by x asc")])
+           'ok))))))
+
 (db-mat m1 ()
   (match-let*
    ([#(ok ,db) (db:start&link #f ":memory:" 'create)]
@@ -246,6 +331,34 @@
     [#(EXIT #(invalid-context columns)) (catch (columns "SELECT 1"))]
     [#(EXIT #(db-error open ,_ "*"))
      (catch (sqlite:open "*" SQLITE_OPEN_READWRITE))]
+    [#(EXIT #(bad-arg sqlite:marshal-bindings 1))
+     (catch (sqlite:marshal-bindings 1))]
+    [#(EXIT ,reason)
+     (catch (sqlite:unmarshal-bindings 1))]
+    [(,_ ,_)
+     ;; make coverage does not attribute the exception to bindings-handle.
+     (pregexp-match "Exception( in bindings-handle|): 1 is not of type #<record type bindings>."
+       (exit-reason->english reason))]
+    ;; check int64 error during sqlite:marshal-bindings
+    [,too-large (ash 1 64)]
+    [,expected-error
+     (format "Exception in Sinteger64_value: ~a is out of range." too-large)]
+    [#(EXIT ,reason)
+     (catch (sqlite:marshal-bindings (list too-large)))]
+    [,@expected-error (exit-reason->english reason)]
+    [#(EXIT ,reason)
+     (catch (sqlite:marshal-bindings (vector too-large)))]
+    [,@expected-error (exit-reason->english reason)]
+    ;; check int64 error during sqlite:bind
+    [,stmts-before (statement-count)]
+    [#(EXIT ,reason)
+     (with-db [db ":memory:" SQLITE_OPEN_READWRITE]
+       (execute-sql db "create table data(x)")
+       (let ([s (sqlite:prepare db "insert into data(x) values(?)")])
+         (on-exit (sqlite:finalize s)
+           (assert (= (statement-count) (+ stmts-before 1)))
+           (catch (sqlite:bind s (list too-large))))))]
+    [,@stmts-before (statement-count)]
     [,name (gensym)]
     [,_
      (db:start&link name ":memory:" 'open
@@ -344,6 +457,28 @@
             [#(EXIT #(osi-error osi_step_statement osi_step_statement ,_))
              (catch (sqlite:step s))])
            'ok))))))
+
+(mat bindings ()
+  (let ([count (bindings-count)])
+    (let ([b1 (sqlite:marshal-bindings '(#f 1 2.34 "text" #vu8(1 2 3 4)))]
+          [b2 (sqlite:marshal-bindings '#(#f 1 2.34 "text" #vu8(1 2 3 4)))])
+      (on-exit (begin (sqlite:unmarshal-bindings b1)
+                      (sqlite:unmarshal-bindings b2))
+        (let ([op (open-output-string)])
+          (print-bindings op)
+          (match (split (get-output-string op) #\newline)
+            [(,one ,two . ,_) 'ok])
+          (assert (= (bindings-count) (+ count 2))))))))
+
+(mat invalid-bindings ()
+  (let ([count (bindings-count)])
+    (match-let*
+     ([`(catch #(osi-error osi_marshal_bindings ,_ ,_))
+       (try (sqlite:marshal-bindings '(#f 1 2.34 symbol "text" #vu8(1 2 3 4))))]
+      [`(catch #(osi-error osi_marshal_bindings ,_ ,_))
+       (try (sqlite:marshal-bindings '#(#f 1 2.34 symbol "text" #vu8(1 2 3 4))))]
+      [,@count (bindings-count)])
+     'ok)))
 
 (mat expand-sql ()
   (match-let*
@@ -470,7 +605,7 @@
          (pregexp-match
           (parameterize ([print-level 0])
             (string-append
-             (pregexp-quote "#(log") "\\s+"
+             (pregexp-quote "#(<log>") "\\s+"
              (format "(#[0-9]=~a|#[0-9]#)" (pregexp-quote sql))
              "\\s+"
              (pregexp-quote (format "(~s)" datum))
@@ -479,7 +614,7 @@
       data))))
 
 (db-mat record-writers ()
-  ;; database and statement
+  ;; database, statement, and bindings
   (match-let*
    ([,db (sqlite:open ":memory:" SQLITE_OPEN_READONLY)]
     [,stmt (sqlite:prepare db "select 123")]
@@ -488,5 +623,10 @@
     [,db-expected (format "#<database ~s>" ":memory:")]
     [,@db-expected (format "~s" db)]
     [,stmt-expected (format "#<statement ~a ~s>" db-expected "select 123")]
-    [,@stmt-expected (format "~s" stmt)])
+    [,@stmt-expected (format "~s" stmt)]
+    [,mbindings (sqlite:marshal-bindings '(123))]
+    [,mb-expected "#<bindings>"]
+    [,@mb-expected (format "~s" mbindings)]
+    [,_ (sqlite:unmarshal-bindings mbindings)]
+    )
    'ok))

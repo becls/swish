@@ -27,6 +27,8 @@
    SQLITE_OPEN_READONLY
    SQLITE_OPEN_READWRITE
    SQLITE_STATUS_MEMORY_USED
+   bindings-count
+   bindings?
    columns
    database-count
    database-create-time
@@ -41,9 +43,11 @@
    execute-sql
    lazy-execute
    parse-sql
+   print-bindings
    print-databases
    print-statements
    sqlite:bind
+   sqlite:bulk-execute
    sqlite:clear-bindings
    sqlite:close
    sqlite:columns
@@ -52,10 +56,12 @@
    sqlite:finalize
    sqlite:interrupt
    sqlite:last-insert-rowid
+   sqlite:marshal-bindings
    sqlite:open
    sqlite:prepare
    sqlite:sql
    sqlite:step
+   sqlite:unmarshal-bindings
    statement-count
    statement-create-time
    statement-database
@@ -104,7 +110,7 @@
     (gen-server:call who 'filename))
 
   (define (db:log who sql . bindings)
-    (gen-server:cast who `#(log ,sql ,bindings)))
+    (gen-server:cast who (<log> make [sql sql] [bindings bindings])))
 
   (define (db:transaction who f)
     (gen-server:call who `#(transaction ,f) 'infinity))
@@ -136,6 +142,8 @@
   (define commit-threshold 10000)
 
   (define-state-tuple <db-state> filename db cache queue worker)
+
+  (define-tuple <log> sql bindings)
 
   (define current-database (make-process-parameter #f))
   (define statement-cache (make-process-parameter #f))
@@ -183,7 +191,7 @@
 
   (define (handle-cast msg state)
     (match msg
-      [#(log ,sql ,bindings)
+      [`(<log>)
        (no-reply ($state copy* [queue (queue:add msg queue)]))]))
 
   (define (handle-info msg state)
@@ -215,48 +223,59 @@
   (define (get-work queue state)
     (let ([head (queue:get queue)])
       (match head
-        [#(log ,_ ,_)
-         (let-values ([(logs queue) (get-related queue 0)])
-           (values (make-worker (cons head logs) state) queue))]
-        [#(transaction ,_ ,_)
-         (values (make-worker head state) (queue:drop queue))])))
+        [`(<log>)
+         (let-values ([(logs queue count) (get-related-logs queue 0)])
+           (values (make-log-worker (cons head logs) count state) queue))]
+        [#(transaction ,f ,from)
+         (values (make-transaction-worker f from state) (queue:drop queue))])))
 
-  (define (get-related queue count)
+  (define (get-related-logs queue count)
     (let ([queue (queue:drop queue)]
           [count (+ count 1)])
       (if (or (queue:empty? queue) (>= count commit-threshold))
-          (values '() queue)
+          (values '() queue count)
           (let ([head (queue:get queue)])
-            (match head
-              [#(log ,_ ,_)
-               (let-values ([(logs queue) (get-related queue count)])
-                 (values (cons head logs) queue))]
-              [,_ (values '() queue)])))))
+            (if (<log> is? head)
+                (let-values ([(logs queue count)
+                              (get-related-logs queue count)])
+                  (values (cons head logs) queue count))
+                (values '() queue count))))))
 
-  (define (make-worker x state)
+  (define (setup-worker db cache)
+    (current-database db)
+    (statement-cache cache))
+
+  (define (make-transaction-worker f from state)
     (match-let* ([`(<db-state> ,db ,cache) state])
       (lambda ()
-        (current-database db)
-        (statement-cache cache)
+        (setup-worker db cache)
         (execute-with-retry-on-busy "BEGIN IMMEDIATE")
-        (match x
-          [#(transaction ,f ,from)
-           (match (try (limit-stack (f)))
-             [`(catch ,reason ,e)
-              (finalize-lazy-statements cache)
-              (execute-with-retry-on-busy "ROLLBACK")
-              (gen-server:reply from `#(error ,e))]
-             [,result
-              (finalize-lazy-statements cache)
-              (execute-with-retry-on-busy "COMMIT")
-              (gen-server:reply from `#(ok ,result))])]
-          [,logs
-           (for-each
-            (lambda (x)
-              (match-let* ([#(log ,sql ,bindings) x])
-                ($execute sql bindings)))
-            logs)
-           (execute-with-retry-on-busy "COMMIT")]))))
+        (match (try (limit-stack (f)))
+          [`(catch ,reason ,e)
+           (finalize-lazy-statements cache)
+           (execute-with-retry-on-busy "ROLLBACK")
+           (gen-server:reply from `#(error ,e))]
+          [,result
+           (finalize-lazy-statements cache)
+           (execute-with-retry-on-busy "COMMIT")
+           (gen-server:reply from `#(ok ,result))]))))
+
+  (define (make-log-worker logs count state)
+    (match-let* ([`(<db-state> ,db ,cache) state])
+      (lambda ()
+        (setup-worker db cache)
+        (let ([vstmt (make-vector count)]
+              [vbind (make-vector count)])
+          (do ([ls logs (cdr ls)]
+               [i 0 (+ i 1)])
+              ((null? ls))
+            (match-let* ([`(<log> ,sql ,bindings) (car ls)])
+              (vector-set! vstmt i (get-statement sql))
+              (vector-set! vbind i (sqlite:marshal-bindings-no-check bindings))))
+          (execute-with-retry-on-busy "BEGIN IMMEDIATE")
+          (sqlite:bulk-execute vstmt vbind)
+          (execute-with-retry-on-busy "COMMIT")
+          (vector-for-each sqlite:unmarshal-bindings vbind)))))
 
   (define (flush state)
     (cond
@@ -422,6 +441,44 @@
     (let ([s (make-statement database sql create-time handle)])
       (statements s handle)))
 
+  (define-record-type bindings
+    (nongenerative)
+    (sealed #t)
+    (fields
+     (mutable handle)))
+
+  (define bindings-guardian
+    (make-foreign-handle-guardian 'bindings
+      bindings-handle
+      bindings-handle-set!
+      (lambda (b) 0)
+      (lambda (b) (sqlite:unmarshal-bindings b))
+      (lambda (op b handle)
+        (fprintf op "  ~d\n" handle))))
+
+  (define bindings-count (foreign-handle-count 'bindings))
+  (define print-bindings (foreign-handle-print 'bindings))
+
+  (define (@make-bindings handle)
+    (let ([b (make-bindings handle)])
+      (bindings-guardian b handle)))
+
+  (define (sqlite:marshal-bindings-no-check bindings)
+    (with-interrupts-disabled
+     (@make-bindings (osi_marshal_bindings bindings))))
+
+  (define (sqlite:marshal-bindings bindings)
+    (arg-check 'sqlite:marshal-bindings
+      [bindings (lambda (x) (or (list? x) (vector? x)))])
+    (sqlite:marshal-bindings-no-check bindings))
+
+  (define (sqlite:unmarshal-bindings mbindings)
+    (with-interrupts-disabled
+     (let ([handle (bindings-handle mbindings)])
+       (when handle
+         (match (osi_unmarshal_bindings* handle)
+           [#t (bindings-guardian mbindings #f)])))))
+
   (define (db-error who error detail)
     (throw `#(db-error ,who ,error ,detail)))
 
@@ -533,6 +590,24 @@
               (cons row (lp))
               '())))))
 
+  (define (sqlite:bulk-execute stmts mbindings)
+    (define result)
+    (with-interrupts-disabled
+     (let ([stmt-handles (vector-map statement-handle stmts)]
+           [bind-handles (vector-map bindings-handle mbindings)])
+       (osi_bulk_execute stmt-handles bind-handles
+         (let ([p self])
+           (lambda (r)
+             (#%$keep-live stmts)
+             (#%$keep-live mbindings)
+             (set! result r)
+             (complete-io p))))
+       (let ([db-name (statement-database (vector-ref stmts 0))])
+         (wait-for-io (database-filename db-name))
+         (when (pair? result)
+           (db-error 'bulk-execute result db-name))
+         result))))
+
   (define (execute-sql db sql . bindings)
     (let ([stmt (sqlite:prepare db sql)])
       (on-exit (sqlite:finalize stmt)
@@ -637,5 +712,9 @@
       (display-string " " p)
       (wr (statement-sql r) p)
       (write-char #\> p)))
+
+  (record-writer (record-type-descriptor bindings)
+    (lambda (r p wr)
+      (display-string "#<bindings>" p)))
 
   )

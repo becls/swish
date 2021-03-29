@@ -1136,6 +1136,44 @@ The \code{osi\_get\_sqlite\_status} function uses the
 \var{reset} flag to return \code{\#(\var{current} \var{highwater})}
 when successful and an error pair otherwise.
 
+\defineentry{osi\_marshal\_bindings}
+\begin{function}
+  \code{ptr osi\_marshal\_bindings(ptr \var{bindings});}
+\end{function}
+
+The \code{osi\_marshal\_bindings} function allocates an internal
+structure and copies each Scheme datum in \var{bindings}. The
+\var{bindings} argument may be a list or a vector. The result is a
+handle to the internal structure.
+An error pair is returned when the internal structure cannot be allocated or the
+\var{bindings} cannot be mapped to SQLite data types.
+
+\defineentry{osi\_unmarshal\_bindings}
+\begin{function}
+  \code{ptr osi\_unmarshal\_bindings(uptr \var{mbindings});}
+\end{function}
+
+The \code{osi\_unmarshal\_bindings} function deallocates the internal
+structure allocated by \code{osi\_marshal\_bindings}.
+
+\defineentry{osi\_bulk\_execute}
+\begin{function}
+  \code{ptr osi\_bulk\_execute(ptr \var{statements}, ptr \var{mbindings}, ptr \var{callback});}
+\end{function}
+
+The \code{osi\_bulk\_execute} function executes all the queries
+defined by \var{statements} and \var{mbindings} on the database worker
+thread associated with the statements. The vector \var{statements}
+must contain statement handles created by
+\code{osi\_prepare\_statement}. All \var{statements} must be prepared
+on the same database. The vector \var{mbindings} must contain binding
+handles created by \code{osi\_marshal\_bindings}. It returns
+\code{\#t} when the operation is started and an error pair otherwise.
+
+When the bulk execute operation finishes, it enqueues the callback
+list \code{(\var{callback} \var{result})}, where \var{result} is
+\code{\#t} when successful and an error pair otherwise.
+
 \subsection {Message-Digest Functions}
 
 \defineentry{osi\_open\_SHA1}

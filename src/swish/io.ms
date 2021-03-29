@@ -579,7 +579,9 @@
          (print-foreign-handles))
        (match-regexps
         ;; gensym g<nnn> will show up between databases and osi-ports
-        `("" "databases:" "" seek
+        `(""
+          "bindings:" "" seek
+          "databases:" "" seek
           ,(format "~a:" fakes-id)
           "8000: info2 created 1"
           "  6000: info4 created 2"
