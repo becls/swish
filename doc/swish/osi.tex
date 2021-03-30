@@ -1154,7 +1154,7 @@ when successful and an error pair otherwise.
 The \code{osi\_marshal\_bindings} function allocates an internal
 structure and copies each Scheme datum in \var{bindings}. The
 \var{bindings} argument may be a list or a vector. The result is a
-handle to the internal structure.
+handle to the internal structure or NULL if \var{bindings} is empty.
 An error pair is returned when the internal structure cannot be allocated or the
 \var{bindings} cannot be mapped to SQLite data types.
 

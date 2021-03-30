@@ -401,8 +401,9 @@ ptr get_binding(binding_t* b) {
 
 ptr osi_get_bindings(uptr mbindings) {
   bindings_t* b = (bindings_t*)mbindings;
-  ptr v = Smake_vector(b->len, Sfixnum(0));
-  for (int i = 0; i < b->len; ++i) {
+  int len = (!b) ? 0 : b->len;
+  ptr v = Smake_vector(len, Sfixnum(0));
+  for (int i = 0; i < len; ++i) {
     ptr x = get_binding(&b->bindings[i]);
     if (Spairp(x))
       return x;
@@ -435,6 +436,8 @@ ptr osi_marshal_bindings(ptr bindings) {
     int len = 0;
     for (ptr p = bindings; p != Snil; p=Scdr(p))
       ++len;
+    if (!len)
+      return Sunsigned((uptr)NULL);
 
     bindings_t* mbindings = (bindings_t*)malloc(sizeof(bindings_t)+len*sizeof(binding_t));
     if (!mbindings)
@@ -457,7 +460,8 @@ ptr osi_marshal_bindings(ptr bindings) {
     return Sunsigned((uptr)mbindings);
   } else if (Svectorp(bindings)) {
     int len = Svector_length(bindings);
-
+    if (!len)
+      return Sunsigned((uptr)NULL);
     bindings_t* mbindings = (bindings_t*)malloc(sizeof(bindings_t)+len*sizeof(binding_t));
     if (!mbindings)
       return osi_make_error_pair("osi_marshal_bindings", UV_ENOMEM);
@@ -482,6 +486,8 @@ ptr osi_marshal_bindings(ptr bindings) {
 
 ptr osi_unmarshal_bindings(uptr mbindings) {
   bindings_t* b = (bindings_t*)mbindings;
+  if (!b)
+    return Strue;
   for (int i=0; i < b->len; ++i) {
     free_binding(&b->bindings[i]);
   }
@@ -532,6 +538,8 @@ static int bind_bindings(statement_t* s, bindings_t* b, const char** who) {
   // is in contrast to the bindings in osi_bind_statement.
   int rc = SQLITE_OK;
   *who = NULL;
+  if (!b)
+    return rc;
   for (int j=0; j < b->len; ++j) {
     binding_t* curr = &b->bindings[j];
     switch (curr->type) {

@@ -224,6 +224,35 @@
                (catch (sqlite:bulk-execute stmts bindings))])
              (execute-sql db "COMMIT"))))))))
 
+(db-mat bulk-execute-null-case ()
+  (with-db [db ":memory:" SQLITE_OPEN_READWRITE]
+    (execute-sql db "create table data(x)")
+    (let ([stmt (sqlite:prepare db "insert into data(x) values(10)")])
+      (on-exit (sqlite:finalize stmt)
+        (let ([stmts (vector stmt)]
+              [bindings (vector (sqlite:marshal-bindings '#()))])
+          (on-exit (vector-for-each sqlite:unmarshal-bindings bindings)
+            (match-let*
+             ([() (execute-sql db "BEGIN IMMEDIATE")]
+              [#t (sqlite:bulk-execute stmts bindings)]
+              [() (execute-sql db "COMMIT")]
+              [(#(10)) (execute-sql db "select x from data")])
+             'ok))))))
+  (match-let*
+   ([#(ok ,db) (db:start&link #f ":memory:" 'create)]
+    [ok (transaction db (execute "CREATE TABLE data(x)") 'ok)]
+    [ok (db:log db "insert into data(x) values(?)" 1)]
+    [ok (db:log db "insert into data(x) values(?)" 2)]
+    [ok (db:log db "insert into data(x) values(3)")]
+    [ok (db:log db "insert into data(x) values(?)" 4)]
+    [ok (db:log db "insert into data(x) values(5)")]
+    [ok (db:log db "insert into data(x) values(6)")]
+    [(1 2 3 4 5 6)
+     (map (lambda (x) (match x [#(,data) data]))
+       (transaction db
+         (execute "select x from data order by rowid asc")))])
+   (db:stop db)))
+
 ;; empty vectors to bulk-execute
 (mat bulk-execute-empty ()
   (match (try (sqlite:bulk-execute '#() '#()))
@@ -313,6 +342,12 @@
           (do ([i 0 (+ i 1)]) ((= i 10))
             (assert (thunk))))
         'selected-rows-lazy)]
+     [selected-rows-lazy/w-bindings
+      (transaction db
+        (let ([thunk (lazy-execute "SELECT col1 FROM table1 where ? < ?" 0 1)])
+          (do ([i 0 (+ i 1)]) ((= i 10))
+            (assert (thunk))))
+        'selected-rows-lazy/w-bindings)]
      [#("col1" "col2" "Column3")
       (transaction db
         (columns "SELECT col1,col2,col3 AS Column3 FROM table1"))]
@@ -525,19 +560,44 @@
   (let ([count (bindings-count)]
         [vals '#(#f 1 2.34 "text" #vu8(1 2 3 4))])
     (let ([b1 (sqlite:marshal-bindings (vector->list vals))]
-          [b2 (sqlite:marshal-bindings vals)])
+          [b2 (sqlite:marshal-bindings vals)]
+          [b3 (sqlite:marshal-bindings '())]
+          [b4 (sqlite:marshal-bindings '#())])
       (on-exit (begin (sqlite:unmarshal-bindings b1)
-                      (sqlite:unmarshal-bindings b2))
+                      (sqlite:unmarshal-bindings b2)
+                      (sqlite:unmarshal-bindings b3)
+                      (sqlite:unmarshal-bindings b4))
         (let ([op (open-output-string)])
           (print-bindings op)
           (let ([pat (format "  [0-9]+: ~a" (pregexp-quote (format "~s" vals)))])
             (match-regexps `(seek ,pat seek ,pat)
               (split (get-output-string op) #\newline)))
+          ;; we don't allocate records to marshal empty bindings
           (assert (= (bindings-count) (+ count 2))))
         (match-let*
          ([,@vals (sqlite:get-bindings b1)]
-          [,@vals (sqlite:get-bindings b2)])
+          [,@vals (sqlite:get-bindings b2)]
+          [#() (sqlite:get-bindings b3)]
+          [#() (sqlite:get-bindings b4)])
          'ok)))))
+
+(mat raw-bindings ()
+  (match-let*
+   ([,vals '#(#f 1 2.34 "text" #vu8(1 2 3 4))]
+    [,p1 (osi_marshal_bindings (vector->list vals))]
+    [,p2 (osi_marshal_bindings vals)]
+    [,p3 (osi_marshal_bindings '())]
+    [,p4 (osi_marshal_bindings '#())])
+   (on-exit (begin (osi_unmarshal_bindings p1)
+                   (osi_unmarshal_bindings p2)
+                   (osi_unmarshal_bindings p3)
+                   (osi_unmarshal_bindings p4))
+     (match-let*
+      ([,@vals (osi_get_bindings p1)]
+       [,@vals (osi_get_bindings p2)]
+       [#() (osi_get_bindings p3)]
+       [#() (osi_get_bindings p4)])
+      'ok))))
 
 (mat invalid-bindings ()
   (let ([count (bindings-count)])

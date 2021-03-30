@@ -473,8 +473,10 @@
       (bindings-guardian b handle)))
 
   (define (sqlite:marshal-bindings-no-check bindings)
-    (with-interrupts-disabled
-     (@make-bindings (osi_marshal_bindings bindings))))
+    (if (or (null? bindings) (eq? bindings '#()))
+        #f
+        (with-interrupts-disabled
+         (@make-bindings (osi_marshal_bindings bindings)))))
 
   (define (sqlite:marshal-bindings bindings)
     (arg-check 'sqlite:marshal-bindings
@@ -482,16 +484,19 @@
     (sqlite:marshal-bindings-no-check bindings))
 
   (define (sqlite:unmarshal-bindings mbindings)
-    (with-interrupts-disabled
-     (let ([handle (bindings-handle mbindings)])
-       (when handle
-         (match (osi_unmarshal_bindings* handle)
-           [#t (bindings-guardian mbindings #f)])))))
+    (when mbindings
+      (with-interrupts-disabled
+       (let ([handle (bindings-handle mbindings)])
+         (when handle
+           (match (osi_unmarshal_bindings* handle)
+             [#t (bindings-guardian mbindings #f)]))))))
 
   (define (sqlite:get-bindings mbindings)
-    (with-interrupts-disabled
-     (let ([handle (bindings-handle mbindings)])
-       (and handle (osi_get_bindings handle)))))
+    (if (not mbindings)
+        '#()
+        (with-interrupts-disabled
+         (let ([handle (bindings-handle mbindings)])
+           (and handle (osi_get_bindings handle))))))
 
   (define (db-error who error detail)
     (throw `#(db-error ,who ,error ,detail)))
@@ -576,7 +581,8 @@
     (match stmt
       [`(statement [handle ,stmt-handle])
        (osi_reset_statement* stmt-handle)
-       (osi_bind_statement_bindings stmt-handle (bindings-handle mbindings))]))
+       (when mbindings
+         (osi_bind_statement_bindings stmt-handle (bindings-handle mbindings)))]))
 
   (define (sqlite:clear-bindings stmt)
     (osi_clear_statement_bindings (statement-handle stmt)))
@@ -620,11 +626,17 @@
              (cons row (lp))
              '())))))
 
+  (define NULL 0)
+  (define (get-bindings-handle bindings)
+    (if (not bindings)
+        NULL
+        (bindings-handle bindings)))
+
   (define (sqlite:bulk-execute stmts mbindings)
     (define result)
     (with-interrupts-disabled
      (let ([stmt-handles (vector-map statement-handle stmts)]
-           [bind-handles (vector-map bindings-handle mbindings)])
+           [bind-handles (vector-map get-bindings-handle mbindings)])
        (osi_bulk_execute stmt-handles bind-handles
          (let ([p self])
            (lambda (r)
@@ -657,7 +669,8 @@
            [stmt (sqlite:prepare (current-database) sql)]
            [mbindings (sqlite:marshal-bindings bindings)])
       (cache-lazy-objects-set! cache
-        (list* stmt mbindings (cache-lazy-objects cache)))
+        (let ([objects (cache-lazy-objects cache)])
+          (cons stmt (if mbindings (cons mbindings objects) objects))))
       (sqlite:bind-mbindings stmt mbindings)
       (lambda () (sqlite:step stmt))))
 

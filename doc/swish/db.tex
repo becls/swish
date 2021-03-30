@@ -643,7 +643,7 @@ The \code{sqlite:bulk-execute} procedure extracts the handles of the
 vectors \var{stmts} and \var{mbindings} and calls
 \code{osi\_bulk\_execute}.  \var{stmts} is a vector of statement
 record instances, and \var{mbindings} is a vector of corresponding
-marshaled bindings record instances.
+marshaled bindings obtained via \code{sqlite:marshal-bindings}.
 
 \defineentry{sqlite:clear-bindings}
 \begin{procedure}
@@ -746,7 +746,7 @@ returns 0 if no such insert has occurred.
 \begin{procedure}
   \code{(sqlite:marshal-bindings \var{bindings})}
 \end{procedure}
-\returns{} a marshaled bindings record instance
+\returns{} a marshaled bindings record instance or \code{\#f}
 
 The \code{sqlite:marshal-bindings} procedure returns a marshaled
 bindings record instance for the provided list or vector of
