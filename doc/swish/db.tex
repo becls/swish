@@ -51,6 +51,8 @@ executes them by opening a transaction lazily when an explicit transaction is
 enqueued, when a \var{worker} process exits normally, or when the \code{db}
 message queue is empty.
 To maintain responsiveness, each lazy transaction commits at most 10,000 queued \code{db:log} requests.
+To maintain responsiveness, each lazy transaction commits at most \code{commit-limit} \code{db:log} requests.
+See \code{db:options} on page~\pageref{db:options} for details.
 By default, each database is created with write-ahead logging enabled
 to prevent write operations from blocking on queries made from another
 connection.
@@ -244,7 +246,8 @@ messages.
 
 \defineentry{db:start\&link}
 \begin{procedure}
-  \code{(db:start\&link \var{name} \var{filename} \var{mode} \opt{\var{db-init}})}
+  \code{(db:start\&link \var{name} \var{filename} \var{mode} \opt{\var{db-init}})}\\
+  \code{(db:start\&link \var{name} \var{filename} \var{mode} \opt{\var{db-options}})}
 \end{procedure}
 \returns{}
 \code{\#(ok \var{pid})} $|$
@@ -282,7 +285,32 @@ record instance. The return value is ignored. When the \var{mode} is
 default procedure sets \code{journal\_mode} to ``wal''; otherwise, no
 additional initialization occurs.
 
-This procedure may return an \var{error} of \code{\#(db-error open
+\var{db-options} can be defined using
+\code{(db:options [\var{option} \var{value}] \etc)}.
+The following options may be used:
+\defineentry{db:options}
+\phantomsection % make pageref go to correct page for this label
+\label{db:options}
+
+\begin{tabular}{lp{5em}p{.65\textwidth}}
+  option & default & description \\ \hline
+
+  \code{init}
+  & see right
+  & a procedure, \code{(lambda (filename mode db) \etc)},
+  called when initializing the gen-server,
+  where \var{db} is a database record instance;
+  the default \code{init} procedure is equivalent to
+  the default \var{db-init} procedure described above \\
+
+  \code{commit-limit}
+  & 10,000
+  & a positive fixnum; the maximum number of \code{db:log}
+  entries to include when opening a lazy transaction \\
+\end{tabular}
+
+The \code{db:start\&link} procedure may return an \var{error} of
+\code{\#(db-error open
   \var{error} \var{filename})}, where \var{error} is a SQLite error
 pair.
 

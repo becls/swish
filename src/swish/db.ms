@@ -407,6 +407,8 @@
            (assert (= (statement-count) (+ stmts-before 1)))
            (catch (sqlite:bind s (list too-large))))))]
     [,@stmts-before (statement-count)]
+    [#(EXIT #(bad-arg db:start&link "options"))
+     (catch (db:start&link #f ":memory:" 'open "options"))]
     [,name (gensym)]
     [,_
      (db:start&link name ":memory:" 'open
@@ -743,6 +745,17 @@
              (pregexp-quote ")")))
           output)))
       data))))
+
+(db-mat check-options ()
+  (match-let*
+   ([,wrong-arity (lambda (x) x)]
+    [`(catch #(bad-arg init ,@wrong-arity))
+     (try (db:options [init wrong-arity]))]
+    [`(catch #(bad-arg init bogus))
+     (try (db:options [init 'bogus]))]
+    [`(catch #(bad-arg commit-limit 3.4))
+     (try (db:options [commit-limit 3.4]))])
+   'ok))
 
 (db-mat record-writers ()
   ;; database, statement, and bindings

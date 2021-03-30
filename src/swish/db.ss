@@ -36,6 +36,7 @@
    database?
    db:filename
    db:log
+   db:options
    db:start&link
    db:stop
    db:transaction
@@ -78,6 +79,7 @@
    (swish events)
    (swish gen-server)
    (swish io)
+   (swish options)
    (swish osi)
    (swish queue)
    (swish string-utils)
@@ -93,16 +95,35 @@
       [(#("wal")) 'ok]
       [(#(,mode)) (throw `#(bad-journal-mode ,mode))]))
 
+  (define (default-db-init filename mode db)
+    (when (and (eq? mode 'create)
+               (not (special-filename? filename)))
+      (init-wal db)))
+
+  (define-options db:options
+    (optional
+     [init
+      (default default-db-init)
+      (must-be (procedure/arity? #b1000))]
+     [commit-limit
+      (default 10000)
+      (must-be fixnum? fxpositive?)]))
+
   (define db:start&link
     (case-lambda
      [(name filename mode)
-      (db:start&link name filename mode
-        (if (and (eq? mode 'create)
-                 (not (special-filename? filename)))
-            init-wal
-            values))]
-     [(name filename mode db-init)
-      (gen-server:start&link name filename mode db-init)]))
+      (db:start&link name filename mode (db:options))]
+     [(name filename mode arg)
+      (gen-server:start&link name filename mode
+        (match arg
+          [`(<db:options>) arg]
+          [,db-init
+           (guard (procedure? db-init))
+           (db:options
+            [init
+             (lambda (filename mode db)
+               (db-init db))])]
+          [,_ (bad-arg 'db:start&link arg)]))]))
 
   (define (db:stop who)
     (gen-server:call who 'stop 'infinity))
@@ -143,9 +164,7 @@
       [#(ok ,result) result]
       [#(error ,reason) (throw reason)]))
 
-  (define commit-limit 10000)
-
-  (define-state-tuple <db-state> filename db cache queue worker)
+  (define-state-tuple <db-state> filename db cache queue worker commit-limit)
 
   (define-tuple <log> sql mbindings)
 
@@ -156,14 +175,15 @@
   (define SQLITE_OPEN_READWRITE 2)
   (define SQLITE_OPEN_CREATE 4)
 
-  (define (init filename mode db-init)
+  (define (init filename mode options)
+    (match-define `(<db:options> ,init ,commit-limit) options)
     (process-trap-exit #t)
     (let ([db (sqlite:open filename
                 (match mode
                   [open SQLITE_OPEN_READWRITE]
                   [create
                    (logor SQLITE_OPEN_READWRITE SQLITE_OPEN_CREATE)]))])
-      (match (try (db-init db))
+      (match (try (init filename mode db))
         [`(catch ,reason ,e)
          (sqlite:close db)
          (raise e)]
@@ -173,7 +193,8 @@
                [db db]
                [cache (make-cache)]
                [queue queue:empty]
-               [worker #f]))))
+               [worker #f]
+               [commit-limit commit-limit]))))
 
   (define (terminate reason state)
     (let ([x (try (flush state))])
@@ -224,25 +245,31 @@
           (let-values ([(work queue) (get-work queue state)])
             ($state copy [queue queue] [worker (spawn&link work)])))))
 
+  (define-syntax with-values
+    (syntax-rules ()
+      [(_ expr consumer)
+       (call-with-values (lambda () expr) consumer)]))
+
   (define (get-work queue state)
     (let ([head (queue:get queue)])
       (match head
         [`(<log>)
-         (let-values ([(logs queue count) (get-related-logs queue 0)])
-           (values (make-log-worker (cons head logs) count state) queue))]
+         (with-values (get-logs queue 0 ($state commit-limit))
+           (lambda (logs queue count)
+             (values (make-log-worker (cons head logs) count state) queue)))]
         [#(transaction ,f ,from)
          (values (make-transaction-worker f from state) (queue:drop queue))])))
 
-  (define (get-related-logs queue count)
+  (define (get-logs queue count commit-limit)
     (let ([queue (queue:drop queue)]
           [count (+ count 1)])
       (if (or (queue:empty? queue) (>= count commit-limit))
           (values '() queue count)
           (let ([head (queue:get queue)])
             (if (<log> is? head)
-                (let-values ([(logs queue count)
-                              (get-related-logs queue count)])
-                  (values (cons head logs) queue count))
+                (with-values (get-logs queue count commit-limit)
+                  (lambda (logs queue count)
+                    (values (cons head logs) queue count)))
                 (values '() queue count))))))
 
   (define (setup-worker db cache)
