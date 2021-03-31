@@ -158,6 +158,19 @@
          [`(EXIT ,@log-db bad-logger)
           'ok])))))
 
+(isolate-mat handler-already-set ()
+  (process-trap-exit #t)
+  (parameterize ([console-error-port (open-output-string)])
+    (on-exit (for-each stop '(log-db event-mgr))
+      (match-let*
+       ([#(ok ,log-db)
+         (parameterize ([log-file ":memory:"])
+           (start-event-mgr)
+           (log-db:start&link))]
+        [ok (event-mgr:set-log-handler (lambda (event) (void)) self)]
+        [#(error log-handler-already-set) (log-db:setup '())])
+       'ok))))
+
 (isolate-mat create ()
   (define db-file (path-combine (output-dir) (uuid->string (osi_make_uuid))))
   (process-trap-exit #t)
