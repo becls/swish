@@ -22,6 +22,8 @@
 
 (library (swish string-utils)
   (export
+   ct:join
+   ct:string-append
    ends-with-ci?
    ends-with?
    format-rfc2822
@@ -38,7 +40,30 @@
   (import
    (chezscheme)
    (swish erlang)
+   (swish meta)
    (swish pregexp))
+
+  (define-syntax (ct:string-append x)
+    (syntax-case x ()
+      [(_ s ...)
+       (replace-source x
+         (match (combine-adjacent string? string-append #'(s ...))
+           [() (datum->syntax #'_ "")]
+           [(,s) (guard (string? s)) (datum->syntax #'_ s)]
+           [,exprs #`(string-append #,@exprs)]))]))
+
+  (define-syntax (ct:join x)
+    (define (do-join sep ls)
+      (if (or (null? ls) (null? (cdr ls)))
+          ls
+          (list* (car ls) sep (do-join sep (cdr ls)))))
+    (syntax-case x ()
+      [(_ sep s ...)
+       (char? (datum sep))
+       #`(ct:string-append #,@(do-join (string (datum sep)) #'(s ...)))]
+      [(_ sep s ...)
+       (string? (datum sep))
+       #`(ct:string-append #,@(do-join (datum sep) #'(s ...)))]))
 
   (define join
     (case-lambda

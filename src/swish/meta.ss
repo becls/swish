@@ -25,6 +25,7 @@
   (export
    add-if-absent
    collect-clauses
+   combine-adjacent
    compound-id
    find-clause
    find-source
@@ -241,5 +242,24 @@
            (valid? #'rest (cons f seen)))]
         [() #t]
         [_ #f])))
+
+  ;; combine adjacent self-evaluating literals
+  (define (combine-adjacent pred? combine exprs)
+    (define (get-literal expr)
+      (if (identifier? expr)
+          (values #f #f)
+          (let ([datum (syntax->datum expr)])
+            (values (pred? datum) datum))))
+    (fold-right
+     (lambda (expr exprs)
+       (let-values ([(combine-first? first) (get-literal expr)])
+         (if (null? exprs)
+             (list (if combine-first? first expr))
+             (let-values ([(combine-second? second) (get-literal (car exprs))])
+               (if (and combine-first? combine-second?)
+                   (cons (combine first second) (cdr exprs))
+                   (cons expr exprs))))))
+     '()
+     (syntax->list exprs)))
 
   )

@@ -2851,6 +2851,31 @@ reason from Swish into an English string.
 
 The string utilities below are found in the \code{(swish
   string-utils)} library.
+% ----------------------------------------------------------------------------
+
+\defineentry{ct:join}
+\begin{syntax}
+  \code{(ct:join \var{sep} \var{s} \etc{})}
+\end{syntax}
+\expandsto{} a string or a call to \code{string-append}
+
+The \code{ct:join} macro uses \code{ct:string-append} to join adjacent string
+literals into a literal string or a call to \code{string-append} where adjacent
+string literals are combined.
+The \var{sep}, which must be a literal string or character, is inserted
+between adjacent elements of \var{s}~\etc{}.
+
+% ----------------------------------------------------------------------------
+\defineentry{ct:string-append}
+\begin{syntax}
+  \code{(ct:string-append \var{s} \etc{})}
+\end{syntax}
+\expandsto{} a string or a call to \code{string-append}
+
+The \code{ct:string-append} macro appends adjacent string literals
+at compile time and expands into the resulting literal string or a
+call to \code{string-append} where adjacent string literals are
+combined.
 
 % ----------------------------------------------------------------------------
 \defineentry{ends-with?}
