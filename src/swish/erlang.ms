@@ -1264,7 +1264,7 @@
        (lambda () (eval (read (open-input-string "(match 3 [#[foo] 4])"))))
        (lambda () (record-reader 'foo orig))))
    "invalid match pattern #[foo]")
-  (assert-syntax-error (define-tuple <point> (x y)) "invalid syntax")
+  (assert-syntax-error (define-tuple <point> (x y)) "invalid field")
   (assert-syntax-error (define-tuple <point> make) "invalid field")
   (assert-syntax-error (define-tuple <point> copy) "invalid field")
   (assert-syntax-error (define-tuple <point> copy*) "invalid field")
@@ -1359,7 +1359,7 @@
      (define-tuple <point> x y)
      (<point> open p [51 mustang])
      p)
-   "invalid syntax")
+   "invalid field")
   )
 
 (mat t9 ()

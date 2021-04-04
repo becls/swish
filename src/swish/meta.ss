@@ -39,6 +39,7 @@
    scdr
    snull?
    syntax-datum-eq?
+   valid-fields?
    windows?
    with-temporaries
    )
@@ -251,4 +252,20 @@
                     (with-syntax ([(actual-opt (... ...))
                                    (map expose (datum (opt (... ...))))])
                       #'(make-options (actual-opt val) (... ...))))]))))]))
+
+  (define (valid-fields? x f* known-fields forbidden)
+    (let valid? ([f* f*] [seen '()])
+      (syntax-case f* ()
+        [(fn . rest)
+         (let ([f (datum fn)])
+           (when (or (not (identifier? #'fn)) (memq f forbidden))
+             (syntax-violation #f "invalid field" x #'fn))
+           (when (memq f seen)
+             (syntax-violation #f "duplicate field" x #'fn))
+           (unless (or (not known-fields) (memq f known-fields))
+             (syntax-violation #f "unknown field" x #'fn))
+           (valid? #'rest (cons f seen)))]
+        [() #t]
+        [_ #f])))
+
   )
