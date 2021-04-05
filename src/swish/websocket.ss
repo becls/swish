@@ -39,44 +39,25 @@
    (swish http)
    (except (swish io) make-utf8-transcoder binary->utf8)
    (swish meta)
+   (swish options)
    (swish pregexp)
    (swish string-utils)
    )
 
-  (define fragmentation-size
-    (make-process-parameter 1048576
-      (lambda (x)
-        (unless (or (not x) (and (fixnum? x) (fx> x 0)))
-          (bad-arg 'fragmentation-size x))
-        x)))
-
-  (define maximum-message-size
-    (make-process-parameter 16777216
-      (lambda (x)
-        (unless (and (fixnum? x) (fx> x 0))
-          (bad-arg 'maximum-message-size x))
-        x)))
-
-  (define ping-frequency
-    (make-process-parameter 30000
-      (lambda (x)
-        (unless (and (fixnum? x) (fx> x 0))
-          (bad-arg 'ping-frequency x))
-        x)))
-
-  (define pong-timeout
-    (make-process-parameter 5000
-      (lambda (x)
-        (unless (and (fixnum? x) (fx> x 0))
-          (bad-arg 'pong-timeout x))
-        x)))
-
   (define-options ws:options
-    fragmentation-size
-    maximum-message-size
-    ping-frequency
-    pong-timeout
-    )
+    (optional
+     [fragmentation-size
+      (default 1048576)
+      (must-be (lambda (x) (or (not x) (and (fixnum? x) (fx> x 0)))))]
+     [maximum-message-size
+      (default 16777216)
+      (must-be fixnum? fxpositive?)]
+     [ping-frequency
+      (default 30000)
+      (must-be fixnum? fxpositive?)]
+     [pong-timeout
+      (default 5000)
+      (must-be fixnum? fxpositive?)]))
 
   ;; We override Scheme and Swish's default UTF-8 decoding by
   ;; raising exceptions upon failure.
@@ -341,7 +322,9 @@
                (throw 'websocket-protocol-violation)])]
             [else (throw `#(websocket-unknown-opcode ,opcode))])))))
 
-  (define (ws:established ip op masked? process)
+  (define (ws:established ip op masked? process options)
+    (match-define `(<ws:options> ,fragmentation-size ,maximum-message-size ,ping-frequency ,pong-timeout) options)
+
     ;; state :=
     ;;   #(closed ,code ,ws-reason-str)
     ;;   #(ping ,waketime)
@@ -408,7 +391,7 @@
       (flush-output-port op))
 
     (define (send-message-frame op opcode masked? payload)
-      (send-frame op opcode masked? (fragmentation-size) payload))
+      (send-frame op opcode masked? fragmentation-size payload))
 
     (define (send-close-frame op masked? code reason)
       ;; Do not fail
@@ -443,10 +426,10 @@
       `#(stop ,reason #(closed ,code ,ws-reason-str)))
 
     (define (next-ping-time)
-      (+ (erlang:now) (ping-frequency)))
+      (+ (erlang:now) ping-frequency))
 
     (define (next-pong-time)
-      (+ (erlang:now) (pong-timeout)))
+      (+ (erlang:now) pong-timeout))
 
     (define (no-reply state)
       (match state
@@ -463,10 +446,9 @@
     (process-trap-exit #t)
     (monitor process)
     (let ([reader (spawn&link
-                   (let ([me self]
-                         [limit (maximum-message-size)])
+                   (let ([me self])
                      (lambda ()
-                       (ws:read-loop ip limit
+                       (ws:read-loop ip maximum-message-size
                          (lambda (msg)
                            (send me `#(read ,self ,msg)))))))])
       (define (terminate reason state)
@@ -542,12 +524,11 @@
         [conn process?]
         [request (lambda (x) (<request> is? x))]
         [process process?]
-        [options procedure?])
+        [options (ws:options is?)])
       (handshake conn request)
       (http:switch-protocol
        (lambda (ip op)
-         (options)
-         (ws:established ip op #f process)))]))
+         (ws:established ip op #f process options)))]))
 
   (define ws:connect
     (case-lambda
@@ -559,12 +540,11 @@
         [port (lambda (x) (and (fixnum? x) (fx<= 0 x 65535)))]
         [request string?]
         [process process?]
-        [options procedure?])
+        [options (ws:options is?)])
       (let-values ([(ip op) (http-upgrade hostname port request)])
         (spawn
          (lambda ()
-           (options)
-           (ws:established ip op #t process))))]))
+           (ws:established ip op #t process options))))]))
 
   (define (ws:send who message)
     (gen-server:cast who
@@ -579,7 +559,7 @@
 
 #!eof mats
 
-(load-this-exposing '(ws:read-loop maximum-message-size))
+(load-this-exposing '(ws:read-loop))
 
 (import
  (swish websocket))
@@ -606,6 +586,6 @@
                    (set! index (+ index 1))
                    1))
                #f #f #f)])
-    (ws:read-loop ip (maximum-message-size)
+    (ws:read-loop ip (ws:options maximum-message-size (ws:options))
       (lambda (msg) (send me msg)))
     (receive [,@message 'ok])))

@@ -688,33 +688,33 @@
      [val "1"]))
   (match-let*
    ([#(EXIT #(bad-arg request-limit a))
-     (catch ((http:options [request-limit 'a])))]
+     (catch (http:options [request-limit 'a]))]
     [#(EXIT #(bad-arg request-limit 0))
-     (catch ((http:options [request-limit 0])))]
+     (catch (http:options [request-limit 0]))]
     [#(EXIT #(bad-arg request-timeout a))
-     (catch ((http:options [request-timeout 'a])))]
+     (catch (http:options [request-timeout 'a]))]
     [#(EXIT #(bad-arg request-timeout 0))
-     (catch ((http:options [request-timeout 0])))]
+     (catch (http:options [request-timeout 0]))]
     [#(EXIT #(bad-arg response-timeout a))
-     (catch ((http:options [response-timeout 'a])))]
+     (catch (http:options [response-timeout 'a]))]
     [#(EXIT #(bad-arg response-timeout 0))
-     (catch ((http:options [response-timeout 0])))]
+     (catch (http:options [response-timeout 0]))]
     [#(EXIT #(bad-arg header-limit a))
-     (catch ((http:options [header-limit 'a])))]
+     (catch (http:options [header-limit 'a]))]
     [#(EXIT #(bad-arg header-limit 0))
-     (catch ((http:options [header-limit 0])))]
+     (catch (http:options [header-limit 0]))]
     [#(EXIT #(bad-arg media-type-handler a))
-     (catch ((http:options [media-type-handler 'a])))]
+     (catch (http:options [media-type-handler 'a]))]
     [#(EXIT #(bad-arg media-type-handler 0))
-     (catch ((http:options [media-type-handler 0])))]
+     (catch (http:options [media-type-handler 0]))]
     [#(EXIT #(bad-arg file-transform a))
-     (catch ((http:options [file-transform 'a])))]
+     (catch (http:options [file-transform 'a]))]
     [#(EXIT #(bad-arg file-transform 0))
-     (catch ((http:options [file-transform 0])))]
+     (catch (http:options [file-transform 0]))]
     [#(EXIT #(bad-arg file-search-extensions a))
-     (catch ((http:options [file-search-extensions 'a])))]
+     (catch (http:options [file-search-extensions 'a]))]
     [#(EXIT #(bad-arg file-search-extensions 0))
-     (catch ((http:options [file-search-extensions 0])))]
+     (catch (http:options [file-search-extensions 0]))]
     [#f (http:find-header "None" header)]
     [#f (http:find-header 'None header)]
     [#(EXIT #(bad-arg http:find-header 0))
@@ -1299,21 +1299,21 @@
 (http-mat websocket-bad-args ()
   (match-let*
    ([#(EXIT #(bad-arg fragmentation-size a))
-     (catch ((ws:options [fragmentation-size 'a])))]
+     (catch (ws:options [fragmentation-size 'a]))]
     [#(EXIT #(bad-arg fragmentation-size 0))
-     (catch ((ws:options [fragmentation-size 0])))]
+     (catch (ws:options [fragmentation-size 0]))]
     [#(EXIT #(bad-arg maximum-message-size a))
-     (catch ((ws:options [maximum-message-size 'a])))]
+     (catch (ws:options [maximum-message-size 'a]))]
     [#(EXIT #(bad-arg maximum-message-size 0))
-     (catch ((ws:options [maximum-message-size 0])))]
+     (catch (ws:options [maximum-message-size 0]))]
     [#(EXIT #(bad-arg ping-frequency a))
-     (catch ((ws:options [ping-frequency 'a])))]
+     (catch (ws:options [ping-frequency 'a]))]
     [#(EXIT #(bad-arg ping-frequency 0))
-     (catch ((ws:options [ping-frequency 0])))]
+     (catch (ws:options [ping-frequency 0]))]
     [#(EXIT #(bad-arg pong-timeout a))
-     (catch ((ws:options [pong-timeout 'a])))]
+     (catch (ws:options [pong-timeout 'a]))]
     [#(EXIT #(bad-arg pong-timeout 0))
-     (catch ((ws:options [pong-timeout 0])))]
+     (catch (ws:options [pong-timeout 0]))]
     [#(EXIT #(bad-arg ws:upgrade a))
      (catch (ws:upgrade 'a 'b 'c))]
     [#(EXIT #(bad-arg ws:upgrade a))

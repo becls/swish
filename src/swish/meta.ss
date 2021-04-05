@@ -26,7 +26,6 @@
    add-if-absent
    collect-clauses
    compound-id
-   define-options
    find-clause
    find-source
    get-clause
@@ -227,31 +226,6 @@
                   (display " " os)
                   (pretty (syntax->datum form) os))
                 (get-output-string os))))))))]))
-
-  (define-syntax (make-options x)
-    (syntax-case x ()
-      [(_ [param-expr val-expr] ...)
-       (with-syntax ([(param ...) (generate-temporaries #'(param-expr ...))]
-                     [(val ...) (generate-temporaries #'(val-expr ...))])
-         #'(let ([param param-expr] ... [val val-expr] ...)
-             (lambda () (param val) ... (void))))]))
-
-  (define-syntax (define-options x)
-    (syntax-case x ()
-      [(_ name option ...)
-       #`(define-syntax name
-           (let ()
-             (define (expose k)
-               (case k [(option) #'option] ...))
-             (lambda (x)
-               (syntax-case x ()
-                 [(_ [opt val] (... ...))
-                  (begin
-                    (collect-clauses x #'([opt val] (... ...))
-                      (datum (option ...)))
-                    (with-syntax ([(actual-opt (... ...))
-                                   (map expose (datum (opt (... ...))))])
-                      #'(make-options (actual-opt val) (... ...))))]))))]))
 
   (define (valid-fields? x f* known-fields forbidden)
     (let valid? ([f* f*] [seen '()])

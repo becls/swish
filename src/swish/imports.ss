@@ -47,6 +47,7 @@
     (swish json)
     (swish log-db)
     (swish meta)
+    (swish options)
     (swish osi)
     (swish pregexp)
     (swish queue)

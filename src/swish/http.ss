@@ -66,6 +66,7 @@
    (swish io)
    (swish json)
    (swish meta)
+   (swish options)
    (swish osi)
    (swish pregexp)
    (swish string-utils)
@@ -73,63 +74,38 @@
    (swish watcher)
    )
 
-  (define request-limit
-    (make-process-parameter 8192
-      (lambda (x)
-        (unless (and (fixnum? x) (fx> x 0))
-          (bad-arg 'request-limit x))
-        x)))
+  (define-syntax define-process-parameter-options
+    (syntax-rules ()
+      [(_ options-name install-params [param kv ...] ...)
+       (begin
+         (define param (make-process-parameter #f)) ...
+         (define-options options-name
+           (optional [param kv ...] ...))
+         (define (install-params options)
+           (param (options-name param options)) ...))]))
 
-  (define request-timeout
-    (make-process-parameter 30000
-      (lambda (x)
-        (unless (and (fixnum? x) (fx> x 0))
-          (bad-arg 'request-timeout x))
-        x)))
-
-  (define response-timeout
-    (make-process-parameter 60000
-      (lambda (x)
-        (unless (and (fixnum? x) (fx> x 0))
-          (bad-arg 'response-timeout x))
-        x)))
-
-  (define header-limit
-    (make-process-parameter 1048576
-      (lambda (x)
-        (unless (and (fixnum? x) (fx> x 0))
-          (bad-arg 'header-limit x))
-        x)))
-
-  (define media-type-handler
-    (make-process-parameter (lambda (ext) #f)
-      (lambda (x)
-        (unless (procedure? x)
-          (bad-arg 'media-type-handler x))
-        x)))
-
-  (define file-transform
-    (make-process-parameter (lambda (path) #f)
-      (lambda (x)
-        (unless (procedure? x)
-          (bad-arg 'file-transform x))
-        x)))
-
-  (define file-search-extensions
-    (make-process-parameter '(".html")
-      (lambda (x)
-        (unless (and (list? x) (andmap string? x))
-          (bad-arg 'file-search-extensions x))
-        x)))
-
-  (define-options http:options
-    file-search-extensions
-    file-transform
-    header-limit
-    media-type-handler
-    request-limit
-    request-timeout
-    response-timeout
+  (define-process-parameter-options http:options install-options
+    [file-search-extensions
+     (default '(".html"))
+     (must-be list? (lambda (ls) (andmap string? ls)))]
+    [file-transform
+     (default (lambda (path) #f))
+     (must-be procedure?)]
+    [header-limit
+     (default 1048576)
+     (must-be fixnum? fxpositive?)]
+    [media-type-handler
+     (default (lambda (ext) #f))
+     (must-be procedure?)]
+    [request-limit
+     (default 8192)
+     (must-be fixnum? fxpositive?)]
+    [request-timeout
+     (default 30000)
+     (must-be fixnum? fxpositive?)]
+    [response-timeout
+     (default 60000)
+     (must-be fixnum? fxpositive?)]
     )
 
   (define-syntax http:add-file-server
@@ -146,9 +122,8 @@
       (let ([mth (http:make-default-media-type-handler dir)])
         (http:configure-server name port
           (http:make-default-file-url-handler dir)
-          (lambda ()
-            (media-type-handler mth)
-            (options))))]))
+          (http:options copy options
+            [media-type-handler mth])))]))
 
   (define-syntax http:add-server
     (syntax-rules ()
@@ -165,7 +140,7 @@
         [name (lambda (x) (or (eq? x #f) (symbol? x)))]
         [port (lambda (x) (and (fixnum? x) (fx<= 0 x 65535)))]
         [url-handler procedure?]
-        [options procedure?])
+        [options (http:options is?)])
       `(#(,(gensym "http-sup")
           ,(lambda ()
              (supervisor:start&link #f 'one-for-one 10 10000
@@ -230,7 +205,7 @@
                 `#(ok ,(spawn&link
                         (lambda ()
                           (cache-manager cache-mgr)
-                          (options)
+                          (install-options options)
                           (match-let*
                            ([#(ok ,conn)
                              (conn:start&link cache-mgr ip op options)])
@@ -326,7 +301,7 @@
       ;; Important for the conn not to trap exits, since it may get
       ;; killed when a timeout occurs.
       (cache-manager cache-mgr)
-      (options)
+      (install-options options)
       `#(ok ,(<conn> make
                [input 'ready]
                [output 'dirty])))
@@ -575,7 +550,7 @@
          pid)))
     (define (init)
       (process-trap-exit #t)
-      (options)
+      (install-options options)
       `#(ok ,(<http-cache> make
                [cookie 0]
                [mime-types #f]
