@@ -1691,6 +1691,19 @@
 (mat native-record ()
   (with-cp0-disabled
    ;; define-record-type
+   (assert-syntax-error
+    (let ()
+      ;; match needs the rtd at expand time, but define-record-type does not
+      ;; construct the rtd at expand time because the record type is generative,
+      ;; i.e., it lacks the (nongenerative) clause; for details, see
+      ;; Chez Scheme's s/syntax.ss.
+      (define-record-type foo (fields a))
+      (match 123 [`(foo) #f]))
+    "unknown type foo in `(foo)")
+   (let ()
+     ;; define-record-type creates rtd at expand time; match finds it
+     (define-record-type foo (nongenerative) (fields a))
+     (match (make-foo 1) [`(foo) #t]))
    (let ()
      (define-record-type foo
        (nongenerative)
