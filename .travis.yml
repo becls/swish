@@ -6,7 +6,7 @@ jobs:
     # macOS
     - env: TARGET_MACHINE=a6osx
       os: osx
-    - env: TARGET_MACHINE=a6osx CHEZ_BRANCH=master
+    - env: TARGET_MACHINE=a6osx CHEZ_BRANCH=main
       os: osx
     - env: TARGET_MACHINE=ta6osx
       os: osx
@@ -46,7 +46,7 @@ jobs:
             - libsystemd-dev
       before_script:
         - sudo sysctl net.ipv6.conf.all.disable_ipv6=0
-    - env: TARGET_MACHINE=a6le CHEZ_BRANCH=master
+    - env: TARGET_MACHINE=a6le CHEZ_BRANCH=main
       os: linux
       addons:
         apt:
@@ -79,7 +79,7 @@ jobs:
       before_script:
         - git config core.autocrlf false; rm .git/index; git reset --hard
         - choco install make -y
-    - env: TARGET_MACHINE=a6nt CHEZ_BRANCH=master
+    - env: TARGET_MACHINE=a6nt CHEZ_BRANCH=main
       os: windows
       before_script:
         - git config core.autocrlf false; rm .git/index; git reset --hard
