@@ -753,6 +753,10 @@
      (try (db:options [init wrong-arity]))]
     [`(catch #(bad-arg init bogus))
      (try (db:options [init 'bogus]))]
+    [`(catch #(bad-arg cache-timeout -1))
+     (try (db:options [cache-timeout -1]))]
+    [`(catch #(bad-arg cache-timeout whenever))
+     (try (db:options [cache-timeout 'whenever]))]
     [`(catch #(bad-arg commit-delay -3))
      (try (db:options [commit-delay -3]))]
     [`(catch #(bad-arg commit-delay none))
@@ -827,6 +831,32 @@
              (print-row id ts1 ts2 (- ts2 ts1))
              (assert (<= delay-ms (- ts2 ts1) (* 2 delay-ms))))]))
       (execute "select id, queued, actual from log order by rowid asc")))))
+
+(db-mat cache-timeout ()
+  (match-let*
+   ([,op (open-output-string)]
+    [,_ (console-error-port op)]
+    [,_ (console-output-port op)]
+    [#(ok ,db)
+     (db:start&link #f ":memory:" 'create
+       (db:options
+        [cache-timeout 0]))]
+    [,stmts-before (statement-count)]
+    [ok
+     (transaction db
+       (execute "create table data(x)")
+       (execute "insert into data(x) values(?)" 1)
+       (execute "insert into data(x) values(?)" 2)
+       (execute "insert into data(x) values(?)" 3)
+       'ok)]
+    [ok (db:log db "insert into data(x) values(4)")]
+    [ok (db:log db "insert into data(x) values(?)" 5)]
+    [(#(1) #(2) #(3) #(4) #(5))
+     (transaction db
+       (execute "select x from data order by rowid asc"))]
+    [ok (receive (after 10 'ok))]
+    [,@stmts-before (statement-count)])
+   'ok))
 
 (db-mat record-writers ()
   ;; database, statement, and bindings

@@ -118,9 +118,14 @@ guardian via \code{make-foreign-handle-guardian}.
 (define-record-type cache
   (fields
    (immutable ht)
+   (immutable expire-timeout)
    (mutable waketime)
    (mutable lazy-objects)))
   \end{alltt}\antipar
+  The \code{expire-timeout} is the duration in milliseconds that
+  entries live in the cache. This is configurable using the
+  \code{cache-timeout} option.
+
   The \code{waketime} is the next time the cache will attempt to
   remove dead entries.
 
@@ -302,6 +307,11 @@ The following options may be used:
   where \var{db} is a database record instance;
   the default \code{init} procedure is equivalent to
   the default \var{db-init} procedure described above \\
+
+  \code{cache-timeout}
+  & 5 minutes
+  & a nonnegative fixnum; the number of milliseconds before
+  unreferenced statements expire from the statement cache \\
 
   \code{commit-delay}
   & 0

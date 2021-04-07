@@ -105,6 +105,9 @@
      [init
       (default default-db-init)
       (must-be (procedure/arity? #b1000))]
+     [cache-timeout
+      (default (* 5 60 1000))
+      (must-be fixnum? fxnonnegative?)]
      [commit-delay
       (default 0)
       (must-be fixnum? fxnonnegative?)]
@@ -180,7 +183,7 @@
   (define SQLITE_OPEN_CREATE 4)
 
   (define (init filename mode options)
-    (match-define `(<db:options> ,init ,commit-delay ,commit-limit) options)
+    (match-define `(<db:options> ,init ,cache-timeout ,commit-delay ,commit-limit) options)
     (process-trap-exit #t)
     (let ([db (sqlite:open filename
                 (match mode
@@ -195,7 +198,7 @@
       `#(ok ,(<db-state> make
                [filename filename]
                [db db]
-               [cache (make-cache)]
+               [cache (make-cache cache-timeout)]
                [queue queue:empty]
                [worker #f]
                [commit-delay commit-delay]
@@ -376,19 +379,18 @@
 
   ;; Cache
 
-  (define cache-timeout (* 5 60 1000))
-
   (define-record-type cache
     (nongenerative)
     (sealed #t)
     (fields
      (immutable ht)
+     (immutable expire-timeout)
      (mutable waketime)
      (mutable lazy-objects))
     (protocol
      (lambda (new)
-       (lambda ()
-         (new (make-hashtable string-hash string=?) #f '())))))
+       (lambda (expire-timeout)
+         (new (make-hashtable string-hash string=?) expire-timeout #f '())))))
 
   (define-record-type entry
     (nongenerative)
@@ -402,19 +404,19 @@
          (new stmt (erlang:now))))))
 
   (define (get-statement sql)
-    (let* ([cache (statement-cache)]
-           [ht (cache-ht cache)])
-      (cond
-       [(hashtable-ref ht sql #f) =>
-        (lambda (entry)
-          (entry-timestamp-set! entry (erlang:now))
-          (entry-stmt entry))]
-       [else
-        (let ([stmt (sqlite:prepare (current-database) sql)])
-          (hashtable-set! ht sql (make-entry stmt))
-          (unless (cache-waketime cache)
-            (cache-waketime-set! cache (+ (erlang:now) cache-timeout)))
-          stmt)])))
+    (match (statement-cache)
+      [,(cache <= `(cache ,expire-timeout ,ht ,waketime))
+       (cond
+        [(hashtable-ref ht sql #f) =>
+         (lambda (entry)
+           (entry-timestamp-set! entry (erlang:now))
+           (entry-stmt entry))]
+        [else
+         (let ([stmt (sqlite:prepare (current-database) sql)])
+           (hashtable-set! ht sql (make-entry stmt))
+           (unless waketime
+             (cache-waketime-set! cache (+ (erlang:now) expire-timeout)))
+           stmt)])]))
 
   (define (finalize-lazy-objects cache)
     (for-each
@@ -425,22 +427,23 @@
      (cache-lazy-objects cache))
     (cache-lazy-objects-set! cache '()))
 
-  (define (remove-dead-entries cache)
-    (let ([dead (- (erlang:now) cache-timeout)]
-          [ht (cache-ht cache)]
-          [oldest #f])
-      (let-values ([(keys vals) (hashtable-entries ht)])
-        (vector-for-each
-         (lambda (key val)
-           (let ([timestamp (entry-timestamp val)])
-             (cond
-              [(<= timestamp dead)
-               (hashtable-delete! ht key)
-               (sqlite:finalize (entry-stmt val))]
-              [(or (not oldest) (< timestamp oldest))
-               (set! oldest timestamp)])))
-         keys vals))
-      (cache-waketime-set! cache (and oldest (+ oldest cache-timeout)))))
+  (define (remove-dead-entries the-cache)
+    (match-let*
+     ([`(cache ,expire-timeout ,ht) the-cache]
+      [,dead (- (erlang:now) expire-timeout)]
+      [,oldest #f])
+     (let-values ([(keys vals) (hashtable-entries ht)])
+       (vector-for-each
+        (lambda (key val)
+          (let ([timestamp (entry-timestamp val)])
+            (cond
+             [(<= timestamp dead)
+              (hashtable-delete! ht key)
+              (sqlite:finalize (entry-stmt val))]
+             [(or (not oldest) (< timestamp oldest))
+              (set! oldest timestamp)])))
+        keys vals))
+     (cache-waketime-set! the-cache (and oldest (+ oldest expire-timeout)))))
 
   ;; Low-level SQLite interface
 
