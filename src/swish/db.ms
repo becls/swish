@@ -880,3 +880,18 @@
     ["#<bindings>" (format "~s" mbindings)]
     )
    'ok))
+
+(db-mat expire-cache ()
+  (match-let*
+   ([#(ok ,db) (db:start&link #f ":memory:" 'create)]
+    [,stmts-before (statement-count)])
+   (transaction db
+     (execute "CREATE TABLE table1 (col1, col2, col3)")
+     (execute "INSERT INTO table1 (col1, col2, col3) VALUES(?,?,?)" 1 2 3)
+     (execute "INSERT INTO table1 (col1, col2, col3) VALUES(?,?,?)" 4 5 6))
+   ;; BEGIN IMMEDIATE, COMMIT, CREATE, INSERT
+   (assert (= (statement-count) (+ stmts-before 4)))
+   (db:expire-cache db)
+   ;; Only BEGIN IMMEDIATE, COMMIT remain.
+   (assert (= (statement-count) (+ stmts-before 2)))
+   (db:stop db)))

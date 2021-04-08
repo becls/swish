@@ -356,6 +356,17 @@ exiting.  This is a suitable alternative to starting a
 SQLite connection, and you do not need to cache prepared SQL
 statements.
 
+\defineentry{db:expire-cache}
+\begin{procedure}
+  \code{(db:expire-cache \var{who})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{db:expire-cache} procedure enqueues a request to remove
+entries from the statement cache regardless of their expiration
+time. \code{BEGIN IMMEDIATE} and \code{COMMIT} remain in the cache
+because they are used frequently.
+
 \defineentry{db:filename}
 \begin{procedure}
   \code{(db:filename \var{who})}

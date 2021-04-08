@@ -34,6 +34,7 @@
    database-create-time
    database-filename
    database?
+   db:expire-cache
    db:filename
    db:log
    db:options
@@ -170,6 +171,12 @@
       [#(ok ,result) result]
       [#(error ,reason) (throw reason)]))
 
+  (define (db:expire-cache who)
+    (transaction who
+      (remove-dead-entries (statement-cache)
+        (lambda (key)
+          (not (member key '("BEGIN IMMEDIATE" "COMMIT")))))))
+
   (define-state-tuple <db-state>
     filename db cache queue worker commit-delay commit-limit log-timeout)
 
@@ -237,7 +244,7 @@
     (match msg
       [timeout
        (when (queue:empty? queue)
-         (remove-dead-entries cache))
+         (remove-dead-entries cache (lambda (key) #f)))
        (no-reply state)]
       [`(EXIT ,@worker normal) (no-reply ($state copy [worker #f]))]
       [`(EXIT ,_pid ,reason ,e) `#(stop ,e ,($state copy [worker #f]))]))
@@ -427,7 +434,7 @@
      (cache-lazy-objects cache))
     (cache-lazy-objects-set! cache '()))
 
-  (define (remove-dead-entries the-cache)
+  (define (remove-dead-entries the-cache expire-now?)
     (match-let*
      ([`(cache ,expire-timeout ,ht) the-cache]
       [,dead (- (erlang:now) expire-timeout)]
@@ -437,7 +444,7 @@
         (lambda (key val)
           (let ([timestamp (entry-timestamp val)])
             (cond
-             [(<= timestamp dead)
+             [(or (<= timestamp dead) (expire-now? key))
               (hashtable-delete! ht key)
               (sqlite:finalize (entry-stmt val))]
              [(or (not oldest) (< timestamp oldest))

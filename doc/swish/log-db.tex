@@ -52,8 +52,9 @@ also calls \code{event-mgr:flush-buffer}. This causes the event
 manager to stop buffering startup events and the \code{log-db} to
 log the events that were buffered.
 
-Finally, setup sends a \code{<system-attributes>} event so that
-\code{log-db} receives and logs it.
+Setup sends a \code{<system-attributes>} event so that \code{log-db}
+receives and logs it. Finally, setup calls \code{db:expire-cache} to
+release the schema definition queries.
 
 Once the \code{log-db} gen-server has been setup, it continues to
 receive events from the system event manager. It converts events that

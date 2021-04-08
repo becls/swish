@@ -80,6 +80,7 @@
                [os-release release]
                [os-version version]
                [os-machine machine])])
+          (db:expire-cache 'log-db)
           'ignore]
          [,error error])]
       [,error error]))
