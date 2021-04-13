@@ -49,8 +49,8 @@ To facilitate logging, the \code{db} gen-server can execute SQL statements
 asynchronously. It enqueues SQL statements submitted via \code{db:log} and
 executes them by opening a transaction lazily when an explicit transaction is
 enqueued, when a \var{worker} process exits normally, or when the \code{db}
-message queue is empty.
-To maintain responsiveness, each lazy transaction commits at most 10,000 queued \code{db:log} requests.
+message queue is empty and \code{commit-delay} has elapsed since enqueuing
+a \code{db:log} request in an empty queue.
 To maintain responsiveness, each lazy transaction commits at most \code{commit-limit} \code{db:log} requests.
 See \code{db:options} on page~\pageref{db:options} for details.
 By default, each database is created with write-ahead logging enabled
@@ -302,6 +302,11 @@ The following options may be used:
   where \var{db} is a database record instance;
   the default \code{init} procedure is equivalent to
   the default \var{db-init} procedure described above \\
+
+  \code{commit-delay}
+  & 0
+  & a nonnegative fixnum; the number of milliseconds
+  to wait before opening a lazy transaction \\
 
   \code{commit-limit}
   & 10,000

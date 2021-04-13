@@ -753,9 +753,80 @@
      (try (db:options [init wrong-arity]))]
     [`(catch #(bad-arg init bogus))
      (try (db:options [init 'bogus]))]
+    [`(catch #(bad-arg commit-delay -3))
+     (try (db:options [commit-delay -3]))]
+    [`(catch #(bad-arg commit-delay none))
+     (try (db:options [commit-delay 'none]))]
     [`(catch #(bad-arg commit-limit 3.4))
      (try (db:options [commit-limit 3.4]))])
    'ok))
+
+(define (julian->timestamp j)
+  ;; based on example at https://sqlite.org/lang_datefunc.html
+  (exact (round (* (- j 2440587.5) 86400 1000))))
+
+(db-mat commit-delay ()
+  (match-let*
+   ([,op (open-output-string)]
+    [,_ (console-error-port op)]
+    [,_ (console-output-port op)]
+    [,delay-ms 250]
+    [,expected '(1 3 7 25)]
+    [#(ok ,db)
+     (db:start&link #f ":memory:" 'create
+       (db:options
+        [commit-delay delay-ms]
+        [commit-limit 10000]))]
+    [ok
+     (transaction db
+       (execute "create table log(id,queued,actual)")
+       'ok)]
+    [,sql "insert into log(id,queued,actual) values(?,?,julianday('now'))"]
+    [,_ (gen-server:debug db '(message) '())]
+    [,rev-actual '()]
+    [,me self]
+    [,_ (event-mgr:add-handler
+         (let ([log 0])
+           (define-tuple <log> sql mbindings)
+           (lambda (x)
+             (match x
+               [`(<gen-server-debug> [type 2] [message `(<log>)])
+                (set! log (+ log 1))]
+               [`(<gen-server-debug> [type 3] [message `(EXIT ,worker ,r)])
+                (set! rev-actual (cons log rev-actual))
+                (set! log 0)
+                (send me 'worker-finished)]
+               [#(,@me waiting) (send me 'in-sync)]
+               [,_ (void)]))))]
+    [ok
+     (let insert ([i 0] [rows expected])
+       (match rows
+         [() 'ok]
+         [(,n . ,rows)
+          (do ([j 0 (fx+ j 1)]) ((fx= j n))
+            (db:log db sql (fx+ i j) (erlang:now)))
+          ;; wait for the commit-delay
+          (receive (after delay-ms 'ok))
+          ;; now wait for the worker to complete
+          (receive (after 2000 (throw 'timeout-waiting-for-worker))
+            [worker-finished 'ok])
+          (insert (fx+ i n) rows)]))]
+    [,_ (event-mgr:notify `#(,self waiting))]
+    [ok (receive [in-sync 'ok])]
+    [,@expected (reverse rev-actual)])
+   (define (print-row id ts1 ts2 delta)
+     (when (getenv "DEBUG")
+       (printf "~3a ~13a ~13a ~5a\n" id ts1 ts2 delta)))
+   (transaction db
+     (print-row "id" "queued" "actual" "delta")
+     (for-each
+      (lambda (v)
+        (match v
+          [#(,id ,ts1 ,julian)
+           (let ([ts2 (julian->timestamp julian)])
+             (print-row id ts1 ts2 (- ts2 ts1))
+             (assert (<= delay-ms (- ts2 ts1) (* 2 delay-ms))))]))
+      (execute "select id, queued, actual from log order by rowid asc")))))
 
 (db-mat record-writers ()
   ;; database, statement, and bindings

@@ -105,6 +105,9 @@
      [init
       (default default-db-init)
       (must-be (procedure/arity? #b1000))]
+     [commit-delay
+      (default 0)
+      (must-be fixnum? fxnonnegative?)]
      [commit-limit
       (default 10000)
       (must-be fixnum? fxpositive?)]))
@@ -164,7 +167,8 @@
       [#(ok ,result) result]
       [#(error ,reason) (throw reason)]))
 
-  (define-state-tuple <db-state> filename db cache queue worker commit-limit)
+  (define-state-tuple <db-state>
+    filename db cache queue worker commit-delay commit-limit log-timeout)
 
   (define-tuple <log> sql mbindings)
 
@@ -176,7 +180,7 @@
   (define SQLITE_OPEN_CREATE 4)
 
   (define (init filename mode options)
-    (match-define `(<db:options> ,init ,commit-limit) options)
+    (match-define `(<db:options> ,init ,commit-delay ,commit-limit) options)
     (process-trap-exit #t)
     (let ([db (sqlite:open filename
                 (match mode
@@ -194,7 +198,9 @@
                [cache (make-cache)]
                [queue queue:empty]
                [worker #f]
-               [commit-limit commit-limit]))))
+               [commit-delay commit-delay]
+               [commit-limit commit-limit]
+               [log-timeout #f]))))
 
   (define (terminate reason state)
     (let ([x (try (flush state))])
@@ -217,33 +223,48 @@
   (define (handle-cast msg state)
     (match msg
       [`(<log>)
-       (no-reply ($state copy* [queue (queue:add msg queue)]))]))
+       (no-reply/delay
+        ($state copy*
+          [queue (queue:add msg queue)]
+          [commit-delay commit-delay]
+          [log-timeout (or log-timeout (+ (erlang:now) commit-delay))]))]))
 
   (define (handle-info msg state)
-    (let ([pid ($state worker)])
-      (match msg
-        [timeout
-         (remove-dead-entries ($state cache))
-         (no-reply state)]
-        [`(EXIT ,@pid normal) (no-reply ($state copy [worker #f]))]
-        [`(EXIT ,_pid ,reason ,e) `#(stop ,e ,($state copy [worker #f]))])))
+    ($state open [cache queue worker])
+    (match msg
+      [timeout
+       (when (queue:empty? queue)
+         (remove-dead-entries cache))
+       (no-reply state)]
+      [`(EXIT ,@worker normal) (no-reply ($state copy [worker #f]))]
+      [`(EXIT ,_pid ,reason ,e) `#(stop ,e ,($state copy [worker #f]))]))
 
   (define (no-reply state)
     (let ([state (update state)])
       `#(no-reply ,state ,(get-timeout state))))
 
+  (define (no-reply/delay state)
+    (if (fxzero? ($state commit-delay))
+        (no-reply state)
+        `#(no-reply ,state ,(get-timeout state))))
+
   (define (get-timeout state)
+    ($state open [cache log-timeout worker])
     (cond
-     [($state worker) 'infinity]
-     [(cache-waketime ($state cache))]
+     [worker 'infinity]
+     [log-timeout]
+     [(cache-waketime cache)]
      [else 'infinity]))
 
   (define (update state)
     (match-let* ([`(<db-state> ,queue ,worker) state])
       (if (or worker (queue:empty? queue))
           state
-          (let-values ([(work queue) (get-work queue state)])
-            ($state copy [queue queue] [worker (spawn&link work)])))))
+          (let-values ([(queue work) (get-work queue state)])
+            ($state copy
+              [queue queue]
+              [log-timeout (if (queue:empty? queue) #f ($state log-timeout))]
+              [worker (spawn&link work)])))))
 
   (define-syntax with-values
     (syntax-rules ()
@@ -256,9 +277,11 @@
         [`(<log>)
          (with-values (get-logs queue 0 ($state commit-limit))
            (lambda (logs queue count)
-             (values (make-log-worker (cons head logs) count state) queue)))]
+             (values queue
+               (make-log-worker (cons head logs) count state))))]
         [#(transaction ,f ,from)
-         (values (make-transaction-worker f from state) (queue:drop queue))])))
+         (values (queue:drop queue)
+           (make-transaction-worker f from state))])))
 
   (define (get-logs queue count commit-limit)
     (let ([queue (queue:drop queue)]
