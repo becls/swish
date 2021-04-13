@@ -26,6 +26,7 @@
    $migrate-pid-columns
    <event-logger>
    coerce
+   create-prune-on-insert-trigger
    create-table
    define-simple-events
    json-stack->string
@@ -328,6 +329,21 @@
         (format "case when [~a] is null then null else ':' || [~a] end"
           column column))))
 
+  (define (create-prune-on-insert-trigger table column prune-max-days prune-limit)
+    (arg-check 'create-prune-on-insert-trigger
+      [prune-max-days fixnum? fxnonnegative?]
+      [prune-limit fixnum? fxpositive?])
+    (execute
+     (format
+      (ct:join #\newline
+        "create temporary trigger prune_~a after insert on ~:*~a"
+        "begin"
+        "  delete from ~:*~a"
+        "  where rowid in"
+        "   (select rowid from ~:*~a where ~a < new.~:*~a - ~d limit ~d);"
+        "end")
+      table column (* prune-max-days 24 60 60 1000) prune-limit)))
+
   (module (swish-event-logger)
     (define schema-name 'swish)
     (define schema-version "2020-10-01")
@@ -415,16 +431,11 @@
       )
 
     (define (create-db)
-      (define max-days 90)
-      (define (create-prune-on-insert-trigger table column)
-        (execute
-         (format "create temporary trigger prune_~a after insert on ~:*~a begin delete from ~:*~a where rowid in (select rowid from ~:*~a where ~a < new.~:*~a - ~d limit 10); end"
-           table column (* max-days 24 60 60 1000))))
 
       (define-syntax create-prune-on-insert-triggers
         (syntax-rules ()
           [(_ (table column) ...)
-           (begin (create-prune-on-insert-trigger 'table 'column) ...)]))
+           (begin (create-prune-on-insert-trigger 'table 'column 90 10) ...)]))
 
       (define (create-index name sql)
         (execute (format "create index if not exists ~a on ~a" name sql)))

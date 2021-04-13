@@ -263,6 +263,21 @@ The argument \var{x} is a Scheme object mapped to a SQLite value.
 interprets as NULL.  Other values are converted to string using
 \code{write}.
 
+\defineentry{create-prune-on-insert-trigger}
+\begin{procedure}
+  \code{(create-prune-on-insert-trigger \var{table} \var{column} \var{max-days} \var{limit})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{create-prune-on-insert-trigger} procedure should be called
+only within a thunk \var{f} provided to \code{db:transaction}.
+It creates a temporary trigger that prunes, after an insert, up to
+\var{limit} rows of the specified \var{table} where the \code{erlang:now}
+timestamp in \var{column} is older than \var{max-days}.
+\var{max-days} must be a nonnegative fixnum, and
+\var{limit} must be a positive fixnum.
+To keep insert operations fast, \var{column} should be indexed.
+
 \defineentry{stack->json}
 \begin{procedure}
   \code{(stack->json \var{k} \opt{\var{max-depth}})}

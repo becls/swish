@@ -333,5 +333,10 @@
     [`(catch #(bad-arg json-stack->string ,@op))
      (try (json-stack->string op empty-stack))]
     [`(catch #(bad-arg json-stack->string 123))
-     (try (json-stack->string (open-output-string) 123))])
+     (try (json-stack->string (open-output-string) 123))]
+    [`(catch #(bad-arg create-prune-on-insert-trigger -1))
+     (try (create-prune-on-insert-trigger 'table 'column -1 10))]
+    [`(catch #(bad-arg create-prune-on-insert-trigger 0))
+     (try (create-prune-on-insert-trigger 'table 'column 44 0))]
+    )
    'ok))
