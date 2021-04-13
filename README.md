@@ -24,6 +24,18 @@ is not thread safe and should be used from the main thread only.
 Swish follows the [semantic versioning](http://semver.org/)
 scheme, starting with 2.0.0 to avoid confusion with internal projects.
 
+Odd minor-version numbers are used for development. As such,
+we are extremely unlikely to use a patch number other than 0 during
+development.
+
+Even minor-version numbers are used for official tagged
+releases.
+
+The first commit after an official tagged release should increment
+either the minor-version or patch-version number so that the version
+number for an official tagged release corresponds to a unique commit
+hash.
+
 # Notes
 
 1. install the prerequisites (see Build System Requirements)
