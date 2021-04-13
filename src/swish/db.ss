@@ -213,14 +213,17 @@
                [log-timeout #f]))))
 
   (define (terminate reason state)
-    (let ([x (try (flush state))])
-      (vector-for-each (lambda (e) (sqlite:finalize (entry-stmt e)))
-        (hashtable-values (cache-ht ($state cache))))
-      (finalize-lazy-objects ($state cache))
-      (sqlite:close ($state db))
+    (let* ([x (try (flush (update state)))]
+           [y (try
+               (vector-for-each (lambda (e) (sqlite:finalize (entry-stmt e)))
+                 (hashtable-values (cache-ht ($state cache))))
+               (finalize-lazy-objects ($state cache))
+               (sqlite:close ($state db)))])
       (match x
-        [`(catch ,reason ,e) (raise e)]
-        [,_ 'ok])))
+        [`(catch ,_ ,e) (raise e)]
+        [,_ (match y
+              [`(catch ,_ ,e) (raise e)]
+              [,_ 'ok])])))
 
   (define (handle-call msg from state)
     (match msg
@@ -246,8 +249,17 @@
        (when (queue:empty? queue)
          (remove-dead-entries cache (lambda (key) #f)))
        (no-reply state)]
-      [`(EXIT ,@worker normal) (no-reply ($state copy [worker #f]))]
-      [`(EXIT ,_pid ,reason ,e) `#(stop ,e ,($state copy [worker #f]))]))
+      [`(DOWN ,_ ,@worker ,reason ,e)
+       (let ([state ($state copy [worker #f])])
+         (if (eq? reason 'normal)
+             (no-reply state)
+             `#(stop ,e ,state)))]
+      [`(DOWN ,_ ,_ ,_ ,_) (no-reply state)]
+      [`(EXIT ,pid ,_ ,e)
+       ;; The DOWN message will process the worker.
+       (if (eq? pid worker)
+           (no-reply state)
+           `#(stop ,e ,state))]))
 
   (define (no-reply state)
     (let ([state (update state)])
@@ -271,10 +283,12 @@
       (if (or worker (queue:empty? queue))
           state
           (let-values ([(queue work) (get-work queue state)])
-            ($state copy
-              [queue queue]
-              [log-timeout (if (queue:empty? queue) #f ($state log-timeout))]
-              [worker (spawn&link work)])))))
+            (let ([worker (spawn work)])
+              (monitor worker)
+              ($state copy
+                [queue queue]
+                [log-timeout (if (queue:empty? queue) #f ($state log-timeout))]
+                [worker worker]))))))
 
   (define-syntax with-values
     (syntax-rules ()
@@ -341,14 +355,40 @@
           (execute-with-retry-on-busy "COMMIT")
           (vector-for-each sqlite:unmarshal-bindings vbind)))))
 
+  (define (shutdown pid)
+    ;; The worker may contain misbehaving code. Use the
+    ;; shutdown protocol similar to supervisors.
+    (kill pid 'shutdown)
+    (receive
+     (after 1000
+       (kill pid 'kill)
+       (receive
+        [`(DOWN ,_ ,@pid ,_ ,e)
+         (raise e)]))
+     [`(DOWN ,_ ,@pid ,reason ,e)
+      (unless (memq reason '(normal shutdown))
+        (raise e))]))
+
+  (define (stop-worker pid db)
+    ;; The C thread may be working on a slow or never-ending
+    ;; query. Interrupt and allow a brief time for context
+    ;; switches.
+    (define busy? (sqlite:interrupt db))
+    (receive (after (if busy? 100 0) (shutdown pid))
+      [`(DOWN ,_ ,@pid ,reason ,e)
+       (unless (eq? reason 'normal)
+         (raise e))]))
+
   (define (flush state)
-    (cond
-     [($state worker) =>
-      (lambda (pid)
-        (receive
-         [`(EXIT ,@pid normal) (flush (update ($state copy [worker #f])))]
-         [`(EXIT ,@pid ,reason ,e) (raise e)]))]
-     [else state]))
+    (let ([pid ($state worker)])
+      (when pid
+        ;; Allow the worker enough time to complete default
+        ;; commit-limit inserts.
+        (receive (after 1000 (stop-worker pid ($state db)))
+          [`(DOWN ,_ ,@pid ,reason ,e)
+           (if (eq? reason 'normal)
+               (flush (update ($state copy [worker #f])))
+               (raise e))]))))
 
   (define ($execute sql bindings)
     (sqlite:execute (get-statement sql) bindings))

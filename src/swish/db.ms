@@ -156,6 +156,13 @@
           (populate bv 0)
           (loop (- n 1) (cons bv ls))))))
 
+(define (assert-stmt-counts before)
+  (let ([after (statement-count)])
+    (unless (= before after)
+      (errorf 'assert-stmt-counts
+        "statement counts didn't match, before ~a and after ~a\n"
+        before after))))
+
 (print-unicode #f)
 
 (db-mat marshal ()
@@ -404,7 +411,7 @@
        (execute-sql db "create table data(x)")
        (let ([s (sqlite:prepare db "insert into data(x) values(?)")])
          (on-exit (sqlite:finalize s)
-           (assert (= (statement-count) (+ stmts-before 1)))
+           (assert-stmt-counts (+ stmts-before 1))
            (catch (sqlite:bind s (list too-large))))))]
     [,@stmts-before (statement-count)]
     [#(EXIT #(bad-arg db:start&link "options"))
@@ -699,6 +706,218 @@
       (guard (> count 0))
       'ok])))
 
+(define (do-transaction trans-proc)
+  (match-let*
+   ([,me self]
+    [,stmts-before (statement-count)]
+    [#(ok ,db) (db:start&link #f ":memory:" 'create)])
+   (spawn
+    (lambda ()
+      ;; Fire up a transaction that may not complete, with a live
+      ;; statement.
+      (transaction db
+        (trans-proc (lambda () (send me 'ready))))))
+   (receive [ready 'ok])
+   ;; Give the transaction some time to start executing
+   (receive (after 10 'ok))
+   (unlink db)
+   (db:stop db)
+   (assert-stmt-counts stmts-before)))
+
+(db-mat terminate-live-statement ()
+  (do-transaction
+   (lambda (ready)
+     (ready)
+     (execute "SELECT 1")
+     (receive))))
+
+(db-mat terminate-live-statement-trap-exit ()
+  (do-transaction
+   (lambda (ready)
+     (process-trap-exit #t)
+     (ready)
+     (execute "SELECT 1")
+     (receive))))
+
+(db-mat transaction-link ()
+  (do-transaction
+   (lambda (ready)
+     (link (process-parent))
+     (ready)
+     (execute "SELECT 1")
+     (receive))))
+
+(db-mat transaction-link-error ()
+  (do-transaction
+   (lambda (ready)
+     (link (process-parent))
+     (ready)
+     (execute "SELECT 1")
+     (throw 'boom!))))
+
+(db-mat transaction-unlink ()
+  (do-transaction
+   (lambda (ready)
+     (unlink (process-parent))
+     (ready)
+     (execute "SELECT 1")
+     (receive))))
+
+(db-mat transaction-unlink-trap-exit ()
+  (do-transaction
+   (lambda (ready)
+     (process-trap-exit #t)
+     (unlink (process-parent))
+     (ready)
+     (execute "SELECT 1")
+     (receive))))
+
+(db-mat trap-exit-succeed-after-shutdown ()
+  (do-transaction
+   (lambda (ready)
+     (process-trap-exit #t)
+     (ready)
+     (execute "SELECT 1")
+     (receive [`(EXIT ,_ shutdown) 'done]))))
+
+(db-mat trap-exit-succeed-after-shutdown-with-busy ()
+  (do-transaction
+   (lambda (ready)
+     (process-trap-exit #t)
+     (ready)
+     (try
+      (execute
+       (string-append
+        "with recursive ints(n) as\n"
+        " ( select 1 union all select n + 1 from ints )\n"
+        "select max(n) from ints")))
+     (receive [`(EXIT ,_ shutdown) 'done]))))
+
+(db-mat terminate-live-trap-exit-alternate-error ()
+  (match-let*
+   ([,me self]
+    [,stmts-before (statement-count)]
+    [#(ok ,db) (db:start&link #f ":memory:" 'create)])
+   (spawn
+    (lambda ()
+      (transaction db
+        (process-trap-exit #t)
+        (send me 'ready)
+        (execute "SELECT 1")
+        (receive [`(EXIT ,_ shutdown) (execute "ROLLBACK")]))))
+   (receive [ready 'ok])
+   (spawn
+    (lambda ()
+      (transaction db
+        (execute "SELECT 1"))
+      (send me 'second-transaction-completed)))
+   (receive (after 10 'ok))
+
+   (unlink db)
+   (db:stop db)
+   (receive (after 10 'ok)
+     [second-transaction-completed
+      (throw 'transaction-should-not-have-completed)])
+   (assert-stmt-counts stmts-before)))
+
+(db-mat terminate-while-busy ()
+  (do-transaction
+   (lambda (ready)
+     (ready)
+     (execute
+      (string-append
+       "with recursive ints(n) as\n"
+       " ( select 1 union all select n + 1 from ints )\n"
+       "select max(n) from ints")))))
+
+(db-mat terminate-while-busy-extended ()
+  ;; Query runs forever. Gets interrupted. Foolishly, someone caught
+  ;; the error and tried to rollback the transaction and causes a
+  ;; failure outside of user-code.
+  (do-transaction
+   (lambda (ready)
+     (ready)
+     (try
+      (execute
+       (string-append
+        "with recursive ints(n) as\n"
+        " ( select 1 union all select n + 1 from ints )\n"
+        "select max(n) from ints")))
+     (execute "ROLLBACK"))))
+
+(db-mat terminate-bad-transaction ()
+  (match-let*
+   ([,me self]
+    [,stmts-before (statement-count)]
+    [#(ok ,db) (db:start&link #f ":memory:" 'create)]
+    [,_ (process-trap-exit #t)]
+    [,pid (spawn&link
+           (lambda ()
+             ;; Fire up a transaction that jumps the gun by doing the
+             ;; rollback that the gen-server will do when the transaction
+             ;; crashes.
+             (transaction db
+               (execute "ROLLBACK")
+               (send me 'crashing)
+               (throw 'crashed))))])
+   (receive [crashing 'ok])
+   (receive
+    [`(EXIT ,@db #(db-error step (sqlite3_step ,_ . ,_) "ROLLBACK")) 'ok])
+   (receive
+    [`(EXIT ,@pid #(#(db-error step (sqlite3_step ,_ . ,_) "ROLLBACK")
+                    #(gen-server call ,_)))
+     'ok])
+   (assert-stmt-counts stmts-before)))
+
+(db-mat errant-messages ()
+  (match-let*
+   ([#(ok ,db) (db:start&link #f ":memory:" 'create)]
+    ;; This is more for coverage than an actual test. It is unlikely
+    ;; that we get an errant DOWN message, but if we do, the db
+    ;; gen-server should survive.
+    [,m (monitor (spawn (lambda () (throw 'boom!))))]
+    [,msg (receive [,(msg <= `(DOWN ,@m ,_ ,_ ,_)) msg])]
+    [,_ (send db msg)]
+    [(#(1)) (transaction db (execute "SELECT 1"))]
+    [,m (monitor (spawn (lambda () 'done)))]
+    [,msg (receive [,(msg <= `(DOWN ,@m ,_ ,_ ,_)) msg])]
+    [,_ (send db msg)]
+    [(#(1)) (transaction db (execute "SELECT 1"))]
+    ;; The db gen-server should ignore EXIT message from worker.
+    [#t (transaction db (kill db 'howdy))]
+    [(#(1)) (transaction db (execute "SELECT 1"))]
+    ;; If the db gen-server receives an EXIT message from a process
+    ;; other than worker, it should terminate.
+    [,me self]
+    [,_ (unlink db)]
+    [,_ (spawn (lambda () (kill db 'bye) (send me 'ready)))]
+    [ok (receive [ready 'ok])]
+    [,m (monitor db)])
+   (receive (after 100 (throw 'timeout))
+     [`(DOWN ,@m ,@db bye) 'ok])))
+
+(db-mat flush-queue ()
+  ;; check that we flush lazy transactions on terminate
+  (match-let*
+   ([,op (open-output-string)]
+    [,_ (console-error-port op)]
+    [,_ (console-output-port op)]
+    [#(ok ,db1)
+     (db:start&link #f "file::memory:?cache=shared" 'create
+       (db:options
+        [commit-delay 5000]))]
+    [#(ok ,db2)
+     (db:start&link #f "file::memory:?cache=shared" 'open)]
+    [ok
+     (transaction db1
+       (execute "create table data(x)")
+       'ok)]
+    [ok (db:log db1 "insert into data(x) values(?)" 1)]
+    [() (transaction db2 (execute "select * from data"))]
+    [stopped (db:stop db1)]
+    [(#(1)) (transaction db2 (execute "select * from data"))])
+   'ok))
+
 (isolate-mat crash ()
   ;; Explicitly not using db-mat form because we want to build an
   ;; event-mgr that dumps output to the console.
@@ -796,7 +1015,7 @@
              (match x
                [`(<gen-server-debug> [type 2] [message `(<log>)])
                 (set! log (+ log 1))]
-               [`(<gen-server-debug> [type 3] [message `(EXIT ,worker ,r)])
+               [`(<gen-server-debug> [type 3] [message `(DOWN ,_ ,worker ,r)])
                 (set! rev-actual (cons log rev-actual))
                 (set! log 0)
                 (send me 'worker-finished)]
@@ -890,8 +1109,8 @@
      (execute "INSERT INTO table1 (col1, col2, col3) VALUES(?,?,?)" 1 2 3)
      (execute "INSERT INTO table1 (col1, col2, col3) VALUES(?,?,?)" 4 5 6))
    ;; BEGIN IMMEDIATE, COMMIT, CREATE, INSERT
-   (assert (= (statement-count) (+ stmts-before 4)))
+   (assert-stmt-counts (+ stmts-before 4))
    (db:expire-cache db)
    ;; Only BEGIN IMMEDIATE, COMMIT remain.
-   (assert (= (statement-count) (+ stmts-before 2)))
+   (assert-stmt-counts (+ stmts-before 2))
    (db:stop db)))

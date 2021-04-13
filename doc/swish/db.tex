@@ -39,7 +39,7 @@ Definitive Guide to SQLite~\cite{sqlite-guide}.
 
 The \code{db} gen-server serializes internal requests to the
 database.  For storage and retrieval of data, each transaction is
-processed in turn by a separate linked \var{worker} process.  The gen-server does
+processed in turn by a separate monitored \var{worker} process.  The gen-server does
 not block waiting for this process to finish so that it can maintain
 linear performance by keeping its inbox short. The return value of the
 transaction is returned to the caller or an error is generated without
@@ -213,14 +213,20 @@ processes messages matching the following patterns:
 
 \antipar\begin{itemize}
 
-\item \code{timeout}: Remove old entries from the statement cache.
+\item \code{timeout}: If the request queue is empty, remove old
+  entries from the statement cache. Process the queue.
 
-\item \code{`(EXIT \var{worker-pid} normal)}: The worker finished
-  the previous request successfully. Process the queue.
+\item \code{`(DOWN \_ \var{worker-pid} \var{reason} \var{e})}: The
+  worker finished the previous request. If successful, process the
+  queue. Otherwise, flush the queue and stop with the fault \var{e}.
 
-\item \code{`(EXIT \var{worker-pid} \var{reason})}: The worker
-  failed to process the previous request. Flush the queue and stop
-  with \var{reason}.
+\item \code{`(DOWN \_ \_ \_)}: Ignore the unexpected \code{DOWN}
+  message. Process the queue.
+
+\item \code{`(EXIT \var{pid} \_ \var{e})}: If the \var{pid} is the
+  worker, ignore the message. Do not update the state. A follow-up
+  \code{DOWN} message will process the queue. Otherwise, flush the
+  queue, and stop with the fault \var{e}.
 
 \end{itemize}
 
