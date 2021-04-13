@@ -34,6 +34,7 @@
    log-db:setup
    log-db:start&link
    log-db:version
+   make-swish-event-logger
    stack->json
    swish-event-logger
    )
@@ -329,10 +330,13 @@
         (format "case when [~a] is null then null else ':' || [~a] end"
           column column))))
 
-  (define (create-prune-on-insert-trigger table column prune-max-days prune-limit)
-    (arg-check 'create-prune-on-insert-trigger
+  (define (check-prune-args who prune-max-days prune-limit)
+    (arg-check who
       [prune-max-days fixnum? fxnonnegative?]
-      [prune-limit fixnum? fxpositive?])
+      [prune-limit fixnum? fxpositive?]))
+
+  (define (create-prune-on-insert-trigger table column prune-max-days prune-limit)
+    (check-prune-args 'create-prune-on-insert-trigger prune-max-days prune-limit)
     (execute
      (format
       (ct:join #\newline
@@ -344,7 +348,7 @@
         "end")
       table column (* prune-max-days 24 60 60 1000) prune-limit)))
 
-  (module (swish-event-logger)
+  (module (make-swish-event-logger swish-event-logger)
     (define schema-name 'swish)
     (define schema-version "2020-10-01")
 
@@ -430,12 +434,15 @@
        (sql text))
       )
 
-    (define (create-db)
+    (define (init-db prune-max-days prune-limit)
 
       (define-syntax create-prune-on-insert-triggers
         (syntax-rules ()
           [(_ (table column) ...)
-           (begin (create-prune-on-insert-trigger 'table 'column 90 10) ...)]))
+           (begin
+             (create-prune-on-insert-trigger 'table 'column
+               prune-max-days prune-limit)
+             ...)]))
 
       (define (create-index name sql)
         (execute (format "create index if not exists ~a on ~a" name sql)))
@@ -489,7 +496,7 @@
 
     (define (upgrade-db)
       (match (log-db:version schema-name)
-        [,@schema-version (create-db)]
+        [,@schema-version 'ok]
         ["2020-09-01"
          (execute "alter table system_attributes add column os_system text default null")
          (execute "alter table system_attributes add column os_release text default null")
@@ -582,10 +589,21 @@
          (upgrade-db)]
         [#f
          (log-db:version schema-name schema-version)
-         (create-db)]
+         (upgrade-db)]
         [,version (throw `#(unsupported-db-version ,schema-name ,version))]))
 
-    (define swish-event-logger
-      (<event-logger> make [setup upgrade-db] [log log-simple-event]))
-    )
+    (define make-swish-event-logger
+      (case-lambda
+       [() (make-swish-event-logger 90 10)]
+       [(prune-max-days prune-limit)
+        (check-prune-args 'make-swish-event-logger prune-max-days prune-limit)
+        (<event-logger> make
+          [setup
+           (lambda ()
+             (upgrade-db)
+             (init-db prune-max-days prune-limit))]
+          [log log-simple-event])]))
+
+    (define swish-event-logger (make-swish-event-logger)))
+
   )

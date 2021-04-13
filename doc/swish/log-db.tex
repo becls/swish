@@ -63,6 +63,7 @@ not recognize are ignored.
 The tables are pruned using insert triggers to hold 90 days of
 information. To keep the insert operations fast, the timestamp columns
 are indexed, and the pruning deletes no more than 10 rows per insert.
+See \hyperref[make-swish-event-logger]{\code{make-swish-event-logger}}.
 
 \subsection {Extensions}
 
@@ -179,14 +180,31 @@ associated with \var{name} in the database.
 database file. The \code{log-db:get-instance-id} function caches and
 returns that identifier.
 
+\defineentry{make-swish-event-logger}
+\begin{property}
+  \code{(make-swish-event-logger \opt{\var{prune-max-days} \var{prune-limit}})}
+  \label{make-swish-event-logger}
+\end{property}
+
+The \code{make-swish-event-logger} procedure returns
+an \code{<event-logger>} tuple that defines the schema
+for Swish events.
+It uses the name \code{swish} to store its schema version.
+The optional \var{prune-max-days} and \var{prune-limit} arguments are passed to
+\code{create-prune-on-insert-trigger} when initializing the Swish event log
+tables.
+The default \var{prune-max-days} is 90.
+The default \var{prune-limit} is 10.
+
 \defineentry{swish-event-logger}
 \begin{property}
   \code{swish-event-logger}
 \end{property}
 
 The \code{swish-event-logger} is an \code{<event-logger>} tuple
-that defines the schema for Swish events. It uses the name
-\code{swish} to store its schema version.
+created by calling \code{(make-swish-event-logger)}.
+
+% TODO deprecate swish-event-logger binding?
 
 \defineentry{create-table}
 \begin{syntax}\begin{alltt}

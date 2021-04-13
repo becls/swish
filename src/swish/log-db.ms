@@ -171,6 +171,40 @@
         [#(error log-handler-already-set) (log-db:setup '())])
        'ok))))
 
+(isolate-mat prune-trigger ()
+  (process-trap-exit #t)
+  (on-exit (for-each stop '(log-db event-mgr))
+    (match-let*
+     ([#(ok ,log-db)
+       (parameterize ([log-file ":memory:"])
+         (start-event-mgr)
+         (log-db:start&link))]
+      [,max-days 1]
+      [,logger (make-swish-event-logger max-days 10)]
+      [`(<event-logger> ,setup ,log) logger]
+      [ignore (log-db:setup (list logger))]
+      [,now (erlang:now)]
+      [,msg (<child-end> make
+              [timestamp now]
+              [pid self]
+              [killed 0]
+              [reason "arbitrary"]
+              [details #f])]
+      [,_ (log msg)]
+      [,_ (log (<child-end> copy* msg
+                 [timestamp (- now (* max-days 24 60 60 1000) 1)]
+                 [reason "ancient"]))]
+      [(#("ancient") #("arbitrary"))
+       (transaction log-db
+         (execute "select reason from child_end order by timestamp asc"))]
+      [,_ (log (<child-end> copy* msg
+                 [timestamp (+ now 1000)]
+                 [reason "future"]))]
+      [(#("arbitrary") #("future"))
+       (transaction log-db
+         (execute "select reason from child_end order by timestamp asc"))])
+     'ok)))
+
 (isolate-mat create ()
   (define db-file (path-combine (output-dir) (uuid->string (osi_make_uuid))))
   (process-trap-exit #t)
@@ -338,5 +372,9 @@
      (try (create-prune-on-insert-trigger 'table 'column -1 10))]
     [`(catch #(bad-arg create-prune-on-insert-trigger 0))
      (try (create-prune-on-insert-trigger 'table 'column 44 0))]
+    [`(catch #(bad-arg make-swish-event-logger -1))
+     (try (make-swish-event-logger -1 10))]
+    [`(catch #(bad-arg make-swish-event-logger 0))
+     (try (make-swish-event-logger 44 0))]
     )
    'ok))
