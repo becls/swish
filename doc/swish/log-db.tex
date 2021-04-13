@@ -172,6 +172,13 @@ supports the following options:
   a procedure of one argument, an event, that logs the
   event if it recognizes it and otherwise ignores it \\
 
+  \code{tolerate-fault?}
+  & \code{(lambda (\var{event}) \#f)}
+  & a procedure of one argument, an event,
+  that returns true if \code{event-mgr} should tolerate
+  the fault in \code{log} for that event
+  or false if \code{event-mgr} should kill \code{log-db} \\
+
 \end{tabular}
 
 \defineentry{log-db:version}

@@ -58,10 +58,16 @@
 
   (define-tuple <event-logger> setup log)
 
+  (define (succumb event) #f)
+
   (define-options log-db:event-logger
     (required
      [setup (must-be (procedure/arity? #b1))]
-     [log (must-be (procedure/arity? #b10))]))
+     [log (must-be (procedure/arity? #b10))])
+    (optional
+     [tolerate-fault?
+      (default succumb)
+      (must-be (procedure/arity? #b10))]))
 
   (define log-db:start&link
     (case-lambda
@@ -81,18 +87,25 @@
 
   (define (log-db:setup loggers)
     (define event-loggers (map ->event-logger loggers))
-    (module (log-event)
+    (module (log-event endure-logger-fault?)
       (define (->vec f) (list->vector (map f event-loggers)))
       (define log* (->vec (log-db:event-logger log)))
+      (define endure* (->vec (log-db:event-logger tolerate-fault?)))
+      (define tolerate-fault? succumb)
+      (define (endure-logger-fault? e) (tolerate-fault? e))
       (define (log-event e)
+        (set! tolerate-fault? succumb)
         (vector-for-each
-         (lambda (log) (log e))
-         log*)))
+         (lambda (log endure?)
+           (set! tolerate-fault? endure?)
+           (log e))
+         log* endure*)))
     (match (db:transaction 'log-db (lambda () (setup-db event-loggers)))
       [#(ok ,_)
        (match (event-mgr:set-log-handler
                log-event
-               (whereis 'log-db))
+               (whereis 'log-db)
+               endure-logger-fault?)
          [ok
           (event-mgr:flush-buffer)
           (match (get-uname)

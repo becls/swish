@@ -171,6 +171,73 @@
         [#(error log-handler-already-set) (log-db:setup '())])
        'ok))))
 
+(isolate-mat log-handler-endures ()
+  (define me self)
+  (define strikes 0)
+  (define (make-logger who)
+    (lambda (x)
+      (match x
+        [(crash ,@who) (raise `(fail ,who))]
+        [,_ (send me (cons who x))])))
+  (process-trap-exit #t)
+  (parameterize ([console-error-port (open-output-string)])
+    (on-exit (for-each stop '(log-db event-mgr))
+      (match-let*
+       ([#(ok ,log-db)
+         (parameterize ([log-file ":memory:"])
+           (start-event-mgr)
+           (log-db:start&link))]
+        [ignore
+         (log-db:setup
+          (list
+           (log-db:event-logger
+            [setup void]
+            [log (make-logger 'logger-1)]
+            [tolerate-fault? (lambda (e) #t)])
+           ;; legacy logger
+           (<event-logger> make
+             [setup void]
+             [log (make-logger 'logger-2)])
+           (log-db:event-logger
+            [setup void]
+            [log (make-logger 'logger-3)]
+            [tolerate-fault?
+             (lambda (e)
+               (set! strikes (+ strikes 1))
+               (< strikes 3))])))]
+        [(logger-1 . `(<system-attributes>)) (receive [,x x])]
+        [(logger-2 . `(<system-attributes>)) (receive [,x x])]
+        [(logger-3 . `(<system-attributes>)) (receive [,x x])]
+        [nothing (receive (until 0 'nothing) [,x x])]
+        [ok (event-mgr:notify 'safe)]
+        [(logger-1 . safe) (receive [,x x])]
+        [(logger-2 . safe) (receive [,x x])]
+        [(logger-3 . safe) (receive [,x x])]
+        [nothing (receive (until 0 'nothing) [,x x])]
+        ;; logger-1 shielded from error, so log-db survives
+        [ok (event-mgr:notify '(crash logger-1))]
+        ;; crash in logger-1 so we never get to logger-2 or logger-3
+        [nothing (receive (until 0 'nothing) [,x x])]
+        ;; logger-3 tolerates strike 1, so log-db survives
+        [ok (event-mgr:notify '(crash logger-3))]
+        [(logger-1 crash logger-3) (receive [,x x])]
+        [(logger-2 crash logger-3) (receive [,x x])]
+        [nothing (receive (until 0 'nothing) [,x x])]
+        [1 strikes]
+        ;; logger-3 tolerates strike 2, so log-db survives
+        [ok (event-mgr:notify '(crash logger-3))]
+        [(logger-1 crash logger-3) (receive [,x x])]
+        [(logger-2 crash logger-3) (receive [,x x])]
+        [nothing (receive (until 0 'nothing) [,x x])]
+        [2 strikes]
+        ;; logger-2 is NOT shielded from error, so log goes down
+        [ok (event-mgr:notify '(crash logger-2))]
+        [(logger-1 crash logger-2) (receive [,x x])]
+        [`(EXIT ,@log-db (fail logger-2)) (receive [,x x])]
+        [nothing (receive (until 0 'nothing) [,x x])]
+        [2 strikes])
+       'ok))))
+
 (isolate-mat prune-trigger ()
   (process-trap-exit #t)
   (on-exit (for-each stop '(log-db event-mgr))
@@ -384,5 +451,10 @@
      (try (log-db:event-logger [setup "xyz"] [log values]))]
     [`(catch #(bad-arg log "rhythm"))
      (try (log-db:event-logger [setup void] [log "rhythm"]))]
+    [`(catch #(bad-arg tolerate-fault? "andreas"))
+     (try (log-db:event-logger
+           [setup void]
+           [log values]
+           [tolerate-fault? "andreas"]))]
     )
    'ok))
