@@ -50,8 +50,14 @@
   (define (event-mgr:flush-buffer)
     (gen-server:call 'event-mgr 'flush-buffer))
 
-  (define (event-mgr:set-log-handler proc owner)
-    (gen-server:call 'event-mgr `#(set-log-handler ,proc ,owner)))
+  (define (succumb event) #f)
+
+  (define event-mgr:set-log-handler
+    (case-lambda
+     [(proc owner)
+      (event-mgr:set-log-handler proc owner succumb)]
+     [(proc owner endure?)
+      (gen-server:call 'event-mgr `#(set-log-handler ,proc ,owner ,endure?))]))
 
   (define (event-mgr:start&link)
     (gen-server:start&link 'event-mgr))
@@ -62,6 +68,7 @@
   (define-state-tuple <event-mgr-state>
     event-buffer                        ; #f | (event ...)
     log-handler                         ; <handler> | #f
+    endure?                             ; (lambda (e) ...)
     handlers                            ; (<handler> ...)
     )
 
@@ -72,6 +79,7 @@
     `#(ok ,(<event-mgr-state> make
              [event-buffer '()]
              [log-handler #f]
+             [endure? succumb]
              [handlers '()])))
 
   (define (terminate reason state)
@@ -94,7 +102,7 @@
                             ,(<handler> make [proc proc] [owner owner]))]))])]
       [flush-buffer
        `#(reply ok ,(do-flush-buffer state))]
-      [#(set-log-handler ,proc ,owner)
+      [#(set-log-handler ,proc ,owner ,endure?)
        (cond
         [($state log-handler)
          `#(reply #(error log-handler-already-set) ,state)]
@@ -102,12 +110,15 @@
          `#(reply #(error #(invalid-procedure ,proc)) ,state)]
         [(not (process? owner))
          `#(reply #(error #(invalid-owner ,owner)) ,state)]
+        [(not (procedure? endure?))
+         `#(reply #(error #(invalid-procedure ,endure?)) ,state)]
         [else
          (link owner)
          (reset-console-event-handler)
          `#(reply ok
              ,($state copy
-                [log-handler (<handler> make [proc proc] [owner owner])]))])]
+                [log-handler (<handler> make [proc proc] [owner owner])]
+                [endure? endure?]))])]
       [unregister
        (unregister 'event-mgr)
        `#(reply ok ,state)]))
@@ -134,7 +145,7 @@
 
   (define (do-notify event state)
     (match state
-      [`(<event-mgr-state> [event-buffer #f] ,log-handler ,handlers)
+      [`(<event-mgr-state> [event-buffer #f] ,log-handler ,handlers ,endure?)
        (for-each
         (lambda (h)
           (match (try ((<handler> proc h) event))
@@ -145,10 +156,15 @@
         [log-handler
          (match (try ((<handler> proc log-handler) event))
            [`(catch ,reason ,e)
-            (unlink (<handler> owner log-handler))
-            (kill (<handler> owner log-handler) e)
             (console-event-handler event)
-            ($state copy [log-handler #f])]
+            (match (try (and (endure? event) #t))
+              [#t
+               (console-event-handler e)
+               state]
+              [,_
+               (unlink (<handler> owner log-handler))
+               (kill (<handler> owner log-handler) e)
+               ($state copy [log-handler #f])])]
            [,_ state])]
         [else
          (console-event-handler event)

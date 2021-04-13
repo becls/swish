@@ -230,6 +230,7 @@
       [#(error #(invalid-owner bar)) (event-mgr:add-handler (lambda (x) x) 'bar)]
       [#(error #(invalid-procedure foo)) (event-mgr:set-log-handler 'foo self)]
       [#(error #(invalid-owner bar)) (event-mgr:set-log-handler (lambda (x) x) 'bar)]
+      [#(error #(invalid-procedure baz)) (event-mgr:set-log-handler values self 'baz)]
       [,pid (spawn&link (lambda () (receive)))]
       [ok (event-mgr:set-log-handler (lambda (x) (raise x)) pid)]
       [#(error log-handler-already-set) (event-mgr:set-log-handler (lambda (x) x) self)])
@@ -238,7 +239,76 @@
        [`(EXIT ,@pid crash) 'ok])
      (match-regexps '(seek "^Date: " "^Timestamp: " "^Event: crash")
        (split (get-output-string op) #\newline))
-     'ok)))
+     (assert (process? (whereis 'event-mgr))))))
+
+;; log handler fails for certain events, but is configured to endure
+(event-mgr-mat log-handler-endures ()
+  (define op (open-output-string))
+  (parameterize ([console-error-port op])
+    (stop-event-mgr)
+    (event-mgr:start&link)
+    (event-mgr:flush-buffer)
+    ;; do not trap exit: crash the test if event-mgr kills pid with the raised
+    ;; condition
+    (match-let*
+     ([,pid (spawn&link (lambda () (receive)))]
+      [,me self]
+      [ok (event-mgr:set-log-handler
+           (lambda (x)
+             (unless (number? x)
+               (raise `#(unhandled-event ,x)))
+             (send me x))
+           pid
+           (lambda (e) #t))])
+     (for-each event-mgr:notify '(1 2 3 crash 4 5 6))
+     (for-each
+      (lambda (x)
+        (match (receive [,x x])
+          [,@x 'ok]))
+      '(1 2 3 4 5 6))
+     (match-regexps
+      '(seek
+        "^Date: " "^Timestamp: " "^Event: crash"
+        seek
+        "^Date: " "^Timestamp: " "^Event: #\\(unhandled-event crash\\)")
+      (split (get-output-string op) #\newline))
+     (assert (process? (whereis 'event-mgr))))))
+
+;; log handler endure? predicate fails
+(event-mgr-mat log-handler-shield-fails ()
+  (define op (open-output-string))
+  (parameterize ([console-error-port op])
+    (stop-event-mgr)
+    (event-mgr:start&link)
+    (event-mgr:flush-buffer)
+    (process-trap-exit #t)
+    (match-let*
+     ([,pid (spawn&link (lambda () (receive)))]
+      [,me self]
+      [ok (event-mgr:set-log-handler
+           (lambda (x)
+             (unless (number? x)
+               (raise `#(unhandled-event ,x)))
+             (send me x))
+           pid
+           (lambda (e)
+             (send me 'saving-throw)
+             (raise 'shield-failed)))])
+     (for-each event-mgr:notify '(1 2 3 crash 4 5 6))
+     (for-each
+      (lambda (x)
+        (match (receive [,x x])
+          [,@x 'ok]))
+      '(1 2 3 saving-throw))
+     (receive (after 1000 (throw 'timeout))
+      [`(EXIT ,@pid #(unhandled-event crash)) 'ok])
+     (match-regexps
+      '(seek "^Date: " "^Timestamp: " "^Event: crash"
+        seek "^Date: " "^Timestamp: " "^Event: 4"
+        seek "^Date: " "^Timestamp: " "^Event: 5"
+        seek "^Date: " "^Timestamp: " "^Event: 6")
+      (split (get-output-string op) #\newline))
+     (assert (process? (whereis 'event-mgr))))))
 
 (event-mgr-mat exit-reason ()
   (match-let*

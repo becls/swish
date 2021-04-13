@@ -104,7 +104,7 @@ processes the following messages:
 \item \code{flush-buffer}: Process the events in the buffer using
   \code{do-notify}, turn off buffering, and return \code{ok}.
 
-\item \code{\#(set-log-handler \var{proc} \var{owner})}: Link to the
+\item \code{\#(set-log-handler \var{proc} \var{owner} \var{endure?})}: Link to the
   \var{owner} process, set the log handler of the state, and return
   \code{ok}.
 
@@ -214,19 +214,26 @@ it prints \var{event} using
 
 \defineentry{event-mgr:set-log-handler}
 \begin{procedure}
-  \code{(event-mgr:set-log-handler \var{proc} \var{owner})}
+  \code{(event-mgr:set-log-handler \var{proc} \var{owner} \opt{\var{endure?}})}
 \end{procedure}
 \returns{} \code{ok} $|$ \code{\#(error \var{reason})}
 
 The \code{event-mgr:set-log-handler} procedure calls
 \code{(gen-server:call event-mgr \#(set-log-handler \var{proc}
-  \var{owner}))}.
+  \var{owner} \var{endure?}))}.
 
-\var{proc} is a procedure of one argument, the event. Failure in
-\var{proc} results in the event manager killing the \var{owner}
-process with the same failure reason. The log handler is removed when
-\var{proc} fails or the event manager receives an \code{EXIT}
-message from \var{owner}.
+\var{proc} and \var{endure?} are procedures of one argument, the event.
+If \var{proc} fails and \var{endure?} returns false, the event is logged
+to the console and the event manager kills the \var{owner}
+process with the same failure reason.
+This is the default behavior since the default \var{endure?} procedure always
+returns false.
+However, if \var{proc} fails and \var{endure?} returns true, the event is
+logged to the console followed by the fault in \var{proc}, and the fault is
+tolerated.
+The log handler is removed when
+\var{proc} fails and \var{endure?} returns true or when the event manager
+receives an \code{EXIT} message from \var{owner}.
 
 \var{owner} is a process.
 
