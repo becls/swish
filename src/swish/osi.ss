@@ -269,7 +269,7 @@
   (define-osi osi_get_statement_expanded_sql (statement uptr))
   (define-osi osi_reset_statement (statement uptr))
   (define-osi osi_step_statement (statement uptr) (callback ptr))
-  (fdefine osi_interrupt_database (database uptr) void)
+  (fdefine osi_interrupt_database (database uptr) ptr)
   (define-osi osi_get_sqlite_status (operation int) (reset? boolean))
   (define-osi osi_bulk_execute (statements ptr) (mbindings ptr) (callback ptr))
   (define-osi osi_marshal_bindings (ls ptr))

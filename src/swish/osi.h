@@ -126,7 +126,7 @@ EXPORT ptr osi_get_statement_columns(uptr statement);
 EXPORT ptr osi_get_statement_expanded_sql(uptr statement);
 EXPORT ptr osi_reset_statement(uptr statement);
 EXPORT ptr osi_step_statement(uptr statement, ptr callback);
-EXPORT void osi_interrupt_database(uptr database);
+EXPORT ptr osi_interrupt_database(uptr database);
 EXPORT ptr osi_get_sqlite_status(int operation, int resetp);
 EXPORT ptr osi_bulk_execute(ptr statements, ptr mbindings, ptr callback);
 EXPORT ptr osi_marshal_bindings(ptr bindings);

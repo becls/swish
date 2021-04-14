@@ -711,8 +711,9 @@ ptr osi_step_statement(uptr statement, ptr callback) {
   return Strue;
 }
 
-void osi_interrupt_database(uptr database) {
+ptr osi_interrupt_database(uptr database) {
   sqlite3_interrupt(((database_t*)database)->db);
+  return ((database_t*)database)->busy ? Strue : Sfalse;
 }
 
 ptr osi_get_sqlite_status(int operation, int resetp) {

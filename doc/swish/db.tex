@@ -779,11 +779,12 @@ or \code{\#f} if the record has been unmarshaled by
 \begin{procedure}
   \code{(sqlite:interrupt \var{db})}
 \end{procedure}
-\returns{} unspecified
+\returns{} a boolean
 
 The \code{sqlite:interrupt} procedure interrupts any pending
 operations on the database associated with database record instance
-\var{db}.
+\var{db}. It returns \code{\#t} when the database is busy and
+\code{\#f} otherwise.
 
 \defineentry{sqlite:last-insert-rowid}
 \begin{procedure}

@@ -1129,12 +1129,13 @@ Scheme. Otherwise, the callback list \code{(\var{callback}
 
 \defineentry{osi\_interrupt\_database}
 \begin{function}
-  \code{void osi\_interrupt\_database(uptr \var{database});}
+  \code{ptr osi\_interrupt\_database(uptr \var{database});}
 \end{function}
 
 The \code{osi\_interrupt\_database} function calls the
 \code{sqlite3\_interrupt} function to interrupt the current operation
-of the \var{database}.
+of the \var{database}. It returns \code{\#t} when the database is busy
+and \code{\#f} otherwise.
 
 \defineentry{osi\_get\_sqlite\_status}
 \begin{function}
