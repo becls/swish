@@ -39,18 +39,18 @@ Definitive Guide to SQLite~\cite{sqlite-guide}.
 
 The \code{db} gen-server serializes internal requests to the
 database.  For storage and retrieval of data, each transaction is
-processed in turn by a separate linked process.  The gen-server does
+processed in turn by a separate linked \var{worker} process.  The gen-server does
 not block waiting for this process to finish so that it can maintain
 linear performance by keeping its inbox short. The return value of the
 transaction is returned to the caller or an error is generated without
 tearing down the gen-server.
 
-To facilitate logging, the \code{db} gen-server can lazily open a
-transaction. In order to allow other processes access to the database,
-lazy transactions should be closed occasionally. To support this, it
-tracks a count of entries in the current transaction. A transaction is
-committed when the threshold of 10,000 is reached, the message queue
-of the \code{db} is empty, or when a direct transaction is requested.
+To facilitate logging, the \code{db} gen-server can execute SQL statements
+asynchronously. It enqueues SQL statements submitted via \code{db:log} and
+executes them by opening a transaction lazily when an explicit transaction is
+enqueued, when a \var{worker} process exits normally, or when the \code{db}
+message queue is empty.
+To maintain responsiveness, each lazy transaction commits at most 10,000 queued \code{db:log} requests.
 By default, each database is created with write-ahead logging enabled
 to prevent write operations from blocking on queries made from another
 connection.

@@ -143,7 +143,7 @@
       [#(ok ,result) result]
       [#(error ,reason) (throw reason)]))
 
-  (define commit-threshold 10000)
+  (define commit-limit 10000)
 
   (define-state-tuple <db-state> filename db cache queue worker)
 
@@ -236,7 +236,7 @@
   (define (get-related-logs queue count)
     (let ([queue (queue:drop queue)]
           [count (+ count 1)])
-      (if (or (queue:empty? queue) (>= count commit-threshold))
+      (if (or (queue:empty? queue) (>= count commit-limit))
           (values '() queue count)
           (let ([head (queue:get queue)])
             (if (<log> is? head)
