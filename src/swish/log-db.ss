@@ -56,10 +56,15 @@
 
   (define-tuple <event-logger> setup log)
 
-  (define (log-db:start&link)
-    (db:start&link 'log-db
-      (make-directory-path (log-file))
-      'create))
+  (define log-db:start&link
+    (case-lambda
+     [() (log-db:start&link (db:options))]
+     [(options)
+      (arg-check 'log-db:start&link [options (db:options is?)])
+      (db:start&link 'log-db
+        (make-directory-path (log-file))
+        'create
+        options)]))
 
   (define (log-db:setup loggers)
     (match (db:transaction 'log-db (lambda () (setup-db loggers)))

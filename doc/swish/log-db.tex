@@ -111,7 +111,7 @@ respect to changes in the Swish implementation.
 
 \defineentry{log-db:start\&link}
 \begin{procedure}
-  \code{(log-db:start\&link)}
+  \code{(log-db:start\&link \opt{\var{db-options}})}
 \end{procedure}
 \returns{}
 \code{\#(ok \var{pid})} $|$
@@ -121,6 +121,8 @@ The \code{log-db:start\&link} procedure creates a new \code{db}
 gen-server named \code{log-db} using \code{db:start\&link}. It
 uses the value of the \code{(log-file)} parameter as the path to the
 SQLite database and specifies \code{create} mode.
+The optional \var{db-options} must be an object created by
+\hyperref[db:options]{\code{db:options}}.
 
 \defineentry{log-db:setup}
 \begin{procedure}
