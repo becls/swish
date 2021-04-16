@@ -644,7 +644,9 @@
 
 (db-mat db-open ()
   (match-let*
-   ([,filename (path-combine (data-dir) "test-db.db3")]
+   ([,filename
+     (make-directory-path
+      (path-combine (data-dir) "test-db.db3"))]
     [#(ok ,file) (db:start&link #f filename 'create)]
     [#(ok ,tmp) (db:start&link #f "" 'create)]
     [#(ok ,mem) (db:start&link #f ":memory:" 'create)]
