@@ -1556,12 +1556,17 @@
                [(name open expr field-names)
                 (eq? (datum open) 'open)
                 (handle-open x #'expr #f #'field-names)]
-               [(name is? e)
+               [(name is? . args)
                 (eq? (datum is?) 'is?)
-                #'(let ([x e])
-                    (and (vector? x)
-                         (#3%fx= (#3%vector-length x) (length '(name field ...)))
-                         (eq? (#3%vector-ref x 0) 'name)))]
+                (let ([is?
+                       #'(lambda (x)
+                           (and (vector? x)
+                                (#3%fx= (#3%vector-length x) (length '(name field ...)))
+                                (eq? (#3%vector-ref x 0) 'name)))])
+                  (syntax-case #'args ()
+                    [() is?]
+                    [(e) #`(#,is? e)]
+                    [else (syntax-case x ())]))]
                [(name fn e)
                 (syntax-datum-eq? #'fn #'field)
                 (with-syntax ([getter (replace-source x #'(name fn))])

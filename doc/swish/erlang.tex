@@ -1656,6 +1656,15 @@ checks the tuple type only once:
 The \code{is?} form determines whether or not the datum \var{x} is
 an instance of tuple type \var{name}.
 
+\index{tuple!is?@\code{is?}}
+\begin{syntax}
+  \code{(\var{name} is?)}
+\end{syntax}
+\expandsto{} a predicate that returns true if and only if its argument
+is an instance of tuple type \var{name}
+
+The \code{(\var{name} is?)} form expands to \code{(lambda (x) (\var{name} is? x))}.
+
 % ----------------------------------------------------------------------------
 \subsection {I/O}
 

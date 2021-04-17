@@ -1273,6 +1273,11 @@
   (assert-syntax-error
    (let ()
      (define-tuple <point> x y)
+     (<point> is? "sharp" "end"))
+   "invalid syntax")
+  (assert-syntax-error
+   (let ()
+     (define-tuple <point> x y)
      (<point> make))
    "missing field x in")
   (assert-syntax-error
@@ -1628,13 +1633,13 @@
       (define-tuple <box> content)
       (<box> copy* 27)))
                                         ; is?
-  (assert
-   (equal?
-    '(#t #f #f #f #f #f #f #f #f #f #f)
-    (let ()
-      (define-tuple <point> x y)
-      (map (lambda (p) (<point> is? p))
-        (list (<point> make [x 1] [y 2]) #f #t 27 #\a "point" 'point '(point) '#(<point>) '#(<point> 1) '#(<point> 1 2 3))))))
+  (let ()
+    (define-tuple <point> x y)
+    (define expected '(#t #f #f #f #f #f #f #f #f #f #f))
+    (define inputs
+      (list (<point> make [x 1] [y 2]) #f #t 27 #\a "point" 'point '(point) '#(<point>) '#(<point> 1) '#(<point> 1 2 3)))
+    (assert (equal? expected (map (lambda (p) (<point> is? p)) inputs)))
+    (assert (equal? expected (map (<point> is?) inputs))))
                                         ; open
   (assert
    (equal?
