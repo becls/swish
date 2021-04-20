@@ -10,7 +10,7 @@ SwishLibs := ../../${BUILD}/bin/libosi.so ../../${BUILD}/lib/swish_kernel.o
 	$C -shared -o ../../${BUILD}/bin/libosi.so ${OsiObj} -L"${LIBUV_LIBPATH}" -luv_a -luuid -lpthread
 
 ../../${BUILD}/lib/swish_kernel.o: run.o ${OsiObj} ${UvLib}/libuv_a.a
-	ld -melf_i386 -r -X -o $@ run.o ${OsiObj} "${SCHEME_LIBPATH}"/kernel.o -L"${LIBUV_LIBPATH}" -luv_a
+	${LD} -r -X -o $@ run.o ${OsiObj} "${SCHEME_LIBPATH}"/kernel.o -L"${LIBUV_LIBPATH}" -luv_a
 
 %.o: %.c osi.h swish.h ${UvInclude}
 	$C -I"${SCHEME_INCLUDE}" -I"${LIBUV_INCLUDE}" -c $<
