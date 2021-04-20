@@ -35,6 +35,7 @@ MYCPPFLAGS=
 MYCFLAGS=
 MYLDFLAGS=
 FSROOT=
+TOOLPREFIX=
 
 case "${CONFIG_UNAME}" in
   CYGWIN_NT-*)
@@ -84,6 +85,9 @@ while [ $# != 0 ]; do
     --help)
       help=yes
       ;;
+    --toolprefix=*)
+      setoption "TOOLPREFIX" "--toolprefix=" "$1"
+      ;;
     --prefix=*)
       setoption "PREFIX" "--prefix=" "$1"
       ;;
@@ -109,9 +113,10 @@ while [ $# != 0 ]; do
 done
 
 : "${PREFIX:=/usr/local}"
-: "${MYCC:=${CC:-gcc}}"
+: "${MYCC:=${TOOLPREFIX}${CC:-gcc}}"
 : "${MYCPPFLAGS:=${CPPFLAGS:-}}"
 : "${MYCFLAGS:=${CFLAGS:-}}"
+: "${MYLD:=${TOOLPREFIX}${LD:-ld}}"
 : "${MYLDFLAGS:=${LDFLAGS:-}}"
 
 deref() { eval printf '%s' "$(printf '"%s"' "\$$1")"; }
@@ -165,9 +170,11 @@ if [ "${help}" = "yes" ]; then
   echo ""
   echo " --prefix=<pathname>  install directory base (${PREFIX})"
   echo " --scheme=<pathname>  Chez Scheme executable (${SCHEME})"
+  echo " --toolprefix=<prefix>  prefix for \${CC} and \${LD} (${TOOLPREFIX})"
   echo " CC=<C compiler name>             optional C compiler name (${MYCC})"
   echo " CPPFLAGS=<C preprocessor flags>  additional C preprocessor flags (${MYCPPFLAGS})"
   echo " CFLAGS=<C compiler flags>        additional C compiler flags (${MYCFLAGS})"
+  echo " LD=<linker name>                 optional linker name (${MYLD})"
   echo " LDFLAGS=<linker flags>           additional linker flags (${MYLDFLAGS})"
   checkerrs
   exit 0
@@ -443,6 +450,7 @@ set_output "#" src/swish/Makefile
 add "CC:=${MYCC}"
 add "CPPFLAGS:=${MYCPPFLAGS}"
 add "CFLAGS:=${MYCFLAGS}"
+add "LD:=${MYLD}"
 add "LDFLAGS:=${MYLDFLAGS}"
 if [ "${Windows}" = "yes" ]; then
   if [ -n "${CUSTOMPATH}" ]; then

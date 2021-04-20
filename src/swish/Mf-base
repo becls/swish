@@ -5,6 +5,8 @@ SETUP := Makefile submodules build-dirs \
 CORE := ../../${BUILD}/bin/swish${EXESUFFIX} ../../${BUILD}/bin/swish.boot ../../${BUILD}/bin/swish.library
 AUXLIB := ../../${BUILD}/lib/swish/mat.so ../../${BUILD}/lib/swish/profile.so ../../${BUILD}/lib/swish/testing.so ../../${BUILD}/lib/swish/internal-testing.so
 
+export CC CPPFLAGS CFLAGS LD LDFLAGS
+
 ready:: | ${SETUP}
 ready:: io-constants.ss ${SwishLibs}
 
