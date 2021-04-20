@@ -378,5 +378,11 @@
      (try (make-swish-event-logger -1 10))]
     [`(catch #(bad-arg make-swish-event-logger 0))
      (try (make-swish-event-logger 44 0))]
+    [`(catch #(bad-arg setup "xyz"))
+     (try (log-db:event-logger [setup "xyz"] [log values]))]
+    [`(catch #(bad-arg setup "xyz"))
+     (try (log-db:event-logger [setup "xyz"] [log values]))]
+    [`(catch #(bad-arg log "rhythm"))
+     (try (log-db:event-logger [setup void] [log "rhythm"]))]
     )
    'ok))

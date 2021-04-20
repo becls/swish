@@ -30,6 +30,7 @@
    create-table
    define-simple-events
    json-stack->string
+   log-db:event-logger
    log-db:get-instance-id
    log-db:setup
    log-db:start&link
@@ -49,12 +50,18 @@
    (swish internal)
    (swish io)
    (swish json)
+   (swish options)
    (swish osi)
    (swish software-info)
    (swish string-utils)
    )
 
   (define-tuple <event-logger> setup log)
+
+  (define-options log-db:event-logger
+    (required
+     [setup (must-be (procedure/arity? #b1))]
+     [log (must-be (procedure/arity? #b10))]))
 
   (define log-db:start&link
     (case-lambda
@@ -66,11 +73,25 @@
         'create
         options)]))
 
+  (define (->event-logger x)
+    (match x
+      [`(<log-db:event-logger>) x]
+      [`(<event-logger> ,setup ,log)
+       (log-db:event-logger [setup setup] [log log])]))
+
   (define (log-db:setup loggers)
-    (match (db:transaction 'log-db (lambda () (setup-db loggers)))
+    (define event-loggers (map ->event-logger loggers))
+    (module (log-event)
+      (define (->vec f) (list->vector (map f event-loggers)))
+      (define log* (->vec (log-db:event-logger log)))
+      (define (log-event e)
+        (vector-for-each
+         (lambda (log) (log e))
+         log*)))
+    (match (db:transaction 'log-db (lambda () (setup-db event-loggers)))
       [#(ok ,_)
        (match (event-mgr:set-log-handler
-               (lambda (event) (log-event loggers event))
+               log-event
                (whereis 'log-db))
          [ok
           (event-mgr:flush-buffer)
@@ -111,18 +132,15 @@
       (log-db:version 'instance id)
       (set! log-db:instance-id id)))
 
-  (define (setup-db loggers)
+  (define (setup-db event-loggers)
     (create-table version
       (name text primary key)
       (version text))
     (match (log-db:version 'instance)
       [#f (create-instance-id!)]
       [,id (set! log-db:instance-id id)])
-    (for-each (lambda (l) ((<event-logger> setup l))) loggers)
+    (for-each (lambda (l) ((log-db:event-logger setup l))) event-loggers)
     'ok)
-
-  (define (log-event loggers e)
-    (for-each (lambda (l) ((<event-logger> log l) e)) loggers))
 
   (meta define (make-sql-name x)
     (let ([ip (open-input-string (symbol->string (syntax->datum x)))]

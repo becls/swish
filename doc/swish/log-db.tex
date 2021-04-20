@@ -74,7 +74,8 @@ Swish events are logged. The \code{log-db} design allows for this
 type of extension.
 
 The \code{log-db:setup} procedure takes a list of
-\code{<event-logger>} tuples. Each logger represents an extension
+\code{<event-logger>} tuples or \code{log-db:event-logger} objects.
+Each logger represents an extension
 to the log database schema and contains two procedures, \code{setup}
 and \code{log}. The \code{log-db:setup} procedure calls the
 \code{setup} procedure of logger to make sure that its portion of
@@ -133,7 +134,8 @@ The optional \var{db-options} must be an object created by
 \code{\#(error \var{error})}
 
 The argument \var{loggers} is a list of \code{<event-logger>}
-tuples. The \code{log-db:setup} makes sure the \code{log-db} is
+tuples or objects constructed by \code{log-db:event-logger}.
+The \code{log-db:setup} makes sure the \code{log-db} is
 setup to run by doing the following in order.
 
 \begin{enumerate}
@@ -153,6 +155,24 @@ If everything succeeds, the procedure returns \code{ignore}. If
 either the \code{db:transaction} or
 \code{event-mgr:set-log-handler} indicate an error, the procedure
 returns that error.
+
+A logger may be configured via
+\code{(log-db:event-logger [\var{option} \var{value}] \etc)}, which
+supports the following options:
+\defineentry{log-db:event-logger}
+
+\begin{tabular}{llp{.5\textwidth}}
+  option & default & description \\ \hline
+
+  \code{setup} & \emph{required} &
+  a procedure of no arguments that makes sure this
+  portion of the schema is created and up-to-date \\
+
+  \code{log} & \emph{required} &
+  a procedure of one argument, an event, that logs the
+  event if it recognizes it and otherwise ignores it \\
+
+\end{tabular}
 
 \defineentry{log-db:version}
 \begin{procedure}
