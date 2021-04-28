@@ -199,7 +199,15 @@
         (write-meta-data op 'test-file test-file)
         (write-meta-data op 'hostname (osi_get_hostname))
         (write-meta-data op 'machine-type (symbol->string (machine-type)))
-        (write-meta-data op 'test-run uuid)))
+        (write-meta-data op 'test-run uuid)
+        (write-meta-data op 'uname
+          (match (get-uname)
+            [`(<uname> ,system ,release ,version ,machine)
+             (json:make-object
+              [os-machine machine]
+              [os-release release]
+              [os-system system]
+              [os-version version])]))))
     (void))
 
   (define $run-mats

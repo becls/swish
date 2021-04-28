@@ -308,6 +308,10 @@
     var keys = [];
     for (key in info) keys.push(key);
     keys.sort((a, b) => a > b);
+    let uname = meta['uname'];
+    let unameKeys = [];
+    for (key in uname) unameKeys.push(key);
+    unameKeys.sort((a, b) => a > b);
     return `<div class="suite-meta">
              <span class="date">${meta.date || "?"}<\/span>
              <span class="hostname">${meta['hostname']}<\/span>
@@ -316,6 +320,9 @@
                                   <span class="version">${escapeHtml(info[key]['version'])}<\/span>
                                   <div class="revision">${escapeHtml(info[key]['revision'])}<\/div>
                                 <\/div>`).join('')}
+             <table>
+              ${unameKeys.map(key => `<tr><td>${escapeHtml(key)}</td><td>${escapeHtml(uname[key])}</td>`).join('')}
+             </table>
             <\/div>`;
   }
   var results = [];
@@ -565,7 +572,7 @@
              ".sstats-gc-bytes { width: 7em; }"
              ".vscroll { overflow-y: auto; overflow-x: hidden; margin-top: var(--tableheaderheight); }"
              ".vscroll tr:first-child td {border-top-style: none; position: unset;}"
-             ".vscroll tr:first-child div {background: rgb(245,245,245); position: absolute; top 0px; margin-top: calc(-1 * var(--tableheaderheight));}"
+             ".vscroll tr:first-child div {background: rgb(245,245,245); position: absolute; margin-top: calc(-1 * var(--tableheaderheight));}"
              "table { table-layout: fixed; border-collapse: collapse; }"
              "tr { vertical-align: text-top; }"
              "tr:not(:first-child):hover { background: #f4f4f4; }"

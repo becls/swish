@@ -117,10 +117,10 @@
            (match (get-uname)
              [`(<uname> ,system ,release ,version ,machine)
               (json:make-object
-               [system system]
-               [release release]
-               [version version]
-               [machine machine])])])
+               [os-machine machine]
+               [os-release release]
+               [os-system system]
+               [os-version version])])])
          0))
        #\newline))))
 
