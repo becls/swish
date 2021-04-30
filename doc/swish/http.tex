@@ -963,7 +963,7 @@ cells of the underlying hashtable.
 The \code{json:size} procedure returns the number of cells
 in the underlying hashtable.
 
-\defineentry{json:delete!}
+\defineentry{json:delete"!}
 \begin{procedure}
   \code{(json:delete! \var{ht} \var{path})}
 \end{procedure}
@@ -1003,7 +1003,7 @@ If any key along the way does not map to a hashtable,
 or if the final hashtable does not contain the final key,
 \code{json:ref} returns \var{default}.
 
-\defineentry{json:set!}
+\defineentry{json:set"!}
 \begin{procedure}
   \code{(json:set! \var{ht} \var{path} \var{value})}
 \end{procedure}
@@ -1026,7 +1026,7 @@ If \var{path} is malformed at some point, \code{json:set!} may
 still mutate hashtables along the valid portion of the path
 before reporting an error.
 
-\defineentry{json:update!}
+\defineentry{json:update"!}
 \begin{procedure}
   \code{(json:update! \var{ht} \var{path} \var{procedure} \var{default})}
 \end{procedure}

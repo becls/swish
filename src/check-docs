@@ -64,6 +64,10 @@
           (pregexp-match regexp (if (symbol? s) (symbol->string s) s)))))]
    [else (lambda (s) #f)]))
 
+;; work around the need to quote ! in \index entries
+(define (dequote s)
+  (pregexp-replace* (re "\"!") s "!"))
+
 (define (detex s)
   ;; won't have trailing } due to defineentry regexp
   (match (pregexp-match (re "\\\\code[{]([^}]*)") s)
@@ -133,7 +137,7 @@
        (let ([file (path-last fullname)])
          (for-each-regex-match fullname entry-regex
            (lambda (entry)
-             (update-entry! exports (detex entry) file)))))
+             (update-entry! exports (dequote (detex entry)) file)))))
      (find-files dir "tex"))
     (let ([partitions (make-hashtable symbol-hash eq?)])
       (vector-for-each
