@@ -650,7 +650,11 @@ size_t osi_get_bytes_used(void) {
   struct mstats ms = mstats();
   return ms.bytes_used;
 #elif defined(__GLIBC__)
+#if (__GLIBC__ > 2) || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 33)
+  struct mallinfo2 hinfo = mallinfo2();
+#else
   struct mallinfo hinfo = mallinfo();
+#endif
   return hinfo.hblkhd + hinfo.uordblks;
 #elif defined(_WIN32)
   size_t used = 0;
