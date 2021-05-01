@@ -7,6 +7,9 @@ endif
 ifneq (,$(shell ${CC} --help=warnings 2> /dev/null | grep Wreturn-local-addr))
   HUSH:=${HUSH} -Wno-return-local-addr
 endif
+ifneq (,$(shell ${CC} --help=warnings 2> /dev/null | grep Wmisleading-indentation))
+  HUSH:=${HUSH} -Wno-misleading-indentation
+endif
 C = ${CC} -m32 -fPIC -Wall -Wextra -Werror -O2 ${CPPFLAGS} ${CFLAGS} ${LDFLAGS}
 OsiObj=osi.o sha1.o sqlite.o sqlite3.o
 SystemLibs=-lm -ldl -lncurses -luuid -lpthread -lsystemd
