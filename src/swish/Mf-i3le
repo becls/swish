@@ -1,10 +1,10 @@
-ifneq (,$(shell "${CC}" --help=warnings 2> /dev/null | grep implicit-fallthrough))
+ifneq (,$(shell ${CC} --help=warnings 2> /dev/null | grep Wimplicit-fallthrough))
   HUSH:=-Wimplicit-fallthrough=0
 endif
-ifneq (,$(shell "${CC}" --help=warnings 2> /dev/null | grep cast-function-type))
+ifneq (,$(shell ${CC} --help=warnings 2> /dev/null | grep Wcast-function-type))
   HUSH:=${HUSH} -Wno-cast-function-type
 endif
-ifneq (,$(shell "${CC}" --help=warnings 2> /dev/null | grep return-local-addr))
+ifneq (,$(shell ${CC} --help=warnings 2> /dev/null | grep Wreturn-local-addr))
   HUSH:=${HUSH} -Wno-return-local-addr
 endif
 C = ${CC} -m32 -fPIC -Wall -Wextra -Werror -O2 ${CPPFLAGS} ${CFLAGS} ${LDFLAGS}
