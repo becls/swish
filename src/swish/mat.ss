@@ -159,21 +159,22 @@
         (and (pair? excl-tags) (present (%mat-tags mat) excl-tags))))
 
   (define (do-run-mat mat reporter incl-tags excl-tags)
-    (let* ([skip (and (skip? mat incl-tags excl-tags) 'skip)]
-           [before (statistics)]
-           [result
-            (or skip
-                (let ([ignore #f])
-                  (guard (e [else (list 'fail e ignore)])
-                    (call/cc
-                     (lambda (k)
-                       (set! ignore k)
-                       (mat-start-time (erlang:now))
-                       ((%mat-test mat))))
-                    'pass)))])
-      (mat-end-time (erlang:now))
-      (reporter (%mat-name mat) (%mat-tags mat) result
-        (sstats-difference (statistics) before))))
+    (parameterize ([mat-annotations '()])
+      (let* ([skip (and (skip? mat incl-tags excl-tags) 'skip)]
+             [before (statistics)]
+             [result
+              (or skip
+                  (let ([ignore #f])
+                    (guard (e [else (list 'fail e ignore)])
+                      (call/cc
+                       (lambda (k)
+                         (set! ignore k)
+                         (mat-start-time (erlang:now))
+                         ((%mat-test mat))))
+                      'pass)))])
+        (mat-end-time (erlang:now))
+        (reporter (%mat-name mat) (%mat-tags mat) result
+          (sstats-difference (statistics) before)))))
 
   (define (present tags tag-list)
     (ormap (lambda (tag) (memq tag tag-list)) tags))
@@ -290,8 +291,7 @@
           (flush-output-port mo-op))
         (for-each
          (lambda (mat/name)
-           (parameterize ([mat-annotations '()])
-             (run-mat mat/name reporter incl-tags excl-tags)))
+           (run-mat mat/name reporter incl-tags excl-tags))
          (or mat/names (all-mats)))
         (when mo-op
           (write-meta-data mo-op 'completed #t)
