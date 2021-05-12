@@ -6,10 +6,13 @@ jobs:
     # macOS
     - env: TARGET_MACHINE=a6osx
       os: osx
+      osx_image: xcode11
     - env: TARGET_MACHINE=a6osx CHEZ_BRANCH=main
       os: osx
+      osx_image: xcode11
     - env: TARGET_MACHINE=ta6osx
       os: osx
+      osx_image: xcode11
 
     # Linux
     - env: TARGET_MACHINE=i3le
