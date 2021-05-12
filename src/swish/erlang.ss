@@ -258,7 +258,7 @@
     (when (eq? p finalizer-process)
       (panic `#(finalizer-process-terminated ,reason)))
     (when (enqueued? p)
-      (remove-q p))
+      (@remove-q p))
     (pcb-cont-set! p #f)
     (pcb-winders-set! p '())
     (pcb-exception-state-set! p extended-reason)
@@ -456,12 +456,12 @@
 
   (define (@enqueue process queue precedence)
     (when (enqueued? process)
-      (remove-q process))
+      (@remove-q process))
     (pcb-precedence-set! process precedence)
     (let find ([next queue])
       (let ([prev (q-prev next)])
         (if (or (eq? prev queue) (<= (pcb-precedence prev) precedence))
-            (insert-q process next)
+            (@insert-q process next)
             (find prev)))))
 
   (define last-process-id 0)
@@ -737,7 +737,7 @@
   (define (@send p x)
     (let ([inbox (pcb-inbox p)])
       (when inbox
-        (insert-q (make-msg x) inbox)
+        (@insert-q (make-msg x) inbox)
         (cond
          [(pcb-sleeping? p)
           (pcb-sleeping?-set! p #f)
@@ -796,7 +796,7 @@
           (cond
            [(matcher (msg-contents msg)) =>
             (lambda (run)
-              (remove-q msg)
+              (no-interrupts (@remove-q msg))
               (run))]
            [else
             (disable-interrupts)
@@ -806,18 +806,14 @@
 
   (define quantum-nanoseconds 1000000) ;; 1 millisecond
 
-  (define (insert-q x next)
-    ;; No interrupts occur within this procedure because the record
-    ;; functions get inlined.
+  (define (@insert-q x next)
     (let ([prev (q-prev next)])
       (q-next-set! prev x)
       (q-prev-set! x prev)
       (q-next-set! x next)
       (q-prev-set! next x)))
 
-  (define (remove-q x)
-    ;; No interrupts occur within this procedure because the record
-    ;; functions get inlined.
+  (define (@remove-q x)
     (let ([prev (q-prev x)] [next (q-next x)])
       (q-next-set! prev next)
       (q-prev-set! next prev)
@@ -871,14 +867,14 @@
          (pcb-cont-set! self k)
          (cond
           [queue (@enqueue self queue precedence)]
-          [(enqueued? self) (remove-q self)]))
+          [(enqueued? self) (@remove-q self)]))
 
        ;; context switch
        (pcb-sic-set! self disable-count)
        (let ([p (q-next run-queue)])
          (when (eq? p run-queue)
            (panic 'run-queue-empty))
-         (set-self! (remove-q p)))
+         (set-self! (@remove-q p)))
 
        ;; adjust system interrupt counter for the new process
        (let loop ([next-sic (pcb-sic self)])
