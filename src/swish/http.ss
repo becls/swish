@@ -183,7 +183,7 @@
         `#(ok ,(<http-listener> make
                  [tcp-listener (listen-tcp "::" init-port self)]
                  [cache-manager cache-mgr]
-                 [pid->op (ht:make equal-hash eq? process?)]))))
+                 [pid->op (ht:make process-id eq? process?)]))))
     (define (terminate reason state)
       ;; Ignore the pid->op table. In the rare event that this
       ;; gen-server fails, the dispatchers can continue
@@ -703,7 +703,7 @@
     (define (init)
       `#(ok ,(<cache-mgr> make
                [path->pid (ht:make string-hash string=? string?)]
-               [pid->path (ht:make equal-hash eq? process?)])))
+               [pid->path (ht:make process-id eq? process?)])))
     (define (terminate reason state) 'ok)
     (define (handle-call msg from state)
       (match msg
