@@ -902,7 +902,7 @@
   (define (wait-for-change-to target)
     (receive
      [#(path-changed ,path ,filename ,events)
-      (unless (and (equal? target filename) (> events 1))
+      (unless (equal? target filename)
         (wait-for-change-to target))]))
 
   (define (check s)
