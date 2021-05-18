@@ -89,11 +89,15 @@
   (define-tuple <os-process-failed> command args stdout stderr exit-status)
 
   (define (test-os-process command args for-stdin patterns)
+    (define timeout
+      (case (machine-type)
+        [(a6osx i3osx ta6osx ti3osx) 30000]
+        [else 10000]))
     (define (write-stdin op)
       (display for-stdin op)
       (newline op)
       (flush-output-port op))
-    (match (run-os-process command args write-stdin 10000 '())
+    (match (run-os-process command args write-stdin timeout '())
       [`(<os-result> ,stdout ,stderr ,exit-status)
        (unless (eqv? exit-status 0)
          (throw
