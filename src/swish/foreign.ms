@@ -149,12 +149,16 @@
     (lambda (failure stderr)
       (match-regexps `(,failure) stderr))))
 
-(define-syntax expect
-  (syntax-rules ()
+(define-syntax (expect x)
+  (syntax-case x ()
     [(_ failure expr)
-     (match (catch expr)
-       [#(EXIT `(<os-process-failed> ,stderr))
-        ((check-error) failure stderr)])]))
+     #`(begin
+         #,(replace-source x
+             #'(mat:add-annotation! (json:make-object [expect (format "~s" 'failure)])))
+         (match (catch expr)
+           [#(EXIT `(<os-process-failed> ,stderr))
+            (mat:add-annotation! (json:make-object [stderr stderr]))
+            ((check-error) failure stderr)]))]))
 
 (define (default-exception failure)
   (pregexp-quote
