@@ -225,8 +225,12 @@
 (define-tuple <result> reason details output)
 
 (define (flush-errors)
-  (receive (after 10 'ok)
-    [`(<child-end>) (flush-errors)]))
+  (define caught-up (gensym))
+  (event-mgr:notify caught-up)
+  (let lp ([current? #f])
+    (receive (after 10 (unless current? (lp current?)))
+      [`(<child-end>) (lp current?)]
+      [,@caught-up (lp #t)])))
 
 (define (test-error&output input)
   (flush-errors)
