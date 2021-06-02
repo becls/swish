@@ -3753,6 +3753,28 @@
        ,@stack-info)
      (split (get-output-string os) #\newline))))
 
+(isolate-mat record-hash ()
+  ;; mon
+  (match-let*
+   ([,me self]
+    [,pid1 (spawn&link (lambda () (send me (monitor me))))]
+    [,m1 (monitor pid1)]
+    [,m2 (receive [,x x])]
+    [#t (monitor? m2)]
+    [#f (eq? m1 m2)]
+    [#f (= (equal-hash m1) (equal-hash m2))] ;; collision unlikely
+    [#t (= (equal-hash m1) (equal-hash m1))]
+    [#t (= (equal-hash m2) (equal-hash m2))])
+   'ok)
+  ;; pcb
+  (match-let*
+   ([,pid1 (spawn&link values)]
+    [#f (eq? pid1 self)]
+    [#f (= (equal-hash pid1) (equal-hash self))] ;; no collision
+    [#t (= (equal-hash pid1) (equal-hash pid1))]
+    [#t (= (equal-hash self) (equal-hash self))])
+   'ok))
+
 (isolate-mat cyclic-event ()
   ;; Handle cyclic structures in console-event-handler.
   (script-test #f '()

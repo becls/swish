@@ -1668,6 +1668,18 @@
           (wr name p)))
       (write-char #\> p)))
 
+  ;; support equal-hash on mon and pcb records so folks don't get burned
+  ;; by the default record-hash-procedure when using functional hash tables
+  (record-type-hash-procedure (record-type-descriptor mon)
+    (lambda (m hash)
+      (match-define `(mon ,origin ,target) m)
+      (+ (pcb-id origin)
+         (ash (pcb-id target) (quotient (fixnum-width) 2)))))
+
+  (record-type-hash-procedure (record-type-descriptor pcb)
+    (lambda (pcb hash)
+      (pcb-id pcb)))
+
   (record-writer (csv7:record-type-descriptor
                   (condition (make-error) (make-warning)))
     (lambda (x p wr)
