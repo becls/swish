@@ -1,0 +1,110 @@
+---
+name: Test
+on: [push]
+jobs:
+  mats:
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - machine: a6osx
+            os: macos-latest
+            chez: v9.5.4
+          - machine: a6osx
+            os: macos-latest
+            chez: main
+          - machine: ta6osx
+            os: macos-latest
+            chez: v9.5.4
+          - machine: i3le
+            os: ubuntu-latest
+            chez: v9.5.4
+          - machine: ti3le
+            os: ubuntu-latest
+            chez: v9.5.4
+          - machine: a6le
+            os: ubuntu-latest
+            chez: v9.5.4
+          - machine: a6le
+            os: ubuntu-latest
+            chez: main
+          - machine: ta6le
+            os: ubuntu-latest
+            chez: v9.5.4
+          - machine: i3nt
+            os: windows-latest
+            chez: v9.5.4
+          - machine: ti3nt
+            os: windows-latest
+            chez: v9.5.4
+          - machine: a6nt
+            os: windows-latest
+            chez: v9.5.4
+          - machine: a6nt
+            os: windows-latest
+            chez: main
+          - machine: ta6nt
+            os: windows-latest
+            chez: v9.5.4
+    runs-on: ${{ matrix.config.os }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
+    steps:
+      - name: Setup 32-bit Linux
+        if: ${{ endsWith(matrix.config.machine, 'i3le') }}
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install gcc-multilib lib32ncurses5-dev\
+            libsystemd-dev:i386 uuid-dev:i386
+      - name: Setup 64-bit Linux
+        if: ${{ endsWith(matrix.config.machine, 'a6le') }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install libsystemd-dev
+      - name: Setup Mac
+        if: ${{ runner.os == 'macOS' }}
+        run: brew install coreutils
+      - name: Setup Windows
+        if: ${{ runner.os == 'Windows' }}
+        run: git config --global core.autocrlf false
+      - name: Install Chez Scheme ${{ matrix.config.chez }}
+        working-directory: ${{ runner.temp }}
+        run: |
+          git clone --branch ${{ matrix.config.chez }} --depth 1 --quiet\
+            https://github.com/cisco/ChezScheme.git
+          cd ChezScheme
+          M=${{ matrix.config.machine }}
+          ./configure -m=$M
+          make
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            echo "$PWD/$M/bin/$M" >> $GITHUB_PATH
+            echo "SCHEMEHEAPDIRS=$(cygpath -w "$PWD/$M/boot/$M")" >> $GITHUB_ENV
+          else sudo make install
+          fi
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - name: Build Swish
+        run: ./configure && make
+      - name: Run tests
+        run: make test || echo "Run tests failed" >> failures
+      - name: Archive test results
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ matrix.config.machine }}-${{ matrix.config.chez }}-test
+          path: |
+            data/mat-report.html
+            src/swish/*.mo
+      - name: Run coverage
+        run: make coverage || echo "Run coverage failed" >> failures
+      - name: Archive coverage results
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ matrix.config.machine }}-${{ matrix.config.chez }}-coverage
+          path: |
+            data/mat-report.html
+            src/swish/*.mo
+      - name: Check for failures
+        run: if test -f failures; then cat failures; exit 1; fi

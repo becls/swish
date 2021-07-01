@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/becls/swish.svg?branch=dev)](https://travis-ci.org/becls/swish)
+[![Build Status](https://github.com/becls/swish/actions/workflows/test.yml/badge.svg?branch=dev)](https://github.com/becls/swish/actions/workflows/test.yml)
 
 # Swish Concurrency Engine
 
