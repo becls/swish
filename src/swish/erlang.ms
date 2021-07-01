@@ -3834,7 +3834,7 @@
 ;; once in a blue moon this will catch a regression in $receive
 ;; that shows up as curious gen-server behavior; typically need
 ;; to save it to a separate mat file and run it repeatedly
-(isolate-mat tempt-fate ()
+(isolate-mat tempt-fate (settings (timeout 120000))
   (define server
     (spawn&link
      (lambda ()
