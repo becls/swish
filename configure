@@ -34,36 +34,28 @@ MYCC=
 MYCPPFLAGS=
 MYCFLAGS=
 MYLDFLAGS=
-FSROOT=
 TOOLPREFIX=
 
 case "${CONFIG_UNAME}" in
-  CYGWIN_NT-*)
+  CYGWIN_NT-* | MINGW64_NT-* | MSYS_NT-*)
     Windows=yes
+    EXESUFFIX=.exe
+    DLLSUFFIX=.dll
     NORMALIZE_PATH="cygpath -au"
-    FSROOT="/cygdrive"
     ;;
-  MINGW64_NT-* | MSYS_NT-*)
-    Windows=yes
-    NORMALIZE_PATH="cygpath -au"
+  Darwin)
+    Windows=no
+    EXESUFFIX=
+    DLLSUFFIX=.dylib
+    NORMALIZE_PATH="realpath -m"
     ;;
   *)
     Windows=no
+    EXESUFFIX=
+    DLLSUFFIX=.so
     NORMALIZE_PATH="realpath -m"
     ;;
 esac
-
-if [ "${Windows}" = "yes" ]; then
-  EXESUFFIX=.exe
-  DLLSUFFIX=.dll
-else
-  EXESUFFIX=
-  if [ "${CONFIG_UNAME}" = "Darwin" ]; then
-    DLLSUFFIX=.dylib
-  else
-    DLLSUFFIX=.so
-  fi
-fi
 
 quote () { printf %s\\n "$1" | sed "s/'/'\\\\''/g;1s/^/'/;\$s/\$/'/" ; }
 
