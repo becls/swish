@@ -1,5 +1,6 @@
-C=../vs 32 cl /nologo /Ox /MD /W3 /Zi
-LD=../vs 32 link /nologo /nodefaultlib:libcmt /debug:full /libpath:"../../${BUILD}/bin" /libpath:"${SCHEME_LIBPATH}"
+# true && ../vs is used to force a subshell for mingw32-make
+C=true && ../vs 32 cl /nologo /Ox /MD /W3 /Zi
+LD=true && ../vs 32 link /nologo /nodefaultlib:libcmt /debug:full /libpath:"../../${BUILD}/bin" /libpath:"${SCHEME_LIBPATH}"
 OsiObj=osi.obj run.obj sha1.obj sqlite.obj
 SystemLibs=rpcrt4.lib ole32.lib advapi32.lib User32.lib
 SwishLibs := ../../${BUILD}/bin/uv.dll ../../${BUILD}/bin/sqlite3.dll ../../${BUILD}/bin/osi.dll
@@ -20,8 +21,8 @@ sqlite3.obj: sqlite3.h sqlite3.c
 	${LD} /dll /out:../../${BUILD}/bin/sqlite3.dll sqlite3.obj
 
 ${UvLib}/uv.dll: Mf-i3nt
-	cd ../../libuv && rm -rf build && mkdir build && cd build && ../../src/vs 32 cmake ..
-	../vs 32 cmake --build ../../libuv/build --config Release --target uv
+	cd ../../libuv && rm -rf build && mkdir build && cd build && ../../src/vs 32 cmake -A Win32 ..
+	true && ../vs 32 cmake --build ../../libuv/build --config Release --target uv
 
 ../../${BUILD}/bin/uv.dll ../../${BUILD}/bin/uv.lib: ${UvLib}/uv.dll ${UvLib}/uv.lib | build-dirs
 	cp -f ${UvLib}/uv.{dll,exp,lib} ../../${BUILD}/bin
