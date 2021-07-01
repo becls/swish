@@ -459,7 +459,7 @@ ptr osi_marshal_bindings(ptr bindings) {
     }
     return Sunsigned((uptr)mbindings);
   } else if (Svectorp(bindings)) {
-    int len = Svector_length(bindings);
+    int len = (int)Svector_length(bindings);
     if (!len)
       return Sunsigned((uptr)NULL);
     bindings_t* mbindings = (bindings_t*)malloc(sizeof(bindings_t)+len*sizeof(binding_t));
@@ -807,7 +807,7 @@ ptr osi_bulk_execute(ptr statements, ptr mbindings, ptr callback) {
   bulk_t* bulk = malloc_container(bulk_t);
   if (!bulk)
     return osi_make_error_pair("osi_bulk_execute", UV_ENOMEM);
-  int count = Svector_length(statements);
+  int count = (int)Svector_length(statements);
   bulk->count = count;
   bulk->statements = malloc_array(statement_t*, count);
   if (!bulk->statements) {
