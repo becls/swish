@@ -898,7 +898,7 @@
     (path-combine (web-dir) fn))
 
   (define (check s)
-    (sleep-ms 10)
+    (sleep-ms 20)
     (let ([expected (format "HTTP/1.1 200 \r\nContent-Length: ~a\r\nCache-Control: no-cache\r\n\r\n~a"
                       (string-length s) s)]
           [actual (utf8->string (simple-get (string-append "/" file1)))])
