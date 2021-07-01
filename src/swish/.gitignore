@@ -1,6 +1,7 @@
 /Makefile
 /Mf-config
 /chezscheme-revision.include
+/internal-testing.so
 /io-constants
 /io-constants.exe
 /io-constants.ilk
