@@ -106,5 +106,13 @@ jobs:
           path: |
             data/mat-report.html
             src/swish/*.mo
+      - name: Archive coverage reports
+        if: ${{ matrix.config.chez == 'main' }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ matrix.config.machine }}-${{ matrix.config.chez }}-coverage-report
+          path: |
+            data/coverage.html
+            data/src/**/*.html
       - name: Check for failures
         run: if test -f failures; then cat failures; exit 1; fi
