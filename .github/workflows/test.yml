@@ -80,6 +80,12 @@ jobs:
           cd ChezScheme
           M=${{ matrix.config.machine }}
           ./configure -m=$M
+          if [ "${{ matrix.config.chez }}" != "main" ]; then
+            # Use checked-in boot files for released builds
+            rm "$M"/boot/"$M"/*.boot
+            cp boot/"$M"/*.boot "$M"/boot/"$M"
+            touch "$M/s/bootstrap"
+          fi
           make
           if [ "$RUNNER_OS" = "Windows" ]; then
             echo "$PWD/$M/bin/$M" >> $GITHUB_PATH
@@ -116,5 +122,21 @@ jobs:
           path: |
             data/coverage.html
             data/src/**/*.html
+      - name: Assemble tarball
+        if: ${{ matrix.config.chez != 'main' && !startsWith(matrix.config.machine, 't') }}
+        # install only the binaries and replace absolute symlinks with relative symlinks
+        run: |
+          make -C src/swish install-bin INSTALLROOT="${PWD}/build/swish"
+          for f in $(find build/swish -type l); do
+            target="$(realpath "$f")"
+            ln -vsf "../$(realpath --relative-to="${PWD}/build/swish" "${target}")" "$f"
+          done
+          tar -cvf ${{ matrix.config.machine }}-${{ matrix.config.chez }}-build.tar build/swish
+      - name: Archive build artifacts
+        if: ${{ matrix.config.chez != 'main' && !startsWith(matrix.config.machine, 't') }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ matrix.config.machine }}-${{ matrix.config.chez }}-build.tar
+          path: ${{ matrix.config.machine }}-${{ matrix.config.chez }}-build.tar
       - name: Check for failures
         run: if test -f failures; then cat failures; exit 1; fi
