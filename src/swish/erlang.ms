@@ -92,9 +92,9 @@
     (match (vector->list (osi_get_argv))
       [()
        (parameterize ([cd "src"])
-         (run-os-process scheme-exe scheme-args write-stdin 10000 '()))]
+         (run-os-process scheme-exe scheme-args write-stdin #f '()))]
       [(,command . ,args)
-       (run-os-process command args write-stdin 10000 '())]))
+       (run-os-process command args write-stdin #f '())]))
   (match (launch)
     [`(<os-result> ,stdout ,stderr ,exit-status)
      (unless (eqv? expected-exit exit-status)
@@ -3834,7 +3834,7 @@
 ;; once in a blue moon this will catch a regression in $receive
 ;; that shows up as curious gen-server behavior; typically need
 ;; to save it to a separate mat file and run it repeatedly
-(isolate-mat tempt-fate (settings (timeout 120000))
+(isolate-mat tempt-fate ()
   (define server
     (spawn&link
      (lambda ()
