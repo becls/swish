@@ -73,11 +73,52 @@ following defaults:
 \begin{tabular}{lcp{.5\textwidth}}
   key & default & description \\ \hline
   \code{tags}    & \code{()} & a list of \var{tag} \etc \\
-  \code{timeout} & 60000 & deadline for test to complete, in milliseconds \\
+  \code{timeout} & 60000 & deadline for test to complete, in milliseconds;
+                           computed as \code{(scale-timeout 'isolate-mat)} \\
   \code{process-cleanup-deadline} & 500 & maximum time to wait for spawned processes to terminate, in milliseconds \\
   \code{process-kill-delay} & 100 & delay in milliseconds before killing each spawned process that did not terminate
   by the \code{process-cleanup-deadline}
 \end{tabular}
+
+% ----------------------------------------------------------------------------
+\defineentry{default-timeout}
+\begin{procedure}
+\code{(default-timeout \var{timeout} \opt{\var{value}})}
+\end{procedure}
+\returns{} see below
+
+Given a symbol \var{timeout} and a \var{value}, which
+must be a nonnegative fixnum or the symbol \code{infinity},
+\code{default-timeout} associates \var{timeout} with \var{value}
+and returns an unspecified value.
+If the optional \var{value} is omitted, \code{default-timeout} returns the
+value currently associated with \var{timeout}, or raises an exception if none.
+If \var{timeout} is a fixnum, \code{default-timeout} is the identity function.
+The following table lists predefined timeouts and their associated values.
+
+\begin{tabular}{lll}
+  timeout & value & use \\ \hline
+  \code{infinity} & \code{infinity} & \\
+  \code{isolate-mat} & 60000 & default \code{timeout} for \code{isolate-mat} \\
+  \code{os-process}  & 10000 & used internally by some Swish tests that call \code{spawn-os-process}
+\end{tabular}
+
+% ----------------------------------------------------------------------------
+\defineentry{scale-timeout}\index{timeout@\texttt{TIMEOUT\_SCALE\_FACTOR}}
+\begin{procedure}
+  \code{(scale-timeout \var{timeout})}
+\end{procedure}
+\returns{} see below
+
+The \code{scale-timeout} procedure resolves \var{timeout} by calling
+\code{(default-timeout \var{timeout})}.
+If the result is the symbol \code{infinity}, it is returned unmodified.
+If the result is a fixnum, \code{scale-timeout} returns the product
+of that number and the scale factor obtained by converting
+the value of the \verb|TIMEOUT_SCALE_FACTOR| environment variable to a number
+via \code{string->number}.
+The scale factor defaults to 1 and must be nonnegative.
+The product is rounded to an exact number.
 
 % ----------------------------------------------------------------------------
 \defineentry{mat:add-annotation"!}

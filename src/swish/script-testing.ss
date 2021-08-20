@@ -93,7 +93,7 @@
       (display for-stdin op)
       (newline op)
       (flush-output-port op))
-    (match (run-os-process command args write-stdin 10000 '())
+    (match (run-os-process command args write-stdin #f '())
       [`(<os-result> ,stdout ,stderr ,exit-status)
        (unless (eqv? exit-status 0)
          (throw

@@ -27,6 +27,7 @@
    <test-spec>
    assert-syntax-error
    capture-events
+   default-timeout
    delete-tree
    discard-events
    gc
@@ -38,6 +39,7 @@
    process-alive?
    run-os-process
    run-test-spec
+   scale-timeout
    scheme-exe
    sleep-ms
    start-event-mgr
@@ -170,8 +172,8 @@
 
   (define-syntax (isolate-mat x)
     (define defaults
-      '([tags ()]
-        [timeout 60000]
+      `([tags ()]
+        [timeout ,#'(scale-timeout 'isolate-mat)]
         [process-cleanup-deadline 500]
         [process-kill-delay 100]))
     (define (make-lookup x forms)
@@ -281,7 +283,7 @@
                         (close-input-port from-stderr))
           (write-stdin to-stdin)
           (receive
-           (after timeout
+           (after (scale-timeout (or timeout 'os-process))
              (osi_kill* os-pid 15)
              (throw
               `#(os-process-timeout
@@ -292,6 +294,43 @@
               [stdout (receive [#(stdout ,@os-pid ,lines) lines])]
               [stderr (receive [#(stderr ,@os-pid ,lines) lines])]
               [exit-status exit-status])])))))
+
+  (define (scale-timeout timeout)
+    (define scale-factor
+      (or (cond
+           [(getenv "TIMEOUT_SCALE_FACTOR") => string->number]
+           [else 1])
+          1))
+    (assert (nonnegative? scale-factor))
+    (match (default-timeout timeout)
+      [infinity 'infinity]
+      [,ms
+       (guard (fixnum? ms))
+       (exact (round (* scale-factor ms)))]))
+
+  (module (default-timeout)
+    (define default-timeout
+      (let ([current (make-eq-hashtable)])
+        (case-lambda
+         [(key)
+          (cond
+           [(fixnum? key)
+            (unless (fxnonnegative? key)
+              (bad-arg 'default-timeout key))
+            key]
+           [(eq-hashtable-ref current key #f)]
+           [else (errorf 'default-timeout "unrecognized timeout ~s" key)])]
+         [(key val)
+          (arg-check default-timeout
+            [key symbol?]
+            [val
+             (lambda (x)
+               (or (eq? x 'infinity)
+                   (and (fixnum? x) (fxnonnegative? x))))])
+          (eq-hashtable-set! current key val)])))
+    (default-timeout 'infinity 'infinity)
+    (default-timeout 'isolate-mat 60000)
+    (default-timeout 'os-process 10000))
 
   (define (match-regexps patterns ls)
     (let check ([patterns patterns] [remaining-lines ls])

@@ -83,7 +83,7 @@
                 (library-list)))
              (exit)))
          (flush-output-port op))
-       1000
+       #f
        '())])
    'ok))
 
