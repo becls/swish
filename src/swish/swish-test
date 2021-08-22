@@ -497,6 +497,8 @@
     };
   }
   document.addEventListener('DOMContentLoaded', function(event) {
+    // serialize as blob before we install suite meta-data
+    const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
     data.forEach(suite => {
       let meta = suite['meta-data'];
       let rs = suite.results || [];
@@ -517,6 +519,8 @@
     setSort('Suite');
     if (!results.every(r => 'pass' == r.type || 'skip' == r.type)) setSort('Result');
     render();
+    var link = document.getElementById('downloadLink');
+    link.href = window.URL.createObjectURL(blob, {type: 'text/plain'});
   });
 |#)))
   (let ([op (open-file-to-replace filename)])
@@ -583,7 +587,8 @@
               (div (@ (id "summary")))
               (div (@ (id "controls"))
                 (input (@ (type "checkbox") (id "showStatistics")))
-                (label (@ (for "showStatistics")) "Show Statistics")))
+                (label (@ (for "showStatistics")) "Show Statistics")
+                (a (@ (id "downloadLink") (style "margin-left: 1em;")) "Download Data")))
             (div (@ (class "vscroll"))
               (table (@ (id "content"))))))))))
 
