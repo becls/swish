@@ -157,7 +157,7 @@
   (supervisor:start&link 'http-sup 'one-for-all 0 1
     (http:configure-file-server #f 0 (web-dir)
       (http:options
-       [request-timeout 500]
+       [request-timeout (scale-timeout 500)]
        [file-search-extensions '(".ss" ".html")]
        [file-transform http:enable-dynamic-pages]))))
 
