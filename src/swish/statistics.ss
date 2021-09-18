@@ -92,6 +92,11 @@
          [date date]
          [reason reason]
          [bytes-allocated (bytes-allocated)]
+         [current-memory-bytes (current-memory-bytes)]
+         [maximum-memory-bytes
+          (let ([max (maximum-memory-bytes)])
+            (reset-maximum-memory-bytes!)
+            max)]
          [osi-bytes-used (osi_get_bytes_used)]
          [sqlite-memory sqlite-memory]
          [sqlite-memory-highwater sqlite-memory-highwater]

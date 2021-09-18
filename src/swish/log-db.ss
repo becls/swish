@@ -115,6 +115,7 @@
                [software-info (software-info)]
                [machine-type (symbol->string (machine-type))]
                [computer-name (osi_get_hostname)]
+               [os-pid (osi_get_pid)]
                [os-system system]
                [os-release release]
                [os-version version]
@@ -387,7 +388,7 @@
 
   (module (make-swish-event-logger swish-event-logger)
     (define schema-name 'swish)
-    (define schema-version "2020-10-01")
+    (define schema-version "2021-09-18")
 
     (define-simple-events create-simple-tables log-simple-event
       (<child-end>
@@ -434,6 +435,8 @@
        (date text)
        (reason text)
        (bytes-allocated integer)
+       (current-memory-bytes integer)
+       (maximum-memory-bytes integer)
        (osi-bytes-used integer)
        (sqlite-memory integer)
        (sqlite-memory-highwater integer)
@@ -459,6 +462,7 @@
        (software-info text)
        (machine-type text)
        (computer-name text)
+       (os-pid integer)
        (os-system text)
        (os-release text)
        (os-version text)
@@ -534,6 +538,12 @@
     (define (upgrade-db)
       (match (log-db:version schema-name)
         [,@schema-version 'ok]
+        ["2020-10-01"
+         (execute "alter table statistics add column current_memory_bytes integer default null")
+         (execute "alter table statistics add column maximum_memory_bytes integer default null")
+         (execute "alter table system_attributes add column os_pid integer default null")
+         (log-db:version schema-name "2021-09-18")
+         (upgrade-db)]
         ["2020-09-01"
          (execute "alter table system_attributes add column os_system text default null")
          (execute "alter table system_attributes add column os_release text default null")

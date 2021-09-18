@@ -82,6 +82,8 @@
     date
     reason            ; startup | update | suspend | resume | shutdown
     bytes-allocated
+    current-memory-bytes
+    maximum-memory-bytes
     osi-bytes-used
     sqlite-memory
     sqlite-memory-highwater
@@ -107,6 +109,7 @@
     software-info
     machine-type
     computer-name
+    os-pid
     os-system
     os-release
     os-version

@@ -88,6 +88,11 @@ top-level-value \code{\$suspend}.
   \argrow{reason}{\code{startup}, \code{update}, \code{suspend},
     \code{resume}, or \code{shutdown}}
   \argrow{bytes-allocated}{Scheme heap size from \code{bytes-allocated}}
+  \argrow{current-memory-bytes}{Scheme heap size including overhead,
+    from \code{current-memory-bytes}}
+  \argrow{maximum-memory-bytes}{maximum Scheme heap size including overhead,
+    since startup or since the last \code{<statistics>} event,
+    from \code{maximum-memory-bytes}}
   \argrow{osi-bytes-used}{C heap size from \code{osi\_get\_bytes\_used}}
   \argrow{sqlite-memory}{SQLite memory used from
     \code{osi\_get\_sqlite\_status}}
@@ -104,6 +109,9 @@ top-level-value \code{\$suspend}.
     since last event}
   \argrow{gc-bytes}{Scheme heap bytes reclaimed since last event}
 \end{pubevent}
+
+Each time a \code{<statistics>} event is emitted,
+the maximum memory bytes value is reset via \code{reset-maximum-memory-bytes!}.
 
 The JSON object in the \code{foreign-handles} field contains at least the following entries:
 
