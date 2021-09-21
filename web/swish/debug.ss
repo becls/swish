@@ -116,7 +116,11 @@
               (quotient (time-nanosecond now) 1000000))))
        (fprintf op "Uptime: ~a\n" (uptime))
        (newline op)
-       (fprintf op "  Scheme bytes: ~15:D\n" (bytes-allocated))
+       (let ([current (current-memory-bytes)]
+             [occupied (bytes-allocated)])
+         (fprintf op "  Scheme bytes: ~15:D / ~:D (~,1f% occupied)\n"
+           occupied current
+           (* 100 (/ occupied current))))
        (fprintf op "       C bytes: ~15:D\n" (osi_get_bytes_used))
        (match (osi_get_sqlite_status* SQLITE_STATUS_MEMORY_USED #f)
          [#(,current ,highwater)

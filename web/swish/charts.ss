@@ -94,7 +94,7 @@
         (fill-gaps (sqlite:execute stmt (list limit)))))))
 
 (define standard-charts
-  '(("memory" "bytes_allocated" "osi_bytes_used")
+  '(("memory" "bytes_allocated" "osi_bytes_used" "maximum_memory_bytes")
     ("time" "cpu" "gc_real")
     ("sqlite" "sqlite_memory" "sqlite_memory_highwater")
     ("bytes_allocated" "bytes_allocated")
