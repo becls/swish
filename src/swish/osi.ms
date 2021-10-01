@@ -96,3 +96,24 @@
         (json:write (current-output-port) (app:config) 0)))
     'replace)
   (script-test test-request '("150") "" '("add-work" "start" "stop" "ok")))
+
+;; test for change in semantics, e.g., units of the underlying uv_get_total_memory
+(isolate-mat sanity-check-memory-info ()
+  ;; test only on Linux; interface should be the same on other platforms
+  (match (get-uname)
+    [`(<uname> [system "Linux"])
+     (let* ([os-total (osi_get_total_memory)] ;; in bytes
+            [os-free (osi_get_free_memory)]   ;; in bytes
+            [ip (open-file-to-read "/proc/meminfo")])
+       (assert (< os-free os-total))
+       (on-exit (close-port ip)
+         (let lp ()
+           (match (get-line ip)
+             [#!eof (throw `reference-memory-info-not-found)]
+             [,line
+              ;; free memory fluctuates too much to check reliably this way
+              (match (pregexp-match (re "^MemTotal: *([0-9]+) kB") line)
+                [(,_ ,total-kb)
+                 (assert (= os-total (* 1024 (string->number total-kb))))]
+                [,_ (lp)])]))))]
+    [,_ 'ok]))

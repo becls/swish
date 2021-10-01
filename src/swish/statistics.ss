@@ -107,7 +107,8 @@
          [gc-count (sstats-gc-count delta)]
          [gc-cpu (time-duration (sstats-gc-cpu delta))]
          [gc-real (time-duration (sstats-gc-real delta))]
-         [gc-bytes (sstats-gc-bytes delta)])
+         [gc-bytes (sstats-gc-bytes delta)]
+         [os-free-memory (osi_get_free_memory)])
        stats)))
 
   ;; External entry points are run from the event-loop process.

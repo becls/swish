@@ -94,7 +94,8 @@
     gc-count
     gc-cpu
     gc-real
-    gc-bytes)
+    gc-bytes
+    os-free-memory)
   (define-tuple <supervisor-error>
     timestamp
     supervisor
@@ -113,7 +114,8 @@
     os-system
     os-release
     os-version
-    os-machine)
+    os-machine
+    os-total-memory)
   (define-tuple <transaction-retry>
     timestamp
     database

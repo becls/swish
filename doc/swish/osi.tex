@@ -289,7 +289,7 @@ See Figure~\ref{fig:service-callbacks} for information on these callbacks.
 \caption{Service callbacks. \label{fig:service-callbacks}}
 \end{figure}
 
-\subsection {System Functions}
+\subsection {System Functions and Procedures}
 
 \defineentry{osi\_get\_argv}
 \begin{function}
@@ -309,6 +309,24 @@ The \code{osi\_get\_bytes\_used} function returns the number of bytes
 used by the C run-time heap. On Linux, it calls the \code{mallinfo}
 function. On macOS, it calls the \code{mstats} function. On Windows,
 it calls the \code{\_heapwalk} function.
+
+\defineentry{osi\_get\_free\_memory}
+\begin{procedure}
+  \code{(osi\_get\_free\_memory)}
+\end{procedure}
+\returns{} an unsigned integer
+
+The \code{osi\_get\_free\_memory} procedure returns the number of bytes of free
+memory as reported by \code{uv\_get\_free\_memory}.
+
+\defineentry{osi\_get\_total\_memory}
+\begin{procedure}
+  \code{(osi\_get\_total\_memory)}
+\end{procedure}
+\returns{} an unsigned integer
+
+The \code{osi\_get\_total\_memory} procedure returns the number of bytes of
+total physical memory as reported by \code{uv\_get\_total\_memory}.
 
 \defineentry{osi\_get\_callbacks}
 \begin{function}

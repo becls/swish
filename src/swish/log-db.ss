@@ -119,7 +119,8 @@
                [os-system system]
                [os-release release]
                [os-version version]
-               [os-machine machine])])
+               [os-machine machine]
+               [os-total-memory (osi_get_total_memory)])])
           (db:expire-cache 'log-db)
           'ignore]
          [,error error])]
@@ -388,7 +389,7 @@
 
   (module (make-swish-event-logger swish-event-logger)
     (define schema-name 'swish)
-    (define schema-version "2021-09-18")
+    (define schema-version "2021-10-01")
 
     (define-simple-events create-simple-tables log-simple-event
       (<child-end>
@@ -447,7 +448,8 @@
        (gc-count integer)
        (gc-cpu real)
        (gc-real real)
-       (gc-bytes integer))
+       (gc-bytes integer)
+       (os-free-memory integer))
       (<supervisor-error>
        (timestamp integer)
        (supervisor text)
@@ -466,7 +468,8 @@
        (os-system text)
        (os-release text)
        (os-version text)
-       (os-machine text))
+       (os-machine text)
+       (os-total-memory integer))
       (<transaction-retry>
        (timestamp integer)
        (database text)
@@ -538,6 +541,11 @@
     (define (upgrade-db)
       (match (log-db:version schema-name)
         [,@schema-version 'ok]
+        ["2021-09-18"
+         (execute "alter table statistics add column os_free_memory integer default null")
+         (execute "alter table system_attributes add column os_total_memory integer default null")
+         (log-db:version schema-name "2021-10-01")
+         (upgrade-db)]
         ["2020-10-01"
          (execute "alter table statistics add column current_memory_bytes integer default null")
          (execute "alter table statistics add column maximum_memory_bytes integer default null")
