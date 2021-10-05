@@ -116,6 +116,11 @@
               (quotient (time-nanosecond now) 1000000))))
        (fprintf op "Uptime: ~a\n" (uptime))
        (newline op)
+       (let ([free (osi_get_free_memory)]
+             [total (osi_get_total_memory)])
+         (fprintf op "  Free memory: ~16:D (~,1f%)\n" free (* 100 (/ free total)))
+         (fprintf op "  Phys memory: ~16:D\n" total))
+       (newline op)
        (let ([current (current-memory-bytes)]
              [occupied (bytes-allocated)])
          (fprintf op "  Scheme bytes: ~15:D / ~:D (~,1f% occupied)\n"
