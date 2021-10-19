@@ -33,6 +33,7 @@ CONFIG_UNAME="$(uname -s)"
 MYCC=
 MYCPPFLAGS=
 MYCFLAGS=
+MYLD=
 MYLDFLAGS=
 TOOLPREFIX=
 
@@ -94,6 +95,9 @@ while [ $# != 0 ]; do
       ;;
     CFLAGS=*)
       setoption "MYCFLAGS" "CFLAGS=" "$1"
+      ;;
+    LD=*)
+      setoption "MYLD" "LD=" "$1"
       ;;
     LDFLAGS=*)
       setoption "MYLDFLAGS" "LDFLAGS=" "$1"
