@@ -8,44 +8,74 @@ jobs:
       matrix:
         config:
           - machine: a6osx
-            os: macos-latest
+            os: macos-11
             chez: v9.5.4
           - machine: a6osx
-            os: macos-latest
+            os: macos-11
+            chez: v9.5.6
+          - machine: a6osx
+            os: macos-11
             chez: main
           - machine: ta6osx
-            os: macos-latest
+            os: macos-11
+            chez: v9.5.4
+          - machine: ta6osx
+            os: macos-11
+            chez: v9.5.6
+          - machine: i3le
+            os: ubuntu-20.04
             chez: v9.5.4
           - machine: i3le
-            os: ubuntu-latest
+            os: ubuntu-20.04
+            chez: v9.5.6
+          - machine: ti3le
+            os: ubuntu-20.04
             chez: v9.5.4
           - machine: ti3le
-            os: ubuntu-latest
+            os: ubuntu-20.04
+            chez: v9.5.6
+          - machine: a6le
+            os: ubuntu-20.04
             chez: v9.5.4
           - machine: a6le
-            os: ubuntu-latest
-            chez: v9.5.4
+            os: ubuntu-20.04
+            chez: v9.5.6
           - machine: a6le
-            os: ubuntu-latest
+            os: ubuntu-20.04
             chez: main
           - machine: ta6le
-            os: ubuntu-latest
+            os: ubuntu-20.04
+            chez: v9.5.4
+          - machine: ta6le
+            os: ubuntu-20.04
+            chez: v9.5.6
+          - machine: i3nt
+            os: windows-2019
             chez: v9.5.4
           - machine: i3nt
-            os: windows-latest
+            os: windows-2019
+            chez: v9.5.6
+          - machine: ti3nt
+            os: windows-2019
             chez: v9.5.4
           - machine: ti3nt
-            os: windows-latest
+            os: windows-2019
+            chez: v9.5.6
+          - machine: a6nt
+            os: windows-2019
             chez: v9.5.4
           - machine: a6nt
-            os: windows-latest
-            chez: v9.5.4
+            os: windows-2019
+            chez: v9.5.6
           - machine: a6nt
-            os: windows-latest
+            os: windows-2019
             chez: main
           - machine: ta6nt
-            os: windows-latest
+            os: windows-2019
             chez: v9.5.4
+          - machine: ta6nt
+            os: windows-2019
+            chez: v9.5.6
     runs-on: ${{ matrix.config.os }}
     defaults:
       run:
