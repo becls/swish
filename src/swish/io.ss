@@ -446,7 +446,7 @@
     (unless (process? process)
       (bad-arg 'watch-path process))
     (with-interrupts-disabled
-     (match (osi_watch_path* path
+     (match (osi_watch_path* (tilde-expand path)
               (case-lambda
                [(filename events)
                 (send process
@@ -576,7 +576,7 @@
      [(path mode)
       (define result)
       (with-interrupts-disabled
-       (match (osi_make_directory* path mode
+       (match (osi_make_directory* (tilde-expand path) mode
                 (let ([p self])
                   (lambda (r)
                     (set! result r)
@@ -591,7 +591,7 @@
   (define make-directory-path
     (case-lambda
      [(path mode)
-      (let loop ([path path])
+      (let loop ([path (tilde-expand path)])
         (let ([dir (path-parent path)])
           (unless (or (string=? dir path) (string=? dir ""))
             (unless (directory? dir)
@@ -619,7 +619,7 @@
   (define (remove-directory path)
     (define result)
     (with-interrupts-disabled
-     (match (osi_remove_directory* path
+     (match (osi_remove_directory* (tilde-expand path)
               (let ([p self])
                 (lambda (r)
                   (set! result r)
@@ -633,7 +633,7 @@
   (define (remove-file path)
     (define result)
     (with-interrupts-disabled
-     (match (osi_unlink* path
+     (match (osi_unlink* (tilde-expand path)
               (let ([p self])
                 (lambda (r)
                   (set! result r)
@@ -647,7 +647,7 @@
   (define (rename-path path new-path)
     (define result)
     (with-interrupts-disabled
-     (match (osi_rename* path new-path
+     (match (osi_rename* (tilde-expand path) (tilde-expand new-path)
               (let ([p self])
                 (lambda (r)
                   (set! result r)
@@ -661,7 +661,7 @@
   (define (set-file-mode path mode)
     (define result)
     (with-interrupts-disabled
-     (match (osi_chmod* path mode
+     (match (osi_chmod* (tilde-expand path) mode
               (let ([p self])
                 (lambda (r)
                   (set! result r)
@@ -682,10 +682,17 @@
        [(,who . ,errno) (io-error name who errno)]
        [,handle (@make-osi-port name handle)])))
 
+  (define (tilde-expand path)
+    (if (and (> (string-length path) 0)
+             (char=? #\~ (string-ref path 0))
+             (string=? "~" (path-first path)))
+        (path-combine (osi_get_home_directory) (path-rest path))
+        path))
+
   (define (open-file-port name flags mode)
     (define result)
     (with-interrupts-disabled
-     (match (osi_open_file* name flags mode
+     (match (osi_open_file* (tilde-expand name) flags mode
               (let ([p self])
                 (lambda (r)
                   (if (pair? r)
@@ -718,7 +725,7 @@
   (define (get-real-path path)
     (define result)
     (with-interrupts-disabled
-     (match (osi_get_real_path* path
+     (match (osi_get_real_path* (tilde-expand path)
               (let ([p self])
                 (lambda (r)
                   (set! result r)
@@ -735,7 +742,7 @@
      [(path follow?)
       (define result)
       (with-interrupts-disabled
-       (match (osi_get_stat* path follow?
+       (match (osi_get_stat* (tilde-expand path) follow?
                 (let ([p self])
                   (lambda (r)
                     (set! result r)
@@ -749,7 +756,7 @@
   (define (list-directory path)
     (define result)
     (with-interrupts-disabled
-     (match (osi_list_directory* path
+     (match (osi_list_directory* (tilde-expand path)
               (let ([p self])
                 (lambda (r)
                   (set! result r)
@@ -841,7 +848,7 @@
     (unless (process? process)
       (bad-arg 'spawn-os-process process))
     (with-interrupts-disabled
-     (match (osi_spawn* path args
+     (match (osi_spawn* (tilde-expand path) args
               (lambda (os-pid exit-status term-signal)
                 (send process
                   `#(process-terminated ,os-pid ,exit-status ,term-signal))))
@@ -859,7 +866,7 @@
   (define (spawn-os-process-detached path args)
     (unless (and (list? args) (for-all string? args))
       (bad-arg 'spawn-os-process-detached args))
-    (match (osi_spawn_detached* path args)
+    (match (osi_spawn_detached* (tilde-expand path) args)
       [(,who . ,errno) (io-error path who errno)]
       [,os-pid os-pid]))
 
