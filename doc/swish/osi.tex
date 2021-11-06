@@ -715,6 +715,15 @@ finishes, it enqueues the callback list \code{(\var{callback}
   \var{result})}, where \var{result} is the string path when
 successful and a negative error code otherwise.
 
+\defineentry{osi\_get\_home\_directory}
+\begin{function}
+  \code{ptr osi\_get\_home\_directory(void);}
+\end{function}
+
+The \code{osi\_get\_home\_directory} function uses the
+\code{uv\_os\_homedir} function to return the string path of the
+current user's home directory and an error pair otherwise.
+
 \defineentry{osi\_get\_temp\_directory}
 \begin{function}
   \code{ptr osi\_get\_temp\_directory(void);}

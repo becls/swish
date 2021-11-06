@@ -1234,6 +1234,15 @@ ptr osi_rename(const char* path, const char* new_path, ptr callback) {
   return Strue;
 }
 
+ptr osi_get_home_directory(void) {
+  static char buffer[32768];
+  size_t len = sizeof(buffer);
+  int rc = uv_os_homedir(buffer, &len);
+  if (rc < 0)
+    return osi_make_error_pair("uv_os_homedir", rc);
+  return Sstring_utf8(buffer, len);
+}
+
 ptr osi_get_temp_directory(void) {
   static char buffer[32768];
   size_t len = sizeof(buffer);

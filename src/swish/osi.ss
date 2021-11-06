@@ -54,6 +54,8 @@
    osi_get_file_size
    osi_get_file_size*
    osi_get_free_memory
+   osi_get_home_directory
+   osi_get_home_directory*
    osi_get_hostname
    osi_get_hostname*
    osi_get_hrtime
@@ -199,6 +201,7 @@
   (define-osi osi_get_executable_path)
   (define-osi osi_get_file_size (port uptr) (callback ptr))
   (define-osi osi_get_real_path (path string) (callback ptr))
+  (define-osi osi_get_home_directory)
   (define-osi osi_get_temp_directory)
   (define-osi osi_chmod (path string) (mode int) (callback ptr))
   (define-osi osi_make_directory (path string) (mode int) (callback ptr))

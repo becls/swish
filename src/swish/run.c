@@ -61,6 +61,7 @@ static void swish_init(void) {
   add_foreign(osi_get_error_text);
   add_foreign(osi_get_executable_path);
   add_foreign(osi_get_file_size);
+  add_foreign(osi_get_home_directory);
   add_foreign(osi_get_hostname);
   add_foreign(osi_get_hrtime);
   add_foreign(osi_get_ip_address);

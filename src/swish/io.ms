@@ -263,7 +263,8 @@
     ["end of file" (osi_get_error_text UV_EOF)]
     ["SQLITE_ERROR" (osi_get_error_text -6000001)]
     ["Error code 0" (osi_get_error_text 0)]
-    [#t (directory? (osi_get_temp_directory))])
+    [#t (directory? (osi_get_temp_directory))]
+    [#t (directory? (osi_get_home_directory))])
    'ok)
   (delete-tree test-dir)
   (make-directory-path test-dir)
