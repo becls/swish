@@ -901,7 +901,8 @@
                     (match (catch (profile:merge full-name))
                       [ok (void)]
                       [#(EXIT ,reason)
-                       (fail "cannot load profile data from ~a" user-supplied-name)]))))
+                       (fail "cannot load profile data from ~a: ~a" user-supplied-name
+                         (exit-reason->english reason))]))))
               (profile:stop))))]
        [save-prof (truncate-profile)])
       (let ([done (make-hashtable string-hash string=?)])

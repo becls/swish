@@ -37,6 +37,7 @@
    (chezscheme)
    (swish app-io)
    (swish erlang)
+   (swish errors)
    (swish gen-server)
    (swish html)
    (swish io)
@@ -336,7 +337,8 @@
          (lambda (profile-fn)
            (match (catch ($profile-load profile-fn (make-insert-filedata table)))
              [#(EXIT ,reason)
-              (errorf 'profile:dump-html "cannot load profile data from ~a" profile-fn)]
+              (errorf 'profile:dump-html "cannot load profile data from ~a: ~a" profile-fn
+                (exit-reason->english reason))]
              [,_ (void)]))
          inputs))
       (let-values ([(keys vals) (hashtable-entries table)])
