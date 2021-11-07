@@ -43,6 +43,11 @@
    [excl-tags --not (list "<tag>") "exclude tests with this tag"]
    [test-run --test-run (string "<UUID>")
     "use the specified <UUID> to identify the test run instead of generating one"]
+   [rerun --rerun (string "<type>")
+     (ct:join #\space
+       "rerun tests whose result type matches <type>, where <type> is"
+       "one of {pass|fail|skip} or a parenthesized Scheme list of those types;"
+       "here <spec> specifies test results in .ms.mo or .ss.mo files")]
    [specs (list . "<spec>") "directory | suite [{test | -t test} ...]"]))
 
 (define test-and-report-cli
@@ -220,7 +225,12 @@
        "run tests t1, t2, and t3 from ./src/foo.ms and all tests from src/bar.ms\n")
      (example (who " --tag fast --not regression src web")
        "run only the tests under src and web whose mat tags include fast,"
-       "but not regression.")])
+       "but not regression.\n")
+     (example (who " --rerun fail --not long src web/alt.ms.mo")
+       "rerun failed tests under src or in web/alt.ms"
+       "whose tags do not include long.\n")
+     (example (who " --rerun '(skip fail)' .")
+       "rerun tests under . that failed or were skipped.")])
   (let ([invalid (fold-right remq sections help-sections)])
     (unless (null? invalid)
       (fail "unrecognized help section~p:~{ ~a~}" (length invalid) invalid)))
@@ -241,7 +251,7 @@
           (match entry
             [(,fn . ,@DIRENT_DIR) (search (combine path fn) hits)]
             [(,fn . ,@DIRENT_FILE)
-             (if (member (path-extension fn) extensions)
+             (if (ormap (lambda (ext) (ends-with-ci? fn ext)) extensions)
                  (cons (combine path fn) hits)
                  hits)]
             [,_ hits])) ;; not following symlinks
@@ -595,7 +605,7 @@
 (define (if-exists fn) (and (regular-file? fn) fn))
 
 (define (get-test-files x)
-  (and (directory? x) (find-files x "ms" "ss")))
+  (and (directory? x) (find-files x ".ms" ".ss")))
 
 (define (get-test-suite x)
   (or (if-exists x) (if-exists (string-append x ".ms"))))
@@ -612,15 +622,52 @@
 
 (define-tuple <pre-spec> suite test)
 
+(define (get-rerun types x)
+  (cond
+   [(not types) #f]
+   [(null? types) '()]
+   [(directory? x) (extract-reruns types (find-files x ".ms.mo" ".ss.mo"))]
+   [(if-exists x) (extract-reruns types (list x))]
+   [else #f]))
+
+(define (extract-reruns types ls)
+  (define (add-pre-spec ls mr)
+    (if (not (memq (mat-result-type mr) types))
+        ls
+        (cons (<pre-spec> make
+                [suite (mat-result-test-file mr)]
+                [test (symbol->string (mat-result-test mr))])
+          ls)))
+  (let lp ([ls ls] [pre-specs '()])
+    (if (null? ls)
+        (reverse pre-specs)
+        (let ([results (get-results (car ls))])
+          (unless (json:ref results '(meta-data completed) #f)
+            (printf "Warning: ~a found incomplete results in ~a.\n"
+              (option-named 'rerun) (car ls)))
+          (lp (cdr ls)
+            (fold-left add-pre-spec pre-specs
+              (mat-data-results results)))))))
+
+(define (parse-rerun-type s)
+  (let* ([x (read (open-input-string s))]
+         [ls (if (list? x) x (list x))])
+    (cond
+     [(ormap (lambda (x) (and (not (memq x '(pass fail skip))) x)) ls) =>
+        (lambda (type)
+          (fail "invalid ~a type ~s" (option-named 'rerun) type))]
+     [else ls])))
+
 (define (extract-pre-specs specs)
   (define out (make-hashtable values =))
+  (define (add-pre-spec! pre-spec)
+    (hashtable-set! out (hashtable-size out) pre-spec))
   (define (add-suite! suite)
     (when (may-have-mats? suite)
-      (hashtable-set! out (hashtable-size out)
-        (<pre-spec> make [suite suite] [test #f]))))
+      (add-pre-spec! (<pre-spec> make [suite suite] [test #f]))))
   (define (add-test! suite test)
-    (hashtable-set! out (hashtable-size out)
-      (<pre-spec> make [suite suite] [test test])))
+    (add-pre-spec! (<pre-spec> make [suite suite] [test test])))
+  (define types (cond [(opt 'rerun) => parse-rerun-type] [else #f]))
   (let lp ([specs specs])
     (cond
      [(null? specs)
@@ -628,6 +675,10 @@
        (vector-map cdr
          (vector-sort (lambda (a b) (< (car a) (car b)))
            (hashtable-cells out))))]
+     [(get-rerun types (car specs)) =>
+      (lambda (pre-specs)
+        (for-each add-pre-spec! pre-specs)
+        (lp (cdr specs)))]
      [(get-test-files (car specs)) =>
       (lambda (files)
         (for-each add-suite! files)
@@ -650,17 +701,18 @@
      [else
       (fail "expected directory or suite: ~s" (car specs))])))
 
+(define (get-results from)
+  (match (catch (load-results from))
+    [#(EXIT ,reason)
+     (fail "cannot load mat results from ~a: ~a" from
+       (exit-reason->english reason))]
+    [,results results]))
+
 (define (harvest from*)
   (let ([ht (make-hashtable string-hash string=?)])
-    (define (get-results from)
-      (match (catch (load-results from))
-        [#(EXIT ,reason)
-         (fail "cannot load mat results from ~a: ~a" from
-           (exit-reason->english reason))]
-        [,results results]))
     (define (add! from)
       (if (directory? from)
-          (for-each add! (find-files from "mo"))
+          (for-each add! (find-files from ".ms.mo" ".ss.mo"))
           (hashtable-set! ht from (hashtable-size ht))))
     (for-each add! from*)
     (vector->list
@@ -732,6 +784,7 @@
         [excl-tags (map string->symbol (or (opt 'excl-tags) '()))]
         [exclude (or (opt 'exclude) '())]
         [include (or (opt 'include) '())]
+        [rerun (opt 'rerun)]
         [save-prof (opt 'save-prof)]
         [load-prof (opt 'load-prof)]
         [progress (cond [(opt 'progress) => string->symbol] [else #f])]
@@ -758,6 +811,14 @@
         (option-named 'harvest)
         (option-named 'load-results)
         (option-named 'files))]
+     [(and (opt 'rerun) (opt 'harvest))
+      (fail "~a conflicts with ~a"
+        (option-named 'rerun)
+        (option-named 'harvest))]
+     [(and (opt 'rerun) (opt 'load-results))
+      (fail "~a conflicts with ~a"
+        (option-named 'rerun)
+        (option-named 'load-results))]
      [(and (opt 'harvest) (pair? pre-specs))
       (fail "~a conflicts with ~a"
         (option-named 'harvest)

@@ -105,7 +105,19 @@
   (nonzero-exit (swish-test "--harvest . --progress none .")
     '() "--harvest conflicts with <file> ...")
   (nonzero-exit (swish-test "--load-results foo.json .")
-    '() "--load-results conflicts with <file> ..."))
+    '() "--load-results conflicts with <file> ...")
+  (nonzero-exit (swish-test "--rerun skip --load-results foo.json .")
+    '() "--rerun conflicts with --load-results")
+  (nonzero-exit (swish-test "--rerun pass --harvest .")
+    '() "--rerun conflicts with --harvest")
+  (nonzero-exit (swish-test "--rerun sitcom .")
+    '() "invalid --rerun type sitcom")
+  ;; using \t as separator instead of space since swish-test helper
+  ;; splits on space
+  (nonzero-exit (swish-test "--rerun (pass\tfail\tsurprise) .")
+    '() "invalid --rerun type surprise")
+  (nonzero-exit (swish-test "--test-run amok")
+    '() "invalid --test-run UUID amok"))
 
 (isolate-mat load-this ()
   (write-test-file "test-load-this.ss"
@@ -228,8 +240,9 @@
   )
 
 (isolate-mat select-tests ()
+  (define subdir (uuid->string (osi_make_uuid)))
   (define test-file
-    (write-test-file "test-specified.ms"
+    (write-test-file (path-combine subdir "test-specified.ms")
       (lambda ()
         (for-each pretty-print
           '((import (swish mat))
@@ -290,6 +303,14 @@
      "SKIP *a5"
      "[-]+"
      "Tests run: 3   Pass: 2   Fail: 1   Skip: 2"))
+  ;; rerun skipped tests
+  (zero-exit
+   (swish-test "--rerun skip " (string-append test-file ".mo"))
+   '(seek
+     "pass *a4"
+     "pass *a5"
+     "[-]+"
+     "Tests run: 2   Pass: 2   Fail: 0   Skip: 0"))
   ;; exclusion tags are additive
   (nonzero-exit
    (swish-test "--progress test --not triv --not silly " test-file)
@@ -301,6 +322,22 @@
      "SKIP *a5"
      "[-]+"
      "Tests run: 2   Pass: 1   Fail: 1   Skip: 3"))
+  ;; rerun tests that passed or failed
+  (nonzero-exit
+   ;; using \t here to work around the split on spaces in swish-test helper
+   (swish-test "--rerun (pass\tfail) " (string-append test-file ".mo"))
+   '(seek
+     "FAIL *a3"
+     "pass *a4"
+     "[-]+"
+     "Tests run: 2   Pass: 1   Fail: 1   Skip: 0"))
+  ;; rerun tests that failed
+  (nonzero-exit
+   (swish-test "--rerun fail " (string-append test-file ".mo"))
+   '(seek
+     "FAIL *a3"
+     "[-]+"
+     "Tests run: 1   Pass: 0   Fail: 1   Skip: 0"))
   ;; filter first by tags and then by exclusion tags
   ;; order on command-line doesn't matter
   (nonzero-exit
@@ -313,6 +350,21 @@
      "pass *a5"
      "[-]+"
      "Tests run: 3   Pass: 3   Fail: 0   Skip: 2"))
+  ;; rerun tests that were skipped, but respect the --not broken tag constraint
+  (nonzero-exit
+   (swish-test "--rerun skip --not broken " (string-append test-file ".mo"))
+   '(seek
+     "SKIP *a3"
+     "pass *a4"
+     "[-]+"
+     "Tests run: 1   Pass: 1   Fail: 0   Skip: 1"))
+  ;; rerun skipped tests in a specified directory
+  (nonzero-exit
+   (swish-test "--rerun skip " (path-parent test-file))
+   '(seek
+     "FAIL *a3"
+     "[-]+"
+     "Tests run: 1   Pass: 0   Fail: 1   Skip: 0"))
   ;; if any test fails, suite summary shows fail
   (nonzero-exit
    (swish-test "--progress suite --tag broken --tag silly " test-file)
