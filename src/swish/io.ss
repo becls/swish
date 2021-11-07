@@ -691,6 +691,7 @@
 
   (define (open-file-port name flags mode)
     (define result)
+    (arg-check 'open-file-port [name string?])
     (with-interrupts-disabled
      (match (osi_open_file* (tilde-expand name) flags mode
               (let ([p self])
@@ -724,6 +725,7 @@
 
   (define (get-real-path path)
     (define result)
+    (arg-check 'get-real-path [path string?])
     (with-interrupts-disabled
      (match (osi_get_real_path* (tilde-expand path)
               (let ([p self])
@@ -741,6 +743,7 @@
     (case-lambda
      [(path follow?)
       (define result)
+      (arg-check 'get-stat [path string?])
       (with-interrupts-disabled
        (match (osi_get_stat* (tilde-expand path) follow?
                 (let ([p self])
@@ -755,6 +758,7 @@
 
   (define (list-directory path)
     (define result)
+    (arg-check 'list-directory [path string?])
     (with-interrupts-disabled
      (match (osi_list_directory* (tilde-expand path)
               (let ([p self])
@@ -829,6 +833,7 @@
     (open-file name (+ O_WRONLY O_CREAT O_TRUNC) #o666 'binary-output))
 
   (define (read-file name)
+    (arg-check 'read-file [name string?])
     (let ([port (open-file-port name O_RDONLY 0)])
       (on-exit (close-osi-port port)
         (let ([n (get-file-size port)])
@@ -842,11 +847,13 @@
 
   ;; Process Ports
 
+  (define (list-of-strings? ls) (and (list? ls) (for-all string? ls)))
+
   (define (spawn-os-process path args process)
-    (unless (and (list? args) (for-all string? args))
-      (bad-arg 'spawn-os-process args))
-    (unless (process? process)
-      (bad-arg 'spawn-os-process process))
+    (arg-check 'spawn-os-process
+      [path string?]
+      [args list-of-strings?]
+      [process process?])
     (with-interrupts-disabled
      (match (osi_spawn* (tilde-expand path) args
               (lambda (os-pid exit-status term-signal)
@@ -864,8 +871,9 @@
        [(,who . ,errno) (io-error path who errno)])))
 
   (define (spawn-os-process-detached path args)
-    (unless (and (list? args) (for-all string? args))
-      (bad-arg 'spawn-os-process-detached args))
+    (arg-check 'spawn-os-process-detached
+      [path string?]
+      [args list-of-strings?])
     (match (osi_spawn_detached* (tilde-expand path) args)
       [(,who . ,errno) (io-error path who errno)]
       [,os-pid os-pid]))

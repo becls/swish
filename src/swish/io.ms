@@ -967,5 +967,23 @@
          (split (receive [,x x]) #\newline)))])
    'ok))
 
+(isolate-mat bad-args ()
+  (define-syntax assert-bad-args
+    (syntax-rules ()
+      [(_ [bad (fn arg ...)] ...)
+       (match-let*
+        ([`(catch #(bad-arg fn bad)) (try (fn arg ...))] ...)
+        'ok)]))
+  (assert-bad-args
+   [123 (open-file-port 123 O_RDONLY S_IFREG)]
+   [123 (get-real-path 123)]
+   [123 (get-stat 123)]
+   [123 (list-directory 123)]
+   [123 (read-file 123)]
+   [123 (spawn-os-process 123 '() self)]
+   [(oops) (spawn-os-process "nosuchfile" '(oops) self)]
+   [due (spawn-os-process "nosuchfile" '() 'due)]
+   [123 (spawn-os-process-detached 123 '())]
+   [(oops) (spawn-os-process-detached"nosuchfile" '(oops))]))
 
 (hook-console-input)
