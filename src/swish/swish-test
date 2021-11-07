@@ -670,9 +670,14 @@
     (define (add! from)
       (if (directory? from)
           (for-each add! (find-files from "mo"))
-          (hashtable-set! ht from #t)))
+          (hashtable-set! ht from (hashtable-size ht))))
     (for-each add! from*)
-    (vector->list (vector-map get-results (hashtable-keys ht)))))
+    (vector->list
+     (vector-map get-results
+       (vector-sort
+        (lambda (k1 k2)
+          (< (hashtable-ref ht k1 #f) (hashtable-ref ht k2 #f)))
+        (hashtable-keys ht))))))
 
 (define (option-named name)
   (format-spec
