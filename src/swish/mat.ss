@@ -371,6 +371,7 @@
               ["meta-kv"
                (json:set! meta-data (string->symbol (meta-kv-key r)) (meta-kv-value r))])
             (rd)))))
+    (json:set! obj 'results (reverse (json:ref obj 'results '())))
     obj)
 
   (define (summarize-results results*)
