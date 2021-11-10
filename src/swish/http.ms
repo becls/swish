@@ -1138,14 +1138,15 @@
        [response-timeout 15])))
   (capture-events)
   (let-values ([(ip op) (connect-tcp "127.0.0.1" (get-http-port))])
-    (put-bytevector op (string->utf8 "GET / HTTP/1.1\r\n\r\n"))
-    (flush-output-port op)
-    ;; grab a few bytes, but otherwise don't read. This will cause the
-    ;; server to fill up the network queue and eventually wait. This
-    ;; causes the response-timeout to trigger.
-    (do ([i 0 (+ i 1)]) ((= i 10)) (get-u8 ip))
-    (receive (after 2000 (throw 'failed-to-timeout))
-      [`(<child-end> [reason #(timeout ,_)]) 'ok])))
+    (on-exit (close-port op) ; tidy up, but also prevent premature gc of op
+      (put-bytevector op (string->utf8 "GET / HTTP/1.1\r\n\r\n"))
+      (flush-output-port op)
+      ;; grab a few bytes, but otherwise don't read. This will cause the
+      ;; server to fill up the network queue and eventually wait. This
+      ;; causes the response-timeout to trigger.
+      (do ([i 0 (+ i 1)]) ((= i 10)) (get-u8 ip))
+      (receive (after 2000 (throw 'failed-to-timeout))
+        [`(<child-end> [reason #(timeout ,_)]) 'ok]))))
 
 (http-mat content-length ()
   (define (test s)
@@ -1437,22 +1438,23 @@
           [ping-frequency 10]
           [pong-timeout 1])))))
   (let-values ([(ip op) (connect-tcp "127.0.0.1" (get-http-port))])
-    (for-each
-     (lambda (str)
-       (put-bytevector op (string->utf8 str))
-       (put-bytevector op (string->utf8 "\r\n")))
-     '("GET / HTTP/1.1"
-       "Connection: Upgrade"
-       "Host: 127.0.0.1"
-       "Upgrade: websocket"
-       "Sec-Websocket-Version: 13"
-       "Sec-Websocket-Key: dGhlIHNhbXBsZSBub25jZQ=="))
-    (put-bytevector op (string->utf8 "\r\n"))
-    (flush-output-port op)
-    (receive (after 1000 (throw 'no-ws:init))
-      [#(ws:init ,s)
-       (receive (after 1000 (throw 'no-server-close))
-         [#(ws:closed ,@s 1002 "no response from ping") 'ok])])))
+    (on-exit (close-port op) ; tidy up, but also prevent premature gc of op
+      (for-each
+       (lambda (str)
+         (put-bytevector op (string->utf8 str))
+         (put-bytevector op (string->utf8 "\r\n")))
+       '("GET / HTTP/1.1"
+         "Connection: Upgrade"
+         "Host: 127.0.0.1"
+         "Upgrade: websocket"
+         "Sec-Websocket-Version: 13"
+         "Sec-Websocket-Key: dGhlIHNhbXBsZSBub25jZQ=="))
+      (put-bytevector op (string->utf8 "\r\n"))
+      (flush-output-port op)
+      (receive (after 1000 (throw 'no-ws:init))
+        [#(ws:init ,s)
+         (receive (after 1000 (throw 'no-server-close))
+           [#(ws:closed ,@s 1002 "no response from ping") 'ok])]))))
 
 (http-mat websocket-client-connect-errors ()
   (define (do-test req)
