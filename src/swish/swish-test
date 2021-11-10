@@ -944,11 +944,17 @@
           (if (profile:dump-html (or save-prof load-prof) coverage include exclude)
               (printf "see ~a\n" (path->file-uri (get-real-path coverage)))
               (printf "no profile to dump\n")))
-        (summarize-results summary
-          (cond
-           [(or (opt 'harvest) (opt 'load-results)) (or progress 'summary)]
-           [(or report coverage) 'summary]
-           [else 'none]))
+        (call-with-values
+          (lambda ()
+            (summarize-results summary
+              (cond
+               [(or (opt 'harvest) (opt 'load-results)) (or progress 'summary)]
+               [(or report coverage) 'summary]
+               [else 'none])))
+          (lambda (pass fail skip completed attempted)
+            (when (or (opt 'harvest) (opt 'load-results))
+              (unless (and (> pass 0) (= fail 0) (= skip 0) (= completed attempted))
+                (set! status 1)))))
         (when (opt 'info)
           (let ([ht (make-eq-hashtable)])
             (define (sym<? a b) (string<? (symbol->string a) (symbol->string b)))
