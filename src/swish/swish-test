@@ -173,8 +173,11 @@
     [(all details)
      (wrap 0
        "By default, " who " runs all tests in the specified test suites."
-       "To run a limited set of tests, specify a suite or a suite and test"
-       "or use --tag or --not to filter tests based on tags.\n"
+       "To run a limited set of tests, use --tag or --not to select or exclude"
+       "tests based on the tags present in the mat or isolate-mat forms."
+       "To run particular tests, specify a suite followed by names of one"
+       "or more tests in the suite. Use -t to disambiguate where a test name"
+       "happens to match the name of an existing suite.\n"
        "\n"
        "Test suites are files with a \".ms\" or \".ss\" extension listed"
        "explicitly on the command line or found by recursively searching"
@@ -607,9 +610,6 @@
 (define (get-test-files x)
   (and (directory? x) (find-files x ".ms" ".ss")))
 
-(define (get-test-suite x)
-  (or (if-exists x) (if-exists (string-append x ".ms"))))
-
 (define (path->file-uri path)
   (define (sanitize path)
     (join (map http:percent-encode (pregexp-split (re "[\\\\/]") path)) "/"))
@@ -683,7 +683,7 @@
       (lambda (files)
         (for-each add-suite! files)
         (lp (cdr specs)))]
-     [(get-test-suite (car specs)) =>
+     [(if-exists (car specs)) =>
       (lambda (suite)
         (let lp2 ([added? #f] [ls (cdr specs)])
           (match ls
@@ -692,7 +692,7 @@
              (add-test! suite test)
              (lp2 #t rest)]
             [(,test . ,rest)
-             (guard (not (or (directory? test) (get-test-suite test))))
+             (guard (not (or (directory? test) (if-exists test))))
              (add-test! suite test)
              (lp2 #t rest)]
             [,rest
