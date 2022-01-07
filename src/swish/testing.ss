@@ -257,7 +257,7 @@
       (let ([to-stdin (binary->utf8 to-stdin)]
             [from-stdout (binary->utf8 from-stdout)]
             [from-stderr (binary->utf8 from-stderr)])
-        (define (spawn-handler pid tag ip)
+        (define (spawn-handler pid tag ip op)
           (define lines '())
           (define (spawn-drain handle-input)
             (spawn&link
@@ -272,12 +272,12 @@
           (define (print)
             (let ([c (read-char ip)])
               (unless (eof-object? c)
-                (write-char c)
-                (flush-output-port)
+                (write-char c op)
+                (flush-output-port op)
                 (print))))
           (spawn-drain (if (memq tag redirected) print collect-lines)))
-        (spawn-handler self 'stdout from-stdout)
-        (spawn-handler self 'stderr from-stderr)
+        (spawn-handler self 'stdout from-stdout (current-output-port))
+        (spawn-handler self 'stderr from-stderr (current-error-port))
         (on-exit (begin (close-output-port to-stdin)
                         (close-input-port from-stdout)
                         (close-input-port from-stderr))

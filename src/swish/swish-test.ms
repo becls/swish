@@ -376,7 +376,8 @@
   ;; failure exit code if specified test not found
   (nonzero-exit
    (swish-test "--progress test " test-file " this-test-does-not-exist")
-   '(seek "Exception in run-mat: mat this-test-does-not-exist is not defined"))
+   '(seek "*** Some test suite did not complete ***")
+   "Exception in run-mat: mat this-test-does-not-exist is not defined")
   ;; if all *specified* tests pass, show pass, exit code zero
   (zero-exit
    (swish-test "--progress suite " test-file " a1 a2 a4")
@@ -1644,8 +1645,5 @@
      "Tests run: 1   Pass: 1   Fail: 0   Skip: 0"))
   (nonzero-exit
    (swish-test test-file)
-   (map pregexp-quote
-     (list
-      "Exception: library (help) not found"
-      ""
-      (format "Test Failed: ~a" test-file)))))
+   `(seek ,(pregexp-quote (format "Test Failed: ~a" test-file)))
+   (pregexp-quote "Exception: library (help) not found")))
