@@ -68,7 +68,7 @@ jobs:
             os: windows-2019
             chez: v9.5.6
           - machine: a6nt
-            os: windows-2019
+            os: windows-2022
             chez: main
           - machine: ta6nt
             os: windows-2019

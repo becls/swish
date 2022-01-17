@@ -86,7 +86,8 @@ hash.
 - Chez Scheme 9.5.4, 9.5.6, or 9.5.7
 - Cygwin or MinGW/MSYS with bash, git, graphviz, grep, perl, texlive,
   GNU make, etc.
-- Microsoft Visual Studio 2019 or 2017 with Visual C++
+- cmake for libuv (https://cmake.org/)
+- Microsoft Visual Studio 2022, 2019, or 2017 with Visual C++
 - Put scheme in PATH.
 
 # Stand-alone Swish Applications

@@ -4,6 +4,18 @@ if not "%Applications%" == "" goto win64
 set Applications=%ProgramFiles%
 :win64
 
+:: Visual Studio 2022 Enterprise
+set BATDIR=%ProgramW6432%\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build
+if exist "%BATDIR%\vcvarsall.bat" goto found
+
+:: Visual Studio 2022 Professional
+set BATDIR=%ProgramW6432%\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build
+if exist "%BATDIR%\vcvarsall.bat" goto found
+
+:: Visual Studio 2022 Community
+set BATDIR=%ProgramW6432%\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build
+if exist "%BATDIR%\vcvarsall.bat" goto found
+
 :: Visual Studio 2019 Enterprise
 set BATDIR=%Applications%\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build
 if exist "%BATDIR%\vcvarsall.bat" goto found
