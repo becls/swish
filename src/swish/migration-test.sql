@@ -124,4 +124,4 @@ CREATE INDEX statistics_timestamp on statistics(timestamp);
 CREATE INDEX supervisor_error_timestamp on supervisor_error(timestamp);
 CREATE INDEX system_attributes_timestamp on system_attributes(timestamp);
 CREATE INDEX transaction_retry_timestamp on transaction_retry(timestamp);
-CREATE VIEW child as select T1.pid as id, T1.name, T1.supervisor, T1.restart_type, T1.type, T1.shutdown, T1.timestamp as start, T2.timestamp - T1.timestamp as duration, T2.killed, T2.reason from child_start T1 left outer join child_end T2 on T1.pid=T2.pid;
+CREATE VIEW child as select T1.rowid as rowid, T1.pid as id, T1.name, T1.supervisor, T1.restart_type, T1.type, T1.shutdown, T1.timestamp as start, T2.timestamp - T1.timestamp as duration, T2.killed, T2.reason from child_start T1 left outer join child_end T2 on T1.pid=T2.pid;

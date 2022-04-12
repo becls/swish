@@ -364,7 +364,7 @@
       (execute (format "drop table [~a_orig]" table))))
 
   (define ($migrate-pid-columns table . columns)
-    (change-column-type table "integer" "text" columns
+    (change-column-type table "INTEGER" "TEXT" columns
       (lambda (column)
         (format "case when [~a] is null then null else ':' || [~a] end"
           column column))))

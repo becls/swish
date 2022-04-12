@@ -16,7 +16,7 @@ SwishLibs := ../../${BUILD}/bin/libosi.so ../../${BUILD}/lib/swish_kernel.o
 	$C -I"${SCHEME_INCLUDE}" -I"${LIBUV_INCLUDE}" -c $<
 
 sqlite3.o: sqlite3.h sqlite3.c
-	$C -DSQLITE_ENABLE_JSON1 -DSQLITE_THREADSAFE=2 -DSQLITE_USE_URI=1 -c sqlite3.c
+	$C -DSQLITE_THREADSAFE=2 -DSQLITE_OMIT_DESERIALIZE -DSQLITE_USE_URI=1 -c sqlite3.c
 
 ${UvLib}/libuv_a.a: Mf-arm32le
 	cd ../../libuv && rm -rf build && mkdir build && cd build && cmake -D CMAKE_MESSAGE_LOG_LEVEL=WARNING -D CMAKE_POSITION_INDEPENDENT_CODE=ON ..

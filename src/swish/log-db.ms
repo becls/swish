@@ -364,26 +364,25 @@
       [#(ok ,log-db)
        (parameterize ([log-file db-file])
          (start-event-mgr)
-         (log-db:start&link))])
-     ;; migrate
-     (log-db:setup (list swish-event-logger))
-     ;; check data by selecting only what was present in original schema
-     (match-let*
-      ([,@orig-child
-        (transaction 'log-db
-          (execute "select 0+ltrim(id,':'), name, 0+ltrim(supervisor,':'), restart_type, type, shutdown, start, duration, killed, reason from child order by rowid"))]
-       [,@orig-gen-server-debug
-        (transaction 'log-db
-          (execute "select timestamp, duration, type, 0+ltrim(client,':'), 0+ltrim(server,':'), message, state, reply from gen_server_debug order by rowid"))]
-       [,@orig-gen-server-terminating
-        (transaction 'log-db
-          (execute "select timestamp, name, last_message, state, reason from gen_server_terminating order by rowid"))]
-       [,@orig-http-request
-        (transaction 'log-db
-          (execute "select timestamp, 0+ltrim(pid,':'), host, method, path, header, params from http_request order by rowid"))]
-       [,@orig-statistics
-        (transaction 'log-db
-          (execute "select timestamp, date, reason, bytes_allocated, osi_bytes_used, sqlite_memory,
+         (log-db:start&link))]
+      ;; migrate
+      [ignore (log-db:setup (list swish-event-logger))]
+      ;; check data by selecting only what was present in original schema
+      [,@orig-child
+       (transaction 'log-db
+         (execute "select rowid, 0+ltrim(id,':'), name, 0+ltrim(supervisor,':'), restart_type, type, shutdown, start, duration, killed, reason from child order by rowid"))]
+      [,@orig-gen-server-debug
+       (transaction 'log-db
+         (execute "select timestamp, duration, type, 0+ltrim(client,':'), 0+ltrim(server,':'), message, state, reply from gen_server_debug order by rowid"))]
+      [,@orig-gen-server-terminating
+       (transaction 'log-db
+         (execute "select timestamp, name, last_message, state, reason from gen_server_terminating order by rowid"))]
+      [,@orig-http-request
+       (transaction 'log-db
+         (execute "select timestamp, 0+ltrim(pid,':'), host, method, path, header, params from http_request order by rowid"))]
+      [,@orig-statistics
+       (transaction 'log-db
+         (execute "select timestamp, date, reason, bytes_allocated, osi_bytes_used, sqlite_memory,
                          sqlite_memory_highwater,
                          json_extract(foreign_handles, '$.osi-ports') as ports,
                          json_extract(foreign_handles, '$.databases') as databases,
@@ -391,33 +390,33 @@
                          json_extract(foreign_handles, '$.tcp-listeners') as listeners,
                          json_extract(foreign_handles, '$.path-watchers') as watchers,
                          cpu, real, bytes, gc_count, gc_cpu, gc_real, gc_bytes from statistics order by rowid"))]
-       [,@orig-supervisor-error-primary
-        (transaction 'log-db
-          (execute "select timestamp, 0+ltrim(supervisor,':'), error_context, 0+ltrim(child_pid,':'), child_name from supervisor_error order by rowid"))]
-       [(#(,reason1) #(,reason2)) orig-supervisor-error-reason]
-       [#(error ,reason1) (read (open-input-string reason1))]
-       [(#(,@reason1) #(,@reason2))
-        (transaction 'log-db
-          (execute "select ifnull(json_extract(details, '$.message'), reason) from supervisor_error order by rowid"))]
-       [,@orig-system-attributes
-        (transaction 'log-db
-          ;; N.B. filter out entry added when we did log-db:setup during the test
-          (execute "select timestamp, date,
+      [,@orig-supervisor-error-primary
+       (transaction 'log-db
+         (execute "select timestamp, 0+ltrim(supervisor,':'), error_context, 0+ltrim(child_pid,':'), child_name from supervisor_error order by rowid"))]
+      [(#(,reason1) #(,reason2)) orig-supervisor-error-reason]
+      [#(error ,reason1) (read (open-input-string reason1))]
+      [(#(,@reason1) #(,@reason2))
+       (transaction 'log-db
+         (execute "select ifnull(json_extract(details, '$.message'), reason) from supervisor_error order by rowid"))]
+      [,@orig-system-attributes
+       (transaction 'log-db
+         ;; N.B. filter out entry added when we did log-db:setup during the test
+         (execute "select timestamp, date,
                            json_extract(software_info, '$.swish.version') as software_version,
                            computer_name from system_attributes
                     where timestamp < ?
                     order by rowid"
-            startup))]
-       [(#("instance" ,instance-id) #("swish" ,original-schema)) orig-version]
-       [(#("instance" ,@instance-id) #("swish" ,new-schema))
-        (transaction 'log-db
-          (execute "select name, version from version order by rowid"))]
-       [,@supervisor-query1-result (transaction 'log-db (execute supervisor-query1))]
-       [,@supervisor-query2-result (transaction 'log-db (execute supervisor-query2))]
-       [,@gs-debug-query-result (transaction 'log-db (execute gs-debug-query))]
-       [,@orig-http-join-1-results (transaction 'log-db (execute http-join-1))]
-       )
-      'ok))))
+           startup))]
+      [(#("instance" ,instance-id) #("swish" ,original-schema)) orig-version]
+      [(#("instance" ,@instance-id) #("swish" ,new-schema))
+       (transaction 'log-db
+         (execute "select name, version from version order by rowid"))]
+      [,@supervisor-query1-result (transaction 'log-db (execute supervisor-query1))]
+      [,@supervisor-query2-result (transaction 'log-db (execute supervisor-query2))]
+      [,@gs-debug-query-result (transaction 'log-db (execute gs-debug-query))]
+      [,@orig-http-join-1-results (transaction 'log-db (execute http-join-1))]
+      )
+     'ok)))
 
 (isolate-mat bad-args ()
   (match-let*
