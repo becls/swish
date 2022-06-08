@@ -1,5 +1,42 @@
 # Change Log
 
+## 2022-06-09 Version 2.4.0 (Stable)
+
+### New
+
+* Breaking change: swish-test no longer adds an automatic .ms suffix
+  when checking whether a specified file exists.
+* Breaking change: swish-test exits with a non-zero exit status when
+  processing results that are incomplete or contain failed tests,
+  skipped tests, or no passing tests. The aim is for `--harvest` or
+  `--load-results` runs to generate a non-zero exit status when the
+  original test run that produced those results would have done so.
+* Improved performance of mon and pcb records in hashtables by
+  implementing custom record-type-hash-procedure for each.
+* Added `os-pid`, `current-memory-bytes`, `maximum-memory-bytes`,
+  `os-free-memory`, and `os-total-memory` to statistics log.
+* Added `osi_get_home_directory` to support limited tilde expansion
+  for filesystem paths.
+* Added `default-timeout` and `scale-timeout` to testing, the latter
+  respecting an optional `TIMEOUT_SCALE_FACTOR` environment variable.
+* Added `LD` compile option to configure script.
+* swish-test:
+  - Preserves stdout and stderr output
+  - Preserves `--harvest` suite order
+  - Added `--rerun` option
+  - Added "Download Data" link to HTML test report
+* Changed `throw` to `raise` for `http-request-timeout` errors.
+
+### Bug Fixes
+
+* mat load-results now preserves result order
+
+### Updates
+
+* Updated to SQLite 3.38.5
+* Updated to libuv 1.44.1
+* Require Chez Scheme 9.5.6 or later
+
 ## 2021-05-18 Version 2.2.0 (Stable)
 
 ### New
