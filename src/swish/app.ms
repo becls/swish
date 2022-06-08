@@ -732,3 +732,28 @@
     [`(catch #(bad-arg repl-level -3)) (try (repl-level -3))]
     [`(catch #(bad-arg repl-level 2.0)) (try (repl-level 2.0))])
    'ok))
+
+(mat coverage ()
+  (define script
+    (write-test-file "script"
+      (lambda ()
+        ;; hit else case in print-banner
+        (pretty-print '(swish-start "--version"))
+        ;; hit help case in run
+        (pretty-print
+         `(let ([os (open-output-string)])
+            (parameterize ([current-output-port os])
+              (swish-start "--help"))
+            (match (split (get-output-string os) #\space)
+              [("Usage:" ,(fix-exe "swish") . ,',_) 'ok])))
+        ;; hit null files case in run
+        (pretty-print '(swish-start)))))
+  (match-let*
+   ([,expected
+     (format "~a Version ~a"
+       (software-product-name)
+       (software-version))]
+    [,prompt (if (whereis 'profiler) ">> " "> ")]
+    [(,@expected ,@expected ,@prompt)
+     (script-test script '() "(exit)" '())])
+   'ok))

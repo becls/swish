@@ -135,6 +135,54 @@
     [#(EXIT `(<os-process-failed> [stderr ("swish-build: requires output filename.")]))
      'ok]))
 
+(isolate-mat errors ()
+  (define empty (write-example "empty" '()))
+  (define non-lib (write-example "non-lib" '((define x 1) (pretty-print x))))
+  (define tl-prog (write-example "tl-prog" '((top-level-program (import (scheme)) (newline)))))
+  (define mixed
+    (write-example "mixed"
+      ;; okay to compile a file containing more than one library, but can't mix in a top-level-program
+      '((library (A) (export a) (import (scheme)) (define a 1))
+        (top-level-program (import (scheme)) (newline)))))
+  (define mixed2
+    (write-example "mixed2"
+      ;; okay to compile a file containing more than one library, but can't mix in a top-level expression
+      '((library (A) (export a) (import (scheme)) (define a 1))
+        (write "hello"))))
+  (define-syntax expect-errors
+    (syntax-rules ()
+      [(_ [patterns expr] ...)
+       (begin
+         (match (try expr)
+           [`(catch `(<os-process-failed> ,stderr))
+            (match-regexps `patterns stderr)])
+         ...)]))
+  (expect-errors
+   [("swish-build: unexpected eof in fasl file.*")
+    (swish-build-test `("--library" "-o" "fail" ,empty) '())]
+   [("swish-build: expected .*library form, but encountered.*")
+    (swish-build-test `("--library" "-o" "fail" ,non-lib) '())]
+   [("swish-build: found program while reading library.*")
+    (swish-build-test `("--library" "-o" "fail" ,tl-prog) '())]
+   [("swish-build: found program while reading library.*")
+    (swish-build-test `("--library" "-o" "fail" ,mixed) '())]
+   [("swish-build: expected .*library form, but encountered.*")
+    (swish-build-test `("--library" "-o" "fail" ,mixed2) '())]
+   [("swish-build: invalid context for top-level-program form.*")
+    (swish-build-test `("-o" "fail" ,tl-prog) '())]
+   [("swish-build: invalid context for top-level-program form.*")
+    (swish-build-test `("-o" "fail" ,tl-prog "-c") '())]
+   [("swish-build: invalid context for top-level-program form.*")
+    (swish-build-test `("-o" "fail" ,tl-prog "-b" "petite") '())]
+   )
+  ;; empty program or component is okay; silly, but okay
+  (match-let*
+   ([() (swish-build-test `("-c" "-o" "empty" ,empty) '())]
+    [() (swish-build-test `("-o" "empty" ,empty) '())]
+    [() (swish-build-test `("-o" "empty" ,empty "-b" "petite") '())])
+   'ok)
+  )
+
 (define hello-fat
   `((import
      (scheme)
