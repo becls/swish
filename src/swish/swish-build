@@ -178,6 +178,14 @@
        who "can make a compiled library, a component program, a stand-alone program, or a linked program."
        "By default," who "creates a linked program.\n"
        "\n"
+       "When compiling a library, the <source> file must contain one or more library forms."
+       "When compiling a program," who "combines the forms from the <source> file"
+       "into a single top-level program and compiles the result:\n\n")
+     (parameterize ([pretty-initial-indent 2])
+       (display "  ")
+       (pretty-print '(top-level-program (import (scheme) (swish imports)) form ...)))
+     (wrap 0
+       "\n"
        "To compile a library, specify --library. The resulting compiled library may"
        "be loaded explicitly or used as a" who "--rtlib argument when compiling other"
        "libraries or programs.\n"
