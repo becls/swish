@@ -388,7 +388,7 @@
 
   (define (conn:get-request who)
     (match (try (gen-server:call who 'get-request (request-timeout)))
-      [`(catch #(timeout ,_)) (throw 'http-request-timeout)]
+      [`(catch #(timeout ,_)) (raise 'http-request-timeout)]
       [,result (unwrap result)]))
 
   (define (conn:output-ready? who)
