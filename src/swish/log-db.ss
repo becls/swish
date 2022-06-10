@@ -499,7 +499,23 @@
         (set-session-id! (+ (or id 0) 1)))
 
       (execute "drop view if exists child")
-      (execute "create view child as select T1.rowid as rowid, T1.pid as id, T1.name, T1.supervisor, T1.restart_type, T1.type, T1.shutdown, T1.timestamp as start, T2.timestamp - T1.timestamp as duration, T2.killed, T2.reason, T2.details from child_start T1 left outer join child_end T2 on T1.pid=T2.pid")
+      (execute
+       (ct:join #\space
+         "create view child as select"
+         "T1.rowid as rowid,"
+         "T1.pid as id,"
+         "T1.name,"
+         "T1.supervisor,"
+         "T1.restart_type,"
+         "T1.type,"
+         "T1.shutdown,"
+         "T1.timestamp as start,"
+         "T2.timestamp as end,"
+         "T2.timestamp - T1.timestamp as duration,"
+         "T2.killed,"
+         "T2.reason,"
+         "T2.details"
+         "from child_start T1 left outer join child_end T2 on T1.pid=T2.pid"))
 
       (create-prune-on-insert-triggers
        (child_end timestamp)
