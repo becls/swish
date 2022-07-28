@@ -362,6 +362,7 @@ BASE="$(git rev-parse --show-toplevel)"
 SWISH_INCLUDE="${BASE}/src/swish"
 SWISH_LIBPATH="${BASE}/build/release/bin"
 LIBUV_INCLUDE="${BASE}/libuv/include"
+SQLITE_SRCPATH="${BASE}/sqlite"
 case "${CONFIG_UNAME}" in
   CYGWIN_NT-* | MINGW64_NT-* | MSYS_NT-*)
     UvLib=libuv/build/Release
@@ -377,6 +378,7 @@ if [ "${Windows}" = "yes" ]; then
     SWISH_LIBPATH="$(cygpath -aw "${SWISH_LIBPATH}")"
     LIBUV_INCLUDE="$(cygpath -aw "${LIBUV_INCLUDE}")"
     LIBUV_LIBPATH="$(cygpath -aw "${LIBUV_LIBPATH}")"
+    SQLITE_SRCPATH="$(cygpath -aw "${SQLITE_SRCPATH}")"
 fi
 
 set_output "#" src/swish/sh-config
@@ -412,6 +414,7 @@ add "SWISH_LIBPATH:=${SWISH_LIBPATH}"
 add "SWISH_VERSION:=${SWISH_VERSION}"
 add "LIBUV_INCLUDE:=${LIBUV_INCLUDE}"
 add "LIBUV_LIBPATH:=${LIBUV_LIBPATH}"
+add "SQLITE_SRCPATH:=${SQLITE_SRCPATH}"
 add "NORMALIZE_PATH:=${NORMALIZE_PATH}"
 if [ "${CONFIG_UNAME}" = "Darwin" ]; then
   add "GNU_INSTALL:=ginstall"

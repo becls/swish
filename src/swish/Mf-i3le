@@ -27,10 +27,10 @@ osi.o run.o: chezscheme-revision.include
 	${LD} -melf_i386 -r -X -o $@ run.o ${OsiObj} "${SCHEME_LIBPATH}"/kernel.o -L"${LIBUV_LIBPATH}" -luv_a
 
 %.o: %.c osi.h swish.h ${UvInclude}
-	$C -I"${SCHEME_INCLUDE}" -I"${LIBUV_INCLUDE}" -c $<
+	$C -I"${SCHEME_INCLUDE}" -I"${LIBUV_INCLUDE}" -I"${SQLITE_SRCPATH}" -c $<
 
-sqlite3.o: sqlite3.h sqlite3.c
-	$C -DSQLITE_THREADSAFE=2 -DSQLITE_OMIT_DESERIALIZE -DSQLITE_USE_URI=1 ${HUSH} -c sqlite3.c
+sqlite3.o: ${SQLITE_SRCPATH}/sqlite3.h ${SQLITE_SRCPATH}/sqlite3.c
+	$C -DSQLITE_THREADSAFE=2 -DSQLITE_OMIT_DESERIALIZE -DSQLITE_USE_URI=1 ${HUSH} -I"${SQLITE_SRCPATH}" -c ${SQLITE_SRCPATH}/sqlite3.c
 
 ${UvLib}/libuv_a.a: Mf-i3le
 	cd ../../libuv && rm -rf build && mkdir build && cd build && CFLAGS=-m32 cmake -D CMAKE_MESSAGE_LOG_LEVEL=WARNING -D CMAKE_POSITION_INDEPENDENT_CODE=ON ..

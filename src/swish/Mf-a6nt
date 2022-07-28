@@ -14,10 +14,10 @@ osi.obj run.obj: chezscheme-revision.include
 	${LD} /dll /out:$@ ${OsiObj} ${SCHEME_LIB_PREFIX}.lib uv.lib sqlite3.lib
 
 %.obj: %.c osi.h swish.h ${UvInclude}
-	$C /DSCHEME_LIB=${SCHEME_LIB_PREFIX} /I"${SCHEME_INCLUDE}" /I"${LIBUV_INCLUDE}" /c $<
+	$C /DSCHEME_LIB=${SCHEME_LIB_PREFIX} /I"${SCHEME_INCLUDE}" /I"${LIBUV_INCLUDE}" /I"${SQLITE_SRCPATH}" /c $<
 
-sqlite3.obj: sqlite3.h sqlite3.c
-	$C /DSQLITE_API=__declspec\(dllexport\) /DSQLITE_THREADSAFE=2 /DSQLITE_OMIT_DESERIALIZE /DSQLITE_USE_URI=1 /c sqlite3.c
+sqlite3.obj: ${SQLITE_SRCPATH}/sqlite3.h ${SQLITE_SRCPATH}/sqlite3.c
+	$C /DSQLITE_API=__declspec\(dllexport\) /DSQLITE_THREADSAFE=2 /DSQLITE_OMIT_DESERIALIZE /DSQLITE_USE_URI=1 /I"${SQLITE_SRCPATH}" /c "${SQLITE_SRCPATH}"/sqlite3.c
 
 ../../${BUILD}/bin/sqlite3.dll ../../${BUILD}/bin/sqlite3.lib: sqlite3.obj
 	${LD} /dll /out:../../${BUILD}/bin/sqlite3.dll sqlite3.obj
