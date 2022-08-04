@@ -91,10 +91,10 @@
      [#vu8(255 255 255 255) "/////w=="]
      ;; hit each character in the output encoding
      [#vu8(#x00 #x10 #x83 #x10 #x51 #x87 #x20 #x92 #x8b #x30 #xd3 #x8f
-            #x41 #x14 #x93 #x51 #x55 #x97 #x61 #x96 #x9b #x71 #xd7 #x9f
-            #x82 #x18 #xa3 #x92 #x59 #xa7 #xa2 #x9a #xab #xb2 #xdb #xaf
-            #xc3 #x1c #xb3 #xd3 #x5d #xb7 #xe3 #x9e #xbb #xf3 #xdf #xbf)
-       "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"])
+           #x41 #x14 #x93 #x51 #x55 #x97 #x61 #x96 #x9b #x71 #xd7 #x9f
+           #x82 #x18 #xa3 #x92 #x59 #xa7 #xa2 #x9a #xab #xb2 #xdb #xaf
+           #xc3 #x1c #xb3 #xd3 #x5d #xb7 #xe3 #x9e #xbb #xf3 #xdf #xbf)
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"])
     (round-trip (generate-bv 256 values))
     (parameterize ([random-seed 2609306995])
       (round-trip (generate-bv 1021 (lambda (i) (random 256))))
@@ -133,10 +133,10 @@
      [#vu8(255 255 255 255) "_____w=="]
      ;; hit each character in the output encoding
      [#vu8(#x00 #x10 #x83 #x10 #x51 #x87 #x20 #x92 #x8b #x30 #xd3 #x8f
-            #x41 #x14 #x93 #x51 #x55 #x97 #x61 #x96 #x9b #x71 #xd7 #x9f
-            #x82 #x18 #xa3 #x92 #x59 #xa7 #xa2 #x9a #xab #xb2 #xdb #xaf
-            #xc3 #x1c #xb3 #xd3 #x5d #xb7 #xe3 #x9e #xbb #xf3 #xdf #xbf)
-       "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"])
+           #x41 #x14 #x93 #x51 #x55 #x97 #x61 #x96 #x9b #x71 #xd7 #x9f
+           #x82 #x18 #xa3 #x92 #x59 #xa7 #xa2 #x9a #xab #xb2 #xdb #xaf
+           #xc3 #x1c #xb3 #xd3 #x5d #xb7 #xe3 #x9e #xbb #xf3 #xdf #xbf)
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"])
     (round-trip (generate-bv 256 values))
     (parameterize ([random-seed 2609306995])
       (round-trip (generate-bv 1021 (lambda (i) (random 256))))

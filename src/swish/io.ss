@@ -533,13 +533,13 @@
         (call/1cc
          (lambda (return)
            (parameterize
-               ([keyboard-interrupt-handler
-                 (lambda ()
-                   ;; Ignore when the reader has already responded.
-                   (when (active? cell)
-                     (active?-set! cell #f)
-                     (return 'interrupt)))])
-             (receive [#(,@reader ,r) r])))))])
+            ([keyboard-interrupt-handler
+              (lambda ()
+                ;; Ignore when the reader has already responded.
+                (when (active? cell)
+                  (active?-set! cell #f)
+                  (return 'interrupt)))])
+            (receive [#(,@reader ,r) r])))))])
     (binary->utf8
      (make-custom-binary-input-port "stdin-nb*" r! gp #f close)))
 
@@ -1035,7 +1035,7 @@
      [(signum)
       (arg-check 'signal-handler [signum fixnum? fxpositive?])
       (with-interrupts-disabled
-        (@signal-handler-callback signum))]
+       (@signal-handler-callback signum))]
      [(signum callback)
       (arg-check 'signal-handler
         [signum fixnum? fxpositive?]

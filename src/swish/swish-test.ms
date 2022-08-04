@@ -87,7 +87,7 @@
 
 (isolate-mat version ()
   (zero-exit (swish-test "--version")
-   '("swish-test Version (?:\\d+\\.){2}\\d+ \\([[:xdigit:]dirty-]+\\)")))
+    '("swish-test Version (?:\\d+\\.){2}\\d+ \\([[:xdigit:]dirty-]+\\)")))
 
 (isolate-mat check-options ()
   (nonzero-exit (swish-test "--progress pilgrim")

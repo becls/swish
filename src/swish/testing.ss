@@ -471,8 +471,8 @@
                           [(,library ,name ,exports ,imports . ,rest)
                            (guard (eq? 'library (annotation-expression library)))
                            `(,library ,name ,exports ,imports
-                              ,@(map (lambda (x) `(export ,x)) to-expose)
-                              ,@rest)]
+                             ,@(map (lambda (x) `(export ,x)) to-expose)
+                             ,@rest)]
                           [,_ x]))))
                    (set-top-level-value! 'load-this
                      (lambda () (help-load eval)))

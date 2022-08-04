@@ -42,14 +42,14 @@
    )
 
   (define-tuple <arg-spec>
-    name                            ; symbol that appears in output ht
-    type                            ;
-    short                           ; #f | character
-    long                            ; #f | string
-    help                            ; string describing argument
-    conflicts                       ; list of names
-    requires                        ; list of names
-    usage                           ; list of [show|hide|fit] and [long|short|req|opt|<how>]
+    name      ; symbol that appears in output ht
+    type      ;
+    short     ; #f | character
+    long      ; #f | string
+    help      ; string describing argument
+    conflicts ; list of names
+    requires  ; list of names
+    usage     ; list of [show|hide|fit] and [long|short|req|opt|<how>]
     )
 
   (define (positional? s)

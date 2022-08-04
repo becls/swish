@@ -43,13 +43,13 @@
    (["foo" (coerce "foo")]
     [0 (coerce 0)]
     [,n (guard (= n (most-positive-fixnum))) ; fixnum
-      (coerce (most-positive-fixnum))]
+     (coerce (most-positive-fixnum))]
     [,n (guard (= n (+ (most-positive-fixnum) 1))) ; small bignum
-      (coerce (+ (most-positive-fixnum) 1))]
+     (coerce (+ (most-positive-fixnum) 1))]
     [3.14159 (coerce 3.14159)]          ; flonum
     [#f (coerce #f)]
     [,n (guard (= n (expt 2 129)))      ; large real
-      (coerce (expt 2 129))]
+     (coerce (expt 2 129))]
     [#vu8(1 2 3) (coerce '#vu8(1 2 3))]
     ["bar" (coerce 'bar)]
     ["gensym" (coerce (gensym "gensym"))]

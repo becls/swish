@@ -359,8 +359,8 @@
           (meta (@ (charset "UTF-8")))
           (title "Test Coverage")
           (style
-            "td { text-align: right; }"
-            "td:first-child { text-align: left; }")))
+           "td { text-align: right; }"
+           "td:first-child { text-align: left; }")))
       (fprintf op "<body style='font-family:monospace;'>\n")
       (let-values ([(hits sites percentage) (summarize-coverage results)])
         (fprintf op

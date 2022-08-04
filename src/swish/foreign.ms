@@ -146,8 +146,8 @@
 
 (define check-error
   (make-process-parameter
-    (lambda (failure stderr)
-      (match-regexps `(,failure) stderr))))
+   (lambda (failure stderr)
+     (match-regexps `(,failure) stderr))))
 
 (define-syntax expect
   (syntax-rules ()
@@ -424,7 +424,7 @@
   (make-directory dir)
   (on-exit (delete-directory dir)
     (parameterize ([current-directory dir])
-       ;; run from a subdirectory that does not contain a config file
+      ;; run from a subdirectory that does not contain a config file
       (match (list-directory ".") [() 'ok])
       ;; run via script
       (run-script (cons shlib-imports shlib-test-expr*) success)

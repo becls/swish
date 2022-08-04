@@ -381,7 +381,7 @@
     [#f (one-or-four port)])
    'ok)
   ;; direct case
-   (match-let*
+  (match-let*
    ([#t (procedure/arity? -1 take-any)]
     [#t (procedure/arity? -1 take-one)]
     [#t (procedure/arity? -1 take-five)]

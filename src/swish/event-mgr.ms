@@ -301,12 +301,12 @@
           [,@x 'ok]))
       '(1 2 3 saving-throw))
      (receive (after 1000 (throw 'timeout))
-      [`(EXIT ,@pid #(unhandled-event crash)) 'ok])
+       [`(EXIT ,@pid #(unhandled-event crash)) 'ok])
      (match-regexps
       '(seek "^Date: " "^Timestamp: " "^Event: crash"
-        seek "^Date: " "^Timestamp: " "^Event: 4"
-        seek "^Date: " "^Timestamp: " "^Event: 5"
-        seek "^Date: " "^Timestamp: " "^Event: 6")
+         seek "^Date: " "^Timestamp: " "^Event: 4"
+         seek "^Date: " "^Timestamp: " "^Event: 5"
+         seek "^Date: " "^Timestamp: " "^Event: 6")
       (split (get-output-string op) #\newline))
      (assert (process? (whereis 'event-mgr))))))
 

@@ -172,7 +172,7 @@
      'ok))
   (match-let*
    ([,empty-bv #vu8(#xda #x39 #xa3 #xee #x5e #x6b #x4b #xd #x32 #x55 #xbf
-                     #xef #x95 #x60 #x18 #x90 #xaf #xd8 #x7 #x9)]
+                    #xef #x95 #x60 #x18 #x90 #xaf #xd8 #x7 #x9)]
     ["da39a3ee5e6b4b0d3255bfef95601890afd80709" (hash->hex-string empty-bv)]
     [,@empty-bv (hex-string->hash "da39a3ee5e6b4b0d3255bfef95601890aFD80709")])
    'ok))

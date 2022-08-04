@@ -2225,8 +2225,8 @@
         (let ()
           (match-define
            (,a.a #(,_ ,a.c) ,a.z
-             `(blat [m ,a.m])
-             `(<top> [dog ,a.dog]))
+            `(blat [m ,a.m])
+            `(<top> [dog ,a.dog]))
            input)
           (list a.a a.c a.dog a.z a.m))]
        [(1 2 3 4 A C ,@nada "frozz" food "hat")
@@ -2234,8 +2234,8 @@
         (let ([a 1] [c 2] [z 3] [m 4] [dog 'food])
           (match-define
            (,a.a #(,_ ,a.c) ,a.z
-             `(blat [m ,a.m])
-             `(<top> [dog ,a.dog]))
+            `(blat [m ,a.m])
+            `(<top> [dog ,a.dog]))
            input)
           (list a c z m a.a a.c a.z a.m dog a.dog))]
        [(A #(b C) "frozz" orig same fine ernate unimpeded untouched "hat" days bark)
@@ -2829,11 +2829,11 @@
 (mat uuid ()
   (match-let*
    ([#vu8(#x79 #x22 #x8E #x49 #x1 #x13 #x1E #x42 #x9A #x2E #x40
-           #x1 #xAC #xF5 #x65 #xE5)
-      (string->uuid "498e2279-1301-421E-9a2E-4001aCf565E5")]
+          #x1 #xAC #xF5 #x65 #xE5)
+     (string->uuid "498e2279-1301-421E-9a2E-4001aCf565E5")]
     ["498E2279-1301-421E-9A2E-4001ACF565E5"
      (uuid->string #vu8(#x79 #x22 #x8E #x49 #x1 #x13 #x1E #x42 #x9A #x2E #x40
-                         #x1 #xAC #xF5 #x65 #xE5))])
+                        #x1 #xAC #xF5 #x65 #xE5))])
    'ok))
 
 (isolate-mat gatekeeper ()

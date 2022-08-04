@@ -229,8 +229,8 @@
 
   (define (conn:start&link cache-mgr ip op options)
     (define-state-tuple <conn>
-      input                     ; ready | #(advance ipos) | close
-      output                    ; ready | dirty
+      input                          ; ready | #(advance ipos) | close
+      output                         ; ready | dirty
       )
     (define host (port-name ip))
 
@@ -488,10 +488,10 @@
     ;; interpret the files and a cookie to determine if the result is
     ;; valid to be placed in the cache.
     (define-state-tuple <http-cache>
-      cookie     ; integer
-      mime-types ; #f | file-extension -> media-type
-      pages      ; path -> #(loaded ,handler) | #(loading ,path ,pid ,waiters)
-      watchers   ; (path-watcher ...)
+      cookie     ;; integer
+      mime-types ;; #f | file-extension -> media-type
+      pages      ;; path -> #(loaded ,handler) | #(loading ,path ,pid ,waiters)
+      watchers   ;; (path-watcher ...)
       )
     (define cache-timeout (* 5 60 1000))
     (define empty-ht (ht:make string-ci-hash string-ci=? string?))

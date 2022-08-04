@@ -96,17 +96,17 @@
 
 (hosted-page "Debug" '()
   `(style
-     "input.collapsoid { display: none; }"
-     "label.reason { display: inline; color: blue; }"
-     "input.collapsoid:checked + label.reason + span + label.stackdump { display: block; margin-left: 5em; }"
-     "input.collapsoid + label.reason + span + label.stackdump { display: none; }"
-     "label.stack { display: flex; }"
-     "input.stack { display: none; }"
-     "input.stack + label span { min-width: 1em; display: inline-block; }"
-     "input.stack + label span::before { content: \"▼\"; }"
-     "input.stack:checked + label span::before { content: \"▶\"; }"
-     "input.stack:checked + label.stack { text-overflow: ellipsis; white-space: pre; max-height: 1.25em; line-height: 1.25; overflow: hidden; }"
-     )
+    "input.collapsoid { display: none; }"
+    "label.reason { display: inline; color: blue; }"
+    "input.collapsoid:checked + label.reason + span + label.stackdump { display: block; margin-left: 5em; }"
+    "input.collapsoid + label.reason + span + label.stackdump { display: none; }"
+    "label.stack { display: flex; }"
+    "input.stack { display: none; }"
+    "input.stack + label span { min-width: 1em; display: inline-block; }"
+    "input.stack + label span::before { content: \"▼\"; }"
+    "input.stack:checked + label span::before { content: \"▶\"; }"
+    "input.stack:checked + label.stack { text-overflow: ellipsis; white-space: pre; max-height: 1.25em; line-height: 1.25; overflow: hidden; }"
+    )
   `(pre
     ,(let-values ([(op get) (open-string-output-port)])
        (let ([now (current-time)])

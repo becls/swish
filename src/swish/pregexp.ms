@@ -164,8 +164,8 @@
   )
 
 (define date-re
-                                        ;match `month year' or `month day, year'.
-                                        ;subpattern matches day, if present
+  ;; match `month year' or `month day, year'.
+  ;; subpattern matches day, if present
   (pregexp "([a-z]+) +([0-9]+,)? *([0-9]+)"))
 
 (test set2
@@ -306,14 +306,14 @@
 
 (define ip-re1
   (string-append
-   "^"        ;nothing before
-   n0-255     ;the first n0-255,
-   "(?x:"     ;then the subpattern of
-   "\\."      ;a dot followed by
-   n0-255     ;an n0-255,
-   ")"        ;which is
-   "{3}"      ;repeated exactly 3 times
-   "$"        ;with nothing following
+   "^"                                  ;nothing before
+   n0-255                               ;the first n0-255,
+   "(?x:"                               ;then the subpattern of
+   "\\."                                ;a dot followed by
+   n0-255                               ;an n0-255,
+   ")"                                  ;which is
+   "{3}"                                ;repeated exactly 3 times
+   "$"                                  ;with nothing following
    ))
 
 (test set3
@@ -335,7 +335,7 @@
 
 (define ip-re
   (string-append
-   "(?=[1-9])" ;ensure there's a non-0 digit
+   "(?=[1-9])"                          ;ensure there's a non-0 digit
    ip-re1))
 
 (test set4
@@ -352,7 +352,7 @@
 
 (define ip-re2
   (string-append
-   "(?![0.]*$)" ;not just zeros and dots
+   "(?![0.]*$)"                         ;not just zeros and dots
                                         ;dot is not metachar inside []
    ip-re1))
 
@@ -402,25 +402,25 @@
 
 (test set6
 
-                                        ;PLT bug 6095 from Neil W. Van Dyke
+  ;; PLT bug 6095 from Neil W. Van Dyke
   (pregexp "[a-z-]")
   (:sub (:or (:seq (:one-of-chars (:char-range #\a #\z) #\-))))
                                         ;
   (pregexp "[-a-z]")
   (:sub (:or (:seq (:one-of-chars #\- (:char-range #\a #\z)))))
 
-                                        ;PLT bug 6442 from David T. Pierson
+  ;; PLT bug 6442 from David T. Pierson
   (pregexp-match-positions "(a(b))?c" "abc")
   ((0 . 3) (0 . 2) (1 . 2))
                                         ;
   (pregexp-match-positions "(a(b))?c" "c")
   ((0 . 1) #f #f)
 
-                                        ;PLT bug 7233 from Edi Weitz
+  ;; PLT bug 7233 from Edi Weitz
   (length (pregexp-match "(a)|(b)" "b"))
   3
 
-                                        ;PLT bug 7232 from Neil Van Dyke
+  ;; PLT bug 7232 from Neil Van Dyke
   (pregexp "[-a]")
   (:sub (:or (:seq (:one-of-chars #\- #\a))))
                                         ;

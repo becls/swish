@@ -565,7 +565,7 @@
     (syntax-case x ()
       [(ls e0 e1 ...)
        #`($limit-stack (lambda () e0 e1 ...)
-          #,(find-source #'ls))]))
+           #,(find-source #'ls))]))
 
   (define (limit-stack? k)
     (and (#3%$continuation? k)
@@ -628,13 +628,13 @@
 
   (define (print-process p op)
     (with-process-details p
-     (lambda (id name spawned state)
-       (fprintf op " ~6d: " id)
-       (when name
-         (display name op)
-         (write-char #\space op))
-       (print-process-state state op)
-       (fprintf op ", spawned ~d\n" spawned))))
+      (lambda (id name spawned state)
+        (fprintf op " ~6d: " id)
+        (when name
+          (display name op)
+          (write-char #\space op))
+        (print-process-state state op)
+        (fprintf op ", spawned ~d\n" spawned))))
 
   (define (with-process-details p k)
     (arg-check 'with-process-details [p pcb?] [k procedure?])

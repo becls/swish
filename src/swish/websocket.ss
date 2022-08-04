@@ -573,11 +573,11 @@
          [payload (map char->integer (string->list message))]
          [data-bv
           (u8-list->bytevector
-           `(129                              ; final packet, string
-             127                              ; 64-bit size
-             0 0 0 0 0 0 0 ,(length payload)  ; payload size
-             ,@payload                        ; new packet
-             136 0)                           ; closing packet, 0 size
+           `(129                             ; final packet, string
+             127                             ; 64-bit size
+             0 0 0 0 0 0 0 ,(length payload) ; payload size
+             ,@payload                       ; new packet
+             136 0)                          ; closing packet, 0 size
            )]
          [ip (make-custom-binary-input-port "paused-input"
                (let ([index 0])

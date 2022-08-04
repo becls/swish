@@ -352,7 +352,7 @@
   (define simple
     (cli-specs
      [counted-flag -c count
-      "flag that is counted when specified multiple times"]))
+       "flag that is counted when specified multiple times"]))
   (check (parse-command-line-arguments simple '("-c"))
     (make-ht [counted-flag 1]))
   (check (parse-command-line-arguments simple '("-c" "-c"))
@@ -394,7 +394,7 @@
   (define simple
     (cli-specs
      [multiple-value -m (list "x")
-      "value that is accumulated when specified multiple times"]))
+       "value that is accumulated when specified multiple times"]))
   (check-error (catch (parse-command-line-arguments simple '("-m")))
     "Exception: option expects value: -m x.")
   (check (parse-command-line-arguments simple '("-m" "here"))
@@ -524,7 +524,7 @@
     (cli-specs
      [profile --profile (string "<file>") "update the specified profile"]
      [coverage --coverage (string "<file>") "write coverage report to <file>"
-      (requires '(profile))]))
+       (requires '(profile))]))
   (check-error (catch (parse-command-line-arguments cli '("--coverage" "coverage.html")))
     "Exception: --coverage requires --profile.")
   (check (parse-command-line-arguments cli '("--coverage" "coverage.html" "--profile" "profile.dat"))
@@ -556,9 +556,9 @@
   (define cli
     (cli-specs
      [a -a --a bool "option A does not work with option B"
-      (conflicts '(b))]
+       (conflicts '(b))]
      [b -b --b bool "option B does not work with option A"
-      (conflicts '(a))]))
+       (conflicts '(a))]))
   (check (parse-command-line-arguments cli '("-a"))
     (make-ht [a #t]))
   (check (parse-command-line-arguments cli '("-b"))
@@ -573,7 +573,7 @@
      [a -a bool "option A does not work with option C"]
      [b -b bool "option B does not work with option C"]
      [c -c bool "option C does not work with option A or B"
-      (conflicts '(a b))]))
+       (conflicts '(a b))]))
   (check (parse-command-line-arguments cli '("-a"))
     (make-ht [a #t]))
   (check (parse-command-line-arguments cli '("-b"))
@@ -693,7 +693,7 @@
   (test "help"
     (cli-specs
      [regexp-pass -r (list "<type>" "<regexp>")
-      "report <regexp> matches as <type>={info|warning|error}"])
+       "report <regexp> matches as <type>={info|warning|error}"])
     (make-ht [regexp-pass (list "info" "Zonk:.*")])
     '(seek
       "^  -r <type> <regexp>$"
@@ -705,9 +705,9 @@
   (test "help"
     (cli-specs
      [format --format (string "<format>")
-      '("format specifiers that include the following"
-        "substitution strings:"
-        "%file, %type, %line, %column, %bfp, %efp, %msg")])
+       '("format specifiers that include the following"
+         "substitution strings:"
+         "%file, %type, %line, %column, %bfp, %efp, %msg")])
     (make-ht [format "%file:%type:%line:%msg"])
     '(seek
       "^  --format <format> format specifiers that include the following substitution$"
@@ -717,9 +717,9 @@
   ;; multi-line help
   (test "multi"
     (cli-specs [multi -m --multi bool
-                '("line one\n"
-                  "line two\n"
-                  "line three")])
+                 '("line one\n"
+                   "line two\n"
+                   "line three")])
     #f
     '(seek
       "^  -m, --multi       line one$"
@@ -729,9 +729,9 @@
   ;; multi-line help with arg
   (test "multi"
     (cli-specs [multi -m --multi bool
-                '("line one\n"
-                  "line two\n"
-                  "line three")])
+                 '("line one\n"
+                   "line two\n"
+                   "line three")])
     (make-ht [multi "input"])
     '(seek
       "^  -m, --multi       line one$"
@@ -741,8 +741,8 @@
   ;; custom formatting: multiple specified newlines
   (test "multi"
     (cli-specs [multi -m --multi bool
-                '("line one\n\n"
-                  "line three")])
+                 '("line one\n\n"
+                   "line three")])
     #f
     '(seek
       "^  -m, --multi       line one$"
@@ -752,8 +752,8 @@
   ;; custom formatting: whitespace followed by explicit newline
   (test "multi"
     (cli-specs [multi -m --multi bool
-                '("line one \n"
-                  "line two")])
+                 '("line one \n"
+                   "line two")])
     #f
     '(seek
       "^  -m, --multi       line one$"

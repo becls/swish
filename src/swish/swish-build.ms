@@ -439,7 +439,7 @@
        (lib-abc)
        (scheme)
        (swish imports))
-      abc                            ; must reference the export
+      abc                               ; must reference the export
       (printf "abc: ~a\n"
         (top-level-value 'abc (environment '(lib-abc))))))
   (build-example "libsvis-fat"
@@ -913,9 +913,9 @@
               [stdout ,@common-prefix]
               [stderr (,err-msg)]))
      (assert
-       (or (string=? err-msg "prog1: variable say is not bound.")
-           ;; 9.5.3 change in library-manager error messages
-           (string=? err-msg "prog1: attempt to invoke invisible library (lib1).")))
+      (or (string=? err-msg "prog1: variable say is not bound.")
+          ;; 9.5.3 change in library-manager error messages
+          (string=? err-msg "prog1: attempt to invoke invisible library (lib1).")))
      'ok])
 
   ;; table not duplicated when prog2 is loaded and say is visible
