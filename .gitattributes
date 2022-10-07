@@ -3,4 +3,3 @@
 *.sql linguist-language=SQL
 src/swish/sqlite3.c linguist-vendored=true
 src/swish/sqlite3.h linguist-vendored=true
-web/swish/js/jquery*.js linguist-vendored=true
