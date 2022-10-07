@@ -27,9 +27,7 @@
   (syntax-rules ()
     [(_ c1 c2 ...)
      (hosted-page (get-page-name)
-       (list (css-include "css/query-db.css")
-         (js-include "js/jquery-1.4.4.min.js")
-         (js-include "js/query-db.js"))
+       (list (css-include "css/query-db.css") (js-include "js/query-db.js"))
        c1 c2 ...)]))
 
 (define (string-param name params)

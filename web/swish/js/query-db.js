@@ -21,47 +21,46 @@
 // SOFTWARE.
 
 function onLoad() {
-  $('#offsetInput').val('');
-  updateButton();
-
-  $('#offsetInput').keypress(filterKeys);
-  $('#offsetInput').keyup(updateButton);
-  $('#rowForm').submit(rowToOffset);
+  var offsetInput = document.getElementById('offsetInput');
+  if (offsetInput) {
+    offsetInput.value = '';
+    updateButton();
+    offsetInput.onkeypress = filterKeys;
+    offsetInput.onkeyup = updateButton;
+  }
+  var rowForm = document.getElementById('rowForm');
+  if (rowForm) {
+    rowForm.onsubmit = rowToOffset;
+  }
 }
 
 //Allow 'Enter' key for form submission and digits 0-9, but discard other keys
 function filterKeys(event) {
-  if(event.which == 13) {
-
+  if (event.which == 13) {
     return;
-  } else if(event.which < 48 || event.which > 57) {
-
+  } else if (event.which < 48 || event.which > 57) {
     event.preventDefault();
   }
 }
 
 function updateButton() {
-  if($('#offsetInput').val()) {
-
-    $('#offsetButton').removeAttr('disabled');
+  if (Number(document.getElementById('offsetInput').value)) {
+    document.getElementById('offsetButton').removeAttribute('disabled');
   } else {
-
-    $('#offsetButton').attr('disabled', 'true');
+    document.getElementById('offsetButton').setAttribute('disabled', 'true');
   }
 }
 
 function rowToOffset() {
   //Prevent going back to offset 0 when there is no input row
-  var row = $('#offsetInput').val();
-  if(!row) {
-
+  var offsetInput = document.getElementById('offsetInput');
+  var row = Number(offsetInput.value)
+  if (!row || row > Number.MAX_SAFE_INTEGER) {
     event.preventDefault();
     return;
   }
-
-  var offset = Math.max(0, row - 1);
-  $('#offsetInput').val(offset);
+  offsetInput.value = Math.max(0, row - 1);
   return true;
 }
 
-$(document).ready(onLoad);
+document.onreadystatechange = onLoad;
