@@ -301,14 +301,18 @@ static void open_fs_cb(uv_fs_t* req) {
   uv_fs_req_cleanup(req);
   Sunlock_object(callback);
   free(req);
-  if (result < 0)
+  if (result < 0) {
     osi_add_callback1(callback, osi_make_error_pair("uv_fs_open", (int)result));
-  else {
-    fs_port_t* port = malloc_container(fs_port_t);
-    port->vtable = &file_vtable;
-    port->file = (uv_file)result;
-    osi_add_callback1(callback, Sunsigned((uptr)port));
+    return;
   }
+  fs_port_t* port = malloc_container(fs_port_t);
+  if (!port) {
+    osi_add_callback1(callback, osi_make_error_pair("uv_fs_open", UV_ENOMEM));
+    return;
+  }
+  port->vtable = &file_vtable;
+  port->file = (uv_file)result;
+  osi_add_callback1(callback, Sunsigned((uptr)port));
 }
 
 static void get_file_size_cb(uv_fs_t* req) {
