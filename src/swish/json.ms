@@ -184,7 +184,7 @@
        (lambda (op v indent wr)
          (if (vector? v)
              (fprintf op "[~{\"~r\"~^,~}]" (vector->list v))
-             (wr op v)))]
+             (wr op v indent)))]
       ["{\"abc\":[\"four\",\"five\",\"six\"],\"def\":[7,8,9],\"ghi\":3}"
        (begin
          (json:write-object op #f json:write
