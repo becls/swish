@@ -223,12 +223,12 @@
 
   (define (profile-update state)
     (<profile-state> open state [context filename ht])
-    (collect (collect-maximum-generation))
     (add-filedata ht
       (with-interrupts-disabled
        (let ([data (profile-dump)])
          (profile-clear)
          data)))
+    (profile-release-counters)
     (profile-save filename context ht))
 
   (define (resolve path)
