@@ -39,16 +39,17 @@
 
 (define-syntax assert-bad-match
   (syntax-rules ()
-    [(_ v e) (assert-bad-match v ,_ e)]
-    [(_ v expected-src e)
-     (match (catch e)
-       [#(EXIT #(bad-match ,x ,actual-src))
-        (guard (and (equal? v x) (match-src expected-src actual-src)))
-        #t]
-       [#(EXIT #(bad-match ,x ,actual-src)) (guard (equal? v x))
-        (errorf 'assert-bad-match "expected to raise bad-match with source ~s but got ~s" 'expected-src actual-src)]
-       [,x
-        (errorf 'assert-bad-match "failed to raise bad-match: ~s" x)])]))
+    [(_ val e) (assert-bad-match val ,_ e)]
+    [(_ val expected-src e)
+     (let ([v val])
+       (match (catch e)
+         [#(EXIT #(bad-match ,x ,actual-src))
+          (guard (and (equal? v x) (match-src expected-src actual-src)))
+          #t]
+         [#(EXIT #(bad-match ,x ,actual-src)) (guard (equal? v x))
+          (errorf 'assert-bad-match "expected to raise bad-match with source ~s but got ~s" 'expected-src actual-src)]
+         [,x
+          (errorf 'assert-bad-match "failed to raise bad-match: ~s" x)]))]))
 
 (define-syntax assert-error
   (syntax-rules ()
