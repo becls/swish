@@ -605,8 +605,11 @@
     (software-revision 'swish))]
  [else
   (let* ([source-fn
-          (or (source-file)
-              (fail "requires a single source filename"))]
+          (cond
+           [(source-file) =>
+            (lambda (filename)
+              (with-source-path 'swish-build filename values))]
+           [else (fail "requires a single source filename")])]
          [output-fn
           (or (opt 'output-file)
               (fail "requires output filename"))]

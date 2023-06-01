@@ -1567,6 +1567,12 @@
         (for-each pretty-print
           `((include "here.ss")
             (pretty-print x))))))
+  (define file3
+    (write-test-file "another/nested/path/main.ss"
+      (lambda ()
+        (for-each pretty-print
+          `((include "here.ss")
+            (pretty-print (+ 4 (* x 10))))))))
   ;; fails to build if source directories not specified
   (match (catch (build-example "test-sd" '()))
     [#(EXIT
@@ -1575,7 +1581,17 @@
           ("swish-build: failed for here.ss: no such file or directory.")]))
      'ok])
   (build-example "test-sd" `("-s" ,(path-parent file1)))
-  (run-thin "test-sd" '() '("123")))
+  (run-thin "test-sd" '() '("123"))
+  ;; we should also be able to find the source-file itself via -s
+  ;; source-directories use swish-build-test directly to avoid the path-combine
+  (swish-build-test
+   `("-o" ,(output-file "test-sd2")
+     "-s" ,(path-parent file3)
+     "-s" ,(path-parent file1)
+     ,(path-last file3))
+   '())
+  (run-thin "test-sd2" '() '("1234"))
+  )
 
 (isolate-mat source-file-switch ()
   (define lib1
