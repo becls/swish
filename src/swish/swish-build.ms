@@ -1689,3 +1689,94 @@
   (delete-file prog.so)
   (swish-build-test `(,prog.ss "-o" ,prog.so "-b" "petite") '())
   (assert (file-exists? prog.so)))
+
+(isolate-mat prelude ()
+  (define-syntax expect-error
+    (syntax-rules (stdout stderr)
+      [(_ expr (stdout stdout-pattern ...) (stderr stderr-pattern ...))
+       (match (try expr)
+         [`(catch `(<os-process-failed> ,stdout ,stderr))
+          (match-regexps `(,stdout-pattern ...) stdout)
+          (match-regexps `(,stderr-pattern ...) stderr)])]))
+  (define (so-file fn) (string-append (path-root fn) ".so"))
+  (define setup.ss
+    (write-example (path-combine "try-prelude-source" "setup")
+      '((printf "loaded setup.ss\n"))))
+  (define lib.ss
+    (write-example (path-combine "try-prelude-lib" "lib")
+      '((library (lib) (export x) (import (scheme)) (define x 123)))))
+  (define src.ss
+    (write-example "src"
+      '((let-syntax ([foo (lambda (x) (pretty-print (length (library-directories))) #'#f)]) foo)
+        (import (lib))
+        (printf "x = ~s\n" x))))
+  (define prog (path-combine (path-parent src.ss) "prog"))
+  (define (cleanup)
+    (for-each delete-file
+      (map so-file (list setup.ss lib.ss src.ss))))
+
+  ;; multiple explicit --prelude command-line arguments, some with multiple
+  ;; <prelude> arguments (segmented artificially here to show that we
+  ;; concatenate them before parsing the prelude expressions).
+  (cleanup)
+  (swish-build-test
+   `(,src.ss "-L" ,(path-parent lib.ss)
+     "--prelude" "(library-e" "xtens" "ions '((\".ss\" . \".so\")))"
+     "--prelude" "(import-notify #t)" "-o" ,prog)
+   '("3" ;; length of library-directories, since we add "try-prelude-lib"
+     seek "import: found source file.*try-prelude-lib.lib[.]ss"
+     seek "import: compiling.*try-prelude-lib.lib[.]ss.* to .*lib[.]so"))
+  (run-thin "prog" '() '("x = 123"))
+
+  ;; like the previous test, except a --prelude expression sets
+  ;; library-directories and this supercedes the -L command-line argument,
+  ;; so we don't find the library
+  (cleanup)
+  (expect-error
+   (swish-build-test `(,src.ss "-L" ,(path-parent lib.ss)
+                       "--prelude" "(library-extensions '((\".ss\" . \".so\")))"
+                       "(library-directories \".\")"
+                       "--prelude" "(import-notify #t)" "-o" "failed") '())
+   (stdout "1"
+     "import: did not find source file.*lib[.]ss"
+     "import: did not find object file.*lib[.]so")
+   (stderr "swish-build: library [(]lib[)] not found[.]"))
+
+  ;; --prelude-file located via -s source directories
+  ;; --prelude-file content evaluated after --prelude
+  ;; show that prelude works when compiling a component (-c)
+  (cleanup)
+  (swish-build-test
+   `(,src.ss "-c"
+     "-s" ,(path-parent setup.ss)
+     "-L" ,(path-parent lib.ss)
+     "--prelude-file" "setup.ss"
+     "--prelude" "(library-extensions '((\".ss\" . \".so\")))" "(pretty-print 'one)"
+     "--prelude" "(pretty-print 'two)" "(import-notify #t)" "-o" ,prog)
+   '("one" "two" "loaded setup.ss"
+     "3" ;; length of library-directories, since we add "try-prelude-lib"
+     seek "import: found source file.*try-prelude-lib.lib[.]ss"
+     seek "import: compiling.*try-prelude-lib.lib[.]ss.* to .*lib[.]so"))
+
+  ;; --prelude-file located via explicit path
+  ;; all prelude expressions evaluated before we start to compile and hit syntax error
+  (cleanup)
+  (expect-error
+   (swish-build-test
+    `(,(write-example "incomplete" '((define)))
+      "--prelude" "(pretty-print 'one)"
+      "--prelude-file" ,setup.ss
+      "--prelude" "(pretty-print 'two)" "-o" "failed") '())
+   (stdout "one" "two" "loaded setup.ss")
+   (stderr "swish-build: invalid syntax [(]define[)]"))
+
+  ;; we try to provide useful source error
+  (cleanup)
+  (expect-error
+   (swish-build-test
+    `(,src.ss
+      "--prelude" "(pretty-print 'one) (define)"
+      "-o" "failed") '())
+   (stdout) ;; error occurrs while expanding (begin (pretty-print 'one) (define)), so no output
+   (stderr "swish-build: invalid syntax [(]define[)] at char 20 of --prelude"))
+  )

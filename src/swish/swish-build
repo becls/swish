@@ -37,14 +37,19 @@
    [libdirs -L (list "<libdir>") "add <libdir> to library-directories"]
    [srcdirs -s (list "<srcdir>") "add <srcdir> to source-directories"]
    [rt-libs --rtlib (list "<lib>" ...)
-    '("visit compiled libraries <lib> ... before compiling <source>;"
-      "these libraries are added to <output> unless otherwise"
-      "specified, in which case they must be provided at run time."
-      "Look for <lib> ... in library-directories (-L) if not found.")]
+     '("visit compiled libraries <lib> ... before compiling <source>;"
+       "these libraries are added to <output> unless otherwise"
+       "specified, in which case they must be provided at run time."
+       "Look for <lib> ... in library-directories (-L) if not found.")]
    [help -h --help (list "[<section>]" ...)
-    (format "display help, <section>={~{~a~^|~}}" help-sections)]
+     (format "display help, <section>={~{~a~^|~}}" help-sections)]
    [version --version bool "print version information"]
    [info --info bool "display software-info"]
+   [prelude --prelude (list "<prelude>" ...)
+     "evaluate <prelude> expression(s) just before compiling <source>"]
+   [prelude-file --prelude-file (string "<prelude-file>")
+     '("load <prelude-file> just before compiling <source>;"
+       "evaluated after the --prelude expressions, if any.")]
    ))
 
 (define library-cli
@@ -255,7 +260,15 @@
        "\"foo.wpo\" for use by whole-program optimization.\n")
      (example (who "-c bar.ss -o bar.component --rtlib foo.library bar.library")
        "compiles the \"bar.ss\" program to \"bar.component\", which expects"
-       "\"foo.library\" and \"bar.library\" to be provided at run time.")
+       "\"foo.library\" and \"bar.library\" to be provided at run time.\n")
+     (example (who "-o foo foo.ss --prelude '(compile-profile #t)'")
+       "compiles foo.ss to foo with profile instrumentation enabled.\n")
+     (example (who "--prelude '(printf \"-->' ${HOME} '<--\\n\")' -o foo foo.ss")
+       who "concatenates <prelude> command-line arguments via string-append"
+       "before parsing and wraps the resulting expressions in a begin"
+       "form before evaluating the result. This lets us interpolate"
+       "shell values, as in this example, which prints the user's home directory,"
+       "e.g., \"-->/home/sam<---\", before compiling foo.ss to foo.")
      ])
   (let ([invalid (fold-right remq sections help-sections)])
     (unless (null? invalid)
@@ -382,6 +395,16 @@
                   (lambda (source dest)
                     (when (> (verbosity) 0) (printf "compiling ~a\n" source))
                     (compile-library source dest))])
+    (cond
+     [(opt 'prelude) =>
+      (lambda (ls)
+        (interpret ;; interpret vs. compile to omit profile data for --prelude
+         `(begin   ;; read-bytevector provides "source" information for syntax errors
+            ,@(read-bytevector "--prelude" (string->utf8 (apply string-append ls))))))])
+    (cond
+     [(opt 'prelude-file) =>
+      (lambda (filename)
+        (with-source-path 'swish-build filename load))])
     (target-case target-type
       [(library)
        (compile-library source-fn obj-fn)]
