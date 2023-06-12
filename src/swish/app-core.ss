@@ -77,7 +77,18 @@
   (define (claim-exception who c)
     (define stderr (console-error-port))
     (define os (open-output-string))
-    (when who (fprintf stderr "~a: " who))
+    (define (report msg op)
+      (fresh-line op)
+      (fprintf op "~@[~a: ~]~a\n" who msg)
+      (flush-output-port op))
+    (define (flush!)
+      (let ([msg (get-output-string os)])
+        ;; may fail when writing to stderr, e.g., on broken pipe
+        (match (try (report msg stderr))
+          [`(catch ,_)
+           ;; try once more with a fresh stderr
+           (try (report msg (binary->utf8 (standard-error-port (buffer-mode line)))))]
+          [,_ (void)])))
     (guard (_ [else (get-output-string os) (display-condition c os)])
       (parameterize ([print-level 3] [print-length 6])
         (cond
@@ -97,14 +108,15 @@
     (let ([i (- (port-output-index os) 1)])
       (when (and (> i 0) (not (char=? #\. (string-ref (port-output-buffer os) i))))
         (display "." os)))
-    (display (get-output-string os) stderr)
-    (fresh-line stderr)
-    (unless (and (warning? c) (not (serious-condition? c)))
+    (cond
+     [(and (warning? c) (not (serious-condition? c))) (flush!)]
+     [else
       (when (and (> (repl-level) 0)
                  (interactive?)
                  (continuation-condition? (debug-condition)))
-        (display "Type (debug) to enter the debugger.\n" stderr))
-      (reset)))
+        (display "\nType (debug) to enter the debugger." os))
+      (flush!)
+      (reset)]))
 
   (define (app-exception-handler c)
     (debug-condition c)

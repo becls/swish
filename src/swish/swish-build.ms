@@ -1108,6 +1108,37 @@
      'ok])
   )
 
+(isolate-mat claim-exceptions-stderr-closed ()
+  (define default-application-exit-code 2) ;; see app-core.ss
+  (define doomed-writer
+    (write-example "doomed-writer"
+      ;; keep trying to write, but parent closed ports; default exception
+      ;; handler should exit instead of repeatedly trying to write to stderr
+      `((do () (#f)
+          (receive (after 1 (write-char #\x)))
+          (flush-output-port)))))
+  (define (hangup-on-process command args)
+    (let-values ([(to-stdin from-stdout from-stderr os-pid)
+                  (spawn-os-process command args self)])
+      (close-port from-stderr)
+      (close-port from-stdout)
+      ;; typically takes < 150 ms real time, so allow 10x that and then
+      ;; scale for slow macOS build agents
+      (receive (after (scale-timeout 1500) (osi_kill* os-pid SIGKILL) (throw 'ran-too-long))
+        [#(process-terminated ,@os-pid ,exit-status ,signal)
+         (assert (= signal 0))
+         (assert (= exit-status default-application-exit-code))])))
+  ;; run as swish script
+  (hangup-on-process swish-exe `(,doomed-writer))
+  ;; run as thin app
+  (build-example "doomed-writer" '())
+  (hangup-on-process swish-exe `(,(output-file "doomed-writer")))
+  ;; run as fat app
+  (assert (delete-file (output-file "doomed-writer")))
+  (build-example "doomed-writer" '("-b" "petite"))
+  (ensure-dlls)
+  (hangup-on-process (output-file "doomed-writer") '()))
+
 (isolate-mat hash-bang ()
   ;; run one source example three different ways
   (define howdy
