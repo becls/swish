@@ -2980,6 +2980,28 @@ of the elements of list \var{ls} separated by displaying
 the last separator.
 
 % ----------------------------------------------------------------------------
+\defineentry{natural-string<?}
+\defineentry{natural-string-ci<?}
+\begin{procedure}
+  \code{(natural-string<? \var{s$_1$} \var{s$_2$})}\\
+  \code{(natural-string-ci<? \var{s$_1$} \var{s$_2$})}\strut
+\end{procedure}
+\returns{} a boolean
+
+These procedures compare strings \var{s$_1$} and \var{s$_2$} in a way that is
+more natural to humans than the corresponding
+\code{string<?} and \code{string-ci<?} predicates.
+The natural comparison predicates:
+\begin{enumerate}
+ \item ignore leading and trailing whitespace,
+ \item treat runs of multiple whitespace characters as a single space,
+ \item compare integers numerically, treating \code{-} as a dash
+   if it follows an alphanumeric character or else as negation, and
+ \item fall back to character comparison otherwise, with the \code{-ci<?}
+   variant being case-insensitive.
+\end{enumerate}
+
+% ----------------------------------------------------------------------------
 \defineentry{oxford-comma}
 \begin{procedure}
   \code{(oxford-comma \opt{\var{prefix}} \var{elt-fmt} \var{conj} \opt{\var{suffix}})}

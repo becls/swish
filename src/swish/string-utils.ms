@@ -328,3 +328,257 @@
         "za" "p" ""))])
    'ok)
   )
+
+(mat natural-string ()
+  (define (do-comparison case-sensitive? elide-whitespace? testing-string<?)
+    (match-let*
+     ([,check-string<?
+       (lambda (a b)
+         (let ([result (testing-string<? a b)])
+           ;; Antisymmetry
+           (when result (assert (not (testing-string<? b a))))
+           (when (and elide-whitespace? (not (eq? a "")))
+             (match-let*
+              ([,@result (testing-string<? (string-append "   " a) b)]
+               [,@result (testing-string<? a (string-append "   " b))]
+               [,@result (testing-string<? (string-append a "   " ) b)]
+               [,@result (testing-string<? a (string-append b "   "))])
+              'ok))
+           result))]
+      [#f ;; irreflexive
+       (ormap
+        (lambda (s)
+          (or (check-string<? s s)
+              (check-string<? s (string-copy s))))
+        '("" "abc" "0" "001" "-100" ".0" ".003" "0.9900" "-" "a0b1"))]
+      [#t
+       (andmap
+        (lambda (n)
+          (define (ok? fmt n1 n2)
+            (and (check-string<? (format fmt n1) (format fmt n2))
+                 (not (check-string<? (format fmt n2) (format fmt n1)))
+                 (let ([s1 (format fmt n1)])
+                   (and (check-string<? s1 (string-append s1 "a"))
+                        (not (check-string<? (string-append s1 "a") s1))))))
+          (define (try-context positive-only? fmt)
+            (and (ok? fmt n (+ n 1))
+                 (or positive-only? (ok? fmt (- n 1) n))
+                 (or (<= n 0)
+                     (and (or positive-only? (ok? fmt (- n) n))
+                          (or positive-only? (not (ok? fmt n (- n))))
+                          (ok? fmt n (* n 10))
+                          (ok? fmt n (* n 2))))))
+          (and (try-context #f "~a")
+               (try-context #t "xyz 0~a Z") ;; leading zero
+               (try-context #t "xyz 000~a") ;; leading zeros
+               (try-context #t "Abc~a")
+               (try-context #f "~aBcd")
+               (try-context #f "~a...")
+               (try-context #f "~a..0.00.1")
+               (try-context #f "~a----")
+               (try-context #t "X +~a")))
+        `(0 1 9 10 20000 900001 12345 ,(most-positive-fixnum)
+          ,(* 1000 (most-positive-fixnum))))]
+      [#t (check-string<? "a" "b")]
+      [#t (check-string<? "abc" "abcd")]
+      [#t (check-string<? "abc1" "abcd")]
+      [#f (check-string<? "abcd" "abc1")]
+      [#f (check-string<? "abc11" "abc2")]
+      [#t (check-string<? "abc2" "abc11")]
+      ;; treat - as dash if it follows alphabetic or numeric character
+      ;; otherwise, treat - as negation
+      [#t (check-string<? "-2" "-1")]
+      [#f (check-string<? "-1" "-2")]
+      [#t (check-string<? "a-1" "a-2")]
+      [#f (check-string<? "a-2" "a-1")]
+      [#t (check-string<? "0-1" "0-2")]
+      [#f (check-string<? "0-2" "0-1")]
+      [#f (check-string<? "a -1" "a -2")]
+      [#t (check-string<? "a -2" "a -1")]
+      [#f (check-string<? "a\t-1" "a\t-2")]
+      [#t (check-string<? "a\t-2" "a\t-1")]
+      [#f (check-string<? "a\n-1" "a\n-2")]
+      [#t (check-string<? "a\n-2" "a\n-1")]
+      [#t (check-string<? "a[-2]" "a[1]")]
+      [#f (check-string<? "a[1]" "a[-2]")]
+      [#t (check-string<? "xyz,-2" "xyz,1")]
+      [#f (check-string<? "xyz,1" "xyz,-2")]
+      ;; no ratnums
+      [#f (check-string<? "1/8" "1/2")]
+      [#t (check-string<? "1/2" "1/8")]
+      [#f (check-string<? "10/11/2027" "8/11/2027")]
+      [#t (check-string<? "8/11/2027" "10/11/2027")]
+      ;; we consider ASCII digits, not just anything char-numeric? accepts
+      [#t (check-string<? "123 4" "123 ④")]
+      [#f (check-string<? "123 ④" "123 4")]
+      [#t (check-string<? "123 4" "123 ⑷")]
+      [#f (check-string<? "123 ⑷" "123 4")]
+      [#f (check-string<? "12" "4㆕")]
+      [#t (check-string<? "4㆕" "12")]
+      ;; make sure we continue after numeric comparison only if n1 == n2
+      [#f (check-string<? "12.1 xyz .7" "12 xyz .9")]
+      [#t (check-string<? "12 xyz .9" "12.1 xyz .7")]
+      [#t (check-string<? "10 abc" "100 abc")]
+      [#f (check-string<? "100 abc" "10 abc")]
+      [#f (check-string<? "100 abc" "100 abc")]
+      [#f (check-string<? "100 abc123" "100 abc12")]
+      [#f (check-string<? "100 abc123" "100 abc123")]
+      [#t (check-string<? "100 abc123" "100 abc1234")]
+      [#t (check-string<? "100 abc0000123" "100 abc1234")]
+      [#f (check-string<? "1a20b300c4321d-5000e6.012345_F_9.700" "1a20b300c4321d-5000e6.012345_F_9.700")]
+      [#f (check-string<? "1a20b300c4321d-5000e6.012345_F_9.700" "1a20b300c4321d-5000e6.012345_F_9.70")]
+      [#f (check-string<? "1a20b300c4321d-5000e6.012345_F_9.700" "1a20b300c4321d-5000e6.012345_F_9.7")]
+      [#t (check-string<? "1a20b300c4321d-5000e6.012345_F_9.700" "1a20b300c4321d-5000e6.012345_F_9.800")]
+      ;; first is greater than second at 012349 vs. 012345
+      [#f (check-string<? "1a20b300c4321d-5000e6.012349_F_9.700" "1a20b300c4321d-5000e6.012345_F_9.800")]
+      [#t (check-string<? "..." "....")]
+      [#f (check-string<? "..." "...")]
+      [#f (check-string<? "..." "..")]
+      ;; not a decimal point, but number comes before character
+      [#f (check-string<? "xyz.100" "xyz100")]
+      [#t (check-string<? "xyz100" "xyz.100")]
+      ;; #f because (string<? "xyz." "xyz ") => #f
+      [#f (check-string<? "xyz. 100" "xyz 100")]
+      [#t (check-string<? "xyz 100" "xyz .100")]
+      [#t (check-string<? ".1.2.3.4" ".1.2.3.5")]
+      [#f (check-string<? ".1.2.3.4" ".1.2.3.0")]
+      [#f (check-string<? ".1.2.3.4" ".1.2.3")]
+      [#t (check-string<? ".1.2.3.4" ".1.20.3.4")]
+      [#t (check-string<? ".1.2.3.4" ".1.2.031.4")]
+      [#t (check-string<? ".1.2.3.4" ".001.0002.03.40")]
+      ;; since (char<? #\. #\a)
+      [#t (check-string<? "1.a" "1a")]
+      [#f (check-string<? "1a" "1.a")]
+      ;; leading zero corner cases: shorter run comes first
+      [#t (check-string<? "a 0" "a 000")]
+      [#f (check-string<? "a 000" "a 0")]
+      [#f (check-string<? "a 0" "a 0")]
+      [#t (check-string<? "a 0 123" "a 000 123")]
+      [#f (check-string<? "a 000 123" "a 0 123")]
+      [#f (check-string<? "a 0 123" "a 0 123")]
+      [#t (check-string<? "a 00 1 0" "a 00 1 00")]
+      [#f (check-string<? "a 00 1 00" "a 00 1 0")]
+      [#t (check-string<? "a 0 2 00" "a 00 1 0")]
+      [#f (check-string<? "a 00 1 0" "a 0 1 00")]
+      [#t (check-string<? "a 0 1 00" "a 00 1 00")]
+      [#t (check-string<? "a 0 00 1 000 2" "a 00 00 1 00 2")]
+      [#t (check-string<? "a 0 000 1 000 2" "a 00 00 1 00 2")]
+      [#t (check-string<? "a 00 0 2 000 2" "a 00 00 1 00 2")]
+      [#f (check-string<? "a 00 00 2 000 2" "a 00 00 1 00 2")]
+      [#t (check-string<? "a 0 1 000 2" "a 00 1 000 2")]
+      [#f (check-string<? "a 000 4" "a 0 001")]
+      [#t (check-string<? "a 000 000 4" "a 000 0000 001")]
+      [#f (check-string<? "a 000 0000 001" "a 000 000 4")])
+     (if case-sensitive?
+         (match-let*
+          ([#t (check-string<? "ABC" "abc")]
+           [#f (check-string<? "abc" "ABC")]
+           [#f (check-string<? "10 four" "10 Four")]
+           [#t (check-string<? "10 Four" "10 four")]
+           [#t (check-string<? "a 00 1 X 0" "a 00 1 x 00")]
+           [#t (check-string<? "a 00 1 000 X" "a 00 1 000 x")])
+          'ok)
+         (match-let*
+          ([#f (check-string<? "ABC" "abc")]
+           [#f (check-string<? "abc" "ABC")]
+           [#t (check-string<? "abc" "ABd")]
+           [#f (check-string<? "10 four" "10 Four")]
+           [#f (check-string<? "10 Four" "10 four")]
+           [#f (check-string<? "a 00 1 X 0" "a 00 1 x 0")]
+           [#f (check-string<? "a 00 1 x 0" "a 00 1 X 0")]
+           [#f (check-string<? "a 00 1 000 X" "a 00 1 000 x")]
+           [#f (check-string<? "a 00 1 000 x" "a 00 1 000 X")])
+          'ok))))
+  (do-comparison #t #t natural-string<?)
+  (do-comparison #f #t natural-string-ci<?)
+  (let ()
+    (import natural-string)
+    (do-comparison #t #f (make-natural<? token<? get-integer-token))
+    (do-comparison #f #f (make-natural<? token-ci<? get-integer-token))
+    ;; check token length reported by get-integer-token
+    (do-comparison #t #f
+      (make-natural<? token<?
+        (lambda (c s i end)
+          (let-values ([(tok new-i len) (get-integer-token c s i end)])
+            (when tok (assert (= tok (string->number (substring s (- new-i len) new-i)))))
+            (values tok new-i len)))))
+    (match-let*
+     ([,size<?
+       (make-natural<? token<?
+         (lambda (c s i end)
+           (let-values ([(tok i len) (get-integer-token c s i end)])
+             (if (and (number? tok) (fx< i end))
+                 (let ([j i] [new-len (fx+ len 1)])
+                   (case (string-ref s j)
+                     [(#\b #\B) (values tok j new-len)]
+                     [(#\k #\K) (values (* tok 1024) j new-len)]
+                     [(#\m #\M) (values (* tok 1024 1024) j new-len)]
+                     [(#\g #\G) (values (* tok 1024 1024 1024) j new-len)]
+                     [else (values tok i len)]))
+                 (values tok i len)))))]
+      [#t (size<? "255b" "1k")]
+      [#f (size<? "1k" "255b")]
+      [#t (size<? "32K" "2M")]
+      [#f (size<? "2M" "32K")]
+      [#t (size<? "512M" "1G")]
+      [#f (size<? "1G" "512M")]
+      [#t (size<? "1k" "1024")] ;; shorter
+      [#f (size<? "1024" "1k")])
+     'ok)
+    (match-let*
+     ([,bad<?
+       (make-natural<? token<?
+         (lambda (c s i end)
+           (match c
+             [#\x (values c "not fixnum" 1)]
+             [#\y (values c (- i 1) 1)] ;; attempt retrograde motion
+             [#\z (values c i "bad len")]
+             [#\A (values c i -7)]
+             [,_ (values #f i 0)])))]
+      [#t (bad<? "abc" "abd")]
+      [#f (bad<? "abd" "abc")]
+      [`(catch #(bad-return-value "not fixnum")) (try (bad<? "abc" "abx"))]
+      [`(catch #(bad-return-value "not fixnum")) (try (bad<? "abx" "abc"))]
+      [`(catch #(bad-return-value 3)) (try (bad<? "abcde" "abcdy"))]
+      [`(catch #(bad-return-value 3)) (try (bad<? "abcdy" "abcde"))]
+      [`(catch #(bad-return-value "bad len")) (try (bad<? "abcde" "abcdz"))]
+      [`(catch #(bad-return-value "bad len")) (try (bad<? "abcdz" "abcde"))]
+      [`(catch #(bad-return-value -7)) (try (bad<? "abcde" "abcdA"))]
+      [`(catch #(bad-return-value -7)) (try (bad<? "abcdA" "abcde"))])
+     'ok)
+    (match-let*
+     ([,warp<?
+       ;; cover case where tokenizer elides all the way to end
+       (make-natural<? token<?
+         (lambda (c s i end)
+           (if (eqv? c #\!)
+               (values #f end 0) ;; warp to end
+               (values #f i 0)))
+         (lambda (c s i end)
+           (values c i end)))]
+      [#t (warp<? "abcd!skip this" "abcd ")]
+      [#f (warp<? "abcd " "abcd!skip this")]
+      [#f (warp<? "abcd!skip this" "abcd")]
+      [#f (warp<? "abcd" "abcd!skip this")]
+      [#f (warp<? "ab!cd" "ab!cdefg")]
+      [#f (warp<? "ab!cddef" "ab!c")])
+     'ok)
+    (match-let*
+     ([,trust<?
+       ;; cover case where we bypass safeguard (for one but not the other)
+       (make-natural<? token<?
+         (trust
+          (lambda (c s i end)
+            (if (eqv? c #\$)
+                (values 'eos end 0)
+                (values #f i 0))))
+         (lambda (c s i end)
+           (if (eqv? c #\!)
+               (values #f "BAD" 0)
+               (values c i end))))]
+      [#t (trust<? "ab$cddef" "abc$")]
+      [#f (trust<? "ab$cddef" "ab$c")]
+      [`(catch #(bad-return-value "BAD")) (try (trust<? "abc!ddef" "abc"))])
+     'ok)
+    )
+  )
