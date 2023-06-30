@@ -2648,6 +2648,17 @@ The \code{tcp-listener-count} procedure returns the number of open TCP
 listeners\index{TCP listener}.
 
 % ----------------------------------------------------------------------------
+\defineentry{tcp-nodelay}
+\begin{procedure}
+  \code{(tcp-nodelay \var{port} \var{enabled?})}
+\end{procedure}
+\returns{} a boolean
+
+The \code{tcp-nodelay} procedure calls \code{osi\_tcp\_nodelay} to enable
+or disable the Nagle algorithm on the specified TCP/IP \var{port}.
+It returns true if successful or false otherwise.
+
+% ----------------------------------------------------------------------------
 \defineentry{watch-path}
 \begin{procedure}
   \code{(watch-path \var{path} \var{process})}

@@ -123,6 +123,8 @@
    osi_step_statement*
    osi_stop_signal
    osi_stop_signal*
+   osi_tcp_nodelay
+   osi_tcp_nodelay*
    osi_unlink
    osi_unlink*
    osi_unmarshal_bindings
@@ -219,6 +221,7 @@
   (fdefine osi_close_tcp_listener (listener uptr) void)
   (define-osi osi_get_tcp_listener_port (listener uptr))
   (define-osi osi_get_ip_address (port uptr))
+  (define-osi osi_tcp_nodelay (port uptr) (enabled? boolean))
 
   (define (uuid->string uuid)
     (unless (and (bytevector? uuid) (= (bytevector-length uuid) 16))

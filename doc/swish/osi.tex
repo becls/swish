@@ -968,6 +968,17 @@ and the port number, e.g. \code{127.0.0.1:80}.
 An IPv6 address is shown in bracketed colon-hexadecimal notation
 followed by a colon and the port number, e.g. \code{[::1]:80}.
 
+\defineentry{osi\_tcp\_nodelay}
+\begin{function}
+  \code{ptr osi\_tcp\_nodelay(uptr \var{port}, int \var{enable});}
+\end{function}
+
+The \code{osi\_tcp\_nodelay} function calls \code{uv\_tcp\_nodelay} to
+enable or disable \code{TCP\_NODELAY} for the specified TCP/IP \var{port}
+based on the value of \var{enable}.
+It returns \code{\#t} if successful and \code{\#f} otherwise.
+Enabling \code{TCP\_NODELAY} disables the Nagle algorithm.
+
 \subsection {SQLite Functions}
 
 For each open SQLite database, a single worker thread performs the

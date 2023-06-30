@@ -600,6 +600,14 @@ static void watch_path_cb(uv_fs_event_t* handle, const char* filename, int event
   osi_add_callback2(callback, Sstring_utf8(filename, -1), Sinteger(events));
 }
 
+ptr osi_tcp_nodelay(uptr port, int enable) {
+  stream_port_t* p = (stream_port_t*)port;
+  if (p->vtable != &tcp_vtable)
+    return osi_make_error_pair("uv_tcp_nodelay", UV_EINVAL);
+  int rc = uv_tcp_nodelay(&(p->h.tcp), enable);
+  return (rc < 0) ? Sfalse : Strue;
+}
+
 static int string_list_length(ptr x) {
   int n = 0;
   while (Spairp(x)) {

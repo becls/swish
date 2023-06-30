@@ -106,6 +106,7 @@ EXPORT ptr osi_listen_tcp(const char* address, uint16_t port, ptr callback);
 EXPORT void osi_close_tcp_listener(uptr listener);
 EXPORT ptr osi_get_tcp_listener_port(uptr listener);
 EXPORT ptr osi_get_ip_address(uptr port);
+EXPORT ptr osi_tcp_nodelay(uptr port, int enable);
 
 // Message Digest
 EXPORT ptr osi_open_SHA1();

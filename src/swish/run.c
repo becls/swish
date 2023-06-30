@@ -102,6 +102,7 @@ static void swish_init(void) {
   add_foreign(osi_start_signal);
   add_foreign(osi_step_statement);
   add_foreign(osi_stop_signal);
+  add_foreign(osi_tcp_nodelay);
   add_foreign(osi_unlink);
   add_foreign(osi_unmarshal_bindings);
   add_foreign(osi_watch_path);

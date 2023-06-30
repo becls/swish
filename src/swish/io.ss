@@ -98,6 +98,7 @@
    stat-directory?
    stat-regular-file?
    tcp-listener-count
+   tcp-nodelay
    watch-path
    with-sfd-source-offset
    write-osi-port
@@ -1119,6 +1120,14 @@
            (set-port-output-index! new-op out-index)
            (return new-op))]
         [else not-reached]))))
+
+  (define (tcp-nodelay port enabled?)
+    (arg-check 'tcp-nodelay [port output-port?])
+    (with-interrupts-disabled
+     (let ([osi-port (@port-osi-port port)])
+       (unless (tcp-osi-port? osi-port)
+         (errorf 'tcp-nodelay "invalid port ~s" port))
+       (osi_tcp_nodelay (osi-port-handle osi-port) enabled?))))
 
   (define-record-type sighandler
     (nongenerative)
