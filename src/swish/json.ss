@@ -448,10 +448,10 @@
                   (do ([i 0 (fx+ i 1)]) ((fx= i (vector-length v)))
                     (when (fx> i 0)
                       (json:write-structural-char #\, indent op))
-                    (let ([p (vector-ref v i)])
-                      (write-string (json-key->string (car p)) op)
+                    (match-let* ([(,key . ,val) (vector-ref v i)])
+                      (write-string (json-key->string key) op)
                       (json:write-structural-char #\: indent op)
-                      (wr op (cdr p) indent))))
+                      (wr op val indent))))
                 (json:write-structural-char #\} indent op)))]
          [else (throw `#(invalid-datum ,x))]))
       (when (and indent (or (not (fixnum? indent)) (negative? indent)))
