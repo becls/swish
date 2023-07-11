@@ -178,7 +178,7 @@
     (put-u8 op (fxand #xFF (fxsrl u16 8)))
     (put-u8 op (fxand #xFF u16)))
 
-  (define (ws:read-loop ip message-limit forward)
+  (define (ws:read-loop message-limit ip forward)
 
     (define (get-u8 ip)
       (let ([x (#%get-u8 ip)])
@@ -416,9 +416,6 @@
     (define (on-close code ws-reason-str)
       (send process `#(ws:closed ,self ,code ,ws-reason-str)))
 
-    (define (on-message msg)
-      (send process `#(ws:message ,self ,msg)))
-
     (define (do-close reason code ws-reason-str)
       ;; We don't use exit-reason->english on reason and use that as
       ;; ws-reason-str because the WebSocket reason string has a 125
@@ -428,7 +425,7 @@
       `#(stop ,reason #(closed ,code ,ws-reason-str)))
 
     (define (next-ping-time)
-      (+ (erlang:now) ping-frequency))
+      (+ shared-read-timestamp ping-frequency))
 
     (define (next-pong-time)
       (+ (erlang:now) pong-timeout))
@@ -445,14 +442,29 @@
             1011)
         ""))
 
+    ;; This value is shared by the reader and writer processes. The
+    ;; reader will set the current timestamp after it returns from
+    ;; reading data from the original input port. The writer will look
+    ;; at the timestamp to determine when it should send a ping
+    ;; message. A shared variable here avoids unnecessary context
+    ;; switches to the writer process just to put it back to sleep.
+    (define shared-read-timestamp (erlang:now))
+
     (process-trap-exit #t)
     (monitor process)
-    (let ([reader (spawn&link
-                   (let ([me self])
-                     (lambda ()
-                       (ws:read-loop ip maximum-message-size
-                         (lambda (msg)
-                           (send me `#(read ,self ,msg)))))))])
+    (let ([reader
+           (spawn&link
+            (let ([me self])
+              (lambda ()
+                (ws:read-loop maximum-message-size
+                  (port->notify-port ip
+                    (lambda (count)
+                      (when (fx> count 0)
+                        (set! shared-read-timestamp (erlang:now)))))
+                  (lambda (msg)
+                    (if (or (string? msg) (bytevector? msg))
+                        (send process `#(ws:message ,me ,msg))
+                        (send me `#(read ,self ,msg))))))))])
       (define (terminate reason state)
         (match state
           [#(closed ,_ ,_) 'ok]
@@ -476,10 +488,6 @@
         (match msg
           [#(read ,@reader ,msg)
            (match msg
-             [,message
-              (guard (or (string? message) (bytevector? message)))
-              (on-message message)
-              (no-reply `#(ping ,(next-ping-time)))]
              [#(close ,code ,reason)
               (do-close
                (if (memq code '(1000 1001))
@@ -509,11 +517,20 @@
            (process-died reason)]
           [timeout
            (match state
-             [#(ping ,_)
-              (send-ping-frame op masked? '#vu8())
-              (no-reply `#(pong ,(next-pong-time)))]
-             [#(pong ,_)
-              (do-close 'websocket-no-pong 1002 "no response from ping")])]))
+             [#(ping ,t)
+              (let ([npt (next-ping-time)])
+                (cond
+                 [(= t npt)
+                  (send-ping-frame op masked? '#vu8())
+                  (no-reply `#(pong ,(next-pong-time)))]
+                 [else
+                  (no-reply `#(ping ,npt))]))]
+             [#(pong ,deadline)
+              (cond
+               [(>= deadline (+ shared-read-timestamp pong-timeout))
+                (do-close 'websocket-no-pong 1002 "no response from ping")]
+               [else
+                (no-reply `#(ping ,(next-ping-time)))])])]))
 
       (let ([t (next-ping-time)])
         (on-init)
@@ -563,10 +580,30 @@
 
 #!eof mats
 
-(load-this-exposing '(ws:read-loop))
+(load-this-exposing '(http-upgrade ws:read-loop))
 
 (import
  (swish websocket))
+
+(define (get-http-listener)
+  (match-let*
+   ([,sup (whereis 'http-sup)]
+    [(`(<child> [pid ,http-sup] [type supervisor]))
+     (supervisor:get-children sup)]
+    [,children (supervisor:get-children http-sup)]
+    [`(<child> [pid ,listener])
+     (find (lambda (x) (eq? (<child> name x) 'http-listener)) children)])
+   listener))
+
+(define http-port (make-process-parameter #f))
+
+(define (get-http-port)
+  (cond
+   [(http-port) => values]
+   [else
+    (let ([p (http:get-port-number (get-http-listener))])
+      (http-port p)
+      p)]))
 
 (isolate-mat read-partial-u64 ()
   ;; If the code accidently uses get-bytevector-some, and the payload
@@ -590,6 +627,215 @@
                    (set! index (+ index 1))
                    1))
                #f #f #f)])
-    (ws:read-loop ip (ws:options maximum-message-size (ws:options))
+    (ws:read-loop (ws:options maximum-message-size (ws:options)) ip
       (lambda (msg) (send me msg)))
     (receive [,@message 'ok])))
+
+(isolate-mat websocket-ping-ex ()
+  (define mat-pid self)
+
+  (define payload-str (make-string 100 #\x))
+  ;; This payload was generated from a sequence of 100 "x" characters
+  ;; as bytes (not a string) with a mask of 0 and fragmentation size
+  ;; of 3.
+  (define payload
+    '#vu8(#x01 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x00 #x83 #x00 #x00 #x00 #x00 #x78 #x78 #x78
+          #x80 #x81 #x00 #x00 #x00 #x00 #x78))
+
+  (define normal-close '#vu8(#x88 #x82 #x00 #x00 #x00 #x00 #x03 #xE8))
+
+  (define (spawn-test delay close-delay)
+    (spawn
+     (lambda ()
+       (let-values ([(ip op) (http-upgrade "127.0.0.1" (get-http-port) "/")])
+         (define process self)
+         (define reader
+           (spawn&link
+            (lambda ()
+              (let lp ()
+                (let ([x (get-u8 ip)])
+                  (if (eof-object? x)
+                      (exit x)
+                      (lp)))))))
+         (define timeout delay)
+         (define sop
+           (make-custom-binary-output-port (format "~a (slow)" (port-name op))
+             (lambda (bv start n)
+               (receive (after timeout 'ok))
+               (let ([r (put-bytevector-some op bv start (min 64 n))])
+                 (flush-output-port op)
+                 r))
+             #f #f (lambda () (close-port op))))
+         (put-bytevector sop payload)
+         (set! timeout close-delay)
+         (put-bytevector sop normal-close)
+         (close-output-port sop)))))
+
+  (define (do-test delay close-delay)
+    (discard-events)
+    (let* ([tid (spawn-test delay close-delay)]
+           [s (receive (after 1000 (throw 'ws:init-timeout))
+                [#(ws:init ,s) s])])
+      (gen-server:debug s '(message state reply) '())
+      (events-until-dies s)))
+
+  (define (events-until-dies pid)
+    (receive
+     [`(<child-end> ,@pid) '()]
+     [,msg (cons msg (events-until-dies pid))]))
+
+  (define (attempt who inputs test-case)
+    ;; Build servers have different timing than our machines. Try to
+    ;; be more forgiving.  Try each input in turn until one
+    ;; succeeds. If they all fail, report the first failure.
+    (let retry ([inputs inputs] [err #f] [err-events '()])
+      (match inputs
+        [() (throw `#(failed-all-inputs ,who ,err ,err-events))]
+        [((,delay ,close-delay) . ,rest)
+         (let ([events (do-test delay close-delay)])
+           (match (try (test-case events))
+             [`(catch ,reason ,e)
+              (if err
+                  (retry rest err err-events)
+                  (retry rest e events))]
+             [,result result]))])))
+
+  (define (help-seek pred ls src)
+    (match ls
+      [(,first . ,rest)
+       (if (pred first) ls (help-seek pred rest src))]
+      [,_ (throw `#(bad-match ,ls ,src))]))
+
+  (define-syntax make-matcher
+    (syntax-rules ()
+      [(_ pat) (lambda (x) (match x [pat #t] [,_ #f]))]))
+
+  (define-match-extension seek
+    (lambda (v pattern)
+      (syntax-case pattern (quasiquote)
+        [`(seek pat rest)
+         #`((sub-match (help-seek (make-matcher pat) #,v #,(find-source #'pat))
+              (pat . rest)))])))
+
+  (start-silent-event-mgr)
+  (capture-events)
+  (supervisor:start&link 'http-sup 'one-for-all 0 1
+    (http:configure-server #f 0
+      (http:url-handler
+       (ws:upgrade conn request mat-pid
+         (ws:options
+          [ping-frequency 500]
+          [pong-timeout 100])))))
+
+  ;; Ping frequency is much slower than the input data rate, so the
+  ;; server should never send a ping (possibly one at the end). Expect
+  ;; websocket to receive data and close normally.
+
+  ;; The minimum delay needs to be less than 100 here. The close
+  ;; should come immediately after the payload.
+  (attempt 'case1 '((10 0) (50 0) (90 0))
+    (lambda (events)
+      (match-let*
+       ([`(seek `(<http-request> [pid ,s]) ,events) events]
+        [`(seek #(ws:message ,@s ,@payload-str) ,events) events]
+        [`(seek #(ws:closed ,@s 1000 "") ,events) events])
+       'ok)))
+
+  ;; Ping frequency is barely slower than the input data rate. After
+  ;; the initial payload is received the server sends a ping. Client
+  ;; closes the connection. Expect websocket to receive data and close
+  ;; normally.
+
+  ;; The minimum delay is based on (* delay N) where N is the number
+  ;; of times the slow output port puts bytes. For this case, 100 is a
+  ;; reasonable minimum.  The maximum close-delay should be less than
+  ;; (+ ping-frequency pong-timeout) or 600.
+  (attempt 'case2 '((450 550) (400 575) (300 550))
+    (lambda (events)
+      (match-let*
+       ([`(seek `(<http-request> [pid ,s]) ,events) events]
+        ;; Observe a timeout where the state remained as ping.
+        [`(seek `(<gen-server-debug> [type 3] [server ,@s] [message timeout]
+                   [state #(ping ,_)]
+                   [reply #(no-reply #(ping ,_) ,_)])
+            ,events) events]
+        [`(seek #(ws:message ,@s ,@payload-str) ,events) events]
+        ;; Observe a timeout where the state changed from ping to pong.
+        [`(seek `(<gen-server-debug> [type 3] [server ,@s] [message timeout]
+                   [state #(ping ,_)]
+                   [reply #(no-reply #(pong ,_) ,_)])
+            ,events) events]
+        [`(seek #(ws:closed ,@s 1000 "") ,events) events])
+       'ok)))
+
+  ;; Ping frequency is much faster than the input data rate. The
+  ;; client does not respond. Expect disconnection for failure to
+  ;; respond to ping.
+
+  ;; The minimum delay needs to be greater than the ping frequency,
+  ;; 1000 is double. The close-delay is absurd, the code should never
+  ;; reach that point.
+  (attempt 'case3 '((1000 10000) (2000 10000))
+    (lambda (events)
+      (match-let*
+       ([`(seek `(<http-request> [pid ,s]) ,events) events]
+        [`(seek #(ws:closed ,@s 1002 "no response from ping") ,events) events])
+       'ok)))
+
+  ;; Ping frequency is barely faster than the input data rate. The
+  ;; client will send data before the pong timeout. Expect websocket
+  ;; to receive data and close normally.
+
+  ;; The minimum delay needs to be greater than the ping frequency,
+  ;; but less than (+ ping-frequency pong-timeout), so (< 500 delay
+  ;; 600). The close should come immediately after the payload.
+  (attempt 'case4 '((510 0) (550 0) (575 0))
+    (lambda (events)
+      (match-let*
+       ([`(seek `(<http-request> [pid ,s]) ,events) events]
+        ;; Observe a timeout where the state changed from ping to pong.
+        [`(seek `(<gen-server-debug> [type 3] [server ,@s] [message timeout]
+                   [state #(ping ,_)]
+                   [reply #(no-reply #(pong ,_) ,_)])
+            ,events) events]
+        ;; Observe a timeout where the state changed from pong to ping.
+        [`(seek `(<gen-server-debug> [type 3] [server ,@s] [message timeout]
+                   [state #(pong ,_)]
+                   [reply #(no-reply #(ping ,_) ,_)])
+            ,events) events]
+        [`(seek #(ws:message ,@s ,@payload-str) ,events) events]
+        [`(seek #(ws:closed ,@s 1000 "") ,events) events])
+       'ok)))
+  )
