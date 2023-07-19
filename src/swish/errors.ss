@@ -141,9 +141,6 @@
            (get-output-string op))]
         [else (format "~s" x)])]))
 
-  (define current-exit-reason->english
-    (make-parameter swish-exit-reason->english))
-
   (define (src->english x)
     (match x
       [#(,at ,offset ,file) (format " ~a offset ~a of ~a" at offset file)]
@@ -170,6 +167,9 @@
          (fold-left add-stack (cons-k reason (cons-k r k*)) inner*)]
         [,_ (cons-k reason k*)]))
     (add-stack '() reason))
+
+  (define current-exit-reason->english
+    (make-parameter swish-exit-reason->english))
 
   (define-syntax redefine
     (syntax-rules ()

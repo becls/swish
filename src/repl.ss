@@ -2,6 +2,7 @@
 
 (let-syntax ([_ (begin ;; run this code at expand time
                   (compile-imported-libraries #t)
+                  (undefined-variable-warnings (equal? (getenv "WARN_UNDEFINED") "yes"))
                   (let ([base (path-parent (cd))]
                         [which (if (equal? (getenv "PROFILE_MATS") "yes")
                                    'profile
