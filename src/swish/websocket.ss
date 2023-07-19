@@ -565,6 +565,7 @@
       (handshake conn request)
       (http:switch-protocol
        (lambda (ip op)
+         (tcp-nodelay op #t)
          (ws:established ip op #f process options)))]))
 
   (define ws:connect
@@ -579,6 +580,7 @@
         [process process?]
         [options (ws:options is?)])
       (let-values ([(ip op) (http-upgrade hostname port request)])
+        (tcp-nodelay op #t)
         (spawn
          (lambda ()
            (ws:established ip op #t process options))))]))
