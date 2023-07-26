@@ -301,19 +301,29 @@
                (set! pp 0)
                (r! bv start n)]
               [else
-               (bytevector-copy! payload pp bv start count)
+               (unless (and (eq? bv payload) (fx= pp start))
+                 (bytevector-copy! payload pp bv start count))
                (set! pp (+ pp count))
                count]))]))
       (make-custom-binary-input-port "websocket payload" r! #f #f #f))
 
     (define (extract type payloads)
+      (define default-buf-size 1024)
       (define (if-eof x value)
         (if (eof-object? x)
             value
             x))
-      (let ([ip (payloads->input-port (reverse payloads))])
+      (let ([ip (payloads->input-port payloads)])
         (if (eq? type 'text)
-            (if-eof (get-string-all (binary->utf8 ip)) "")
+            (let ([bv0 (car payloads)])
+              ;; If large enough, use *first* payload as our codec buffer so we
+              ;; avoid one bytevector-copy! and avoid allocating a buffer here.
+              (parameterize ([make-codec-buffer
+                              (lambda (bp)
+                                (if (fx>= (bytevector-length bv0) default-buf-size)
+                                    bv0
+                                    (make-bytevector default-buf-size)))])
+                (if-eof (get-string-all (binary->utf8 ip)) "")))
             (if-eof (get-bytevector-all ip) '#vu8()))))
 
     ;; Set parameters for the reader process which creates custom ports for
@@ -341,7 +351,7 @@
               [(not type)
                (throw 'websocket-protocol-violation)]
               [final?
-               (forward (extract type (cons payload payloads)))
+               (forward (extract type (reverse (cons payload payloads))))
                (lp #f '() message-limit)]
               [else
                (lp type (cons payload payloads) (- limit len))])]
