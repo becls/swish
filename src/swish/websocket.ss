@@ -261,6 +261,22 @@
             (if-eof (get-string-all (binary->utf8 ip)) "")
             (if-eof (get-bytevector-all ip) '#vu8()))))
 
+    ;; Set parameters for the reader process which creates custom ports for
+    ;; decoding payloads as text and to assemble continuation payloads. We use
+    ;; these ports only with block reads via get-string-all, get-bytevector-all,
+    ;; or bytevector->string.
+    (custom-port-buffer-size 1)
+    (make-codec-buffer
+     (lambda (bp)
+       ;; Accelerate bytevector->string by recognizing hard-coded Chez Scheme
+       ;; port name for bytevector input ports and reusing the input buffer.
+       (or (and (input-port? bp) (equal? (port-name bp) "bytevector")
+                (let ([bv (binary-port-input-buffer bp)])
+                  ;; safe to reuse bv here because we own it
+                  ;; and we don't use it for anything else
+                  (and (fx>= (bytevector-length bv) 4) bv)))
+           (make-bytevector 4))))
+
     (let lp ([type #f] [payloads '()] [limit message-limit])
       (let-values ([(final? opcode payload) (read-frame ip limit)])
         (let ([len (bytevector-length payload)])

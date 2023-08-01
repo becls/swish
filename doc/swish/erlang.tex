@@ -259,10 +259,13 @@ Asynchronous I/O operations for COM ports, named pipes, external
 operating system processes, files, console input, and TCP connections
 are implemented with custom binary ports so that they have the same
 interface as the system I/O procedures. The system I/O procedures are
-not used because they perform synchronous I/O.  The custom port buffer
-size is set to 1024\footnote{1024 was chosen because Chez Scheme uses
-  1024 for the buffer size of buffered transcoded ports.} with
-\code{custom-port-buffer-size}.  The custom binary port read and write
+not used because they perform synchronous I/O.  The default custom port buffer
+size is set to 1024 with \code{custom-port-buffer-size}.\footnote{1024 was
+chosen because prior versions of Chez Scheme use 1024 for the buffer size
+of buffered transcoded ports.}
+When compiled with Chez Scheme versions 9.6.2 and later, Swish uses
+\code{file-buffer-size} as the buffer size for custom file ports.
+The custom binary port read and write
 procedures call \code{osi\_read\_port} and \code{osi\_write\_port}
 with callbacks that send a message to the calling process, which waits
 until it receives the message.

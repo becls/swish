@@ -860,17 +860,25 @@
       (define (gp) fp)
       (define (sp! pos) (set! fp pos))
       (define (close) (close-osi-port port))
-      (let open ([type type])
-        (case type
-          [(binary-input)
-           (make-custom-binary-input-port name r! gp sp! close)]
-          [(binary-output)
-           (make-custom-binary-output-port name w! gp sp! close)]
-          [(binary-append)
-           (make-custom-binary-output-port name a! #f #f close)]
-          [(input) (binary->utf8 (open 'binary-input))]
-          [(output) (binary->utf8 (open 'binary-output))]
-          [(append) (binary->utf8 (open 'binary-append))]))))
+      (define buffer-size (fxmax 4 (file-buffer-size)))
+      (parameterize ([custom-port-buffer-size buffer-size]
+                     [make-codec-buffer
+                      (lambda (bp)
+                        (or (and (input-port? bp)
+                                 (let ([bv (binary-port-input-buffer bp)])
+                                   (and (fx>= (bytevector-length bv) 4) bv)))
+                            (make-bytevector buffer-size)))])
+        (let open ([type type])
+          (case type
+            [(binary-input)
+             (make-custom-binary-input-port name r! gp sp! close)]
+            [(binary-output)
+             (make-custom-binary-output-port name w! gp sp! close)]
+            [(binary-append)
+             (make-custom-binary-output-port name a! #f #f close)]
+            [(input) (binary->utf8 (open 'binary-input))]
+            [(output) (binary->utf8 (open 'binary-output))]
+            [(append) (binary->utf8 (open 'binary-append))])))))
 
   (define (open-file-to-read name)
     (open-file name O_RDONLY 0 'input))

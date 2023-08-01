@@ -405,6 +405,91 @@
       (gc)
       (assert (handle-gone? (g))))))
 
+;; This test shows why we can't re-use the port's buffer as the codec buffer
+;; for an output port.
+(isolate-mat make-codec-buffer ()
+  (define fill-char #\A)
+  (define test-dir
+    (make-directory-path (path-combine (tmp-dir) "make-codec-buffer")))
+  ;; test reusing port's buffer as codec buffer with multi-byte character
+  ;; encoding at that crosses a buffer boundary
+  (define (check buffer-size)
+    ;; characters with 2-byte, 3-byte, and 4-byte utf-8 encodings
+    (define mischief '(#\δ #\Ⓓ #\🌓))
+    (define bv-len (* 2 buffer-size))
+    (define payload (make-bytevector bv-len))
+    (for-each
+     (lambda (mb-char)
+       (let* ([mbce-bv (string->utf8 (string mb-char))]
+              [mbce-len (bytevector-length mbce-bv)])
+         ;; try each overlap near buffer boundary
+         (do ([i 0 (+ i 1)]) ((= i mbce-len))
+           (let ([offset (- bv-len i mbce-len)])
+             (bytevector-fill! payload (char->integer fill-char))
+             (bytevector-copy! mbce-bv 0 payload offset mbce-len)
+             (assert (equal? payload (string->utf8 (utf8->string payload))))
+             (parameterize ([file-buffer-size buffer-size]
+                            [custom-port-buffer-size buffer-size])
+               (check-crossing payload offset mb-char
+                 (- bv-len (- mbce-len 1))))))))
+     mischief))
+  (define (check-crossing payload offset mb-char str-len)
+    (define utf8-file (make-directory-path (path-combine test-dir "file.utf8")))
+    ;; write binary file and read as text
+    (let ([bin-op (open-binary-file-to-replace utf8-file)])
+      (on-exit (close-port bin-op)
+        (put-bytevector bin-op payload))
+      (let* ([ip (open-file-to-read utf8-file)]
+             [s (on-exit (close-port ip) (get-string-all ip))])
+        (assert (= (string-length s) str-len))
+        (do ([i 0 (+ i 1)]) ((= i str-len))
+          (match-let* ([,expected (if (= i offset) mb-char fill-char)]
+                       [,@expected (string-ref s i)])
+            'ok)))
+      ;; Check use of port-position for input port.
+      ;;
+      ;; Chez Scheme's custom-binary-port set-position! handler invalidates the
+      ;; buffered data so we call the OS to fill port's buffer (which is also
+      ;; internal codec buffer in Swish) and we can safely decode multi-byte
+      ;; character sequence.
+      (let* ([ip (open-file-to-read utf8-file)]
+             [positions (make-fxvector str-len)])
+        (do ([i 0 (+ i 1)]) ((fx= i str-len))
+          (fxvector-set! positions i (port-position ip))
+          (read-char ip))
+        (do ([i 0 (+ i 1)]) ((fx= i str-len))
+          (let ([j (random str-len)]
+                [tmp (fxvector-ref positions i)])
+            (fxvector-set! positions i (fxvector-ref positions j))
+            (fxvector-set! positions j tmp)))
+        (do ([i 0 (+ i 1)]) ((fx= i str-len))
+          (let ([j (fxvector-ref positions i)])
+            (set-port-position! ip j)
+            (match-let* ([,expected (if (= j offset) mb-char fill-char)]
+                         [,@expected (read-char ip)])
+              'ok)))))
+    ;; write text and read as binary
+    (let ([op (open-file-to-replace utf8-file)])
+      (on-exit (close-port op)
+        (put-string op (utf8->string payload)))
+      (let* ([bip (open-binary-file-to-read utf8-file)]
+             [bv (on-exit (close-port bip) (get-bytevector-all bip))])
+        (match-let* ([,@payload bv])
+          'ok))))
+  (assert (= 1 (bytevector-length (string->utf8 (string fill-char)))))
+  (delete-tree test-dir)
+  (on-exit (delete-tree test-dir)
+    (parameterize ([transcoded-port-buffer-size 1])
+      (check 4) ;; minimum buffer size
+      (check 128)
+      (check 511) ;; not a power of two
+      (check 2048))
+    (parameterize ([transcoded-port-buffer-size 1024])
+      (check 4) ;; minimum buffer size
+      (check 128)
+      (check 511) ;; not a power of two
+      (check 2048))))
+
 (isolate-mat read ()
   (read-bytevector "src/swish/io.ms" (read-file "src/swish/io.ms")))
 
