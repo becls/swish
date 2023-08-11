@@ -30,6 +30,7 @@
    find-clause
    find-source
    get-clause
+   not-reached
    pretty-syntax-violation
    profile-me
    profile-me-as
@@ -64,7 +65,12 @@
   (define-syntax (profile-omit x)
     (syntax-case x ()
       [(kwd expr ...)
-       (datum->syntax #'kwd `(begin ,@(syntax->datum #'(expr ...))))]))
+       (if (compile-profile)
+           (datum->syntax #'kwd `(begin ,@(syntax->datum #'(expr ...))))
+           #`(begin expr ...))]))
+
+  (define-syntax not-reached
+    (identifier-syntax (profile-omit (assert #f))))
 
   (define (find-source x)
     (let ([annotation (syntax->annotation x)])
