@@ -2355,6 +2355,20 @@ The \code{path-watcher?} procedure determines whether or not the datum
 \var{x} is a path watcher.
 
 % ----------------------------------------------------------------------------
+\defineentry{port->notify-port}
+\begin{procedure}
+  \code{(port->notify-port \var{p} \var{notify!})}
+\end{procedure}
+\returns{} a port
+
+The \code{port->notify-port} procedure takes a custom binary port \var{p} and a
+\var{notify!} procedure of one argument.
+It marks port \var{p} as closed and returns a new custom port whose \code{r!} or
+\code{w!} procedure calls \var{notify!} with the number of bytes returned.
+This procedure is currently restricted to ports returned by \code{connect-tcp}
+and ports obtained from an \code{\#(accept-tcp \var{listener} \var{ip} \var{op})} tuple.
+
+% ----------------------------------------------------------------------------
 \defineentry{print-osi-ports}
 \begin{procedure}
   \code{(print-osi-ports \opt{\var{op}})}

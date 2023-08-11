@@ -1037,4 +1037,130 @@
    [123 (spawn-os-process-detached 123 '())]
    [(oops) (spawn-os-process-detached"nosuchfile" '(oops))]))
 
+(isolate-mat notify-port ()
+  (define-syntax foreach
+    (syntax-rules ()
+      [(_ ([v ls] ...) e0 e1 ...)
+       (for-each (lambda (v ...) e0 e1 ...) ls ...)]))
+  (define checked-error-case? #f)
+  (define (test-tcp data cpbs-before cpbs-after chunks)
+    (define size (bytevector-length data))
+    (define chunk-size (max 1 (quotient size chunks)))
+    (define-syntax do-write
+      (syntax-rules ()
+        [(_ op check-n check-calls)
+         (let* ([n (put-bytevector-some op data 0 chunk-size)]
+                [! (when (zero? (port-output-index op))
+                     ;; initial write flushed buffer before we were instrumented, so update check-n
+                     (set! check-n (+ check-n n)))]
+                [fp (port-position op)]
+                [new-op
+                 ;; instrument port while we may have some buffered data
+                 (port->notify-port op
+                   (lambda (count)
+                     (set! check-calls (+ check-calls 1))
+                     (set! check-n (+ check-n count))))])
+           (assert (port-closed? op))
+           (assert (= fp (port-position new-op)))
+           (let lp ([n n])
+             (let ([remaining (- size n)])
+               (when (> remaining 0)
+                 (let ([block-size (min remaining chunk-size)])
+                   (lp (+ n (put-bytevector-some new-op data n block-size)))))))
+           ;; don't close the port yet; that would also close the input side
+           (flush-output-port new-op)
+           new-op)]))
+    (define-syntax do-read
+      (syntax-rules ()
+        [(_ ip check-n check-calls dest-op)
+         (let* ([bv (get-bytevector-n ip chunk-size)]
+                [n (bytevector-length bv)]
+                [! (set! check-n (+ check-n n))]
+                [! (put-bytevector dest-op bv)]
+                [fp (port-position ip)]
+                [new-ip
+                 ;; instrument port while we may have some buffered data
+                 (port->notify-port ip
+                   (lambda (count)
+                     (set! check-calls (+ check-calls 1))
+                     (set! check-n (+ check-n count))))])
+           (assert (port-closed? ip))
+           (assert (= fp (port-position new-ip)))
+           (let lp ([n n])
+             (let ([remaining (- size n)])
+               (when (> remaining 0)
+                 (let* ([block-size (min remaining chunk-size)]
+                        [bv (get-bytevector-n new-ip block-size)])
+                   (assert (bytevector? bv))
+                   (put-bytevector dest-op bv)
+                   (lp (+ n (bytevector-length bv))))))))]))
+    (define sip-calls 0)
+    (define sop-calls 0)
+    (define cip-calls 0)
+    (define cop-calls 0)
+    (define sip-n 0)
+    (define sop-n 0)
+    (define cip-n 0)
+    (define cop-n 0)
+    (custom-port-buffer-size cpbs-before)
+    (let* ([listener (listen-tcp "::" 0 self)]
+           [test-port (listener-port-number listener)])
+      (on-exit (close-tcp-listener listener)
+        (let-values ([(cip cop) (connect-tcp "::1" test-port)])
+          (unless checked-error-case?
+            (match (try (port->notify-port cip 'bad-proc))
+              [`(catch #(bad-arg port->notify-port bad-proc))
+               (set! checked-error-case? #t)]))
+          (receive (after 5000 (throw 'timeout-connecting-tcp))
+            [#(accept-tcp ,@listener ,sip ,sop)
+             (spawn&link
+              (lambda ()
+                (custom-port-buffer-size cpbs-after)
+                (let-values ([(op get) (open-bytevector-output-port)])
+                  (do-read sip sip-n sip-calls op)
+                  (assert (equal? data (get)))
+                  (close-port (do-write sop sop-n sop-calls)))))])
+          (custom-port-buffer-size cpbs-after)
+          (let ([new-cop (do-write cop cop-n cop-calls)])
+            (let-values ([(op get) (open-bytevector-output-port)])
+              (do-read cip cip-n cip-calls op)
+              (assert (equal? data (get))))
+            (close-port new-cop))
+          (match-let* ([,@size sip-n]
+                       [,@size sop-n]
+                       [,@size cip-n]
+                       [,@size cop-n]
+                       [#t (= sip-calls cip-calls)]
+                       [,low (* sip-calls chunk-size)]
+                       [,high (+ low chunk-size)]
+                       [#t (<= low size high)]
+                       ;; The number of cop-calls and sop-calls is complicated
+                       ;; by Chez Scheme's internal max-put-copy constant. Calls
+                       ;; to put-bytevector-some below a certain size (currently
+                       ;; 256) will copy bytes to the ports buffer without going
+                       ;; through the instrumented w! procedure.
+                       [#t (>= cop-calls 1)]
+                       [#t (>= sop-calls 1)])
+            'ok)))))
+  (define (live-osi-ports) (gc) (osi-port-count))
+  (define original-ports (live-osi-ports))
+  (foreach ([size buffer-sizes])
+    (foreach ([prime primes])
+      (let ([buf (build-buffer size (make-byte-stream prime))])
+        ;; increasing buffer size: allocate new and copy
+        (test-tcp buf 512 1000 7)
+        ;; decreeasing buffer size: reuse original
+        (test-tcp buf 1000 512 7)
+        ;; different number of chunks
+        (test-tcp buf 1000 512 128))))
+  (match-let*
+   ([,bad-port (open-input-string "")]
+    [`(catch #(bad-arg port->notify-port ,@bad-port))
+     (try (port->notify-port bad-port values))]
+    [#t checked-error-case?]
+    ;; check that we collected the osi-ports
+    [#t (<= (live-osi-ports) original-ports)])
+   'ok)
+  )
+
 (hook-console-input)
