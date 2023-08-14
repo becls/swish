@@ -500,6 +500,7 @@
               [(eq? reason 'normal) 1000]
               [(eq? reason 'websocket-message-limit-exceeded) 1009]
               [(i/o-decoding-error? reason) 1007]
+              [(condition? reason) 1011]
               [else 1002])
              "")]
           [`(EXIT ,@process ,reason)
