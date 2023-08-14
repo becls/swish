@@ -123,13 +123,13 @@ jobs:
           else sudo make install
           fi
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Build Swish
         run: ./configure && make
       - name: Run tests
         run: make test || echo "Run tests failed" >> failures
       - name: Archive test results
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.config.machine }}-${{ matrix.config.chez }}-test
           path: |
@@ -138,7 +138,7 @@ jobs:
       - name: Run coverage
         run: make coverage || echo "Run coverage failed" >> failures
       - name: Archive coverage results
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.config.machine }}-${{ matrix.config.chez }}-coverage
           path: |
@@ -146,7 +146,7 @@ jobs:
             src/swish/*.mo
       - name: Archive coverage reports
         if: ${{ matrix.config.chez == 'main' }}
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.config.machine }}-${{ matrix.config.chez }}-coverage-report
           path: |
@@ -164,7 +164,7 @@ jobs:
           tar -cvf ${{ matrix.config.machine }}-${{ matrix.config.chez }}-build.tar build/swish
       - name: Archive build artifacts
         if: ${{ matrix.config.chez != 'main' && !startsWith(matrix.config.machine, 't') }}
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.config.machine }}-${{ matrix.config.chez }}-build.tar
           path: ${{ matrix.config.machine }}-${{ matrix.config.chez }}-build.tar
