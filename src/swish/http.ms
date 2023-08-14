@@ -1414,9 +1414,9 @@
         (let ([str (make-string (+ max-size 1) #\b)])
           (ws:send c str)
           (receive (after 1000 (throw 'no-server-close))
-            [#(ws:closed ,@s 1002 ,_) 'ok]))
+            [#(ws:closed ,@s 1009 ,_) 'ok]))
         (receive (after 1000 (throw 'no-client-close))
-          [#(ws:closed ,@c 1002 ,_) 'ok]
+          [#(ws:closed ,@c 1009 ,_) 'ok]
           [#(ws:closed ,@c 1001 ,_)
            ;; When the message size is large, it is likely the server
            ;; side closes the connection, and the client side fails
