@@ -111,13 +111,6 @@
          (lambda () b1 b2 ...)
          (lambda () finally))]))
 
-  (define-syntax no-interrupts
-    (syntax-rules ()
-      [(_ body ...)
-       (let ([x (begin (disable-interrupts) body ...)])
-         (enable-interrupts)
-         x)]))
-
   (define-syntax (receive x)
     (syntax-case x ()
       [(_ (after timeout t1 t2 ...) (pattern b1 b2 ...) ...)
@@ -356,6 +349,7 @@
         thunk))))
 
   ($import-internal throw)
+  (include "unsafe.ss")
 
   (define (bad-arg who arg)
     (no-inline throw `#(bad-arg ,who ,arg)))

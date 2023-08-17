@@ -1,5 +1,5 @@
 MAKEFLAGS += --no-print-directory
-.PHONY: clean coverage check-docs doc install pristine swish test
+.PHONY: clean coverage check-docs doc install pristine swish test safe-check
 
 swish: src/swish/Makefile
 	$(MAKE) -C src/swish all
@@ -13,6 +13,11 @@ src/swish/Makefile:
 
 test: src/swish/Makefile
 	@$(MAKE) -C src/swish mat-prereq
+	@./src/run-mats
+
+safe-check: src/swish/Makefile
+	@touch src/swish/unsafe.ss
+	@UNSAFE_PRIMITIVES=no $(MAKE) -C src/swish mat-prereq
 	@./src/run-mats
 
 coverage: src/swish/Makefile

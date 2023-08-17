@@ -1,4 +1,4 @@
-.PHONY: all build-dirs clean platform-clean ready reminders submodules
+.PHONY: all build-dirs clean platform-clean ready reminders submodules touch-includes
 
 SETUP := Makefile submodules build-dirs \
          chezscheme-revision.include swish-revision.include swish-version.include
@@ -9,8 +9,18 @@ SSRC := $(shell git ls-files '*.ss')
 
 export CC CPPFLAGS CFLAGS LD LDFLAGS
 
+# We want to recompile code that includes unsafe.ss if it changes. So generate a
+# make include that touches any file that includes unsafe.ss and update those
+# dependencies if unsafe.ss itself changes. Use a grep pattern that won't match
+# Mf-base itself.
+unsafe.ss.dep: unsafe.ss
+	@git grep -l '[(]include "unsafe.ss"[)]' | tr '\n' ' ' > unsafe.ss.dep
+	@echo -e ': unsafe.ss\n\ttouch --reference unsafe.ss $$@' >> unsafe.ss.dep
+
 ready:: | ${SETUP}
-ready:: io-constants.ss ${SwishLibs}
+ready:: io-constants.ss unsafe.ss.dep ${SwishLibs}
+
+-include unsafe.ss.dep
 
 submodules:
 	@if cd ../.. && git submodule status --recursive | grep -q '^[^ ]'; then \

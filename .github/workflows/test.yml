@@ -179,6 +179,9 @@ jobs:
           path: |
             data/mat-report.html
             src/swish/*.mo
+      - name: Run safe-check tests
+        if: ${{ matrix.config.chez == 'main' && !startsWith(matrix.config.os, 'macos') }}
+        run: .github/workflows/unless-failed.sh safe-check
       - name: Run coverage
         run: .github/workflows/unless-failed.sh coverage
       - name: Archive coverage results

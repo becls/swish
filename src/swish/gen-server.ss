@@ -230,14 +230,9 @@
      [(server request timeout)
       (do-call server request timeout #t)]))
 
-  (define-syntax no-interrupts
-    (syntax-rules ()
-      [(_ body ...)
-       (let ([x (begin (disable-interrupts) body ...)])
-         (enable-interrupts)
-         x)]))
-
   (define debug-table (make-weak-eq-hashtable))
+
+  (include "unsafe.ss")
 
   (define (do-call server request timeout timeout?)
     (define (failed-call reason e)
