@@ -358,12 +358,14 @@
       (fprintf op "<html>\n")
       (html->string op
         `(head
-          (meta (@ (charset "UTF-8")))
+          (meta (@ (http-equiv "Content-Type")
+                   (content "text/html; charset=UTF-8")))
           (title "Test Coverage")
           (style
+           "BODY { font-family: monospace; }"
            "td { text-align: right; }"
            "td:first-child { text-align: left; }")))
-      (fprintf op "<body style='font-family:monospace;'>\n")
+      (fprintf op "<body>\n")
       (let-values ([(hits sites percentage) (summarize-coverage results)])
         (fprintf op
           "<h2>Overall ~a% coverage with ~a of ~a sites covered.\n</h2>"

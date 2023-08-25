@@ -48,8 +48,7 @@
   `(script (@ (type "text/javascript") (src ,location))))
 
 (define (css-include location)
-  `(link (@ (type "text/css")
-            (rel "stylesheet")
+  `(link (@ (rel "stylesheet")
             (href ,location))))
 
 (define (table . content)

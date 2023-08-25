@@ -857,7 +857,7 @@
   (define mo-path4 (string-append test-file4 ".mo"))
   (define mo-all-pass (string-append all-pass ".mo"))
   (define (get-data content)
-    (match-let* ([(,_ ,data) (pregexp-match "<script>var data = (.*);</script><script>\n  function escapeHtml" content)])
+    (match-let* ([(,_ ,data) (pregexp-match "<script[^>]*>var data = (.*);</script><script[^>]*>\n  function escapeHtml" content)])
       (json:string->object data)))
   (define (results-of-type t obj)
     (filter (lambda (r) (eq? t (mat-result-type r)))
