@@ -604,6 +604,10 @@
         "-ms-user-select: none;"
         "user-select: none;"
         "}\n"))
+    (fprintf op ".legend { position:fixed; top:0; right:0; float:right; height: 0px; margin-right: 1em; }\n")
+    (fprintf op "table.legend { padding:0; border-spacing:0; white-space: pre; }\n")
+    (fprintf op "table.legend th { text-align:center; }\n")
+    (fprintf op "table.legend td { text-align:right; padding-top:0; padding-bottom:0; }\n")
 
     ;; To emit the minimal set of style sheet classes, we union the
     ;; set of counts in the profile and set of values displayed in the
@@ -635,11 +639,31 @@
         "-->"
         "</style>"
         "</head>"
-        "<body>"))
+        "<body>"
+        ""))
+    (let ()
+      (define (emit-legend op count max-count)
+        (fprintf op "<tr class=\"~a\"><td>~:d</td></tr>\n"
+          (color-class count max-count)
+          count
+          (hashtable-ref hist (hist-key count) 0)))
+      (do ([ls data (cdr ls)]) ((null? ls))
+        (update! hist (cdar ls)))
+      (fprintf op "<table class=\"legend\">\n")
+      (fprintf op "<tr><th>counts</th><th>sites</th></tr>\n")
+      (emit-legend op 0 max-count hist)
+      (let lp ([count 1])
+        (when (< count max-count)
+          (emit-legend op count max-count)
+          (lp (* count 10))))
+      (emit-legend op max-count max-count)
+      (fprintf op "</table>\n"))
+
     (fprintf op
       (ct:join #\newline
         "<h1>~a</h1>"
-        "<table class=\"code\" summary=\"Code including profile counts\">")
+        "<table class=\"code\">"
+        "")
       name))
 
   (define (emit-trailer op)
