@@ -18,6 +18,8 @@ SwishLibs := ../../${BUILD}/bin/libosi.so ../../${BUILD}/lib/swish_kernel.o
 ../../${BUILD}/bin/swish: main.o ../../${BUILD}/lib/swish_kernel.o
 	$C -o $@ $^ -Wl,-E ${SystemLibs}
 
+osi.o run.o: chezscheme-revision.include
+
 ../../${BUILD}/bin/libosi.so: ${OsiObj} ${UvLib}/libuv_a.a
 	$C -shared -o ../../${BUILD}/bin/libosi.so ${OsiObj} -L"${LIBUV_LIBPATH}" -luv_a -luuid -lpthread
 

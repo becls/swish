@@ -8,6 +8,8 @@ SwishLibs := ../../${BUILD}/bin/uv.dll ../../${BUILD}/bin/sqlite3.dll ../../${BU
 ../../${BUILD}/bin/swish.exe: main.obj ../../${BUILD}/bin/uv.lib
 	${LD} /out:$@ /subsystem:console main.obj ${SystemLibs} uv.lib
 
+osi.obj run.obj: chezscheme-revision.include
+
 ../../${BUILD}/bin/osi.dll: ${OsiObj} ../../${BUILD}/bin/uv.lib ../../${BUILD}/bin/sqlite3.lib
 	${LD} /dll /out:$@ ${OsiObj} ${SCHEME_LIB_PREFIX}.lib uv.lib sqlite3.lib
 

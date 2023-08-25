@@ -6,6 +6,8 @@ SwishLibs := ../../${BUILD}/bin/libosi.dylib ../../${BUILD}/lib/swish_kernel.o
 ../../${BUILD}/bin/swish: main.o ../../${BUILD}/lib/swish_kernel.o
 	$C -o $@ $^ ${SystemLibs}
 
+osi.o run.o: chezscheme-revision.include
+
 ../../${BUILD}/bin/libosi.dylib: ${OsiObj} ${UvLib}/libuv_a.a
 	$C -dynamiclib -undefined dynamic_lookup -o ../../${BUILD}/bin/libosi.dylib ${OsiObj} -L"${LIBUV_LIBPATH}" -luv_a
 

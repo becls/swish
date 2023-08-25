@@ -5,6 +5,8 @@ SETUP := Makefile submodules build-dirs \
 CORE := ../../${BUILD}/bin/swish${EXESUFFIX} ../../${BUILD}/bin/swish.boot ../../${BUILD}/bin/swish.library
 AUXLIB := ../../${BUILD}/lib/swish/mat.so ../../${BUILD}/lib/swish/profile.so ../../${BUILD}/lib/swish/testing.so ../../${BUILD}/lib/swish/internal-testing.so
 
+SSRC := $(shell git ls-files '*.ss')
+
 export CC CPPFLAGS CFLAGS LD LDFLAGS
 
 ready:: | ${SETUP}
@@ -29,8 +31,20 @@ all: ready ${CORE} ${AUXLIB} ${REMINDERS}
 	@if cmp --quiet "$@" "$<"; then \
 	  rm "$<"; \
 	else \
-	  mv "$<" "$@"; touch software-info.ss; echo "$@ changed"; \
+	  mv "$<" "$@"; $(MAKE) $@-changed; echo "$@ changed"; \
 	fi
+
+${OsiObj}: sqlite3.h swish.h sha.h sha-private.h
+
+.PHONY: swish-revision.include-changed swish-version.include-changed chezscheme-revision.include-changed
+swish-revision.include-changed:
+	touch software-info.ss
+
+swish-version.include-changed:
+	touch software-info.ss
+
+chezscheme-revision.include-changed:
+	touch $(SSRC)
 
 swish-revision.tmp-include:
 	@git describe --always --match none --abbrev=40 --dirty > "$@"
@@ -57,12 +71,12 @@ compile.ss: ${SwishLibs} | ${SETUP}
 	'(make-boot-file "../${BUILD}/bin/swish.boot" (quote ("scheme" "petite")) "../${BUILD}/bin/swish-core.library" "../${BUILD}/bin/swish.library" "swish/boot.ss")' \
 	| "${SCHEME}" -q compile.ss
 
-../../${BUILD}/bin/swish-core.library: *.ss io-constants.ss compile.ss
+../../${BUILD}/bin/swish-core.library: $(SSRC) io-constants.ss compile.ss
 	@echo \
 	'(wpo-make-library "../${BUILD}/lib" "swish/app-core.ss" "../${BUILD}/bin/swish-core.library")' \
 	| "${SCHEME}" -q compile.ss
 
-../../${BUILD}/bin/swish.library: *.ss compile.ss ../../${BUILD}/bin/swish-core.library
+../../${BUILD}/bin/swish.library: $(SSRC) compile.ss ../../${BUILD}/bin/swish-core.library
 	@echo \
 	'(exclude-from-wpo "../${BUILD}/bin/swish-core.library")' \
 	'(wpo-make-library "../${BUILD}/lib" "swish/imports.ss" "../${BUILD}/bin/swish.library")' \
