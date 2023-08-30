@@ -33,6 +33,7 @@
     (swish cli)
     (swish db)
     (swish digest)
+    (swish dsm)
     (swish erlang)
     (swish errors)
     (swish event-mgr)

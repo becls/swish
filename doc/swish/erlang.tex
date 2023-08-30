@@ -3358,3 +3358,79 @@ condition within the compound condition it constructs.
 The \code{with-temporaries} macro binds each macro-language
 pattern variable \var{id} to a fresh generated identifier
 within the body \code{(begin \var{e0}\ \var{e1}\ \etc)}.
+
+% ----------------------------------------------------------------------------
+\defineentry{define-syntactic-monad}
+\begin{syntax}
+  \code{(define-syntactic-monad \var{m} \var{id} \etc)}
+\end{syntax}
+\expandsto{} see below
+
+The \code{define-syntactic-monad} macro defines a macro \var{m} for defining
+and calling procedures that take implicit \code{\var{id} \etc} arguments in addition
+to any explicit arguments that may be provided.
+Such macros make it easier to write state machines in a functional style
+by allowing the programmer to specify only the values that change at a call.
+
+A call to \var{m} takes the form
+\code{(\var{m} \var{e$_0$} ([\var{id$_i$} \var{e$_i$}] \etc) \var{x} \etc)}
+or
+\code{(\var{m} \var{kwd} \var{form} \etc)}
+where \var{kwd} is
+\code{case-lambda},
+\code{define},
+\code{lambda},
+\code{let},
+\code{trace-case-lambda},
+\code{trace-define},
+\code{trace-lambda}, or
+\code{trace-let}.
+The first form constructs a call to \code{\var{e$_0$}} and is described below
+along with the \code{let} case.
+The other cases may be understood in terms of the following template
+expansions or their natural extension to tracing variants:
+
+~\code{(\var{m} lambda \var{fmls} \var{body} \etc)}
+$\rightarrow$
+\code{(lambda (\var{id} \etc{} . \var{fmls}) \var{body} \etc)}
+
+~\code{(\var{m} define (\var{proc} . \var{fmls}) \var{body} \etc)}
+$\rightarrow$
+\code{(define \var{proc} (\var{m} lambda \var{fmls} \var{body} \etc))}
+
+~\code{(\var{m} case-lambda [\var{fmls} \var{body} \etc] \etc)}
+$\rightarrow$
+\code{(case-lambda [(\var{id} \etc{} . \var{fmls}) \var{body} \etc] \etc)}
+
+The call form
+\code{(\var{m} \var{e$_0$} ([\var{id$_i$} \var{e$_i$}] \etc) \var{x} \etc)}
+constructs a call to \code{\var{e$_0$}} where the arguments are
+the \code{\var{id} \etc} with any \var{id$_i$} replaced by \var{e$_i$}
+all followed by the \code{\var{x} \etc} expressions.
+Any \var{id} that does not have an explicit
+\code{[\var{id$_i$} \var{e$_i$}]} binding in the call form
+must have a binding in scope.
+For calls within the body of an
+\code{(\var{m} case-lambda \etc)},
+\code{(\var{m} define \etc)},
+\code{(\var{m} lambda \etc)}, or
+\code{(\var{m} let \etc)}
+form such bindings are already in scope.
+As a convenience, the call syntax \code{(\var{m} \var{f})} is equivalent to
+\code{(\var{m} \var{f} ())} which specifies an empty list of implicit-binding updates.
+
+The \code{(\var{m} let \etc)} form constructs a named \code{let} using
+syntax inspired by the call form described above.
+That is,
+\code{(\var{m} let \var{name} ([\var{id$_i$} \var{e$_i$}] \etc) ([\var{x$_j$} \var{e$_j$}] \etc) \var{body} \etc)}
+constructs a named \code{let} \var{name}
+that binds \code{\var{id} \etc{} \var{x} \etc}
+with the initial value of each \var{id} coming from
+the value of the corresponding \var{e$_i$}
+or else the binding already in scope
+and the initial value of each \var{x$_j$} supplied by
+the corresponding \var{e$_j$}.
+Within \code{\var{body} \etc}, a call
+of the form \code{(\var{m} \var{name} (\var{id$_i$} \etc) \var{e$_j$} \etc)}
+can supply required values for each of the \var{x$_j$}
+along with new values for \var{id} \etc{} if needed.
