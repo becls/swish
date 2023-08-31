@@ -1146,6 +1146,22 @@ Within coverage reports, profile counts on the \code{arg-check}
 keyword indicate the number of \code{bad-arg} cases encountered.
 
 % ----------------------------------------------------------------------------
+\defineentry{procedure/arity?}
+\begin{procedure}
+  \code{(procedure/arity? \var{mask} \opt{\var{obj}})}
+\end{procedure}
+\returns{} see below
+
+If both arguments are supplied, \code{procedure/arity?} returns true if
+\var{obj} is a procedure that supports all of the argument counts specified by
+\var{mask}.
+If only the \var{mask} is supplied, then \code{procedure/arity?}
+returns a procedure \code{(lambda (p) (procedure/arity? \var{mask} p))}
+suitable for use with \code{andmap} or \code{arg-check}, for example.
+In either case \var{mask} must be an exact integer bitmask of the
+form returned by \code{procedure-arity-mask}.
+
+% ----------------------------------------------------------------------------
 \defineentry{bad-arg}
 \begin{procedure}
   \code{(bad-arg \var{who} \var{arg})}
