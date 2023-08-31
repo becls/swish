@@ -37,23 +37,23 @@
 
 (define opt (parse-command-line-arguments cli))
 
-(define (find-files path . extensions)
-  (define (combine path fn) (if (equal? "." path) fn (path-combine path fn)))
-  (let search ([path path] [hits '()])
-    (match (catch (list-directory path))
-      [#(EXIT ,reason) hits]
-      [,found
-       (fold-left
-        (lambda (hits entry)
-          (match entry
-            [(,fn . ,@DIRENT_DIR) (search (combine path fn) hits)]
-            [(,fn . ,@DIRENT_FILE)
-             (if (member (path-extension fn) extensions)
-                 (cons (combine path fn) hits)
-                 hits)]
-            [,_ hits])) ;; not following symlinks
-        hits
-        found)])))
+(define (git-ls-files root pattern)
+  (define me self)
+  (let-values ([(to-stdin from-stdout from-stderr os-pid)
+                (spawn-os-process "git" `("ls-files" ,(path-combine root pattern)) me)])
+    (spawn&link
+     (lambda ()
+       (let ([ip (binary->utf8 from-stdout)])
+         (let lp ([ls '()])
+           (match (get-line ip)
+             [#!eof (send me `#(lines ,(reverse ls)))]
+             [,line (lp (cons line ls))])))))
+    (receive (after 10000 (throw 'timeout))
+      [#(process-terminated ,@os-pid ,exit-status ,_)
+       (unless (zero? exit-status)
+         (errorf 'git-ls-files "failed:\n~a"
+           (get-string-all (binary->utf8 from-stderr))))
+       (receive [#(lines ,ls) ls])])))
 
 (define exclude?
   (cond
@@ -126,7 +126,7 @@
       (or (opt 'libraries) '("(swish imports)")))
     (for-each
      (lambda (filename)
-       (let ([file.h (path-combine dir ".." "src" "swish" filename)])
+       (let ([file.h (path-combine dir "src" "swish" filename)])
          (when (and (not (opt 'libraries)) (file-regular? file.h))
            (for-each-regex-match file.h C-export-regex
              (lambda (entry)
@@ -138,7 +138,7 @@
          (for-each-regex-match fullname entry-regex
            (lambda (entry)
              (update-entry! exports (dequote (detex entry)) file)))))
-     (find-files dir "tex"))
+     (git-ls-files (path-combine dir "doc" "swish") "*.tex"))
     (let ([partitions (make-hashtable symbol-hash eq?)])
       (vector-for-each
        (lambda (e)
