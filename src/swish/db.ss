@@ -38,6 +38,7 @@
    db:filename
    db:log
    db:options
+   db:start
    db:start&link
    db:stop
    db:transaction
@@ -117,21 +118,32 @@
       (default 10000)
       (must-be fixnum? fxpositive?)]))
 
+  (define (process-start-arg who arg)
+    (match arg
+      [`(<db:options>) arg]
+      [,db-init
+       (guard (procedure? db-init))
+       (db:options
+        [init
+         (lambda (filename mode db)
+           (db-init db))])]
+      [,_ (bad-arg who arg)]))
+
   (define db:start&link
     (case-lambda
      [(name filename mode)
       (db:start&link name filename mode (db:options))]
      [(name filename mode arg)
       (gen-server:start&link name filename mode
-        (match arg
-          [`(<db:options>) arg]
-          [,db-init
-           (guard (procedure? db-init))
-           (db:options
-            [init
-             (lambda (filename mode db)
-               (db-init db))])]
-          [,_ (bad-arg 'db:start&link arg)]))]))
+        (process-start-arg 'db:start&link arg))]))
+
+  (define db:start
+    (case-lambda
+     [(name filename mode)
+      (db:start name filename mode (db:options))]
+     [(name filename mode arg)
+      (gen-server:start name filename mode
+        (process-start-arg 'db:start arg))]))
 
   (define (db:stop who)
     (gen-server:call who 'stop 'infinity))
