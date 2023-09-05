@@ -32,6 +32,7 @@
    json:object->bytevector
    json:object->string
    json:object?
+   json:pretty
    json:read
    json:ref
    json:set!
@@ -511,11 +512,11 @@
             (json:write-structural-char #\} indent op)))]
      [else (throw `#(invalid-datum ,x))]))
 
-  (define (internal-write op x indent custom-writer)
+  (define (internal-write op x indent custom-writer default-key<?)
     (define key<?
       (let ([x (json:key<?)])
         (cond
-         [(eq? x #t) string<?]
+         [(eq? x #t) default-key<?]
          [else x])))
     (define custom-write
       (and custom-writer
@@ -533,7 +534,7 @@
      [(op x indent custom-writer)
       (when (and indent (or (not (fixnum? indent)) (negative? indent)))
         (bad-arg 'json:write indent))
-      (internal-write op x indent custom-writer)]))
+      (internal-write op x indent custom-writer string<?)]))
 
   (define json:object->string
     (case-lambda
@@ -668,4 +669,14 @@
              (when (eqv? indent 0)
                (newline op))
              #t))]))
+
+  (define json:pretty
+    (case-lambda
+     [(x) (json:pretty x (current-output-port))]
+     [(x cw/op)
+      (if (procedure? cw/op)
+          (json:pretty x cw/op (current-output-port))
+          (json:pretty x #f cw/op))]
+     [(x custom-writer op)
+      (internal-write op x 0 custom-writer natural-string-ci<?)]))
   )

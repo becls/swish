@@ -1140,6 +1140,24 @@ The latter trades code size and compile time for run-time efficiency.
 At compile time, \code{json:write-object} sorts the keys and
 preformats the strings that will separate values.
 
+\defineentry{json:pretty}
+\begin{procedure}
+  \code{(json:pretty \var{x} \opt{\var{op}})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{json:pretty} procedure formats an object \var{x} to the
+optional textual output port \var{op} in a human-readable form. The
+object is indented and keys are sorted using
+\code{natural-string-ci<?}. The default value of \var{op} is
+\code{(current-output-port)}.
+
+Calling \code{(json:pretty x)} is roughly equivalent to the following:
+\antipar\codebegin
+(parameterize ([json:key<? natural-string-ci<?])
+  (json:write (current-output-port) x 0))
+\codeend
+
 \defineentry{json:key<?}
 \begin{parameter}
   \code{json:key<?}
@@ -1147,14 +1165,15 @@ preformats the strings that will separate values.
 \returns{} a boolean or a predicate for comparing two strings
 
 The \code{json:key<?} parameter determines whether and how
-\code{json:write} and \code{json:write-object} sort keys
+\code{json:pretty}, \code{json:write}, and \code{json:write-object} sort keys
 when writing JSON objects.
 If set to \code{\#f}, keys are not sorted and the output order is arbitrary.
 Otherwise, the output is sorted by obtaining a string for each key
 via \code{symbol->string} and comparing those strings using the predicate
 specified by \code{json:key<?}.
 If \code{json:key<?} is set to \code{\#t}, which is the default,
-then \code{json:write} and \code{json:write-object} sort with
+then \code{json:pretty} sorts with \code{natural-string-ci<?}
+while \code{json:write} and \code{json:write-object} sort with
 \code{string<?}.
 To affect the output of \code{json:write-object}, \code{json:key<?} must
 be set to the desired value at expand time.
