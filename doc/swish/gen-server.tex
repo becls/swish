@@ -138,8 +138,9 @@ process and yield \code{\#(error \#(bad-return-value \var{other}))}.
   \#(error \var{error})\alt{}%
   ignore}
 
-\code{gen-server:start} behaves the same as \code{start\&link}
-except that it does not link to the calling process.
+\code{gen-server:start} behaves the same as
+\code{gen-server:start\&link} except that it does not link to the
+calling process.
 
 \defineentry{gen-server:enter-loop}
 \begin{syntax}
