@@ -49,11 +49,12 @@ returns \code{\#(ok \var{process})}. If $r$ = \code{\#(error
 \genserver{application}{terminate} The application \code{terminate}
 procedure shuts down \var{process}. When \var{process} is not
 \code{\#f}, it kills \var{process} with reason \code{shutdown} and
-waits indefinitely for it to terminate. Then it calls
-\code{(exit-process \var{exit-code})}, where \var{exit-code} is
-initially 2 but set to the value passed to
-\code{application:shutdown}. In this way, the exit code can be used
-to determine if the application shut down normally.
+waits indefinitely for it to terminate. It flushes the console
+output and error ports, ignoring any exceptions, and then calls
+\code{(osi\_exit \var{exit-code})}, where \var{exit-code} is initially
+2 but set to the value passed to \code{application:shutdown}. In this
+way, the exit code can be used to determine if the application shut
+down normally.
 
 \genserver{application}{handle-call} The application
 \code{handle-call} procedure raises an exception on all messages.
@@ -69,16 +70,6 @@ to determine if the application shut down normally.
   \var{process}, return \code{\#(stop \var{reason} \#f)}. Otherwise,
   return \code{\#(stop \var{reason} \var{process})}.
 \end{itemize}
-
-\index{application!exit-process@\code{exit-process}}
-\begin{procedure}
-  \code{(exit-process \var{exit-code})}
-\end{procedure}
-\returns{} never
-
-The \code{exit-process} procedure flushes the console output and error
-ports, ignoring any exceptions, and then calls \code{(osi\_exit
-  \var{exit-code})}.
 
 \section {Programming Interface}
 
@@ -107,6 +98,6 @@ The \code{application:shutdown} procedure kills the
 procedure does not wait for the \code{application} process to
 terminate so that it can be called from a process managed by the
 supervision hierarchy without causing a deadlock on shutdown. If the
-\code{application} process does not exist,
-\code{application:shutdown} calls \code{(exit-process
-  \var{exit-code})}.
+\code{application} process does not exist, \code{application:shutdown}
+flushes the console output and error ports, ignoring any exceptions,
+and then calls \code{(osi\_exit \var{exit-code})}.
