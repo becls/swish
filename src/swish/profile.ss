@@ -608,6 +608,7 @@
     (fprintf op "table.legend { padding:0; border-spacing:0; white-space: pre; }\n")
     (fprintf op "table.legend th { text-align:center; }\n")
     (fprintf op "table.legend td { text-align:right; padding-top:0; padding-bottom:0; }\n")
+    (fprintf op "table.legend td:nth-child(2) { border-left: solid 2px white;}\n")
 
     ;; To emit the minimal set of style sheet classes, we union the
     ;; set of counts in the profile and set of values displayed in the
@@ -641,9 +642,17 @@
         "</head>"
         "<body>"
         ""))
-    (let ()
-      (define (emit-legend op count max-count)
-        (fprintf op "<tr class=\"~a\"><td>~:d</td></tr>\n"
+    (let ([hist (make-hashtable equal-hash equal?)])
+      (define (hist-key count)
+        (if (= count max-count)
+            max-count
+            (exact (ceiling (log (+ count 1) 10)))))
+      (define (update! hist count)
+        (hashtable-update! hist (hist-key count)
+          (lambda (old) (+ old 1))
+          0))
+      (define (emit-legend op count max-count hist)
+        (fprintf op "<tr class=\"~a\"><td>~:d</td><td>~:d</td></tr>\n"
           (color-class count max-count)
           count
           (hashtable-ref hist (hist-key count) 0)))
@@ -654,9 +663,9 @@
       (emit-legend op 0 max-count hist)
       (let lp ([count 1])
         (when (< count max-count)
-          (emit-legend op count max-count)
+          (emit-legend op count max-count hist)
           (lp (* count 10))))
-      (emit-legend op max-count max-count)
+      (emit-legend op max-count max-count hist)
       (fprintf op "</table>\n"))
 
     (fprintf op
