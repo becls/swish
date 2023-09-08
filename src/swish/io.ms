@@ -1110,17 +1110,24 @@
        (match-let*
         ([`(catch #(bad-arg fn bad)) (try (fn arg ...))] ...)
         'ok)]))
-  (assert-bad-args
-   [123 (open-file-port 123 O_RDONLY S_IFREG)]
-   [123 (get-real-path 123)]
-   [123 (get-stat 123)]
-   [123 (list-directory 123)]
-   [123 (read-file 123)]
-   [123 (spawn-os-process 123 '() self)]
-   [(oops) (spawn-os-process "nosuchfile" '(oops) self)]
-   [due (spawn-os-process "nosuchfile" '() 'due)]
-   [123 (spawn-os-process-detached 123 '())]
-   [(oops) (spawn-os-process-detached"nosuchfile" '(oops))]))
+  (define listener (listen-tcp "::1" 0 self))
+  (define-values (cip cop)
+    (connect-tcp
+     (listener-address listener)
+     (listener-port-number listener)))
+  (on-exit (begin (close-port cip) (close-port cop) (close-tcp-listener listener))
+    (assert-bad-args
+     [123 (open-file-port 123 O_RDONLY S_IFREG)]
+     [123 (get-real-path 123)]
+     [123 (get-stat 123)]
+     [123 (list-directory 123)]
+     [123 (read-file 123)]
+     [123 (spawn-os-process 123 '() self)]
+     [(oops) (spawn-os-process "nosuchfile" '(oops) self)]
+     [due (spawn-os-process "nosuchfile" '() 'due)]
+     [123 (spawn-os-process-detached 123 '())]
+     [(oops) (spawn-os-process-detached"nosuchfile" '(oops))]
+     [,cip (make-tcp-write2 cip)])))
 
 (isolate-mat notify-port ()
   (define-syntax foreach

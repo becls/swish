@@ -774,14 +774,19 @@ defined in Section~\ref{sec:websocket-protocol} to the given
 The \var{options} are the same as defined for \code{ws:upgrade}.
 
 \defineentry{ws:send}
+\defineentry{ws:send"!} % use " to escape the ! for index entry
 \begin{procedure}
-  \code{(ws:send \var{server} \var{message})}
+  \code{(ws:send \var{server} \var{message})}\\
+  \code{(ws:send! \var{server} \var{message})}
 \end{procedure}
 \returns{} \code{ok}
 
 The \code{ws:send} procedure uses \code{gen-server:cast} to transmit
 the bytevector or string \var{message} to the websocket process or
 registered name \var{server}.
+The \code{ws:send!} procedure is like \code{ws:send} except that it does
+not copy bytevector messages, but may instead destructively update them
+to apply a mask for transmission.
 
 \defineentry{ws:close}
 \begin{procedure}

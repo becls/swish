@@ -1197,8 +1197,13 @@
     (receive (after 1000 (throw 'get-msg-timeout))
       [#(ws:message ,@from ,msg) msg]))
 
-  (define (send/expect p1 p2 data)
-    (ws:send p1 data)
+  (define (send/expect do-send p1 p2 data)
+    ;; ws:send! is destructive only if data is a bytevector;
+    ;; for strings, we have to convert to utf8 in either case
+    (do-send p1
+      (if (and (eq? do-send ws:send!) (bytevector? data))
+          (bytevector-copy data)
+          data))
     (assert (equal? data (get-msg p2))))
 
   (define primes '(7 11 13 239 241 251))
@@ -1209,8 +1214,12 @@
      (lambda (prime)
        (for-each
         (lambda (size)
-          (send/expect p1 p2 (build-buffer size (make-byte-stream prime)))
-          (send/expect p1 p2 (build-string size (make-byte-stream prime))))
+          (let ([buffer (build-buffer size (make-byte-stream prime))])
+            (send/expect ws:send p1 p2 buffer)
+            (send/expect ws:send! p1 p2 buffer))
+          (let ([str (build-string size (make-byte-stream prime))])
+            (send/expect ws:send p1 p2 str)
+            (send/expect ws:send! p1 p2 str)))
         buffer-sizes))
      primes))
 
@@ -1346,7 +1355,9 @@
     [#(EXIT #(bad-arg ws:send a))
      (catch (ws:send 'test 'a))]
     [#(EXIT #(bad-arg ws:send 0))
-     (catch (ws:send 'test 0))])
+     (catch (ws:send 'test 0))]
+    [#(EXIT #(bad-arg ws:send! 12))
+     (catch (ws:send! 'test 12))])
    'ok))
 
 (http-mat websocket-linking ()

@@ -54,6 +54,7 @@
    make-foreign-handle-guardian
    make-osi-input-port
    make-osi-output-port
+   make-tcp-write2
    make-utf8-transcoder
    open-binary-file-to-append
    open-binary-file-to-read
@@ -1120,6 +1121,35 @@
            (set-port-output-index! new-op out-index)
            (return new-op))]
         [else not-reached]))))
+
+  (define (make-tcp-write2 op)
+    (define who 'make-tcp-write2)
+    (with-interrupts-disabled
+     (let ([osi-port (@port-osi-port op)])
+       (unless (and (tcp-osi-port? osi-port) (output-port? op))
+         (bad-arg who op))
+       (mark-port-closed! op)
+       (rec tcp-write2
+         (case-lambda
+          [() (close-osi-port osi-port)]
+          [(bv1 bv2) (tcp-write2 bv1 bv2 0 (bytevector-length bv2))]
+          [(bv1 bv2 start2 length2)
+           (define result)
+           (with-interrupts-disabled
+            (match (osi_tcp_write2* (get-osi-port-handle 'tcp-write2 osi-port)
+                     bv1 bv2 start2 length2
+                     (let ([p self])
+                       (lambda (r)
+                         (keep-live osi-port)
+                         (set! result r)
+                         (complete-io p))))
+              [#t
+               (wait-for-io (osi-port-name osi-port))
+               (if (>= result 0)
+                   result
+                   (io-error (osi-port-name osi-port) 'osi_tcp_write2 result))]
+              [(,who . ,errno)
+               (io-error (osi-port-name osi-port) who errno)]))])))))
 
   (define (tcp-nodelay port enabled?)
     (arg-check 'tcp-nodelay [port output-port?])

@@ -27,6 +27,7 @@
    ws:connect
    ws:options
    ws:send
+   ws:send!
    ws:upgrade
    )
   (import
@@ -408,6 +409,8 @@
   (define (ws:established ip op masked? process options)
     (match-define `(<ws:options> ,fragmentation-size ,maximum-message-size ,ping-frequency ,pong-timeout) options)
 
+    (define tcp-write2 (make-tcp-write2 op))
+
     ;; state :=
     ;;   #(closed ,code ,ws-reason-str)
     ;;   #(ping ,waketime)
@@ -422,7 +425,7 @@
           (bytevector-u64-set! bv8 0 u64 'big)
           (put-bytevector op bv8))))
 
-    (define (send-frame op opcode masked? max-payload-size payload)
+    (define (send-frame opcode masked? max-payload-size payload)
 
       (define (mask-len len)
         (if masked?
@@ -430,30 +433,25 @@
             len))
 
       (define (do-send final? opcode fast? start payload-len)
-        (put-u8 op
-          (if final?
-              (fxior #x80 opcode)
-              opcode))
-        (cond
-         [(< payload-len 126)
-          (put-u8 op (mask-len payload-len))]
-         [(<= payload-len #xFFFF)
-          (put-u8 op (mask-len 126))
-          (put-u16 op payload-len)]
-         [else
-          (put-u8 op (mask-len 127))
-          (put-u64 op payload-len)])
-        (cond
-         [fast? (put-bytevector op payload)]
-         [masked?
-          (let ([mask-key (random-bytevector 4)])
-            (put-bytevector op mask-key)
-            (do ([i 0 (+ i 1)]) ((= i payload-len))
-              (let ([x (bytevector-u8-ref payload (+ start i))]
-                    [m (bytevector-u8-ref mask-key (fxmod i 4))])
-                (put-u8 op (fxxor x m)))))]
-         [else
-          (put-bytevector-some op payload start payload-len)]))
+        (let-values ([(op get) (open-bytevector-output-port)])
+          (put-u8 op
+            (if final?
+                (fxior #x80 opcode)
+                opcode))
+          (cond
+           [(< payload-len 126)
+            (put-u8 op (mask-len payload-len))]
+           [(<= payload-len #xFFFF)
+            (put-u8 op (mask-len 126))
+            (put-u16 op payload-len)]
+           [else
+            (put-u8 op (mask-len 127))
+            (put-u64 op payload-len)])
+          (when masked?
+            (let ([mask-key (random-bytevector 4)])
+              (put-bytevector op mask-key)
+              (mask-bytevector! payload start payload-len mask-key)))
+          (tcp-write2 (get) payload start payload-len)))
 
       (let ([payload-len (bytevector-length payload)])
         (cond
@@ -469,27 +467,25 @@
               (do-send #t 0 #f start remaining)]
              [else
               (do-send #f 0 #f start max-payload-size)
-              (lp (+ start max-payload-size) (- remaining max-payload-size))]))]))
+              (lp (+ start max-payload-size) (- remaining max-payload-size))]))])))
 
-      (flush-output-port op))
+    (define (send-message-frame opcode masked? payload)
+      (send-frame opcode masked? fragmentation-size payload))
 
-    (define (send-message-frame op opcode masked? payload)
-      (send-frame op opcode masked? fragmentation-size payload))
-
-    (define (send-close-frame op masked? code reason)
+    (define (send-close-frame masked? code reason)
       ;; Do not fail
       (catch
-       (send-frame op 8 masked? #f
+       (send-frame 8 masked? #f
          (call-with-bytevector-output-port
           (lambda (op)
             (put-u16 op code)
             (put-bytevector op (string->utf8 reason)))))))
 
-    (define (send-ping-frame op masked? payload)
-      (send-frame op 9 masked? #f payload))
+    (define (send-ping-frame masked? payload)
+      (send-frame 9 masked? #f payload))
 
-    (define (send-pong-frame op masked? payload)
-      (send-frame op 10 masked? #f payload))
+    (define (send-pong-frame masked? payload)
+      (send-frame 10 masked? #f payload))
 
     (define (on-init)
       (send process `#(ws:init ,self)))
@@ -501,7 +497,7 @@
       ;; We don't use exit-reason->english on reason and use that as
       ;; ws-reason-str because the WebSocket reason string has a 125
       ;; byte limit after UTF8 encoding.
-      (send-close-frame op masked? code ws-reason-str)
+      (send-close-frame masked? code ws-reason-str)
       (on-close code ws-reason-str)
       `#(stop ,reason #(closed ,code ,ws-reason-str)))
 
@@ -550,22 +546,23 @@
         (match state
           [#(closed ,_ ,_) 'ok]
           [,_
-           (send-close-frame op masked? 1001 "")
+           (send-close-frame masked? 1001 "")
            (on-close 1001 "")])
         ;; In general, the current process may be poisoned with
         ;; process-parameters that may affect the state of future
         ;; communications, so we explicitly close the connection here.
         (force-close-output-port op)
+        (tcp-write2) ;; close underlying osi port
         'ok)
       (define (handle-call msg from state) (match msg))
       (define (handle-cast msg state)
         (match msg
           [#(send ,opcode ,bv)
-           (send-message-frame op opcode masked?
+           (send-message-frame opcode masked?
              (if masked? (bytevector-copy bv) bv))
            (no-reply state)]
           [#(send! ,opcode ,bv)
-           (send-message-frame op opcode masked? bv)
+           (send-message-frame opcode masked? bv)
            (no-reply state)]
           [close
            (do-close 'normal 1000 "")]))
@@ -583,7 +580,7 @@
              [close
               (do-close 'normal 1000 "")]
              [#(ping ,bv)
-              (send-pong-frame op masked? bv)
+              (send-pong-frame masked? bv)
               (no-reply `#(ping ,(next-ping-time)))]
              [#(pong ,bv)
               (no-reply `#(ping ,(next-ping-time)))])]
@@ -606,7 +603,7 @@
               (let ([npt (next-ping-time)])
                 (cond
                  [(= t npt)
-                  (send-ping-frame op masked? '#vu8())
+                  (send-ping-frame masked? '#vu8())
                   (no-reply `#(pong ,(next-pong-time)))]
                  [else
                   (no-reply `#(ping ,npt))]))]
@@ -660,6 +657,13 @@
        [(string? message) `#(send! 1 ,(string->utf8 message))]
        [(bytevector? message) `#(send 2 ,message)]
        [else (bad-arg 'ws:send message)])))
+
+  (define (ws:send! who message)
+    (gen-server:cast who
+      (cond
+       [(string? message) `#(send! 1 ,(string->utf8 message))]
+       [(bytevector? message) `#(send! 2 ,message)]
+       [else (bad-arg 'ws:send! message)])))
 
   (define (ws:close who)
     (gen-server:cast who 'close))

@@ -74,6 +74,8 @@ EXPORT ptr osi_read_port(uptr port, ptr buffer, size_t start_index, uint32_t siz
 EXPORT ptr osi_write_port(uptr port, ptr buffer, size_t start_index, uint32_t size, int64_t offset, ptr callback);
 EXPORT ptr osi_close_port(uptr port, ptr callback);
 
+EXPORT ptr osi_tcp_write2(uptr port, ptr bv1, ptr bv2, size_t start_index2, uint32_t size2, ptr callback);
+
 // Process
 EXPORT void osi_exit(int status);
 EXPORT ptr osi_spawn(const char* path, ptr args, ptr callback);
