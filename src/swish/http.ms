@@ -1457,6 +1457,32 @@
          (receive (after 1000 (throw 'no-server-close))
            [#(ws:closed ,@s 1002 "no response from ping") 'ok])]))))
 
+(http-mat websocket-pong ()
+  ;; Send multiple pings, fail if pong is not processed.
+  (define me self)
+  (capture-events)
+  (supervisor:start&link 'http-sup 'one-for-all 0 1
+    (http:configure-server #f 0
+      (http:url-handler
+       (ws:upgrade conn request me
+         (ws:options
+          [ping-frequency 100]
+          [pong-timeout 1000])))))
+  (let* ([c (ws:connect "127.0.0.1" (get-http-port) "/" self)]
+         [_ (receive [#(ws:init ,@c) 'ok])]
+         [s (receive [#(ws:init ,s) s])])
+    ;; This delay needs to be more than the pong-timeout.
+    (receive (after 2000 'ok))
+    (ws:close c)
+    (receive (after 1000 (throw 'no-client-close))
+      [#(ws:closed ,@c 1000 "") 'ok]
+      [#(ws:closed ,@c ,code ,reason)
+       (throw `#(client-closed-for-bad-reason ,code ,reason))])
+    (receive (after 1000 (throw 'no-server-close))
+      [#(ws:closed ,@s 1000 "") 'ok]
+      [#(ws:closed ,@s ,code ,reason)
+       (throw `#(server-closed-for-bad-reason ,code ,reason))])))
+
 (http-mat websocket-client-connect-errors ()
   (define (do-test req)
     (catch (ws:connect "127.0.0.1" (get-http-port) req self)))
