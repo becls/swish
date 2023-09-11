@@ -178,6 +178,56 @@
     (put-u8 op (fxand #xFF (fxsrl u16 8)))
     (put-u8 op (fxand #xFF u16)))
 
+  (include "unsafe.ss")
+
+  (define (mask-bytevector! payload start payload-len mask-key)
+    (define mask-len 4)
+    (define stride 4)
+    ;; keep safe bytevector-length so we check type of input bytevectors
+    (declare-unsafe-primitives
+     bytevector-u24-ref bytevector-u24-set!
+     bytevector-u32-ref bytevector-u32-set!
+     bytevector-u8-ref bytevector-u8-set!
+     fx+ fx- fx= fx>= fxlogor fxmod fxsll fxxor)
+    (define (mask-ref i) (bytevector-u8-ref mask-key (fxmod i mask-len)))
+    (define (xor-byte! i m)
+      (let ([x (bytevector-u8-ref payload i)])
+        (bytevector-u8-set! payload i (fxxor x m))))
+    (define (xor-range! from to mask-start)
+      (do ([i from (fx+ i 1)] [j mask-start (fx+ j 1)]) ((fx= i to))
+        (xor-byte! i (mask-ref j))))
+    (define (load-mask len i)
+      (do ([m 0 (fxlogor m (fxsll (mask-ref i) shift))]
+           [i i (fx+ i 1)]
+           [shift 0 (fx+ shift 8)])
+          ((fx= shift len) m)))
+    (define (boundary i)
+      (let-values ([(d r) (fxdiv-and-mod i stride)])
+        (fx* stride (fx+ d (fxmin r 1)))))
+    (define end0 (fx+ start payload-len))
+    (define end1 (fxmin (boundary start) end0))
+    (define end2 (fx* stride (fx/ end0 stride)))
+    (define mask2-start (fx- end1 start))
+    (when (and (fx< -1 start end0) (fx<= end0 (bytevector-length payload)))
+      (assert (fx= (bytevector-length mask-key) mask-len))
+      (xor-range! start end1 0)
+      (unless (fx>= end1 end2)
+        (meta-cond
+         [(fx<= 32 (fixnum-width))
+          (let ([mask (load-mask 32 mask2-start)])
+            (do ([i end1 (fx+ i stride)]) ((fx>= i end2))
+              (let ([x (bytevector-u32-ref payload i 'little)])
+                (bytevector-u32-set! payload i (fxxor x mask) 'little))))]
+         [(fx<= 24 (fixnum-width))
+          (let ([mask0 (load-mask 24 mask2-start)]
+                [mask3 (mask-ref (fx+ mask2-start 3))])
+            (do ([i end1 (fx+ i stride)]) ((fx>= i end2))
+              (let ([x (bytevector-u24-ref payload i 'little)])
+                (bytevector-u24-set! payload i (fxxor x mask0) 'little)
+                (xor-byte! (fx+ i 3) mask3))))]))
+      (when (fx>= end2 end1) ;; avoid redoing part of the range
+        (xor-range! end2 end0 mask2-start))))
+
   (define (ws:read-loop message-limit ip forward)
 
     (define (get-u8 ip)
@@ -208,6 +258,7 @@
         [,len len]))
 
     (define (get-bytevector-exactly-n ip size)
+      (declare-unsafe-primitives get-bytevector-n! fx+ fx- fx=)
       (let ([bv (make-bytevector size)])
         (let lp ([i 0])
           (let ([count (get-bytevector-n! ip bv i (fx- size i))])
@@ -232,15 +283,9 @@
              [_ (when (> payload-len limit)
                   (throw 'websocket-message-limit-exceeded))]
              [mask-key (and masked? (get-bytevector-exactly-n ip 4))]
-             [payload
-              (if masked?
-                  (let ([bv (make-bytevector payload-len)])
-                    (do ([i 0 (+ i 1)]) ((= i payload-len))
-                      (let* ([x (get-u8 ip)]
-                             [m (bytevector-u8-ref mask-key (fxmod i 4))])
-                        (bytevector-u8-set! bv i (fxxor x m))))
-                    bv)
-                  (get-bytevector-exactly-n ip payload-len))])
+             [payload (get-bytevector-exactly-n ip payload-len)])
+        (when masked?
+          (mask-bytevector! payload 0 payload-len mask-key))
         (values final? opcode payload)))
 
     (define (payloads->input-port payloads)
@@ -506,6 +551,10 @@
       (define (handle-cast msg state)
         (match msg
           [#(send ,opcode ,bv)
+           (send-message-frame op opcode masked?
+             (if masked? (bytevector-copy bv) bv))
+           (no-reply state)]
+          [#(send! ,opcode ,bv)
            (send-message-frame op opcode masked? bv)
            (no-reply state)]
           [close
@@ -598,7 +647,7 @@
   (define (ws:send who message)
     (gen-server:cast who
       (cond
-       [(string? message) `#(send 1 ,(string->utf8 message))]
+       [(string? message) `#(send! 1 ,(string->utf8 message))]
        [(bytevector? message) `#(send 2 ,message)]
        [else (bad-arg 'ws:send message)])))
 
@@ -608,9 +657,10 @@
 
 #!eof mats
 
-(load-this-exposing '(http-upgrade ws:read-loop))
+(load-this-exposing '(http-upgrade ws:read-loop mask-bytevector! random-bytevector))
 
 (import
+ (swish mat)
  (swish websocket))
 
 (define (get-http-listener)
@@ -867,3 +917,54 @@
         [`(seek #(ws:closed ,@s 1000 "") ,events) events])
        'ok)))
   )
+
+(mat mask-in-place ()
+  (define mask-len 4)
+  (define primes '(7 11 13 239 241 251))
+  (define buffer-sizes '(0 1 4 8 256 512 1023 4000 16385))
+
+  (define (build-buffer size prime)
+    (let ([bv (make-bytevector size)])
+      (do ([i 0 (+ i 1)] [n prime (fxmod (+ n prime) 256)]) ((= i size))
+        (bytevector-u8-set! bv i n))
+      bv))
+
+  (define (try-mask! payload start payload-len mask-key)
+    ;; sanity check arguments
+    (assert (= mask-len (bytevector-length mask-key)))
+    (let ([bv (bytevector-copy payload)])
+      (mask-bytevector! bv start payload-len mask-key)
+      bv))
+
+  (define (gen-expected payload start payload-len mask-key)
+    (let ([bv (bytevector-copy payload)]
+          [bv-len (bytevector-length payload)]
+          [end (+ start payload-len)])
+      (when (and (< start bv-len) (<= end bv-len))
+        (do ([i start (+ i 1)] [j 0 (fxmod (+ j 1) mask-len)]) ((= i end))
+          (let* ([x (bytevector-u8-ref payload i)]
+                 [m (bytevector-u8-ref mask-key j)])
+            (bytevector-u8-set! bv i (fxxor x m)))))
+      bv))
+
+  (define (edge-cases payload mask-key)
+    (define len (bytevector-length payload))
+    (define (try-range start end)
+      (when (and (<= 0 start end) (<= 0 end len))
+        (match-let* ([,expect (gen-expected payload start end mask-key)]
+                     [,@expect (try-mask! payload start end mask-key)])
+          'ok)))
+    (do ([i 0 (+ i 1)]) ((= i mask-len))
+      (do ([j 0 (+ j 1)]) ((= j mask-len))
+        (try-range i (- len j)))))
+
+  (for-each
+   (lambda (buffer-size)
+     (for-each
+      (lambda (prime)
+        (let ([bv (build-buffer buffer-size prime)])
+          (edge-cases bv #vu8(6 42 102 85))
+          (edge-cases (random-bytevector buffer-size) (random-bytevector mask-len))
+          (edge-cases (random-bytevector buffer-size) (random-bytevector mask-len))))
+      primes))
+   buffer-sizes))
