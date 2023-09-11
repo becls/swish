@@ -207,6 +207,16 @@
         [127 (get-u64 ip)]
         [,len len]))
 
+    (define (get-bytevector-exactly-n ip size)
+      (let ([bv (make-bytevector size)])
+        (let lp ([i 0])
+          (let ([count (get-bytevector-n! ip bv i (fx- size i))])
+            (if (eof-object? count)
+                (throw 'unexpected-eof)
+                (let ([next (fx+ i count)])
+                  (unless (fx= next size) (lp next))))))
+        bv))
+
     (define (read-frame ip limit)
       (let* ([fin&opcode (get-u8 ip)]
              [final? (fxbit-set? fin&opcode 7)]
@@ -221,7 +231,7 @@
                   (throw `#(websocket-control-frame-too-long ,payload-len)))]
              [_ (when (> payload-len limit)
                   (throw 'websocket-message-limit-exceeded))]
-             [mask-key (and masked? (get-bytevector-n ip 4))]
+             [mask-key (and masked? (get-bytevector-exactly-n ip 4))]
              [payload
               (if masked?
                   (let ([bv (make-bytevector payload-len)])
@@ -230,7 +240,7 @@
                              [m (bytevector-u8-ref mask-key (fxmod i 4))])
                         (bytevector-u8-set! bv i (fxxor x m))))
                     bv)
-                  (get-bytevector-n ip payload-len))])
+                  (get-bytevector-exactly-n ip payload-len))])
         (values final? opcode payload)))
 
     (define (payloads->input-port payloads)
