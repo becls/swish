@@ -221,6 +221,41 @@
        (begin
          (json:write-object op #f json:write)
          (get))]
+      ;; interaction of json:custom-write with json:write-object
+      ;; also mix in some indentation for good measure
+      [,custom-write
+       (lambda (op x indent wr)
+         (and (box? x) (wr op (format "BOX ~a" (unbox x)) indent)))]
+      [,expected
+       (let ([obj (json:make-object
+                   [abc 123]
+                   [n0 (box 0)]
+                   [n1 (list (box 1) (box 2))])])
+         (json:write op obj 0 custom-write)
+         (get))]
+      [,@expected
+       (parameterize ([json:custom-write custom-write])
+         (json:write-object op 0 json:write
+           [abc 123]
+           [n0 (box 0)]
+           [n1 (list (box 1) (box 2))])
+         (get))]
+      ;; exercise custom-write with write-field-value
+      ["{\"aux\":11,\"zap\":[\"BOX 1\",2,\"BOX 3\"]}"
+       (let ([write-vector
+              (lambda (op v indent wr)
+                (if (vector? v)
+                    (let ([len (vector-length v)])
+                      (do ([i 0 (fx+ i 1)] [pre #\[ #\,]) ((fx= i len))
+                        (write-char pre op)
+                        (wr op (vector-ref v i) indent))
+                      (write-char #\] op))
+                    (wr op v indent)))])
+         (parameterize ([json:custom-write custom-write])
+           (json:write-object op #f json:write
+             [zap (vector (box 1) 2 (box 3)) write-vector]
+             [aux 11])
+           (get)))]
       )
      'ok)))
 
@@ -474,6 +509,11 @@
     [,proc1 (lambda (x) #t)]
     [#(EXIT #(bad-arg json:key<? ,@proc1))
      (catch (json:key<? proc1))]
+    [#(EXIT #(bad-arg json:custom-write #t))
+     (catch (json:custom-write #t))]
+    [,proc3 (lambda (a b c) "bad")]
+    [#(EXIT #(bad-arg json:custom-write ,@proc3))
+     (catch (json:custom-write proc3))]
     )
    'ok))
 
