@@ -164,6 +164,8 @@
              (check-header header 'sec-websocket-accept (encode-key key))
              (values ip op))]
           [,status
+           (close-port ip)
+           (close-port op)
            (throw `#(websocket-upgrade-failed ,status))]))))
 
   (define (random-bytevector n)

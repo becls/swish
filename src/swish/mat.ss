@@ -377,15 +377,16 @@
     (define meta-data (json:make-object))
     (define obj (make-mat-data filename meta-data '()))
     (let ([ip (open-file-to-read filename)])
-      (let rd ()
-        (let ([r (json:read ip)])
-          (unless (eof-object? r)
-            (match (json:ref r '_type_ #f)
-              ["mat-result"
-               (json:update! obj 'results (lambda (old) (cons r old)) #f)]
-              ["meta-kv"
-               (json:set! meta-data (string->symbol (meta-kv-key r)) (meta-kv-value r))])
-            (rd)))))
+      (on-exit (close-port ip)
+        (let rd ()
+          (let ([r (json:read ip)])
+            (unless (eof-object? r)
+              (match (json:ref r '_type_ #f)
+                ["mat-result"
+                 (json:update! obj 'results (lambda (old) (cons r old)) #f)]
+                ["meta-kv"
+                 (json:set! meta-data (string->symbol (meta-kv-key r)) (meta-kv-value r))])
+              (rd))))))
     (json:set! obj 'results (reverse (json:ref obj 'results '())))
     obj)
 

@@ -208,11 +208,10 @@
 
 (define (simple-tcp x)
   (let-values ([(ip op) (connect-tcp "127.0.0.1" (get-http-port))])
-    (put-bytevector op x)
-    (flush-output-port op)
-    (let ([r (get-bytevector-all ip)])
-      (close-port op)
-      r)))
+    (on-exit (begin (close-port op) (close-port ip))
+      (put-bytevector op x)
+      (flush-output-port op)
+      (get-bytevector-all ip))))
 
 (define (simple-get x)
   (simple-tcp (string->utf8 (format "GET ~a HTTP/1.1\r\nConnection: close\r\n\r\n" x))))
@@ -1076,7 +1075,9 @@
         (assert (process? (g))))
 
       ;; I/O Continues after the connection exited
-      (check-loopback '(4 3 2 1 0)))))
+      (check-loopback '(4 3 2 1 0))
+      (close-port op)
+      (close-port ip))))
 
 (http-mat switch-protocol-fail ()
   (supervisor:start&link 'http-sup 'one-for-all 0 1
