@@ -1041,10 +1041,9 @@
         [signum fixnum? fxpositive?]
         [callback (lambda (cb) (or (not cb) (procedure? cb)))])
       (with-interrupts-disabled
-       (let* ([cell (hashtable-cell signal-handlers signum #f)]
-              [prev (cdr cell)])
+       (let ([prev (hashtable-ref signal-handlers signum #f)])
          (define (set-handler! signum handle callback)
-           (set-cdr! cell
+           (hashtable-set! signal-handlers signum
              (make-sighandler signum (erlang:now) handle callback)))
          (cond
           [(sighandler? prev)

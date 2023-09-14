@@ -666,6 +666,11 @@
     [,expected (- expected 1)]
     [,@expected (signal-handler-count)])
    'ok)
+  (match-let*
+   ([#f (signal-handler SIGFPE)]
+    [,_ (signal-handler SIGFPE #f)]
+    [,_ (print-signal-handlers (open-output-string))]) ;; should not crash
+   'ok)
   (meta-cond
    [(memq (machine-type) '(i3nt ti3nt a6nt ta6nt))
     ;; skip signal-handling tests on Windows
