@@ -405,6 +405,48 @@
       (gc)
       (assert (handle-gone? (g))))))
 
+(isolate-mat file-enum ()
+  ;; Use Chez Scheme's directory-list to walk a file tree and
+  ;; accumulate filenames the way we expect Swish's filter-files to
+  ;; work. Verify their output is equivalent.
+  (define (chez-list path descend?)
+    (let* ([cs (directory-list path)]
+           [cs (if (equal? path ".")  ; only prepend path if necessary
+                   cs
+                   (map (lambda (x) (path-combine path x)) cs))]
+           [cs (if descend?
+                   (fold-left
+                    (lambda (acc x)
+                      (if (directory? x)
+                          (append acc (chez-list x descend?))
+                          acc))
+                    cs
+                    cs)
+                   cs)])
+      ;; keep files only
+      (filter file-regular? cs)))
+  (define (keep-all _) #t)
+  (define (compare path descend? keep-file?)
+    (let ([cs (sort string<? (filter keep-file? (chez-list path descend?)))]
+          [sw (sort string<?
+                (if (and descend? (eq? keep-file? keep-all))
+                    (filter-files path)
+                    (filter-files path (lambda (d) descend?) keep-file?)))]
+          [count (fold-files path 0 (lambda (d) descend?)
+                   (lambda (fn acc)
+                     (if (keep-file? fn)
+                         (+ 1 acc)
+                         acc)))])
+      (assert (and (> (length cs) 0) (> (length sw) 0)))
+      (unless (equal? cs sw)
+        (throw `#(unexpected-file-enum ,cs ,sw)))
+      (unless (= count (length cs) (length sw))
+        (throw `#(mismached-lengths ,count ,cs ,sw)))))
+  (compare "." #f keep-all)
+  (compare "src" #f keep-all)
+  (compare "src" #t keep-all)
+  (compare "src" #t (lambda (fn) (ends-with? fn ".ss"))))
+
 ;; This test shows why we can't re-use the port's buffer as the codec buffer
 ;; for an output port.
 (isolate-mat make-codec-buffer ()

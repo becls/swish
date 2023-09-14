@@ -1775,6 +1775,41 @@ The \code{directory?} procedure calls \code{(get-stat \var{path})} to
 determine whether or not \var{path} is a directory.
 
 % ----------------------------------------------------------------------------
+\defineentry{filter-files}
+\begin{procedure}
+  \code{(filter-files \var{path} \opt{\var{keep-dir?} \var{keep-file?}})}
+\end{procedure}
+\returns{} a list of filenames
+
+The \code{filter-files} procedure calls \code{fold-files} to
+accumulate a list of filenames. \var{keep-dir?} is a procedure which
+should accept a full directory name and return true to descend into
+that directory. \var{keep-file?} is a procedure which should accept a
+full path to a file and return true to keep the filename in the final
+result list.
+
+When \var{keep-dir?} and \var{keep-file?} are not specified, all
+directories under \var{path} are traversed, and all filenames are
+returned.
+
+% ----------------------------------------------------------------------------
+\defineentry{fold-files}
+\begin{procedure}
+  \code{(fold-files \var{path} \var{init} \var{keep-dir?} \var{f})}
+\end{procedure}
+\returns{} see below
+
+The \code{fold-files} procedure folds over directories and files
+starting at \var{path} and calls \var{f} with the full path to each
+file and an accumulator (initially \var{init}).
+
+For each directory, \code{fold-files} calls \var{keep-dir?} with the
+full directory name. When \var{keep-dir?} returns true
+\code{fold-files} will descend into that directory.
+
+Errors while enumerating the file system are ignored.
+
+% ----------------------------------------------------------------------------
 \defineentry{force-close-output-port}
 \begin{procedure}
   \code{(force-close-output-port \var{op})}

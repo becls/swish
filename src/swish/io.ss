@@ -33,6 +33,8 @@
    connect-tcp
    count-foreign-handles
    directory?
+   filter-files
+   fold-files
    force-close-output-port
    foreign-handle-count
    foreign-handle-print
@@ -852,6 +854,38 @@
             (io-error path 'osi_list_directory result)
             result)]
        [(,who . ,errno) (io-error path who errno)])))
+
+  (define (fold-files path init keep-dir? f)
+    (define (combine path fn) (if (equal? "." path) fn (path-combine path fn)))
+    (let search ([path path] [acc init])
+      (match (try (list-directory path))
+        [`(catch ,_) acc]
+        [,found
+         (fold-left
+          (lambda (acc entry)
+            (match entry
+              [(,fn . ,@DIRENT_DIR)
+               (let ([full (combine path fn)])
+                 (if (keep-dir? full)
+                     (search full acc)
+                     acc))]
+              [(,fn . ,@DIRENT_FILE)
+               (f (combine path fn) acc)]
+              [,_ acc])) ;; not following symlinks
+          acc
+          found)])))
+
+  (define (keep-all _) #t)
+
+  (define filter-files
+    (case-lambda
+     [(path) (filter-files path keep-all keep-all)]
+     [(path keep-dir? keep-file?)
+      (fold-files path '() keep-dir?
+        (lambda (fn acc)
+          (if (keep-file? fn)
+              (cons fn acc)
+              acc)))]))
 
   (define-syntax define-export
     (syntax-rules ()
