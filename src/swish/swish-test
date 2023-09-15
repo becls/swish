@@ -243,22 +243,9 @@
     (library-directories)))
 
 (define (find-files path . extensions)
-  (define (combine path fn) (if (equal? "." path) fn (path-combine path fn)))
-  (let search ([path path] [hits '()])
-    (match (catch (list-directory path))
-      [#(EXIT ,reason) hits]
-      [,found
-       (fold-left
-        (lambda (hits entry)
-          (match entry
-            [(,fn . ,@DIRENT_DIR) (search (combine path fn) hits)]
-            [(,fn . ,@DIRENT_FILE)
-             (if (ormap (lambda (ext) (ends-with? fn ext)) extensions)
-                 (cons (combine path fn) hits)
-                 hits)]
-            [,_ hits])) ;; not following symlinks
-        hits
-        found)])))
+  (filter-files path
+    (lambda (d) #t)
+    (lambda (f) (ormap (lambda (ext) (ends-with? f ext)) extensions))))
 
 (import
  (swish mat)
