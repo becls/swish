@@ -253,7 +253,7 @@
           (match entry
             [(,fn . ,@DIRENT_DIR) (search (combine path fn) hits)]
             [(,fn . ,@DIRENT_FILE)
-             (if (ormap (lambda (ext) (ends-with-ci? fn ext)) extensions)
+             (if (ormap (lambda (ext) (ends-with? fn ext)) extensions)
                  (cons (combine path fn) hits)
                  hits)]
             [,_ hits])) ;; not following symlinks
