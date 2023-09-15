@@ -430,9 +430,15 @@
         '((log-file ":memory:")
           (app:start)
           ;; simulate winning race to exit-process with an earlier app:shutdown
-          (#%$set-top-level-value! '$console-input-port 'bogus)
-          (app:shutdown 1)
-          (receive (after 100 (osi_exit 3)))))
+          ;; (all within one expression since we can't read after closing stdin)
+          (let ([p (#%$top-level-value '$console-input-port)])
+            (#%$set-top-level-value! '$console-input-port #f)
+            ;; close port so leak checker is happy
+            (close-port p)
+            ;; poison the value so exit-process has to be careful
+            (#%$set-top-level-value! '$console-input-port 'bogus)
+            (app:shutdown 1)
+            (receive (after 100 (osi_exit 3))))))
       '("expected non-zero exit")))
    [#(EXIT `(<os-process-failed> [exit-status 1] ,stdout ,stderr))
     (match-regexps '("ok") stdout)

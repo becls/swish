@@ -988,7 +988,8 @@
              (pregexp-quote (format "#<bindings ~s>" datum))
              (pregexp-quote ")")))
           output)))
-      data))))
+      data))
+   (gc)))
 
 (db-mat check-options ()
   (match-let*

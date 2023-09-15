@@ -315,6 +315,7 @@
              "Exception in get-hash: cannot read from closed digest."))
          h*)])
       'ok))
+   (gc)
    'ok))
 
 (mat sha1 ()
@@ -382,4 +383,5 @@
     ["#<digest-provider swish>" (format "~s" default-digest-provider)]
     ["#<SHA1 digest>" (format "~s" (open-digest 'sha1))]
     )
+   (gc)
    'ok))

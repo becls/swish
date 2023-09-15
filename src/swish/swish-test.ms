@@ -1317,7 +1317,8 @@
   (define abort.ms
     (write-test-file "abort.ms"
       (lambda ()
-        (pretty-print '(abort)))))
+        ;; call exit instead of abort to clean up and prevent apparent leaks
+        (pretty-print '(exit 1)))))
   (define no-tests.ms (write-test-file "no-tests.ms" void))
   (define pass.ms
     (write-test-file "pass.ms"

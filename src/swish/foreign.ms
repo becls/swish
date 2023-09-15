@@ -48,7 +48,7 @@
 
 (define (run-script exprs output)
   (script-test shlib-repl '()
-    (format "(reset-handler abort)\n~{~s\n~}#!eof\n" exprs)
+    (format "(reset-handler (lambda () (app:shutdown 1)))\n~{~s\n~}#!eof\n" exprs)
     output))
 
 (define (run-repl shlib-imports shlib-test-expr* write-config success)
