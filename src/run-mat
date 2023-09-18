@@ -1,7 +1,7 @@
 #!/bin/sh -e
 
 if [ $# = 0 ]; then
-  echo "Usage: $0 suite [test ...]"
+  echo "Usage: $0 [-b] suite [test ...]"
   echo ""
   echo " For example:"
   echo "   $0 swish/json"
@@ -9,13 +9,28 @@ if [ $# = 0 ]; then
   echo "   $0 swish/json.ms"
   echo "   $0 swish/profile.ss"
   echo "   $0 swish/erlang chain-reaction"
+  echo ""
+  echo " -b  means build mat-prereq and use that to run test"
   exit
+fi
+
+BUILD=0
+RUN=./go
+
+if [ "$1" = '-b' ]; then
+  shift;
+  BUILD=1
+  RUN=../build/mat-prereq/bin/swish
 fi
 
 find . -name "*.mo" -delete
 rm -f ../data/server.profile
 rm -f ../data/TestLog.db3
-make -s -C swish
+if [ ${BUILD} -eq 0 ]; then
+  make -s -C swish
+else
+  make -s -C swish mat-prereq
+fi
 
 FILENAME="$1"
 if [ ! -f "${FILENAME}" ]; then
@@ -24,7 +39,7 @@ fi
 
 shift
 
-./go -q <<EOF
+${RUN} -q <<EOF
 (reset-handler abort)
 (import (swish mat) (swish profile) (swish testing))
 (cd "..")
