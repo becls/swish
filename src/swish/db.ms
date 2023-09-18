@@ -390,7 +390,9 @@
     ;; check int64 error during sqlite:marshal-bindings
     [,too-large (ash 1 64)]
     [,expected-error
-     (format "Exception in Sinteger64_value: ~a is out of range." too-large)]
+     (if (pregexp-match ".*HAS_TRY_INT64_VALUE.*" (utf8->string (read-file "src/swish/scheme_aux.h")))
+         (exit-reason->english `#(osi-error osi_marshal_bindings osi_marshal_bindings ,UV_EINVAL))
+         (format "Exception in Sinteger64_value: ~a is out of range." too-large))]
     [#(EXIT ,reason)
      (catch (sqlite:marshal-bindings (list too-large)))]
     [,@expected-error (exit-reason->english reason)]

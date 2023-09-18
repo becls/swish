@@ -21,6 +21,15 @@
 // SOFTWARE.
 
 #include "osi.h"
+#include "scheme_aux.h"
+
+#if !defined(HAS_TRY_INT64_VALUE)
+int Stry_integer64_value(ptr n, Sint64_t* val, const char** err) {
+  (void)(err);
+  *val = Sinteger64_value(n);
+  return 1;
+}
+#endif
 
 typedef struct statement_s statement_t;
 
@@ -357,16 +366,20 @@ int set_binding(binding_t* b, ptr datum) {
   switch (type) {
   case SQLITE_NULL:
     return 0;
-  case SQLITE_INTEGER:
-    b->i = Sinteger64_value(datum);
+  case SQLITE_INTEGER: {
+    Sint64_t val;
+    int rc = Stry_integer64_value(datum, &val, NULL);
+    if (!rc) return UV_EINVAL;
+    b->i = val;
     return 0;
+  }
   case SQLITE_FLOAT:
     b->d = Sflonum_value(datum);
     return 0;
   case SQLITE_TEXT:
     b->utf8 = osi_string_to_utf8(datum, &b->size);
     return b->utf8 ? 0 : UV_ENOMEM;
-  case SQLITE_BLOB:
+  case SQLITE_BLOB: {
     b->size = Sbytevector_length(datum);
     void* blob = malloc_array(uint8_t, b->size);
     if (!blob)
@@ -374,6 +387,7 @@ int set_binding(binding_t* b, ptr datum) {
     memcpy(blob, Sbytevector_data(datum), b->size);
     b->blob = blob;
     return 0;
+  }
   default:
     return UV_EINVAL;
   }
@@ -511,7 +525,11 @@ ptr osi_bind_statement(uptr statement, int index, ptr datum) {
     rc = sqlite3_bind_null(s->stmt, index);
   } else if (Sfixnump(datum) || Sbignump(datum)) {
     who = "sqlite3_bind_int64";
-    rc = sqlite3_bind_int64(s->stmt, index, Sinteger64_value(datum));
+    Sint64_t val;
+    if (Stry_integer64_value(datum, &val, NULL)) {
+      rc = sqlite3_bind_int64(s->stmt, index, val);
+    } else
+      return osi_make_error_pair("osi_bind_statement", UV_EINVAL);
   } else if (Sflonump(datum)) {
     who = "sqlite3_bind_double";
     rc = sqlite3_bind_double(s->stmt, index, Sflonum_value(datum));
@@ -672,11 +690,10 @@ static void step_cb(uv_async_t* handle) {
       case SQLITE_FLOAT:
         x = Sflonum(sqlite3_column_double(stmt, i));
         break;
-      case SQLITE_TEXT: {
+      case SQLITE_TEXT:
         x = Sstring_utf8((const char*)sqlite3_column_text(stmt, i),
                          sqlite3_column_bytes(stmt, i));
         break;
-      }
       default: { // SQLITE_BLOB
         const void* blob = sqlite3_column_blob(stmt, i);
         int n = sqlite3_column_bytes(stmt, i);

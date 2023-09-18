@@ -25,7 +25,7 @@ build-dirs:
 	@mkdir -p ../../${BUILD}/bin
 	@mkdir -p ../../${BUILD}/lib
 
-all: ready ${CORE} ${AUXLIB} ${REMINDERS}
+all: ready ${SYNC} ${CORE} ${AUXLIB} ${REMINDERS}
 
 %.include: %.tmp-include
 	@if cmp --quiet "$@" "$<"; then \
@@ -43,6 +43,8 @@ swish-version.include-changed:
 
 chezscheme-revision.include-changed:
 	touch $(SSRC)
+	rm -f scheme_aux.h
+	$(MAKE) scheme_aux.h
 
 swish-revision.tmp-include:
 	@git describe --always --match none --abbrev=40 --dirty > "$@"
@@ -57,7 +59,13 @@ chezscheme-revision.tmp-include:
 	  cat "${SCHEME_REVISION_PATH}/revision" > "$@" ; \
 	fi
 
-${OsiObj}: ${SQLITE_SRCPATH}/sqlite3.h swish.h sha.h sha-private.h
+${OsiObj}: ${SQLITE_SRCPATH}/sqlite3.h swish.h sha.h sha-private.h scheme_aux.h
+
+sqlite.c: scheme_aux.h
+
+scheme_aux.h:
+	@sed -n 's/^EXPORT \([^S].*\) Sinteger64_value.*/typedef \1 Sint64_t;/p' < "${SCHEME_REVISION_PATH}/scheme.h" > scheme_aux.h
+	@sed -n 's/EXPORT.*Stry_integer64_value.*/#define HAS_TRY_INT64_VALUE/p' < "${SCHEME_REVISION_PATH}/scheme.h" >> scheme_aux.h
 
 io-constants.ss: io-constants${EXESUFFIX}
 	./$< > $@
@@ -101,6 +109,7 @@ clean: platform-clean
 	rm -f ../../${BUILD}/lib/swish/*.wpo
 	rm -f ${SwishLibs}
 	rm -f ${SHLIBTEST}
+	rm -f scheme_aux.h
 	rm -f chezscheme-revision.include
 	rm -f swish-revision.include
 	rm -f swish-version.include
@@ -163,7 +172,7 @@ install-internal: install-check all
 
 .PHONY: mat-prereq
 mat-prereq:: | ${SETUP}
-mat-prereq:: ${SHLIBTEST} ${TESTREQUEST}
+mat-prereq:: ${SHLIBTEST} ${TESTREQUEST} scheme_aux.h
 	@printf "making mat-prereq ... "
 	@rm -rf ../../build/mat-prereq
 	@$(MAKE) install-batteries install-bin install-internal INSTALLROOT="$$(${NORMALIZE_PATH} ../../build/mat-prereq)" SWISH_VERSION=".x.y.z" MACHINE_TYPE="arch" > /dev/null

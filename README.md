@@ -65,7 +65,7 @@ hash.
 
 - Chez Scheme 9.6.4 or later
 - GCC, the GNU Compiler Collection
-- GNU make
+- GNU make 4.4 or later
 - GNU C++ compiler for libuv
 - cmake for libuv
 - libsystemd-dev and uuid-dev packages

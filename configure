@@ -438,6 +438,16 @@ if [ "${CONFIG_UNAME}" = "Darwin" ]; then
 else
   add "GNU_INSTALL:=install"
 fi
+# build server may not have GNU make >= 4.4, but we don't use -j there either
+TMPFILE="$(mktemp)"
+echo "target: .WAIT" > "${TMPFILE}"
+if make -qf "${TMPFILE}" 2> /dev/null ; then
+  add "SYNC=.WAIT"
+else
+  add "SYNC="
+  echo "Note: make does not support .WAIT, so make -j may not work."
+fi
+rm "${TMPFILE}"
 
 set_output ";;" src/osi-bootstrap.ss
 if [ "${Windows}" = "yes" ]; then
