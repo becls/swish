@@ -1051,7 +1051,7 @@
     (with-interrupts-disabled
      (parameterize ([print-graph #t])
        (let ([op (console-error-port)]
-             [ht (or (event-condition-table) (make-eq-hashtable))])
+             [ht (or (event-condition-table) (make-weak-eq-hashtable))])
          (event-condition-table ht)
          (fprintf op "\nDate: ~a\n" (date-and-time))
          (fprintf op "Timestamp: ~a\n" (erlang:now))
