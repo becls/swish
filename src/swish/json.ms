@@ -461,33 +461,51 @@
     )
    'ok))
 
+;; default canonical ordering for JSON serialization
 (mat stable-ordering ()
-  (define (find-collision s1 bound)
-    (define (gen)
-      (let* ([len (+ 1 (random 5))]
-             [s (make-string len)])
-        (do ([i 0 (fx+ i 1)]) ((fx= i len) (string->symbol s))
-          (string-set! s i
-            (integer->char (fx+ (char->integer #\a) (random 26)))))))
-    (define target (symbol-hash s1))
-    (let search ([i 0])
-      (and (fx< i bound)
-           (let ([s2 (gen)])
-             (if (= (symbol-hash s2) target)
-                 `(,s1 ,s2)
-                 (search (fx+ i 1)))))))
-  (match-let*
-   ([,hash (symbol-hash 'foo)]
-    [,@hash (symbol-hash 'byu)] ;; use find-collision if this fails
-    [,obj1 (json:make-object
-            [foo 1]
-            [byu 2])]
-    [,str1 (json:object->string obj1)]
-    [,obj2 (json:make-object
-            [byu 2]
-            [foo 1])]
-    [,@str1 (json:object->string obj2)])
-   'ok))
+  (define (gen)
+    (let* ([len (+ 1 (random 5))]
+           [s (make-string len)])
+      (do ([i 0 (fx+ i 1)]) ((fx= i len) (string->symbol s))
+        (string-set! s i
+          (integer->char (fx+ (char->integer #\a) (random 26)))))))
+  (define (gen-keys n)
+    ;; assumes n < size of the key space
+    (let lp ([i n] [acc '()])
+      (if (= i 0)
+          acc
+          (let ([key (gen)])
+            (if (memq key acc)
+                (lp i acc)
+                (lp (- i 1) (cons key acc)))))))
+  (define (scramble ls)
+    (let ([v (list->vector ls)])
+      (do ([i 0 (+ i 1)]) ((= i (vector-length v)) (vector->list v))
+        (let ([j (random (+ i 1))])
+          (unless (= i j)
+            (let ([t (vector-ref v i)])
+              (vector-set! v i (vector-ref v j))
+              (vector-set! v j t)))))))
+  (define (kvs->json kvs)
+    (let ([obj (json:make-object)])
+      (for-each
+       (lambda (kv)
+         (match-let* ([(,k . ,v) kv])
+           (json:extend-object obj [,k v])))
+       kvs)
+      obj))
+  (define (test n)
+    (match-let*
+     ([,kvs (map cons (gen-keys n) (iota n))]
+      [,obj1 (kvs->json (scramble kvs))]
+      [,str1 (json:object->string obj1)]
+      [,obj2 (kvs->json (scramble kvs))]
+      [,@str1 (json:object->string obj2)])
+     'ok))
+  (test 1)
+  (test 10)
+  (test 100)
+  (test 1000))
 
 (mat manipulate ()
   (match-let*
