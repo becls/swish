@@ -28,7 +28,7 @@ This chapter describes the design of the message-passing concurrency
 model. It provides a Scheme embedding of a significant subset of the
 Erlang programming
 language~\cite{armstrong-thesis,programming-erlang}.\footnote{Tuples,
-  denoted by \{$e_1$, \ldots, $e_n$\} in Erlang, are implemented as
+  denoted by \{$e_1$, \etc, $e_n$\} in Erlang, are implemented as
   vectors: \code{\#(\var{e$_1$}~\etc~\var{e$_n$})}. Similarly
   records, defined as syntactic sugar over tuples in Erlang, are
   implemented as syntactic sugar over vectors.}  Tuple and pattern
@@ -856,7 +856,7 @@ into arguments for \var{handle-field}:
   \code{,\var{field}} & \var{field} & \var{field} & \code{()} & \var{field} must be an identifier \\
   \code{,@\var{field}} & \var{field} & \var{unique} & \code{()} & \var{field} must be an identifier \\
   \code{[\var{field} \var{pattern} \var{option} \etc{}]} &
-    \var{field} & \var{unique} & \code{(\var{option} ...)} &
+    \var{field} & \var{unique} & \code{(\var{option} \etc)} &
     \var{unique} is matched against \var{pattern} \\
 \end{tabular}
 
@@ -1129,15 +1129,15 @@ for each foreign-handle type registered with \code{make-foreign-handle-guardian}
 % ----------------------------------------------------------------------------
 \defineentry{arg-check}
 \begin{syntax}
-  \code{(arg-check \var{who} [\var{arg} \var{pred} \ldots] \ldots)}
+  \code{(arg-check \var{who} [\var{arg} \var{pred} \etc] \etc)}
 \end{syntax}
 \expandsto{}\begin{alltt}\antipar
 (let ([who \var{who}])
   (let ([arg \var{arg}])
-    (unless (and (pred arg) \ldots)
+    (unless (and (pred arg) \etc)
       (profile-me-as arg-check)
       (bad-arg who arg)))
-  \ldots
+  \etc
   (void))\end{alltt}
 
 The \code{arg-check} macro raises a \code{bad-arg} exception if
@@ -3307,7 +3307,7 @@ condition within the compound condition it constructs.
 % ----------------------------------------------------------------------------
 \defineentry{with-temporaries}
 \begin{syntax}
-  \code{(with-temporaries (\var{id} ...) e0 e1 ...)}
+  \code{(with-temporaries (\var{id} \etc) e0 e1 \etc)}
 \end{syntax}
 \expandsto{}\begin{alltt}\antipar
 (with-syntax ([(id ...) (generate-temporaries '(id ...))])
@@ -3315,4 +3315,4 @@ condition within the compound condition it constructs.
 
 The \code{with-temporaries} macro binds each macro-language
 pattern variable \var{id} to a fresh generated identifier
-within the body \code{(begin \var{e0}\ \var{e1}\ ...)}.
+within the body \code{(begin \var{e0}\ \var{e1}\ \etc)}.

@@ -352,7 +352,7 @@ The \code{db:stop} procedure calls \code{(gen-server:call
 \expandsto{} \antipar\begin{alltt}
 (let ([\var{db} (sqlite:open \var{filename} \var{flags})])
   (on-exit (sqlite:close \var{db})
-    \var{body\(\sb{1}\)} \var{body\(\sb{2}\)} ...))
+    \var{body\(\sb{1}\)} \var{body\(\sb{2}\)} \etc))
 \end{alltt}
 
 The \code{with-db} macro opens the database in \var{filename},

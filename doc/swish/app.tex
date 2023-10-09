@@ -513,7 +513,7 @@ be passed to \code{log-db:setup} when the \code{log-db} gen-server is started.
 
 \defineentry{swish-start}
 \begin{procedure}
-  \code{(swish-start \var{arg} \ldots)}
+  \code{(swish-start \var{arg} \etc)}
 \end{procedure}
 \returns{} see below
 
@@ -681,13 +681,13 @@ containing the application configuration file name returned by \code{app:config-
 
 \defineentry{define-foreign}
 \begin{syntax}
-  \code{(define-foreign \var{name} (\var{arg-name} \var{arg-type}) ...)}
+  \code{(define-foreign \var{name} (\var{arg-name} \var{arg-type}) \etc)}
 \end{syntax}
 \expandsto{} \antipar\codebegin
 (begin
-  (define \var{name}* (foreign-procedure (symbol->string '\var{name}) (\var{arg-type} ...) ptr))
-  (define (\var{name} \var{arg-name} ...)
-    (match (\var{name}* \var{arg-name} ...)
+  (define \var{name}* (foreign-procedure (symbol->string '\var{name}) (\var{arg-type} \etc) ptr))
+  (define (\var{name} \var{arg-name} \etc)
+    (match (\var{name}* \var{arg-name} \etc)
       [(,who . ,err)
        (guard (symbol? who))
        (io-error '\var{name} who err)]

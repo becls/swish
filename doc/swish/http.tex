@@ -308,11 +308,11 @@ used:
 
 \defineentry{http:add-server}
 \begin{syntax}
-  \code{(http:add-server \var{arg} \ldots)}
+  \code{(http:add-server \var{arg} \etc)}
 \end{syntax}
 
 The \code{http:add-server} macro expands to code that appends the
-result of \code{(http:configure-server \var{arg} \ldots)} to the
+result of \code{(http:configure-server \var{arg} \etc)} to the
 \code{app-sup-spec} parameter.
 
 \defineentry{http:configure-file-server}
@@ -333,11 +333,11 @@ defaults to one constructed via
 
 \defineentry{http:add-file-server}
 \begin{syntax}
-  \code{(http:add-file-server \var{arg} \ldots)}
+  \code{(http:add-file-server \var{arg} \etc)}
 \end{syntax}
 
 The \code{http:add-file-server} macro expands to code that appends the
-result of \code{(http:configure-file-server \var{arg} \ldots)} to the
+result of \code{(http:configure-file-server \var{arg} \etc)} to the
 \code{app-sup-spec} parameter.
 
 \defineentry{http:make-default-file-url-handler}
@@ -836,20 +836,20 @@ HTML. The transformation, $H$, is described below:
   \code{\#!void} & nothing\\
   \code{\var{string}} & $E(\var{string})$\\
   \code{\var{number}} & \var{number}\\
-  \code{(begin \var{pattern} \ldots)} & $H(\var{pattern})$\ldots\\
-  \code{(cdata \var{string} \ldots)} &
-  \code{[!CDATA[\var{string}$\ldots$]]}\\
-  \code{(html5 \opt{(@ \var{attr} \ldots)} \var{pattern} \ldots)} &
-  \code{<!DOCTYPE html><html $A(\var{attr})$ $\ldots$>$H(\var{pattern})\ldots$</html>}\\
-  \code{(raw \var{string} \ldots)} & \var{string}$\ldots$\\
-  \code{(script \opt{(@ \var{attr} \ldots)} \var{string} \ldots)} &
-  \code{<script $A(\var{attr})$ $\ldots$>\var{string}$\ldots$</script>}\\
-  \code{(style \opt{(@ \var{attr} \ldots)} \var{string} \ldots)} &
-  \code{<style $A(\var{attr})$ $\ldots$>\var{string}$\ldots$</style>}\\
-  \code{(\var{tag} \opt{(@ \var{attr} \ldots)} \var{pattern} \ldots)} &
-  \code{<\var{tag} $A(\var{attr})$ $\ldots$>$H(\var{pattern})\ldots$</\var{tag}>}\\
-  \code{(\var{void-tag} \opt{(@ \var{attr} \ldots)})} &
-  \code{<\var{void-tag} $A(\var{attr})$ $\ldots$>}\\
+  \code{(begin \var{pattern} \etc)} & $H(\var{pattern})$\etc\\
+  \code{(cdata \var{string} \etc)} &
+  \code{[!CDATA[\var{string}$\etc$]]}\\
+  \code{(html5 \opt{(@ \var{attr} \etc)} \var{pattern} \etc)} &
+  \code{<!DOCTYPE html><html $A(\var{attr})$ $\etc$>$H(\var{pattern})\etc$</html>}\\
+  \code{(raw \var{string} \etc)} & \var{string}$\etc$\\
+  \code{(script \opt{(@ \var{attr} \etc)} \var{string} \etc)} &
+  \code{<script $A(\var{attr})$ $\etc$>\var{string}$\etc$</script>}\\
+  \code{(style \opt{(@ \var{attr} \etc)} \var{string} \etc)} &
+  \code{<style $A(\var{attr})$ $\etc$>\var{string}$\etc$</style>}\\
+  \code{(\var{tag} \opt{(@ \var{attr} \etc)} \var{pattern} \etc)} &
+  \code{<\var{tag} $A(\var{attr})$ $\etc$>$H(\var{pattern})\etc$</\var{tag}>}\\
+  \code{(\var{void-tag} \opt{(@ \var{attr} \etc)})} &
+  \code{<\var{void-tag} $A(\var{attr})$ $\etc$>}\\
 
   \hline
 \end{tabular}

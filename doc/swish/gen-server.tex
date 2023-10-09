@@ -98,7 +98,7 @@ up. Timeouts during initialization should be considered carefully.
 
 \code{gen-server:start\&link} spawns the server process, links to
 the calling process, registers the server process as \var{name}, and calls
-\code{(init \var{arg} ...)} within that process. To ensure a
+\code{(init \var{arg} \etc)} within that process. To ensure a
 synchronized startup procedure, \code{gen-server:start\&link} does
 not return until \code{init} has returned.
 

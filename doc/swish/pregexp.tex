@@ -117,7 +117,7 @@ Otherwise it expands into a run-time call to \code{pregexp}.
 \begin{procedure}
   \code{(pregexp-match-positions \var{pat} \var{str} \opt{\var{start} \opt{\var{end}}})}
 \end{procedure}
-\returns{} \code{((\var{s}~.~\var{e}) \ldots)} or \code{\#f}
+\returns{} \code{((\var{s}~.~\var{e}) \etc)} or \code{\#f}
 
 The \code{pregexp-match-positions} procedure takes a regexp pattern
 \var{pat} and a text string \var{str} and returns a \emph{match} if
@@ -278,7 +278,7 @@ It also matches \code{pat}, \code{pit}, \code{pot}, \code{put}, and
 
 A \emph{character class} matches any one character from a set of
 characters. A typical format for this is the \emph{bracketed character
-  class} \code{[}\ldots\code{]}, which matches any one character from
+  class} \code{[}\etc\code{]}, which matches any one character from
 the non-empty sequence of characters enclosed within the
 brackets.\footnote{Requiring a bracketed character class to be
   non-empty is not a limitation, since an empty character class can be
@@ -349,7 +349,7 @@ lower-case letter or a digit.
 \subsubsection {POSIX Character Classes}
 
 A \emph{POSIX character class} is a special metasequence of the form
-\code{[:}\ldots\code{:]} that can be used only inside a bracketed
+\code{[:}\etc\code{:]} that can be used only inside a bracketed
 expression. The POSIX classes supported are:
 
 \begin{center}\begin{tabular}{ll}
@@ -472,7 +472,7 @@ the two uses of the metacharacter \code{?}.
 \subsection {Clusters}
 
 \emph{Clustering}, i.e., enclosure within parentheses
-\code{(}\ldots\code{)}, identifies the enclosed subpattern as a single
+\code{(}\etc\code{)}, identifies the enclosed subpattern as a single
 entity.  It causes the matcher to \emph{capture} the \emph{submatch},
 or the portion of the string matching the subpattern, in addition to
 the overall match.
@@ -745,7 +745,7 @@ fail to yield an overall match.
 Sometimes it is efficient to disable backtracking.  For example, we
 may wish to \emph{commit} to a choice, or we know that trying
 alternatives is fruitless.  A non-backtracking regexp is enclosed in
-\code{(?>}\ldots\code{)}.
+\code{(?>}\etc\code{)}.
 
 \code{(pregexp-match "(?>a+)." "aaaa")} $\Rightarrow$ \code{\#f}
 

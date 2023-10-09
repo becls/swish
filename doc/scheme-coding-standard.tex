@@ -232,13 +232,13 @@ path through \code{f}.
 \codebegin
 (define (f x)
   (if (eq? x 'old-school)
-      (catch \(e\sb{0}\) \ldots \(e\sb{n}\))
-      (try \(e\sb{0}\) \ldots \(e\sb{n}\))))
+      (catch \(e\sb{0}\) \etc{} \(e\sb{n}\))
+      (try \(e\sb{0}\) \etc{} \(e\sb{n}\))))
 (define (g x)
   (match (f x)
     [`(catch fire ,e) (throw 'water e)]
     [`(catch ,_ ,e) (throw e)]
-    \ldots))
+    \etc))
 \codeend
 
 \subsection* {Know when to use \texttt{eq?}, \texttt{eqv?},
