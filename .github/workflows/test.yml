@@ -41,7 +41,7 @@ jobs:
             os: ubuntu-20.04
             chez: v9.5.8
           - machine: a6le
-            os: ubuntu-20.04
+            os: ubuntu-latest
             chez: main
           - machine: ta6le
             os: ubuntu-20.04
