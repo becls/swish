@@ -33,13 +33,13 @@
 (define shared-cli
   (cli-specs
    [verbose -v count "show more compiler messages"]
-   [output-file -o (string "<output>") "write output to <output>"]
+   [output-file -o (string "<output>") "compile to <output>; see details"]
    [libdirs -L (list "<libdir>") "add <libdir> to library-directories"]
    [srcdirs -s (list "<srcdir>") "add <srcdir> to source-directories"]
    [rt-libs --rtlib (list "<lib>" ...)
      '("visit compiled libraries <lib> ... before compiling <source>;"
-       "these libraries are added to <output> unless otherwise"
-       "specified, in which case they must be provided at run time."
+       "these libraries are added to <output> unless the target is a"
+       "component or library, in which case they must be provided at run time."
        "Look for <lib> ... in library-directories (-L) if not found.")]
    [help -h --help (list "[<section>]" ...)
      (format "display help, <section>={~{~a~^|~}}" help-sections)]

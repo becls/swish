@@ -89,7 +89,7 @@
   (swish-build-test '("--help")
     '("Usage:"
       seek
-      "write output"
+      "compile to <output>"
       seek
       "source filename"))
   (swish-build-test '("-h" "details")
