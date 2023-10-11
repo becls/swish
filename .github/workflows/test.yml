@@ -136,7 +136,7 @@ jobs:
             data/mat-report.html
             src/swish/*.mo
       - name: Run coverage
-        run: make coverage || echo "Run coverage failed" >> failures
+        run: .github/workflows/unless-failed.sh coverage
       - name: Archive coverage results
         uses: actions/upload-artifact@v3
         with:
