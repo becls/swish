@@ -1124,6 +1124,27 @@
         "--load-results " aggregate.json)
        expected))
     (let ([expected
+           `(,(string-append (pregexp-quote test-file) ".* fail")
+             " SKIP .*TEST2"
+             " FAIL .*TEST3"
+             ,(string-append (pregexp-quote test-file2) ".* no tests")
+             ,(string-append (pregexp-quote test-file3) ".* fail")
+             " FAIL .*zero"
+             ,(string-append (pregexp-quote "incomplete.ms") ".* no tests")
+             ,@summary-output)])
+      ;; --progress suite-verbose with --harvest
+      (nonzero-exit
+       (swish-test
+        "--harvest " mo-path1 " " mo-path2 " " mo-path3 " " incomplete " "
+        "--progress " "suite-verbose")
+       expected)
+      ;; --progress suite-verbose with --load-results
+      (nonzero-exit
+       (swish-test
+        "--progress " "suite-verbose "
+        "--load-results " aggregate.json)
+       expected))
+    (let ([expected
            `(,(pregexp-quote test-file)
              seek
              " pass .*TEST1"

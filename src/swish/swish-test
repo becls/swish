@@ -51,7 +51,12 @@
 
 (define test-and-report-cli
   (cli-specs
-   [progress --progress (string "<mode>") "<mode>={test|suite|none}"]
+   [progress --progress (string "<mode>")
+     '("<mode>={test|suite|suite-verbose|none}\n"
+       "where 'test' shows pass/fail/skip for each test,"
+       "'suite' shows pass/fail at the suite level, and"
+       "'suite-verbose' is like 'suite' but shows fail/skip"
+       "for individual tests that do not pass.")]
    [load-prof --load-profile (list "<file>" "<file>" ...)
     "load the specified profile(s)"]
    [save-prof --save-profile (string "<file>")
@@ -780,7 +785,7 @@
         [coverage (opt 'coverage)]
         [pre-specs (extract-pre-specs (or (opt 'specs) '()))])
     (check-report-format report 'report)
-    (unless (memq progress '(#f test suite none))
+    (unless (memq progress '(#f test suite suite-verbose none))
       (fail "invalid ~a ~s" (option-named 'progress) progress))
     (cond
      [(and load-prof (not (or save-prof coverage)))
