@@ -289,6 +289,14 @@ See Figure~\ref{fig:service-callbacks} for information on these callbacks.
 \caption{Service callbacks. \label{fig:service-callbacks}}
 \end{figure}
 
+\defineentry{osi\_is\_service}\label{isservice}
+\begin{procedure}
+  \code{(osi\_is\_service)}
+\end{procedure}
+\returns{} a boolean
+
+If Swish is running as a service, then \code{osi\_is\_service} returns true, otherwise false.
+
 \subsection {System Functions and Procedures}
 
 \defineentry{osi\_get\_argv}

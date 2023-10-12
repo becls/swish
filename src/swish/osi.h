@@ -51,6 +51,7 @@ typedef struct {
 } jmp_t;
 
 EXPORT jmp_t g_exit;
+EXPORT int g_is_service;
 
 // System
 EXPORT ptr osi_get_argv(void);
@@ -68,6 +69,7 @@ EXPORT ptr osi_list_uv_handles(void);
 EXPORT ptr osi_make_uuid(void);
 EXPORT void osi_set_argv(int argc, const char* argv[]);
 EXPORT void osi_set_quantum(uint64_t nanoseconds);
+EXPORT int osi_is_service();
 
 // Ports
 EXPORT ptr osi_read_port(uptr port, ptr buffer, size_t start_index, uint32_t size, int64_t offset, ptr callback);

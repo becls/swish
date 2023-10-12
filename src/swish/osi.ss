@@ -83,6 +83,7 @@
    osi_get_uname
    osi_interrupt_database
    osi_is_quantum_over
+   osi_is_service
    osi_kill
    osi_kill*
    osi_list_directory
@@ -186,6 +187,7 @@
     (foreign-procedure "uv_get_free_memory" () unsigned-64))
   (define osi_get_total_memory
     (foreign-procedure "uv_get_total_memory" () unsigned-64))
+  (fdefine osi_is_service boolean)
 
   ;; Ports
   (define-osi osi_read_port (port uptr) (buffer ptr) (start-index size_t) (size unsigned-32) (offset integer-64) (callback ptr))

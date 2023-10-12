@@ -96,6 +96,7 @@ typedef struct {
 uv_loop_t* osi_loop;
 
 jmp_t g_exit;
+int g_is_service;
 
 static uint64_t g_threshold;
 static ptr g_callbacks;
@@ -1508,6 +1509,10 @@ int osi_send_request(handle_request_func code, void* payload) {
   uv_cond_signal(&g_send_request.cond);
   uv_mutex_unlock(&g_send_request.mutex);
   return 0;
+}
+
+int osi_is_service() {
+  return g_is_service;
 }
 
 // Cannot use exports of scheme.h here; the Scheme heap may not have

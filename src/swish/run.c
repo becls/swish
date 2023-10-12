@@ -80,6 +80,7 @@ static void swish_init(void) {
   add_foreign(osi_init);
   add_foreign(osi_interrupt_database);
   add_foreign(osi_is_quantum_over);
+  add_foreign(osi_is_service);
   add_foreign(osi_kill);
   add_foreign(osi_list_directory);
   add_foreign(osi_list_uv_handles);
@@ -269,6 +270,7 @@ static void match_login1_manager_signal(const char* member) {
 }
 
 int swish_service(int argc, const char* argv[]) {
+  g_is_service = 1;
   scheme_init(argc, argv, 0);
   CHECK(sd_bus_default_system, &system_bus);
   int fd = sd_bus_get_fd(system_bus);
@@ -356,6 +358,7 @@ static DWORD WINAPI service_control_handler(DWORD dwControl, DWORD dwEventType, 
 }
 
 static void WINAPI service_run(DWORD _argc, wchar_t* _argv[]) {
+  g_is_service = 1;
   scheme_init(g_argc, g_argv, 0);
   g_service_status_handle = RegisterServiceCtrlHandlerExW(g_service_name, service_control_handler, NULL);
   if (NULL == g_service_status_handle)

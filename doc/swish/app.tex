@@ -192,7 +192,7 @@ In addition, the program executable must be able to locate
 Microsoft's C Runtime Library \code{vcruntime140.dll}
 and the appropriate Chez Scheme DLL via the standard search order.
 
-\subsection {Services}
+\subsection {Services}\index{service}
 
 On Linux and Windows, a Swish application can be started as a service
 that listens for system shutdown, suspend, and resume messages.
@@ -201,7 +201,15 @@ the first command-line argument.
 On Windows, two additional command-line arguments are required:
 the service name and the path to the log file where stdout and
 stderr are redirected.
-See \hyperref[swishservice]{\code{swish\_service}} for details.
+See \hyperref[swishservice]{\code{swish\_service}} and
+\hyperref[isservice]{\code{osi\_is\_service}} for details.
+
+% Note that we can run a script as a service
+% by making its first line:
+% #! /usr/bin/env -S swish /SERVICE
+% and this works for thin compiled scripts as well.
+% For fat applications, we have to pass /SERVICE explicitly
+% as the first argument.
 
 % Rationale:
 % - /SERVICE is not likely to be a Swish script on Unix system
