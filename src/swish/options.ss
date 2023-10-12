@@ -70,12 +70,12 @@
   ;; opt-spec -> req-spec
   ;;           | (default default-expr)
   ;;
-  ;; The pred? and filter-expr expressions are evaluated once, when defining the
-  ;; internal make-record procedure generated for my:options. The default-expr
-  ;; is evaluated whenever the corresponding optional key is not specified in a
-  ;; call to the internal make-record procedure. This lets us have generative
-  ;; default expressions. We can bind default-expr to a variable where this is
-  ;; not desirable.
+  ;; The define-options form generates an internal make-record procedure that
+  ;; evaluates the default-expr, pred?, and filter-expr expressions left-to-right
+  ;; in the order that fields appear in the definition, though the order of
+  ;; evaluation for individual expressions of a particular field is unspecified.
+  ;; This means that default expressions are generative. We can bind
+  ;; default-expr to a variable where this is not desirable.
   ;;
   ;; The define-options form defines:
   ;;  - a macro opt-name that supports
@@ -100,17 +100,15 @@
       (syntax-case field ()
         [(key kv ...)
          (let ([kv* (collect-clauses field #'(kv ...) valid-specs)])
-           (with-syntax ([(check) (generate-temporaries '(check))]
+           (with-syntax ([(fml) (generate-temporaries '(formal))]
                          [dflt-expr (find-rhs 'default kv* #f)]
                          [(pred? ...) (or (find-rhs 'must-be kv* #t) '())]
                          [filter (or (find-rhs 'filter kv* #f) #'values)])
-             #`(key
-                dflt-expr
-                [check
+             #`(key fml dflt-expr
                  (lambda (val)
                    (unless (and (pred? val) ...)
                      (bad-arg 'key val))
-                   (filter val))])))]))
+                   (filter val)))))]))
     (let f ([x input])
       (syntax-case x ()
         [(_ name (optional opt-field ...))
@@ -126,9 +124,9 @@
           ([<name> (compound-id #'name "<" #'name ">")]
            [<name>? (compound-id #'name "<" #'name ">?")]
            [make-<name> (compound-id #'name "make-<" #'name ">")]
-           [((req-key #f [req-check req-check-expr]) ...)
+           [((req-key req-fml #f req-check-expr) ...)
             (map parse-required #'(req-field ...))]
-           [((opt-key opt-dflt-expr [opt-check opt-check-expr]) ...)
+           [((opt-key opt-fml opt-dflt-expr opt-check-expr) ...)
             (map parse-optional #'(opt-field ...))]
            [:... #'(... ...)])
           (assert (valid-fields? input #'(req-key ... opt-key ...) #f '(copy copy* is?)))
@@ -140,14 +138,11 @@
                  (immutable req-key) ...
                  (immutable opt-key) ...))
               (define make-record
-                (let ([req-check req-check-expr] ...
-                      [opt-check opt-check-expr] ...
-                      [omitted (record-type-descriptor <options>)])
-                  (lambda (req-key ... opt-key ...)
-                    (make-<name>
-                     (req-check req-key) ...
-                     (opt-check (if (eq? opt-key omitted) opt-dflt-expr opt-key))
-                     ...))))
+                (let ([omitted (record-type-descriptor <options>)])
+                  (lambda (req-fml ... opt-fml ...)
+                    (let* ([req-key (req-check-expr req-fml)] ...
+                           [opt-key (opt-check-expr (if (eq? opt-fml omitted) opt-dflt-expr opt-fml))] ...)
+                      (make-<name> req-key ... opt-key ...)))))
               (define-syntax (name x)
                 (define fields '(req-key ... opt-key ...))
                 force-library-init ;; insert reference to force library init

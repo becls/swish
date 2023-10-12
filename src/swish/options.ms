@@ -348,6 +348,42 @@
       [elephant (bar x ba)]
       [11 (foo x z)])
      'ok))
+  ;; fields do not shadow default expression; default expressions are scoped
+  ;; as let* of fields in the order they are listed in the define-options
+  (let ()
+    (define x 11)
+    (define-options foo (required [x]) (optional [y (default x)]))
+    (define-options bar (optional [spawn (default spawn)]))
+    (match-let*
+     ([,@spawn (bar spawn (bar))]
+      [7 (bar spawn (bar [spawn 7]))]
+      [,x 'local]
+      [,opt (foo [x 'act])]
+      [act (foo y opt)]
+      [act (foo x opt)]
+      [,opt (foo [x 123] [y 'not])]
+      [not (foo y opt)]
+      [123 (foo x opt)]
+      )
+     'ok))
+  ;; must-be has access to prior bindings
+  (let ()
+    (define x 11)
+    (define-options foo
+      (required [x])
+      (optional [y (default 0) (must-be fixnum? (lambda (y) (> y x)))]))
+    (match-let*
+     ([,a (foo [x -1])]
+      [-1 (foo x a)]
+      [0 (foo y a)]
+      [`(catch #(bad-arg y 0)) (try (foo [x 1]))]
+      [`(catch #(bad-arg y not)) (try (foo [x 1] [y 'not]))]
+      [`(catch #(bad-arg y 4)) (try (foo [x 5] [y 4]))]
+      [,b (foo [x 7] [y 11])]
+      [7 (foo x b)]
+      [11 (foo y b)]
+      )
+     'ok))
   )
 
 (mat procedure/arity ()
