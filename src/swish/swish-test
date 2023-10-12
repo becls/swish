@@ -44,8 +44,7 @@
    [test-run --test-run (string "<UUID>")
     "use the specified <UUID> to identify the test run instead of generating one"]
    [rerun --rerun (string "<type>")
-     (ct:join #\space
-       "rerun tests whose result type matches <type>, where <type> is"
+     '("rerun tests whose result type matches <type>, where <type> is"
        "one of {pass|fail|skip} or a parenthesized Scheme list of those types;"
        "here <spec> specifies test results in .ms.mo or .ss.mo files")]
    [specs (list . "<spec>") "directory | suite [{test | -t test} ...]"]))
