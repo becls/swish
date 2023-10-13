@@ -50,6 +50,7 @@
     (swish meta)
     (swish options)
     (swish osi)
+    (swish parallel)
     (swish pregexp)
     (swish queue)
     (swish software-info)

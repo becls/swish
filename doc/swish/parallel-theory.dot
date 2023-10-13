@@ -1,0 +1,18 @@
+digraph G {
+  concentrate=true;
+  graph [margin=0,rankdir=LR];
+  node [shape=box,fontname="Latin Modern Roman",fontsize=11];
+  caller [label="Caller"];
+  kernel [label="Kernel",shape=ellipse];
+  worker1 [label="Worker 1"];
+  worker2 [label="Worker 2"];
+  worker3 [label="Worker 3"];
+  workerDots [label="..."];
+  workerN [label="Worker N"];
+  caller -> kernel;
+  kernel -> worker1;
+  kernel -> worker2;
+  kernel -> worker3;
+  kernel -> workerDots;
+  kernel -> workerN;
+}

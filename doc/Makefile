@@ -26,6 +26,7 @@ swish :=\
   swish/event-mgr-events.pdf\
   swish/http-tree.pdf\
   swish/intro-sup-tree.pdf\
+  swish/parallel-theory.pdf\
   ../src/swish/swish-version.include\
 
 swish.pdf: $(swish)
