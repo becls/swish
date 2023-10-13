@@ -314,65 +314,67 @@
       (set-port-output-index! op 0)
       str))
 
+  (define-syntactic-monad R custom-inflate)
+
+  (R define (rd ip)
+    (let ([c (next-non-ws ip)])
+      (cond
+       [(eqv? c #\t)
+        (expect-char #\r ip)
+        (expect-char #\u ip)
+        (expect-char #\e ip)
+        #t]
+       [(eqv? c #\f)
+        (expect-char #\a ip)
+        (expect-char #\l ip)
+        (expect-char #\s ip)
+        (expect-char #\e ip)
+        #f]
+       [(eqv? c #\n)
+        (expect-char #\u ip)
+        (expect-char #\l ip)
+        (expect-char #\l ip)
+        #\nul]
+       [(eqv? c #\") (read-string ip (json-buffer))]
+       [(eqv? c #\[)
+        (let lp ([acc '()])
+          (let ([c (next-non-ws ip)])
+            (cond
+             [(and (eqv? c #\]) (null? acc)) '()]
+             [else
+              (unread-char c ip)
+              (let* ([acc (cons (R rd () ip) acc)]
+                     [c (next-non-ws ip)])
+                (case c
+                  [(#\,) (lp acc)]
+                  [(#\]) (reverse acc)]
+                  [else (unexpected-input c ip)]))])))]
+       [(eqv? c #\{)
+        (custom-inflate
+         (let ([buffer (json-buffer)])
+           (let lp ([obj (json:make-object)])
+             (let ([c (next-non-ws ip)])
+               (cond
+                [(eqv? c #\")
+                 (let* ([key (string->key (read-string ip buffer))]
+                        [c (next-non-ws ip)])
+                   (unless (eqv? c #\:)
+                     (unexpected-input c ip))
+                   (#3%hashtable-set! obj key (R rd () ip)))
+                 (let ([c (next-non-ws ip)])
+                   (case c
+                     [(#\,) (lp obj)]
+                     [(#\}) obj]
+                     [else (unexpected-input c ip)]))]
+                [(and (eqv? c #\}) (eqv? (#3%hashtable-size obj) 0)) obj]
+                [else (unexpected-input c ip)])))))]
+       [(eqv? c #\-) (- (read-unsigned ip))]
+       [else (unread-char c ip) (read-unsigned ip)])))
+
   (define json:read
     (case-lambda
      [(ip) (json:read ip no-custom-inflate)]
      [(ip custom-inflate)
-      (define-syntactic-monad R custom-inflate)
-      (R define (rd ip)
-        (let ([c (next-non-ws ip)])
-          (cond
-           [(eqv? c #\t)
-            (expect-char #\r ip)
-            (expect-char #\u ip)
-            (expect-char #\e ip)
-            #t]
-           [(eqv? c #\f)
-            (expect-char #\a ip)
-            (expect-char #\l ip)
-            (expect-char #\s ip)
-            (expect-char #\e ip)
-            #f]
-           [(eqv? c #\n)
-            (expect-char #\u ip)
-            (expect-char #\l ip)
-            (expect-char #\l ip)
-            #\nul]
-           [(eqv? c #\") (read-string ip (json-buffer))]
-           [(eqv? c #\[)
-            (let lp ([acc '()])
-              (let ([c (next-non-ws ip)])
-                (cond
-                 [(and (eqv? c #\]) (null? acc)) '()]
-                 [else
-                  (unread-char c ip)
-                  (let* ([acc (cons (R rd () ip) acc)]
-                         [c (next-non-ws ip)])
-                    (case c
-                      [(#\,) (lp acc)]
-                      [(#\]) (reverse acc)]
-                      [else (unexpected-input c ip)]))])))]
-           [(eqv? c #\{)
-            (custom-inflate
-             (let ([buffer (json-buffer)])
-               (let lp ([obj (json:make-object)])
-                 (let ([c (next-non-ws ip)])
-                   (cond
-                    [(eqv? c #\")
-                     (let* ([key (string->key (read-string ip buffer))]
-                            [c (next-non-ws ip)])
-                       (unless (eqv? c #\:)
-                         (unexpected-input c ip))
-                       (#3%hashtable-set! obj key (R rd () ip)))
-                     (let ([c (next-non-ws ip)])
-                       (case c
-                         [(#\,) (lp obj)]
-                         [(#\}) obj]
-                         [else (unexpected-input c ip)]))]
-                    [(and (eqv? c #\}) (eqv? (#3%hashtable-size obj) 0)) obj]
-                    [else (unexpected-input c ip)])))))]
-           [(eqv? c #\-) (- (read-unsigned ip))]
-           [else (unread-char c ip) (read-unsigned ip)])))
       (let ([x (seek-non-ws ip)])
         (cond
          [(eof-object? x) x]
@@ -452,60 +454,65 @@
                   (put-string op buf i (fx- len i))]
                  [else (lp n (fx- i 1))]))))]))))
 
+  (define-syntactic-monad W op indent custom-write)
+
+  (W define (wr x)
+    (cond
+     [(eq? x #t) (display-string "true" op)]
+     [(eq? x #f) (display-string "false" op)]
+     [(eqv? x #\nul) (display-string "null" op)]
+     [(string? x) (write-string x op)]
+     [(fixnum? x) (display-fixnum x op)]
+     [(or (bignum? x) (and (flonum? x) (finite? x)))
+      (display-string (number->string x) op)]
+     [(and custom-write (custom-write op x indent))]
+     [(null? x) (display-string "[]" op)]
+     [(pair? x)
+      (let ([indent (json:write-structural-char #\[ indent op)])
+        (W wr () (car x))
+        (let lp ([ls (cdr x)])
+          (when (pair? ls)
+            (json:write-structural-char #\, indent op)
+            (W wr () (car ls))
+            (lp (cdr ls))))
+        (json:write-structural-char #\] indent op))]
+     [(json:object? x)
+      (if (zero? (#3%hashtable-size x))
+          (display-string "{}" op)
+          (let ([indent (json:write-structural-char #\{ indent op)])
+            (let ([v (#3%hashtable-cells x)])
+              (vector-sort!
+               (lambda (x y)
+                 (string<? (json-key->sort-key (car x)) (json-key->sort-key (car y))))
+               v)
+              (do ([i 0 (fx+ i 1)]) ((fx= i (vector-length v)))
+                (when (fx> i 0)
+                  (json:write-structural-char #\, indent op))
+                (match-let* ([(,key . ,val) (vector-ref v i)])
+                  (write-string (json-key->string key) op)
+                  (json:write-structural-char #\: indent op)
+                  (W wr () val))))
+            (json:write-structural-char #\} indent op)))]
+     [else (throw `#(invalid-datum ,x))]))
+
+  (define (internal-write op x indent custom-writer)
+    (define custom-write
+      (and custom-writer
+           (letrec ([custom-adapter (lambda (op x indent) (custom-writer op x indent wr-adapter))]
+                    [wr-adapter (lambda (op x indent) (W wr ([custom-write custom-adapter]) x))])
+             custom-adapter)))
+    (W wr () x)
+    (when (eqv? indent 0)
+      (newline op)))
+
   (define json:write
     (case-lambda
      [(op x) (json:write op x #f)]
      [(op x indent) (json:write op x indent no-custom-write)]
      [(op x indent custom-writer)
-      (define-syntactic-monad W op indent custom-write)
-      (W define (wr x)
-        (cond
-         [(eq? x #t) (display-string "true" op)]
-         [(eq? x #f) (display-string "false" op)]
-         [(eqv? x #\nul) (display-string "null" op)]
-         [(string? x) (write-string x op)]
-         [(fixnum? x) (display-fixnum x op)]
-         [(or (bignum? x) (and (flonum? x) (finite? x)))
-          (display-string (number->string x) op)]
-         [(and custom-write (custom-write op x indent))]
-         [(null? x) (display-string "[]" op)]
-         [(pair? x)
-          (let ([indent (json:write-structural-char #\[ indent op)])
-            (W wr () (car x))
-            (let lp ([ls (cdr x)])
-              (when (pair? ls)
-                (json:write-structural-char #\, indent op)
-                (W wr () (car ls))
-                (lp (cdr ls))))
-            (json:write-structural-char #\] indent op))]
-         [(json:object? x)
-          (if (zero? (#3%hashtable-size x))
-              (display-string "{}" op)
-              (let ([indent (json:write-structural-char #\{ indent op)])
-                (let ([v (#3%hashtable-cells x)])
-                  (vector-sort!
-                   (lambda (x y)
-                     (string<? (json-key->sort-key (car x)) (json-key->sort-key (car y))))
-                   v)
-                  (do ([i 0 (fx+ i 1)]) ((fx= i (vector-length v)))
-                    (when (fx> i 0)
-                      (json:write-structural-char #\, indent op))
-                    (match-let* ([(,key . ,val) (vector-ref v i)])
-                      (write-string (json-key->string key) op)
-                      (json:write-structural-char #\: indent op)
-                      (W wr () val))))
-                (json:write-structural-char #\} indent op)))]
-         [else (throw `#(invalid-datum ,x))]))
-      (define custom-write
-        (and custom-writer
-             (letrec ([custom-adapter (lambda (op x indent) (custom-writer op x indent wr-adapter))]
-                      [wr-adapter (lambda (op x indent) (W wr ([custom-write custom-adapter]) x))])
-               custom-adapter)))
       (when (and indent (or (not (fixnum? indent)) (negative? indent)))
         (bad-arg 'json:write indent))
-      (W wr () x)
-      (when (eqv? indent 0)
-        (newline op))]))
+      (internal-write op x indent custom-writer)]))
 
   (define json:object->string
     (case-lambda
