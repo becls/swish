@@ -45,6 +45,7 @@
    (chezscheme)
    (swish erlang)
    (swish io)
+   (swish meta)
    )
 
   (define-syntax extend-object-internal
@@ -358,43 +359,34 @@
 
   (define (newline-and-indent indent op)
     (newline op)
-    (do ([i 0 (+ i 1)]) ((= i indent))
+    (do ([i 0 (fx+ i 1)]) ((fx= i indent))
       (write-char #\space op)))
 
   (define (json:write-structural-char x indent op)
-    (if (not indent)
-        (begin
-          (write-char x op)
-          #f)
-        (match x
-          [#\[
-           (let ([indent (+ indent 2)])
-             (write-char #\[ op)
-             (newline-and-indent indent op)
-             indent)]
-          [#\]
-           (let ([indent (- indent 2)])
-             (newline-and-indent indent op)
-             (write-char #\] op)
-             indent)]
-          [#\{
-           (let ([indent (+ indent 2)])
-             (write-char #\{ op)
-             (newline-and-indent indent op)
-             indent)]
-          [#\}
-           (let ([indent (- indent 2)])
-             (newline-and-indent indent op)
-             (write-char #\} op)
-             indent)]
-          [#\:
-           (write-char #\: op)
-           (write-char #\space op)
-           indent]
-          [#\,
-           (write-char #\, op)
-           (newline-and-indent indent op)
-           indent])))
+    (cond
+     [(not indent)
+      (write-char x op)
+      #f]
+     [(memv x '(#\[ #\{))
+      (let ([indent (fx+ indent 2)])
+        (write-char x op)
+        (newline-and-indent indent op)
+        indent)]
+     [(memv x '(#\] #\}))
+      (let ([indent (fx- indent 2)])
+        (newline-and-indent indent op)
+        (write-char x op)
+        indent)]
+     [(eqv? x #\:)
+      (write-char x op)
+      (write-char #\space op)
+      indent]
+     [(eqv? x #\,)
+      (write-char x op)
+      (newline-and-indent indent op)
+      indent]
+     [else
+      not-reached]))
 
   (define-syntax json-key->sort-key
     (syntax-rules ()
