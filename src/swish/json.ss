@@ -27,6 +27,7 @@
    json:cells
    json:delete!
    json:extend-object
+   json:key<?
    json:make-object
    json:object->bytevector
    json:object->string
@@ -47,6 +48,8 @@
    (swish erlang)
    (swish io)
    (swish meta)
+   (swish options)
+   (swish string-utils)
    )
 
   (define-syntax extend-object-internal
@@ -456,7 +459,20 @@
                   (put-string op buf i (fx- len i))]
                  [else (lp n (fx- i 1))]))))]))))
 
-  (define-syntactic-monad W op indent custom-write)
+  (define json:key<?
+    (make-process-parameter #t
+      (lambda (x)
+        (arg-check 'json:key<?
+          [x (lambda (x) (or (boolean? x) (procedure/arity? #b100 x)))])
+        x)))
+
+  (define (sort-cells! key<? v)
+    (vector-sort!
+     (lambda (x y)
+       (key<? (json-key->sort-key (car x)) (json-key->sort-key (car y))))
+     v))
+
+  (define-syntactic-monad W op indent custom-write key<?)
 
   (W define (wr x)
     (cond
@@ -484,10 +500,7 @@
           (display-string "{}" op)
           (let ([indent (json:write-structural-char #\{ indent op)])
             (let ([v (#3%hashtable-cells x)])
-              (vector-sort!
-               (lambda (x y)
-                 (string<? (json-key->sort-key (car x)) (json-key->sort-key (car y))))
-               v)
+              (when key<? (sort-cells! key<? v))
               (do ([i 0 (fx+ i 1)]) ((fx= i (vector-length v)))
                 (when (fx> i 0)
                   (json:write-structural-char #\, indent op))
@@ -499,6 +512,11 @@
      [else (throw `#(invalid-datum ,x))]))
 
   (define (internal-write op x indent custom-writer)
+    (define key<?
+      (let ([x (json:key<?)])
+        (cond
+         [(eq? x #t) string<?]
+         [else x])))
     (define custom-write
       (and custom-writer
            (letrec ([custom-adapter (lambda (op x indent) (custom-writer op x indent wr-adapter))]
@@ -620,6 +638,16 @@
         [(key field) #'(key field #f)]
         [(key field custom-write) c]
         [_ (syntax-error c)]))
+    (define (maybe-sort ls)
+      (let ([key<?
+             (let ([x ((eval '(let () (import (swish json)) json:key<?)))])
+               (cond
+                [(eq? x #t) string<?]
+                [else x]))])
+        (if (not key<?)
+            ls
+            (sort (lambda (x y) (key<? (sort-key x) (sort-key y)))
+              ls))))
     (syntax-case x ()
       [(_ op-expr indent-expr wr-expr)
        #'(let ([indent indent-expr] [op op-expr])
@@ -631,10 +659,7 @@
       [(_ op-expr indent-expr wr-expr [key . spec] ...)
        (valid? (datum (key ...)))
        (with-syntax ([([k0 f0 cw0] [k1 f1 cw1] ...)
-                      (sort
-                       (lambda (x y)
-                         (string<? (sort-key x) (sort-key y)))
-                       (map parse-clause #'([key . spec] ...)))])
+                      (maybe-sort (map parse-clause #'([key . spec] ...)))])
          #'(let ([op op-expr] [indent indent-expr] [wr wr-expr])
              (let ([indent (json-write-kv op indent wr #\{ k0 f0 cw0)])
                (json-write-kv op indent wr #\, k1 f1 cw1)

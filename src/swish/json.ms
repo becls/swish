@@ -469,6 +469,11 @@
      (catch (json:set! 1 2 3))]
     [#(EXIT #(bad-arg json:cells apoptosis))
      (catch (json:cells 'apoptosis))]
+    [#(EXIT #(bad-arg json:key<? "wrong"))
+     (catch (json:key<? "wrong"))]
+    [,proc1 (lambda (x) #t)]
+    [#(EXIT #(bad-arg json:key<? ,@proc1))
+     (catch (json:key<? proc1))]
     )
    'ok))
 
@@ -517,6 +522,56 @@
   (test 10)
   (test 100)
   (test 1000))
+
+(mat custom-ordering ()
+  (define (test-write-object key<?)
+    (let-values ([(op get) (open-string-output-port)])
+      (parameterize ([json:key<? key<?])
+        ((eval
+          `(lambda (op)
+             (json:write-object op #f json:write
+               [foo2 2]
+               [foo1 1]
+               [foo10 10])))
+         op)
+        (get))))
+  (define obj (json:make-object
+               [foo2 2]
+               [foo1 1]
+               [foo10 10]))
+  (define (test-write key<?)
+    (let-values ([(op get) (open-string-output-port)])
+      (parameterize ([json:key<? key<?])
+        (json:write op obj)
+        (get))))
+
+  (match-let*
+   (["{\"foo2\":2,\"foo1\":1,\"foo10\":10}" ; no sort
+     (test-write-object #f)]
+    ["{\"foo1\":1,\"foo10\":10,\"foo2\":2}" ; default string<?
+     (test-write-object #t)]
+    ["{\"foo2\":2,\"foo10\":10,\"foo1\":1}" ; custom (reverse)
+     (test-write-object string>?)]
+    ["{\"foo1\":1,\"foo2\":2,\"foo10\":10}" ; custom (natural)
+     (test-write-object natural-string-ci<?)]
+    ;; Particularly difficult to prove that json:write does not
+    ;; sort. Here we serialize to a string, then deserialize to
+    ;; compare that the new object matches the original.
+    [,unsorted (test-write #f)]         ; no sort
+    [,_ (assert
+         (equal?
+          (dump obj)
+          (dump (json:string->object unsorted))))]
+
+    ["{\"foo1\":1,\"foo10\":10,\"foo2\":2}" ; default string<?
+     (test-write #t)]
+    ["{\"foo2\":2,\"foo10\":10,\"foo1\":1}" ; custom (reverse)
+     (test-write string>?)]
+    ["{\"foo1\":1,\"foo2\":2,\"foo10\":10}" ; custom (natural)
+     (test-write natural-string-ci<?)]
+    )
+   'ok)
+  )
 
 (mat manipulate ()
   (match-let*
