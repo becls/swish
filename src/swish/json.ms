@@ -428,6 +428,8 @@
   (match-let*
    ([#(EXIT #(bad-arg json:write -1))
      (catch (json:write (open-output-string) 12 -1))]
+    [#(EXIT #(bad-arg json:write 7)) (catch (json:write 7 #f 0))]
+    [#(EXIT #(bad-arg json:pretty 9)) (catch (json:pretty #t 9))]
     [#(EXIT #(invalid-datum 1/2)) (catch (json:object->string 1/2))]
     [#(EXIT #(invalid-datum +inf.0)) (catch (json:object->string +inf.0))]
     [#(EXIT #(invalid-datum -inf.0)) (catch (json:object->string -inf.0))]

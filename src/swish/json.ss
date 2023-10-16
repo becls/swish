@@ -146,7 +146,10 @@
                    ,(and (port-has-port-position? ip)
                          (- (port-position ip) 1))))))
 
+  (include "unsafe.ss")
+
   (define (next-char ip)
+    (declare-unsafe-primitives read-char)
     (let ([x (read-char ip)])
       (if (eof-object? x)
           (throw 'unexpected-eof)
@@ -156,12 +159,14 @@
     (memv x '(#\x20 #\x09 #\x0A #\x0D)))
 
   (define (next-non-ws ip)
-    (let ([c (next-char ip)])
+    (declare-unsafe-primitives read-char)
+    (let ([c (read-char ip)])
       (if (ws? c)
           (next-non-ws ip)
           c)))
 
   (define (seek-non-ws ip)
+    (declare-unsafe-primitives read-char)
     (let ([c (read-char ip)])
       (cond
        [(eof-object? c) c]
@@ -169,6 +174,7 @@
        [else c])))
 
   (define (read-string ip op)
+    (declare-unsafe-primitives write-char)
     (let ([c (next-char ip)])
       (case c
         [(#\") (get-json-buffer-string op)]
@@ -218,8 +224,9 @@
     (syntax-rules ()
       [(_ s op)
        (lambda (s op)
+         (declare-unsafe-primitives char->integer char<=? fx+ fx= string-ref write-char) ;; #3%
          (write-char #\" op)
-         (do ([i 0 (+ i 1)] [n (string-length s)]) [(= i n)]
+         (do ([i 0 (fx+ i 1)] [n (string-length s)]) [(fx= i n)]
            (let ([c (string-ref s i)])
              (cond
               [(memv c '(#\" #\\)) (write-char #\\ op) (write-char c op)]
@@ -436,14 +443,13 @@
              (parameterize ([print-gensym #t]) (format "~s" x))
              (symbol->string x)))]))
 
-  (include "unsafe.ss")
-
   (define display-fixnum
     (let ([len (string-length (number->string (most-negative-fixnum)))])
       (define display-fixnum-buffer
         (make-weak-process-local
          (lambda () (make-string len))))
-      (declare-unsafe-primitives char->integer fx+ fx- fx< fx<= fx= fxabs fxdiv-and-mod integer->char) ;; #3%
+      (declare-unsafe-primitives char->integer fx+ fx- fx< fx<= fx= fxabs
+        fxdiv-and-mod integer->char put-string string-set! write-char) ;; #3%
       (define (digit->char d)
         (integer->char (fx+ d (char->integer #\0))))
       (lambda (x op)
@@ -484,6 +490,7 @@
   (define-syntactic-monad W op indent custom-write key<?)
 
   (W define (wr x)
+    (declare-unsafe-primitives display-string) ;; #3%
     (cond
      [(eq? x #t) (display-string "true" op)]
      [(eq? x #f) (display-string "false" op)]
@@ -520,7 +527,7 @@
             (json:write-structural-char #\} indent op)))]
      [else (throw `#(invalid-datum ,x))]))
 
-  (define (internal-write op x indent custom-writer default-key<?)
+  (define (internal-write op x indent custom-writer default-key<? who)
     (define key<?
       (let ([x (json:key<?)])
         (cond
@@ -531,6 +538,8 @@
            (letrec ([custom-adapter (lambda (op x indent) (custom-writer op x indent wr-adapter))]
                     [wr-adapter (lambda (op x indent) (W wr ([custom-write custom-adapter]) x))])
              custom-adapter)))
+    (unless (and (output-port? op) (textual-port? op))
+      (bad-arg who op))
     (W wr () x)
     (when (eqv? indent 0)
       (newline op)))
@@ -542,7 +551,7 @@
      [(op x indent custom-writer)
       (when (and indent (or (not (fixnum? indent)) (negative? indent)))
         (bad-arg 'json:write indent))
-      (internal-write op x indent custom-writer string<?)]))
+      (internal-write op x indent custom-writer string<? 'json:write)]))
 
   (define json:object->string
     (case-lambda
@@ -680,5 +689,5 @@
     (case-lambda
      [(x) (json:pretty x (current-output-port))]
      [(x op)
-      (internal-write op x 0 (json:custom-write) natural-string-ci<?)]))
+      (internal-write op x 0 (json:custom-write) natural-string-ci<? 'json:pretty)]))
   )
