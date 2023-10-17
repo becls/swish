@@ -306,15 +306,18 @@
   (define json-buffer (make-weak-process-local open-output-string))
   (define (get-json-buffer-string op)
     ;; We don't reset string output port's buffer via get-output-string since
-    ;; we will likely have to regrow the buffer. We'll reclaim the weakly held
-    ;; buffer at the next collection.
+    ;; we will likely have to regrow the buffer. The collector can reclaim the
+    ;; buffer when the R rd call is complete.
     (let* ([end (port-output-index op)]
            [str (make-string end)])
       (string-copy! (port-output-buffer op) 0 str 0 end)
       (set-port-output-index! op 0)
       str))
 
-  (define-syntactic-monad R custom-inflate)
+  ;; Strings and objects are common enough that it appears
+  ;; to be worth resolving json-buffer eagerly and making
+  ;; it available via json-buf within R.
+  (define-syntactic-monad R json-buf custom-inflate)
 
   (R define (rd ip)
     (let ([c (next-non-ws ip)])
@@ -335,7 +338,7 @@
         (expect-char #\l ip)
         (expect-char #\l ip)
         #\nul]
-       [(eqv? c #\") (read-string ip (json-buffer))]
+       [(eqv? c #\") (read-string ip json-buf)]
        [(eqv? c #\[)
         (let lp ([acc '()])
           (let ([c (next-non-ws ip)])
@@ -351,23 +354,22 @@
                   [else (unexpected-input c ip)]))])))]
        [(eqv? c #\{)
         (custom-inflate
-         (let ([buffer (json-buffer)])
-           (let lp ([obj (json:make-object)])
-             (let ([c (next-non-ws ip)])
-               (cond
-                [(eqv? c #\")
-                 (let* ([key (string->key (read-string ip buffer))]
-                        [c (next-non-ws ip)])
-                   (unless (eqv? c #\:)
-                     (unexpected-input c ip))
-                   (#3%hashtable-set! obj key (R rd () ip)))
-                 (let ([c (next-non-ws ip)])
-                   (case c
-                     [(#\,) (lp obj)]
-                     [(#\}) obj]
-                     [else (unexpected-input c ip)]))]
-                [(and (eqv? c #\}) (eqv? (#3%hashtable-size obj) 0)) obj]
-                [else (unexpected-input c ip)])))))]
+         (let lp ([obj (json:make-object)])
+           (let ([c (next-non-ws ip)])
+             (cond
+              [(eqv? c #\")
+               (let* ([key (string->key (read-string ip json-buf))]
+                      [c (next-non-ws ip)])
+                 (unless (eqv? c #\:)
+                   (unexpected-input c ip))
+                 (#3%hashtable-set! obj key (R rd () ip)))
+               (let ([c (next-non-ws ip)])
+                 (case c
+                   [(#\,) (lp obj)]
+                   [(#\}) obj]
+                   [else (unexpected-input c ip)]))]
+              [(and (eqv? c #\}) (eqv? (#3%hashtable-size obj) 0)) obj]
+              [else (unexpected-input c ip)]))))]
        [(eqv? c #\-) (- (read-unsigned ip))]
        [else (unread-char c ip) (read-unsigned ip)])))
 
@@ -380,7 +382,7 @@
          [(eof-object? x) x]
          [else
           (unread-char x ip)
-          (R rd () ip)]))]))
+          (R rd ([json-buf (json-buffer)]) ip)]))]))
 
   (define (newline-and-indent indent op)
     (newline op)
