@@ -165,7 +165,7 @@
   (define (read-string ip op)
     (let ([c (next-char ip)])
       (case c
-        [(#\") (get-output-string op)]
+        [(#\") (get-json-buffer-string op)]
         [(#\\)
          (let ([c (next-char ip)])
            (case c
@@ -292,11 +292,31 @@
                  (read (open-input-string s))))
           (string->symbol s))))
 
+  (define (make-weak-process-local init)
+    (define param (make-process-parameter #f))
+    (lambda ()
+      (let ([val (cond [(param) => car] [else #!bwp])])
+        (if (not (eq? val #!bwp))
+            val
+            (let ([val (init)])
+              (param (weak-cons val #f))
+              val)))))
+
+  (define json-buffer (make-weak-process-local open-output-string))
+  (define (get-json-buffer-string op)
+    ;; We don't reset string output port's buffer via get-output-string since
+    ;; we will likely have to regrow the buffer. We'll reclaim the weakly held
+    ;; buffer at the next collection.
+    (let* ([end (port-output-index op)]
+           [str (make-string end)])
+      (string-copy! (port-output-buffer op) 0 str 0 end)
+      (set-port-output-index! op 0)
+      str))
+
   (define json:read
     (case-lambda
      [(ip) (json:read ip no-custom-inflate)]
      [(ip custom-inflate)
-      (define buffer (open-output-string))
       (define (rd ip)
         (let ([c (next-non-ws ip)])
           (cond
@@ -316,7 +336,7 @@
             (expect-char #\l ip)
             (expect-char #\l ip)
             #\nul]
-           [(eqv? c #\") (read-string ip buffer)]
+           [(eqv? c #\") (read-string ip (json-buffer))]
            [(eqv? c #\[)
             (let lp ([acc '()])
               (let ([c (next-non-ws ip)])
@@ -332,22 +352,23 @@
                       [else (unexpected-input c ip)]))])))]
            [(eqv? c #\{)
             (custom-inflate
-             (let lp ([obj (json:make-object)])
-               (let ([c (next-non-ws ip)])
-                 (cond
-                  [(eqv? c #\")
-                   (let* ([key (string->key (read-string ip buffer))]
-                          [c (next-non-ws ip)])
-                     (unless (eqv? c #\:)
-                       (unexpected-input c ip))
-                     (#3%hashtable-set! obj key (rd ip)))
-                   (let ([c (next-non-ws ip)])
-                     (case c
-                       [(#\,) (lp obj)]
-                       [(#\}) obj]
-                       [else (unexpected-input c ip)]))]
-                  [(and (eqv? c #\}) (eqv? (#3%hashtable-size obj) 0)) obj]
-                  [else (unexpected-input c ip)]))))]
+             (let ([buffer (json-buffer)])
+               (let lp ([obj (json:make-object)])
+                 (let ([c (next-non-ws ip)])
+                   (cond
+                    [(eqv? c #\")
+                     (let* ([key (string->key (read-string ip buffer))]
+                            [c (next-non-ws ip)])
+                       (unless (eqv? c #\:)
+                         (unexpected-input c ip))
+                       (#3%hashtable-set! obj key (rd ip)))
+                     (let ([c (next-non-ws ip)])
+                       (case c
+                         [(#\,) (lp obj)]
+                         [(#\}) obj]
+                         [else (unexpected-input c ip)]))]
+                    [(and (eqv? c #\}) (eqv? (#3%hashtable-size obj) 0)) obj]
+                    [else (unexpected-input c ip)])))))]
            [(eqv? c #\-) (- (read-unsigned ip))]
            [else (unread-char c ip) (read-unsigned ip)])))
       (let ([x (seek-non-ws ip)])
