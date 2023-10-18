@@ -15,7 +15,7 @@ fail() {
 }
 
 case $# in
-  0) TESTARGS="src"; PROGRESS="${PROGRESS:-suite}";;
+  0) TESTARGS="$(git ls-files 'src/*.ss' 'src/*.ms')"; PROGRESS="${PROGRESS:-suite}";;
   1) TESTARGS="$1"; PROGRESS="${PROGRESS:-test}";;
   *) fail;;
 esac
