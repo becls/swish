@@ -464,7 +464,7 @@
          [(fixnum? x) (display-fixnum x op)]
          [(or (bignum? x) (and (flonum? x) (finite? x)))
           (display-string (number->string x) op)]
-         [(custom-write op x indent wr)]
+         [(and custom-write (custom-write op x indent wr))]
          [(null? x) (display-string "[]" op)]
          [(pair? x)
           (let ([indent (json:write-structural-char #\[ indent op)])
@@ -540,7 +540,7 @@
 
   (define (no-custom-inflate x) x)
 
-  (define (no-custom-write op x indent wr) #f)
+  (define no-custom-write #f)
 
   (define (write-key indent pre key whole op)
     ;; pre is a token
