@@ -43,6 +43,7 @@
    )
   (import
    (chezscheme)
+   (swish dsm)
    (swish erlang)
    (swish io)
    (swish meta)
@@ -317,7 +318,8 @@
     (case-lambda
      [(ip) (json:read ip no-custom-inflate)]
      [(ip custom-inflate)
-      (define (rd ip)
+      (define-syntactic-monad R custom-inflate)
+      (R define (rd ip)
         (let ([c (next-non-ws ip)])
           (cond
            [(eqv? c #\t)
@@ -344,7 +346,7 @@
                  [(and (eqv? c #\]) (null? acc)) '()]
                  [else
                   (unread-char c ip)
-                  (let* ([acc (cons (rd ip) acc)]
+                  (let* ([acc (cons (R rd () ip) acc)]
                          [c (next-non-ws ip)])
                     (case c
                       [(#\,) (lp acc)]
@@ -361,7 +363,7 @@
                             [c (next-non-ws ip)])
                        (unless (eqv? c #\:)
                          (unexpected-input c ip))
-                       (#3%hashtable-set! obj key (rd ip)))
+                       (#3%hashtable-set! obj key (R rd () ip)))
                      (let ([c (next-non-ws ip)])
                        (case c
                          [(#\,) (lp obj)]
@@ -376,7 +378,7 @@
          [(eof-object? x) x]
          [else
           (unread-char x ip)
-          (rd ip)]))]))
+          (R rd () ip)]))]))
 
   (define (newline-and-indent indent op)
     (newline op)
@@ -454,8 +456,9 @@
     (case-lambda
      [(op x) (json:write op x #f)]
      [(op x indent) (json:write op x indent no-custom-write)]
-     [(op x indent custom-write)
-      (define (wr op x indent)
+     [(op x indent custom-writer)
+      (define-syntactic-monad W op indent custom-write)
+      (W define (wr x)
         (cond
          [(eq? x #t) (display-string "true" op)]
          [(eq? x #f) (display-string "false" op)]
@@ -464,15 +467,15 @@
          [(fixnum? x) (display-fixnum x op)]
          [(or (bignum? x) (and (flonum? x) (finite? x)))
           (display-string (number->string x) op)]
-         [(and custom-write (custom-write op x indent wr))]
+         [(and custom-write (custom-write op x indent))]
          [(null? x) (display-string "[]" op)]
          [(pair? x)
           (let ([indent (json:write-structural-char #\[ indent op)])
-            (wr op (car x) indent)
+            (W wr () (car x))
             (for-each
              (lambda (x)
                (json:write-structural-char #\, indent op)
-               (wr op x indent))
+               (W wr () x))
              (cdr x))
             (json:write-structural-char #\] indent op))]
          [(json:object? x)
@@ -490,12 +493,17 @@
                     (match-let* ([(,key . ,val) (vector-ref v i)])
                       (write-string (json-key->string key) op)
                       (json:write-structural-char #\: indent op)
-                      (wr op val indent))))
+                      (W wr () val))))
                 (json:write-structural-char #\} indent op)))]
          [else (throw `#(invalid-datum ,x))]))
+      (define custom-write
+        (and custom-writer
+             (letrec ([custom-adapter (lambda (op x indent) (custom-writer op x indent wr-adapter))]
+                      [wr-adapter (lambda (op x indent) (W wr ([custom-write custom-adapter]) x))])
+               custom-adapter)))
       (when (and indent (or (not (fixnum? indent)) (negative? indent)))
         (bad-arg 'json:write indent))
-      (wr op x indent)
+      (W wr () x)
       (when (eqv? indent 0)
         (newline op))]))
 

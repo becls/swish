@@ -579,7 +579,7 @@
               [stdout ("A: [1,2,3]")]
               [stderr (,err-msg)]))
      (assert
-      (or (string=? err-msg "rtlibs-swish-fat: library (swish json) is not visible.")
+      (or (string=? err-msg "rtlibs-swish-fat: library (swish dsm) not found.") ;; (swish json) now imports (swish dsm)
           ;; 9.5.3 provides a more precise error message
           (string=? err-msg "rtlibs-swish-fat: attempt to import invisible library (swish json).")))
      'ok])
