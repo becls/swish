@@ -193,6 +193,52 @@
      (osi_spawn_detached* "*" '("x" . 0))])
    'ok))
 
+(isolate-mat process-detached ()
+  (import (swish script-testing))
+  (define listener (listen-tcp "::1" 0 self))
+  (define test-port (listener-port-number listener))
+  (define start (string->utf8 "Engage!"))
+  (define cookie (osi_make_uuid))
+  (define (get-expected ip expected-bv)
+    (define end (bytevector-length expected-bv))
+    (let lp ([i 0])
+      (or (fx= i end)
+          (and (eqv? (get-u8 ip) (bytevector-u8-ref expected-bv i))
+               (lp (fx+ i 1))))))
+  (define test-file.ss
+    (write-test-file "test-file.ss"
+      (lambda ()
+        (for-each pretty-print
+          `((spawn&link (lambda () (receive (after 60000 (throw 'up)))))
+            (define-values (cip cop) (connect-tcp "::1" ,test-port))
+            ;; announce our presence
+            (put-bytevector cop ',start)
+            (flush-output-port cop)
+            (put-bytevector cop
+              ;; read bytes of cookie and echo bytevector back in reverse
+              (let lp ([ls '()] [n ,(bytevector-length cookie)])
+                (if (= n 0)
+                    (u8-list->bytevector ls)
+                    (lp (cons (get-u8 cip) ls) (- n 1)))))
+            (flush-output-port cop)
+            (app:shutdown))))))
+  (spawn-os-process-detached (osi_get_executable_path) (list test-file.ss))
+  (receive (after 60000 (throw 'timeout))
+    [#(accept-tcp ,@listener ,sip ,sop)
+     (match-let* ([#t (get-expected sip start)]    ;; expect start message
+                  [,_ (put-bytevector sop cookie)] ;; put cookie forward order
+                  [,_ (flush-output-port sop)]
+                  [,eikooc (u8-list->bytevector (reverse (bytevector->u8-list cookie)))]
+                  [#t (get-expected sip eikooc)])  ;; expect client to reverse cookie
+       (close-port sip)
+       (close-port sop)
+       'ok)])
+  (close-tcp-listener listener)
+  ;; no spam from detached process
+  (receive (after 200 'ok)
+    [(,x <= `#(process-terminated ,os-pid ,exit-status ,term-signal))
+     (throw x)]))
+
 (isolate-mat files ()
   (define (make-buffers)
     (fold-left
