@@ -142,7 +142,7 @@
 
   (define (add-mat name tags test)
     (if (find-mat name)
-        (errorf 'add-mat "mat ~a is already defined." name)
+        (errorf 'add-mat "mat ~a is already defined" name)
         (mats (cons (make-mat name tags test) (mats)))))
 
   (define run-mat
@@ -152,7 +152,7 @@
       (cond
        [(mat? mat/name) (do-run-mat mat/name reporter incl-tags excl-tags)]
        [(find-mat mat/name) => (lambda (mat) (do-run-mat mat reporter incl-tags excl-tags))]
-       [else (errorf 'run-mat "mat ~a is not defined." mat/name)])]))
+       [else (errorf 'run-mat "mat ~a is not defined" mat/name)])]))
 
   (define (skip? mat incl-tags excl-tags)
     (or (and (pair? incl-tags) (not (present (%mat-tags mat) incl-tags)))
