@@ -23,6 +23,7 @@
 #!chezscheme
 (library (swish erlang)
   (export
+   $console-event-handler
    DOWN
    EXIT
    add-finalizer
@@ -30,7 +31,6 @@
    bad-arg
    catch
    complete-io
-   console-event-handler
    dbg
    define-match-extension
    define-tuple
@@ -246,7 +246,7 @@
 
   (define (panic event)
     (on-exit (osi_exit 80)
-      (console-event-handler event)))
+      ($console-event-handler event)))
 
   (define (@kill p raw-reason)
     (define reason (unwrap-fault-condition raw-reason))
@@ -1041,7 +1041,7 @@
   (define event-loop-process #f)
   (define finalizer-process #f)
 
-  (define (console-event-handler event)
+  (define ($console-event-handler event)
     (with-interrupts-disabled
      (parameterize ([print-graph #t])
        (let ([op (console-error-port)]

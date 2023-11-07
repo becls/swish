@@ -23,6 +23,7 @@
 #!chezscheme
 (library (swish event-mgr-notify)
   (export
+   console-event-handler
    event-mgr:notify
    informative-exit-reason?
    normalize-exit-reason
@@ -31,14 +32,18 @@
   (import
    (chezscheme)
    (swish erlang)
+   (swish events)
    (swish internal)
    (swish meta)
    )
 
   ($import-internal make-fault-condition &fault-condition)
 
+  (define (normal? reason)
+    (and (memq reason '(normal shutdown)) #t))
+
   (define (abnormal? reason)
-    (not (memq reason '(normal shutdown))))
+    (not (normal? reason)))
 
   (define normalize-exit-reason
     (case-lambda
@@ -71,6 +76,17 @@
      [(whereis 'event-mgr) => (lambda (pid) (send pid `#(notify ,event)))]
      [else (console-event-handler event)])
     'ok)
+
+  (define (console-event-handler event)
+    ;; During a normal application shutdown, after event-mgr is
+    ;; unregistered, the exiting processes may still be marked
+    ;; killed. Ignore normal reasons as long as there are no
+    ;; associated stack details.
+    (match event
+      [`(<child-end> ,reason [details #f])
+       (guard (normal? reason))
+       (void)]
+      [,_ ($console-event-handler event)]))
 
   (define-syntax (system-detail x)
     (syntax-case x ()

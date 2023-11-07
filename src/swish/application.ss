@@ -60,7 +60,7 @@
     (match (gen-server:start 'application starter)
       [#(ok ,_) 'ok]
       [#(error ,reason)
-       (console-event-handler `#(application-start-failed ,reason))
+       ($console-event-handler `#(application-start-failed ,reason))
        (exit 1)]))
 
   )

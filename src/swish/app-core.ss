@@ -131,7 +131,7 @@
      [(int32? exit-code) exit-code]
      [(eq? exit-code (void)) 0]
      [else
-      (console-event-handler (format "application shutdown due to (exit ~s)" exit-code))
+      ($console-event-handler (format "application shutdown due to (exit ~s)" exit-code))
       1]))
 
   (profile-omit ;; profiler won't have a chance to save data for these due to osi_exit

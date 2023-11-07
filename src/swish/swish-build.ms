@@ -743,11 +743,14 @@
   (run-fat "hook-exit" '() expected-output))
 
 (isolate-mat application-shutdown ()
-  (define event "Event: #\\(<child-end> [0-9]+ #<process [0-9]+:[0-9]+> 1 (normal|shutdown)")
-  (define expected-output
-    `(seek "Date:" "Timestamp:" ,event
-       seek "Date:" "Timestamp:" ,event
-       seek "Date:" "Timestamp:" ,event))
+  (define (exit-status err)
+    (match err
+      [`(catch `(<os-process-failed> [stdout ()] [stderr ()] ,exit-status))
+       exit-status]
+      [,_
+       ;; Expect no stdout or stderr. If we get here, we've violated
+       ;; that assumption.
+       (raise err)]))
   (define app-shutdown
     (write-test-file "app-shutdown.ss"
       (lambda ()
@@ -767,41 +770,27 @@
                  (app:shutdown 42)
                  (receive))]))))))
   (set-file-mode app-shutdown #o755)
-  ;; run as /usr/bin/env script
-  (run-bash "app-shutdown.ss" '("normal") expected-output)
-  (match (catch (run-bash "app-shutdown.ss" '("abnormal") '()))
-    [#(EXIT `(<os-process-failed> ,stderr [exit-status 2]))
-     (match-regexps expected-output stderr)])
-  (match (catch (run-bash "app-shutdown.ss" '("specific") '()))
-    [#(EXIT `(<os-process-failed> ,stderr [exit-status 42]))
-     (match-regexps expected-output stderr)])
-  ;; run as swish script
-  (run-script app-shutdown '("normal") expected-output)
-  (match (catch (run-script app-shutdown '("abnormal") expected-output))
-    [#(EXIT `(<os-process-failed> ,stderr [exit-status 2]))
-     (match-regexps expected-output stderr)])
-  (match (catch (run-script app-shutdown '("specific") expected-output))
-    [#(EXIT `(<os-process-failed> ,stderr [exit-status 42]))
-     (match-regexps expected-output stderr)])
-  ;; run as thin app
-  (build-example "app-shutdown" '())
-  (run-thin "app-shutdown" '("normal") expected-output)
-  (match (catch (run-thin "app-shutdown" '("abnormal") '()))
-    [#(EXIT `(<os-process-failed> ,stderr [exit-status 2]))
-     (match-regexps expected-output stderr)])
-  (match (catch (run-thin "app-shutdown" '("specific") '()))
-    [#(EXIT `(<os-process-failed> ,stderr [exit-status 42]))
-     (match-regexps expected-output stderr)])
-  (assert (delete-file (output-file "app-shutdown")))
-  ;; run as fat app
-  (build-example "app-shutdown" '("--rtlib" "swish" "-b" "petite"))
-  (run-fat "app-shutdown" '("normal") expected-output)
-  (match (catch (run-fat "app-shutdown" '("abnormal") '()))
-    [#(EXIT `(<os-process-failed> ,stderr [exit-status 2]))
-     (match-regexps expected-output stderr)])
-  (match (catch (run-fat "app-shutdown" '("specific") '()))
-    [#(EXIT `(<os-process-failed> ,stderr [exit-status 42]))
-     (match-regexps expected-output stderr)]))
+  (match-let*
+   (;; run as /usr/bin/env script
+    [() (run-bash "app-shutdown.ss" '("normal") '())]
+    [2 (exit-status (try (run-bash "app-shutdown.ss" '("abnormal") '())))]
+    [42 (exit-status (try (run-bash "app-shutdown.ss" '("specific") '())))]
+    ;; run as swish script
+    [() (run-script app-shutdown '("normal") '())]
+    [2 (exit-status (try (run-script app-shutdown '("abnormal") '())))]
+    [42 (exit-status (try (run-script app-shutdown '("specific") '())))]
+    ;; run as thin app
+    [() (build-example "app-shutdown" '())]
+    [() (run-thin "app-shutdown" '("normal") '())]
+    [2 (exit-status (try (run-thin "app-shutdown" '("abnormal") '())))]
+    [42 (exit-status (try (run-thin "app-shutdown" '("specific") '())))]
+    [,_ (assert (delete-file (output-file "app-shutdown")))]
+    ;; run as fat app
+    [() (build-example "app-shutdown" '("--rtlib" "swish" "-b" "petite"))]
+    [() (run-fat "app-shutdown" '("normal") '())]
+    [2 (exit-status (try (run-fat "app-shutdown" '("abnormal") '())))]
+    [42 (exit-status (try (run-fat "app-shutdown" '("specific") '())))])
+   'ok))
 
 (isolate-mat compile-library ()
   (define source (input-file "clib"))
