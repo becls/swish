@@ -179,9 +179,10 @@
    )
   ;; empty program or component is okay; silly, but okay
   (match-let*
-   ([() (swish-build-test `("-c" "-o" "empty" ,empty) '())]
-    [() (swish-build-test `("-o" "empty" ,empty) '())]
-    [() (swish-build-test `("-o" "empty" ,empty "-b" "petite") '())])
+   ([,dest (path-combine (output-dir) "empty")]
+    [() (swish-build-test `("-c" "-o" ,dest ,empty) '())]
+    [() (swish-build-test `("-o" ,dest ,empty) '())]
+    [() (swish-build-test `("-o" ,dest ,empty "-b" "petite") '())])
    'ok)
   )
 
