@@ -2,9 +2,57 @@
 name: Test
 on: [push]
 jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
+    outputs:
+      HASH_KEY: ${{ steps.build-clone-main.outputs.HASH_KEY }}
+    steps:
+      - name: Clone Chez Scheme
+        id: build-clone-main
+        run: |
+          git clone --filter=blob:none --branch main https://github.com/cisco/ChezScheme.git
+          echo "HASH_KEY=$(cat ChezScheme/.git/refs/heads/main)" >> "${GITHUB_OUTPUT}"
+      - name: Establish Chez Scheme .git / boot file cache
+        id: build-restore-bootfiles
+        uses: actions/cache@v3
+        env:
+          cache-name: boot-files
+        with:
+          path: |
+            ChezScheme/boot
+            ChezScheme/.git*
+          key: ${{ steps.build-clone-main.outputs.HASH_KEY }}
+          enableCrossOsArchive: true
+      - if: ${{ steps.build-restore-bootfiles.outputs.cache-hit != 'true' }}
+        name: Populate boot file cache
+        run: |
+          cd ChezScheme
+          git checkout v9.6.4
+          ./configure -m=a6le
+          cd a6le/c
+          make -j 4
+          cd ../..
+          mkdir -p ../build/bin ../build/lib/csv9.6.4/a6le
+          cp a6le/bin/a6le/* ../build/bin
+          cp boot/a6le/* ../build/lib/csv9.6.4/a6le
+          export PATH=$(realpath ../build/bin):${PATH}
+          export SCHEMEHEAPDIRS=$(realpath ../build/lib/csv9.6.4/a6le):
+          git checkout main
+          git clean -dxf .
+          ./configure --force -m=a6le
+          make re.boot
+          make
+          make bootquick XM=a6osx
+          make bootquick XM=a6nt
   mats:
+    continue-on-error: ${{ startsWith(matrix.machine, 't') }}
+    needs: build
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         config:
           - machine: a6osx
@@ -16,6 +64,9 @@ jobs:
           - machine: a6osx
             os: macos-12
             chez: v9.6.4
+          - machine: a6osx
+            os: macos-12
+            chez: main
           - machine: i3le
             os: ubuntu-20.04
             chez: v9.5.6
@@ -31,6 +82,9 @@ jobs:
           - machine: a6le
             os: ubuntu-latest
             chez: v9.6.4
+          - machine: a6le
+            os: ubuntu-latest
+            chez: main
           - machine: ta6le
             os: ubuntu-22.04
             chez: v9.6.4
@@ -49,6 +103,9 @@ jobs:
           - machine: a6nt
             os: windows-2022
             chez: v9.6.4
+          - machine: a6nt
+            os: windows-2022
+            chez: main
           - machine: ta6nt
             os: windows-2022
             chez: v9.6.4
@@ -78,28 +135,54 @@ jobs:
       - name: Setup Windows
         if: ${{ runner.os == 'Windows' }}
         run: git config --global core.autocrlf false
-      - name: Install Chez Scheme ${{ matrix.config.chez }}
-        working-directory: ${{ runner.temp }}
-        run: |
-          git clone --branch ${{ matrix.config.chez }} --depth 1 --quiet\
-            https://github.com/cisco/ChezScheme.git
-          cd ChezScheme
-          M=${{ matrix.config.machine }}
-          ./configure -m=$M
-          if [ "${{ matrix.config.chez }}" != "main" ]; then
-            # Use checked-in boot files for released builds
-            rm "$M"/boot/"$M"/*.boot
-            cp boot/"$M"/*.boot "$M"/boot/"$M"
-            touch "$M/s/bootstrap"
-          fi
-          make
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            echo "$PWD/$M/bin/$M" >> $GITHUB_PATH
-            echo "SCHEMEHEAPDIRS=$(cygpath -w "$PWD/$M/boot/$M")" >> $GITHUB_ENV
-          else sudo make install
-          fi
       - name: Checkout repository
         uses: actions/checkout@v3
+        # the checkout action wipes the workarea, so do the checkout
+        # *before* we restore and build Chez Scheme from cache
+      - name: Restore Chez Scheme .git / boot file cache
+        id: mats-restore-bootfiles
+        uses: actions/cache@v3
+        env:
+          cache-name: boot-files
+        with:
+          path: |
+            ChezScheme/boot
+            ChezScheme/.git*
+          key: ${{ needs.build.outputs.HASH_KEY }}
+          enableCrossOsArchive: true
+      - name: Fail if no cache
+        if: ${{ steps.mats-restore-bootfiles.outputs.cache-hit != 'true' }}
+        run: exit 1
+      - name: Build Chez Scheme ${{ matrix.config.chez }}
+        run: |
+          M=${{ matrix.config.machine }}
+          cd ChezScheme
+          git checkout -q -f ${{ matrix.config.chez }}
+          git reset --hard ${{ matrix.config.chez }}
+          if [ "${{ matrix.config.chez }}" = "main" ]; then
+            ./configure -m=$M --force
+            make bin/zuo
+            if [ "$RUNNER_OS" = "Windows" ]; then
+              cmd //c build.bat $M //force //as-is //MD  //kernel
+            else
+              cd $M
+              ../bin/zuo . kernel
+              cd ..
+            fi
+          else
+            ./configure -m=$M
+            cd $M/c
+            make
+            cd ../..
+          fi
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            echo "$(cygpath -u "$PWD/$M/bin/$M")" >> $GITHUB_PATH
+            echo "SCHEMEHEAPDIRS=$(cygpath -w "$PWD/$M/boot/$M")" >> $GITHUB_ENV
+          else
+            echo "$(realpath "$PWD/$M/bin/$M")" >> $GITHUB_PATH
+            echo "SCHEMEHEAPDIRS=$(realpath $PWD/$M/boot/$M)" >> $GITHUB_ENV
+          fi
+          echo "done building in $PWD"
       - name: Build Swish
         run: ./configure && make
       - name: Run tests
