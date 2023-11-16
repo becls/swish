@@ -1710,7 +1710,7 @@
       '((let-syntax ([foo (lambda (x) (pretty-print (length (library-directories))) #'#f)]) foo)
         (import (lib))
         (printf "x = ~s\n" x))))
-  (define prog (path-combine (path-parent src.ss) "prog"))
+  (define prog (path-combine (path-parent src.ss) (fix-exe "prog")))
   (define (cleanup)
     (for-each delete-file
       (map so-file (list setup.ss lib.ss src.ss))))
@@ -1724,8 +1724,8 @@
      "--prelude" "(library-e" "xtens" "ions '((\".ss\" . \".so\")))"
      "--prelude" "(import-notify #t)" "-o" ,prog)
    '("3" ;; length of library-directories, since we add "try-prelude-lib"
-     seek "import: found source file.*try-prelude-lib.lib[.]ss"
-     seek "import: compiling.*try-prelude-lib.lib[.]ss.* to .*lib[.]so"))
+     seek "import: found source file.*try-prelude-lib.*lib[.]ss"
+     seek "import: compiling.*try-prelude-lib.*lib[.]ss.* to .*lib[.]so"))
   (run-thin "prog" '() '("x = 123"))
 
   ;; like the previous test, except a --prelude expression sets
@@ -1755,8 +1755,8 @@
      "--prelude" "(pretty-print 'two)" "(import-notify #t)" "-o" ,prog)
    '("one" "two" "loaded setup.ss"
      "3" ;; length of library-directories, since we add "try-prelude-lib"
-     seek "import: found source file.*try-prelude-lib.lib[.]ss"
-     seek "import: compiling.*try-prelude-lib.lib[.]ss.* to .*lib[.]so"))
+     seek "import: found source file.*try-prelude-lib.*lib[.]ss"
+     seek "import: compiling.*try-prelude-lib.*lib[.]ss.* to .*lib[.]so"))
 
   ;; --prelude-file located via explicit path
   ;; all prelude expressions evaluated before we start to compile and hit syntax error
