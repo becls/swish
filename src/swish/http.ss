@@ -651,8 +651,8 @@
         [timeout `#(stop normal ,state)]
         [#(path-changed ,path ,filename ,_)
          `#(no-reply
-            ,(if (and (string=? path root-dir)
-                      (string=? filename "mime-types"))
+            ,(if (and (equal? path root-dir)
+                      (equal? filename "mime-types"))
                  ($state copy [mime-types #f])
                  (clear-cache state))
             ,cache-timeout)]

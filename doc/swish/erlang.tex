@@ -2720,6 +2720,7 @@ with the path-watcher guardian\index{path-watcher guardian}.
 
 Every time a change is detected, \code{\#(path-changed \var{path}
   \var{filename} \var{events})} is sent to \var{process}, where
+\var{filename} is a string or \code{\#f} and
 \var{events} is 1 for rename, 2 for change, and 3 for rename and
 change. If the watcher encounters an error,
 \code{\#(path-watcher-failed \var{path} \var{errno})} is sent to

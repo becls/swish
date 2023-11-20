@@ -645,7 +645,7 @@ static void watch_path_cb(uv_fs_event_t* handle, const char* filename, int event
     osi_add_callback1(callback, Sinteger(status));
     return;
   }
-  osi_add_callback2(callback, Sstring_utf8(filename, -1), Sinteger(events));
+  osi_add_callback2(callback, filename ? Sstring_utf8(filename, -1) : Sfalse, Sinteger(events));
 }
 
 ptr osi_tcp_nodelay(uptr port, int enable) {
