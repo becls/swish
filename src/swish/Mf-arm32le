@@ -12,7 +12,7 @@ osi.o run.o: chezscheme-revision.include
 	$C -shared -o ../../${BUILD}/bin/libosi.so ${OsiObj} -L"${LIBUV_LIBPATH}" -luv -luuid -lpthread
 
 ../../${BUILD}/lib/swish_kernel.o: run.o ${OsiObj} ${UvLib}/libuv.a
-	${LD} -r -X -o $@ run.o ${OsiObj} "${SCHEME_LIBPATH}"/kernel.o -L"${LIBUV_LIBPATH}" -luv
+	${LD} -r -X -o $@ run.o ${OsiObj} ${SCHEMELINK} -L"${LIBUV_LIBPATH}" -luv
 
 %.o: %.c osi.h swish.h ${UvInclude}
 	$C -I"${SCHEME_INCLUDE}" -I"${LIBUV_INCLUDE}" -I"${SQLITE_SRCPATH}" -c $<

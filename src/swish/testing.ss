@@ -29,10 +29,12 @@
    assert-syntax-error
    capture-events
    default-timeout
+   define-environment-parameters
    delete-tree
    discard-events
    gc
    handle-gone?
+   incorrect-argument-count?
    isolate-mat
    match-prefix
    match-regexps
@@ -112,6 +114,37 @@
        'ok])
      (eval e)
      (errorf 'assert-syntax-error "failed to raise syntax error: ~s" e)))
+
+  (define arg-count-err-msg
+    (let ([f (lambda (x) x)])
+      (guard (c [else (condition-message c)])
+        ((eval '(lambda (f) (f 1 2 3))) f))))
+
+  (define (incorrect-argument-count? err proc)
+    (define (procedure-name x)
+      (let ([insp (inspect/object x)])
+        (and (eq? (insp 'type) 'procedure)
+             (string->symbol ((insp 'code) 'name)))))
+    (define reason
+      (match err
+        [`(catch ,reason ,_) reason]
+        [,_ err]))
+    (meta-cond
+     [(call-with-values scheme-version-number (lambda (maj min sub) (or (> maj 9) (and (= maj 9) (> min 6)))))
+      (match (condition-irritants reason)
+        [(,_arg-count ,@proc) 'ok]
+        [(,_arg-count ,x)
+         (guard (eq? proc (procedure-name x)))
+         'ok])]
+     [else
+      (match (condition-irritants reason)
+        [(,@proc) 'ok]
+        [(,x)
+         (guard (eq? proc (procedure-name x)))
+         'ok])])
+    (match-let*
+     ([,@arg-count-err-msg (condition-message reason)])
+     #t))
 
   (define (sleep-ms t) (receive (after t 'ok)))
 
@@ -503,5 +536,16 @@
           (match (path-extension test-file)
             ["ms" (do-mats source-offset)]
             [,_ (do-source source-offset)])))))
+
+  (define-syntax define-environment-parameters
+    (syntax-rules ()
+      [(_ NAME ...)
+       (begin
+         (define NAME
+           (let ([var (symbol->string 'NAME)])
+             (case-lambda
+              [() (getenv var)]
+              [(x) (when (string? x) (putenv var x))])))
+         ...)]))
 
   )

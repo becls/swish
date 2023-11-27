@@ -155,10 +155,14 @@ static int allow_verbose_flag(const char* bootfn) {
   return len >= suffixlen && !COMPARE(bootfn + len - suffixlen, suffix, suffixlen);
 }
 
+static void abnormal_exit(void) {
+  exit(1);
+}
+
 static void scheme_init(int argc, const char* argv[], void (*custom_init)(void)) {
   char* bootfn = get_boot_fn();
 
-  Sscheme_init(NULL);
+  Sscheme_init(abnormal_exit);
   // Don't interfere with swish scripts or stand-alone swish applications that
   // want to support a --verbose option.
   if (argc >= 2 && (strcmp(argv[1], "--verbose") == 0) && allow_verbose_flag(bootfn)) {

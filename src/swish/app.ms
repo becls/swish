@@ -65,6 +65,7 @@
          ((eval enumerate-libs-expr)
           '((chezscheme)
             (swish app-core)
+            (swish compat)
             (swish erlang)
             (swish errors)
             (swish internal)

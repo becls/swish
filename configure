@@ -332,7 +332,20 @@ if [ "${Windows}" = "yes" ]; then
   check_missing "scheme.h" "$(cygpath -au "${SchemeInclude}")"
 else
   check_missing "scheme.h" "${SchemeInclude}"
-  check_missing "kernel.o" "${SchemeInclude}"
+fi
+
+if [ -f "${SchemeInclude}/kernel.o" ]; then
+  SCHEMELINK="\${SCHEME_LIBPATH}/kernel.o"
+elif [ -f "${SchemeInclude}/libkernel.a" ]; then
+  if [ ! -f "${SchemeInclude}/liblz4.a" ]; then
+    SCHEMELINK="-L\${SCHEME_LIBPATH}/../../lz4/lib "
+  fi
+  if [ ! -f "${SchemeInclude}/liblz4.a" ]; then
+    SCHEMELINK="${SCHEMELINK:-}-L\${SCHEME_LIBPATH}/../../zlib "
+  fi
+  SCHEMELINK="${SCHEMELINK:-}-L\${SCHEME_LIBPATH} -lkernel -llz4 -lz"
+elif [ "${Windows}" = "no" ]; then
+  err "Missing Chez Scheme kernel.o or libkernel.a"
 fi
 
 SWISH_VERSION=$(sed -n 's/^#define SWISH_VERSION \([0-9a-z."]*\)/\1/p' src/swish/swish.h)
@@ -403,6 +416,10 @@ if [ -n "${SCHEMEHEAPDIRS:-}" ]; then
 fi
 add "SCHEME_INCLUDE:=${SchemeInclude}"
 add "SCHEME_LIBPATH:=${SCHEME_LIBPATH}"
+add "SCHEMEBOOT:=$(${NORMALIZE_PATH} "$(dirname "${PETITE_BOOT}")")"
+if [ -n "${SCHEMELINK:-}" ]; then
+  add "SCHEMELINK:=${SCHEMELINK:-}"
+fi
 if [ "${Windows}" = "yes" ]; then
   add "SCHEME_LIB_PREFIX:=${SchemeLibPrefix}"
   add "SCHEME_REVISION_PATH:=$(cygpath -u "${SchemeInclude}")"

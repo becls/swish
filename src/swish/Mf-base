@@ -108,7 +108,7 @@ clean: platform-clean
 	rm -f ../*.ss.html ../mat-report.html ../server-profile.html
 	rm -f *.mo *.ms.html *.ss.html
 
-.PHONY: install install-bin install-check install-doc
+.PHONY: install install-batteries install-bin install-check install-doc
 INSTLIBDIR := ${INSTALLROOT}/lib/swish${SWISH_VERSION}/${MACHINE_TYPE}
 INSTWEBDIR := ${INSTALLROOT}/lib/swish${SWISH_VERSION}/web
 INSTDOCDIR := ${INSTALLROOT}/share/doc/swish${SWISH_VERSION}
@@ -125,6 +125,12 @@ install-doc: install-check
 	${GNU_INSTALL} --mode=444 ../../LICENSE ${INSTDOCDIR}
 	${GNU_INSTALL} --mode=444 ../../NOTICE ${INSTDOCDIR}
 	${GNU_INSTALL} --mode=444 ../../doc/swish.pdf ${INSTDOCDIR}
+
+install-batteries: install-check
+	${GNU_INSTALL} --directory ${INSTLIBDIR}
+	${GNU_INSTALL} --mode=444 ${SCHEMEBOOT}/petite.boot ${INSTLIBDIR}
+	${GNU_INSTALL} --mode=444 ${SCHEMEBOOT}/scheme.boot ${INSTLIBDIR}
+	${GNU_INSTALL} --mode=444 ${SCHEMEBOOT}/scheme.h ${INSTLIBDIR}
 
 install-bin: install-check all
 	${GNU_INSTALL} --directory ${INSTLIBDIR}
@@ -160,5 +166,5 @@ mat-prereq:: | ${SETUP}
 mat-prereq:: ${SHLIBTEST} ${TESTREQUEST}
 	@printf "making mat-prereq ... "
 	@rm -rf ../../build/mat-prereq
-	@$(MAKE) install-bin install-internal INSTALLROOT="$$(${NORMALIZE_PATH} ../../build/mat-prereq)" SWISH_VERSION=".x.y.z" MACHINE_TYPE="arch" > /dev/null
+	@$(MAKE) install-batteries install-bin install-internal INSTALLROOT="$$(${NORMALIZE_PATH} ../../build/mat-prereq)" SWISH_VERSION=".x.y.z" MACHINE_TYPE="arch" > /dev/null
 	@printf "done.\n"

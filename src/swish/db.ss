@@ -75,6 +75,7 @@
    )
   (import
    (chezscheme)
+   (swish compat)
    (swish erlang)
    (swish event-mgr)
    (swish events)
@@ -699,7 +700,7 @@
      (osi_step_statement (statement-handle stmt)
        (let ([p self])
          (lambda (r)
-           (#%$keep-live stmt)
+           (keep-live stmt)
            (set! result r)
            (complete-io p))))
      (wait-for-io (database-filename (statement-database stmt)))
@@ -740,8 +741,8 @@
        (osi_bulk_execute stmt-handles bind-handles
          (let ([p self])
            (lambda (r)
-             (#%$keep-live stmts)
-             (#%$keep-live mbindings)
+             (keep-live stmts)
+             (keep-live mbindings)
              (set! result r)
              (complete-io p))))
        (let ([db-name (statement-database (vector-ref stmts 0))])

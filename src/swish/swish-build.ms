@@ -160,7 +160,7 @@
             (match-regexps `patterns stderr)])
          ...)]))
   (expect-errors
-   [("swish-build: unexpected eof in fasl file.*")
+   [("swish-build: (unexpected eof in fasl file|malformed fasl-object header).*")
     (swish-build-test `("--library" "-o" "fail" ,empty) '())]
    [("swish-build: expected .*library form, but encountered.*")
     (swish-build-test `("--library" "-o" "fail" ,non-lib) '())]
@@ -220,10 +220,24 @@
   (run-fat "fat2" '() '("Hello, World!")))
 
 (isolate-mat fat3 ()
+  (define-environment-parameters SCHEMEHEAPDIRS)
   ;; fat with scheme only
   (write-example "fat3" hello-fat)
   (build-example "fat3" '("-b" "scheme"))
-  (run-fat "fat3" '() '("Hello, World!")))
+  ;; Set SCHEMEHEAPDIRS explicitly since Chez Scheme v10.x changes the default
+  ;; heap search path so that it is relative to the executable. Otherwise the
+  ;; fat3 binary cannot find the system petite.boot.
+  (parameterize ([SCHEMEHEAPDIRS
+                  (let ([base (path-parent scheme-exe)])
+                    (join
+                     (list
+                      (path-combine base ".." ".." "boot" "%m")
+                      (path-combine base ".." "lib" "csv%v" "%m")
+                      "")
+                     (meta-cond
+                      [(memq (machine-type) '(a6nt ta6nt i3nt ti3nt)) #\;]
+                      [else #\:])))])
+    (run-fat "fat3" '() '("Hello, World!"))))
 
 (isolate-mat fat-ext ()
   ;; fat with petite, where output filename contains an extension

@@ -69,10 +69,13 @@
   (define-syntax (json:make-object x)
     (syntax-case x ()
       [(_ (key val) ...)
-       #`(extend-object-internal #,x (make-hashtable symbol-hash json:key=?)
+       #`(extend-object-internal #,x (make-json-object)
            (key val) ...)]))
 
   (define (json:key=? x y) (eq? x y))
+
+  (define (make-json-object)
+    (make-hashtable symbol-hash json:key=?))
 
   (define (json:object? x)
     (and (hashtable? x)
@@ -94,12 +97,12 @@
              (found obj key default)]
             [(,key1 . ,more)
              (guard (symbol? key1))
-             (let ([hit (#3%symbol-hashtable-ref obj key1 #f)])
+             (let ([hit (#3%hashtable-ref obj key1 #f)])
                (cond
                 [(json:object? hit) (lp hit more)]
                 [extend?
                  (let ([new (json:make-object)])
-                   (#3%symbol-hashtable-set! obj key1 new)
+                   (#3%hashtable-set! obj key1 new)
                    (lp new more))]
                 [else default]))]
             [,_ (bad-arg who full-path)]))))
@@ -107,23 +110,23 @@
   (define (json:ref obj path default)
     (walk-path 'json:ref obj path #f default
       (lambda (obj sym default)
-        (#3%symbol-hashtable-ref obj sym default))))
+        (#3%hashtable-ref obj sym default))))
 
   (define (json:set! obj path value)
     (walk-path 'json:set! obj path #t value
       (lambda (obj key value)
-        (#3%symbol-hashtable-set! obj key value))))
+        (#3%hashtable-set! obj key value))))
 
   (define (json:update! obj path f default)
     (unless (procedure? f) (bad-arg 'json:update! f))
     (walk-path 'json:update! obj path #t default
       (lambda (obj key default)
-        (#3%symbol-hashtable-update! obj key f default))))
+        (#3%hashtable-update! obj key f default))))
 
   (define (json:delete! obj path)
     (walk-path 'json:delete! obj path #f (void)
       (lambda (obj key default)
-        (#3%symbol-hashtable-delete! obj key))))
+        (#3%hashtable-delete! obj key))))
 
   (define (json:size obj)
     (unless (json:object? obj) (bad-arg 'json:size obj))
@@ -336,7 +339,7 @@
                           [c (next-non-ws ip)])
                      (unless (eqv? c #\:)
                        (unexpected-input c ip))
-                     (#3%symbol-hashtable-set! obj key (rd ip)))
+                     (#3%hashtable-set! obj key (rd ip)))
                    (let ([c (next-non-ws ip)])
                      (case c
                        [(#\,) (lp obj)]
