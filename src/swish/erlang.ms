@@ -34,6 +34,8 @@
  (swish testing)
  )
 
+(set-scheme-exe "src/swish/sh-config")
+
 (parameterize ([library-extensions '((".ss" . ".so"))])
   (eval '(import (swish internal-testing))))
 

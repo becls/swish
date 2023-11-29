@@ -25,6 +25,8 @@
  (swish script-testing)
  (swish testing))
 
+(set-scheme-exe "src/swish/sh-config")
+
 (isolate-mat go ()
   (parameterize ([cd "src"])
     (test-os-process scheme-exe `("--eedisable" "--program" "repl.ss")

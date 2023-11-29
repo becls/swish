@@ -20,6 +20,7 @@
 ;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 ;;; DEALINGS IN THE SOFTWARE.
 
+#!chezscheme
 (library (swish testing)
   (export
    $run-test-spec
@@ -41,6 +42,7 @@
    run-test-spec
    scale-timeout
    scheme-exe
+   set-scheme-exe
    sleep-ms
    start-event-mgr
    start-silent-event-mgr
@@ -70,9 +72,26 @@
 
   (profile:exclude)
 
-  (define scheme-exe
-    (or (getenv (if (memq (machine-type) '(a6nt i3nt ta6nt ti3nt)) "SCHEME_WIN" "SCHEME"))
+  (define-syntax scheme-exe (identifier-syntax (get-scheme-exe)))
+
+  (define scheme-environment-variable
+    (if (memq (machine-type) '(a6nt i3nt ta6nt ti3nt)) "SCHEME_WIN" "SCHEME"))
+
+  (define (get-scheme-exe)
+    (or (getenv scheme-environment-variable)
         "scheme"))
+
+  (define (set-scheme-exe filename)
+    (let ([ip (open-file-to-read filename)]
+          [re (pregexp (format "^export ~a='(.*)'" scheme-environment-variable))])
+      (on-exit (close-port ip)
+        (let lp ()
+          (match (get-line ip)
+            [#!eof (void)]
+            [,line
+             (match (pregexp-match re line)
+               [(,_ ,exe) (putenv scheme-environment-variable exe)]
+               [,_ (lp)])])))))
 
   (define-syntax assert-syntax-error
     (syntax-rules ()
