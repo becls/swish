@@ -48,6 +48,9 @@ jobs:
           make
           make bootquick XM=a6osx
           make bootquick XM=a6nt
+          make bootquick XM=i3le
+          make bootquick XM=ta6nt
+          make bootquick XM=ta6le
   mats:
     continue-on-error: ${{ startsWith(matrix.machine, 't') }}
     needs: build
@@ -57,49 +60,31 @@ jobs:
         config:
           - machine: a6osx
             os: macos-12
-            chez: v9.5.6
-          - machine: a6osx
-            os: macos-12
-            chez: v9.5.8
-          - machine: a6osx
-            os: macos-12
             chez: v9.6.4
           - machine: a6osx
             os: macos-12
             chez: main
           - machine: i3le
-            os: ubuntu-20.04
-            chez: v9.5.6
-          - machine: i3le
-            os: ubuntu-20.04
-            chez: v9.5.8
+            os: ubuntu-22.04
+            chez: main
           - machine: a6le
-            os: ubuntu-20.04
-            chez: v9.5.6
-          - machine: a6le
-            os: ubuntu-20.04
-            chez: v9.5.8
-          - machine: a6le
-            os: ubuntu-latest
+            os: ubuntu-22.04
             chez: v9.6.4
           - machine: a6le
-            os: ubuntu-latest
+            os: ubuntu-22.04
             chez: main
           - machine: ta6le
             os: ubuntu-22.04
+            chez: main
+          - machine: i3nt
+            os: windows-2022
             chez: v9.6.4
-          - machine: i3nt
-            os: windows-2019
-            chez: v9.5.6
-          - machine: i3nt
-            os: windows-2022
-            chez: v9.5.8
           - machine: a6nt
             os: windows-2019
-            chez: v9.5.6
+            chez: v9.6.4
           - machine: a6nt
             os: windows-2022
-            chez: v9.5.8
+            chez: v9.6.4
           - machine: a6nt
             os: windows-2022
             chez: v9.6.4
@@ -108,7 +93,7 @@ jobs:
             chez: main
           - machine: ta6nt
             os: windows-2022
-            chez: v9.6.4
+            chez: main
     runs-on: ${{ matrix.config.os }}
     defaults:
       run:
