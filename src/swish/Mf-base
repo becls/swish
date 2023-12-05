@@ -122,34 +122,38 @@ endif
 
 install-doc: install-check
 	${GNU_INSTALL} --directory ${INSTDOCDIR}
-	${GNU_INSTALL} ../../LICENSE ${INSTDOCDIR}
-	${GNU_INSTALL} ../../NOTICE ${INSTDOCDIR}
-	${GNU_INSTALL} ../../doc/swish.pdf ${INSTDOCDIR}
+	${GNU_INSTALL} --mode=444 ../../LICENSE ${INSTDOCDIR}
+	${GNU_INSTALL} --mode=444 ../../NOTICE ${INSTDOCDIR}
+	${GNU_INSTALL} --mode=444 ../../doc/swish.pdf ${INSTDOCDIR}
 
 install-bin: install-check all
 	${GNU_INSTALL} --directory ${INSTLIBDIR}
 	${GNU_INSTALL} ../../${BUILD}/bin/swish${EXESUFFIX} ${INSTLIBDIR}
 	${GNU_INSTALL} swish-build ${INSTLIBDIR}
 	${GNU_INSTALL} swish-test ${INSTLIBDIR}
-	${GNU_INSTALL} ../../${BUILD}/bin/swish.boot ${INSTLIBDIR}
-	${GNU_INSTALL} ../../${BUILD}/bin/swish.library ${INSTLIBDIR}
-	${GNU_INSTALL} ../../${BUILD}/bin/swish-core.library ${INSTLIBDIR}
+	${GNU_INSTALL} --mode=444 ../../${BUILD}/bin/swish.boot ${INSTLIBDIR}
+	${GNU_INSTALL} --mode=444 ../../${BUILD}/bin/swish.library ${INSTLIBDIR}
+	${GNU_INSTALL} --mode=444 ../../${BUILD}/bin/swish-core.library ${INSTLIBDIR}
+ifeq ($(MACHINE_TYPE:nt=), ${MACHINE_TYPE}) # if not Windows
+	${GNU_INSTALL} --mode=444 ${SwishLibs} ${INSTLIBDIR}
+else
 	${GNU_INSTALL} ${SwishLibs} ${INSTLIBDIR}
+endif
 	${GNU_INSTALL} --directory ${INSTALLROOT}/bin
 	ln -sf ${INSTLIBDIR}/swish${EXESUFFIX} ${INSTALLROOT}/bin/swish
 	ln -sf ${INSTLIBDIR}/swish-build ${INSTALLROOT}/bin/swish-build
 	ln -sf ${INSTLIBDIR}/swish-test ${INSTALLROOT}/bin/swish-test
 	${GNU_INSTALL} --directory ${INSTLIBDIR}/lib
-	cd ../../${BUILD}/lib ; find . -type f -name '*.wpo' -a -not -iname 'internal*' -exec ${GNU_INSTALL} -D -T {} ${INSTLIBDIR}/wpo/{} \;
-	cd ../../${BUILD}/lib ; find . -type f -name '*.so' -a -not -iname 'internal*' -exec ${GNU_INSTALL} -D -T {} ${INSTLIBDIR}/lib/{} \;
-	${GNU_INSTALL} ../../${BUILD}/lib/swish/mat.so ${INSTLIBDIR}/lib/swish
-	${GNU_INSTALL} ../../${BUILD}/lib/swish/profile.so ${INSTLIBDIR}/lib/swish
-	${GNU_INSTALL} ../../${BUILD}/lib/swish/testing.so ${INSTLIBDIR}/lib/swish
+	cd ../../${BUILD}/lib ; find . -type f -name '*.wpo' -a -not -iname 'internal*' -exec ${GNU_INSTALL} --mode=444 -D -T {} ${INSTLIBDIR}/wpo/{} \;
+	cd ../../${BUILD}/lib ; find . -type f -name '*.so' -a -not -iname 'internal*' -exec ${GNU_INSTALL} --mode=444 -D -T {} ${INSTLIBDIR}/lib/{} \;
+	${GNU_INSTALL} --mode=444 ../../${BUILD}/lib/swish/mat.so ${INSTLIBDIR}/lib/swish
+	${GNU_INSTALL} --mode=444 ../../${BUILD}/lib/swish/profile.so ${INSTLIBDIR}/lib/swish
+	${GNU_INSTALL} --mode=444 ../../${BUILD}/lib/swish/testing.so ${INSTLIBDIR}/lib/swish
 	${GNU_INSTALL} --directory ${INSTWEBDIR}
-	cd ../../web ; find . -type f -exec ${GNU_INSTALL} -D -T {} ${INSTWEBDIR}/{} \;
+	cd ../../web ; git ls-files | xargs -I {} ${GNU_INSTALL} --mode=444 -D -T {} ${INSTWEBDIR}/{}
 
 install-internal: install-check all
-	cd ../../${BUILD}/lib ; find . -type f -name 'internal*.so' -exec ${GNU_INSTALL} -D -T {} ${INSTLIBDIR}/lib/{} \;
+	cd ../../${BUILD}/lib ; find . -type f -name 'internal*.so' -exec ${GNU_INSTALL} --mode=444 -D -T {} ${INSTLIBDIR}/lib/{} \;
 
 .PHONY: mat-prereq
 mat-prereq:: | ${SETUP}
