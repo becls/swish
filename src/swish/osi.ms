@@ -91,7 +91,7 @@
           (path-combine (base-dir) "src" "swish"
             (case (machine-type)
               [(a6nt i3nt ta6nt ti3nt) "test-request.dll"]
-              [(a6osx ta6osx) "test-request.dylib"]
+              [(a6osx arm64osx ta6osx tarm64osx) "test-request.dylib"]
               [else "test-request.so"])))
         (json:write (current-output-port) (app:config) 0)))
     'replace)

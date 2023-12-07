@@ -71,7 +71,7 @@
   (let ([shlib
          (case (machine-type)
            [(a6nt i3nt ta6nt ti3nt) "shlibtest.dll"]
-           [(a6osx i3osx ta6osx ti3osx) "shlibtest.dylib"]
+           [(a6osx arm64osx ta6osx tarm64osx) "shlibtest.dylib"]
            [else "shlibtest.so"])])
     ;; deliberately left this in src/swish, not in build/mat-prereq/bin,
     ;; so we don't happen to find shared library just because it's near
@@ -523,7 +523,7 @@
   (<shlib-test> open init [shlib-imports shlib-test-expr* linked stand-alone stand-alone-rtlib1 stand-alone-rtlib2 success failure])
   (define (massage-result err)
     (meta-cond
-     [(memq (machine-type) '(a6osx ta6osx))
+     [(memq (machine-type) '(a6osx arm64osx ta6osx tarm64osx))
       (match err
         [(,err1 . ,_)
          ;; MacOS dlerror(3) may include unpredictable extra lines after

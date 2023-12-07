@@ -1,0 +1,42 @@
+C = ${CC} -fPIC -Wall -Wextra -Werror -O2 ${CPPFLAGS} ${CFLAGS} ${LDFLAGS}
+OsiObj=osi.o sha1.o sqlite.o sqlite3.o
+SystemLibs=-liconv -lm -lncurses
+SwishLibs := ../../${BUILD}/bin/libosi.dylib ../../${BUILD}/lib/swish_kernel.o
+
+../../${BUILD}/bin/swish: main.o ../../${BUILD}/lib/swish_kernel.o
+	$C -o $@ $^ ${SystemLibs}
+
+osi.o run.o: chezscheme-revision.include
+
+../../${BUILD}/bin/libosi.dylib: ${OsiObj} ${UvLib}/libuv.a
+	$C -dynamiclib -undefined dynamic_lookup -o ../../${BUILD}/bin/libosi.dylib ${OsiObj} -L"${LIBUV_LIBPATH}" -luv
+
+../../${BUILD}/lib/swish_kernel.o: run.o ${OsiObj} ${UvLib}/libuv.a
+	${LD} -r -o $@ run.o ${OsiObj} ${SCHEMELINK} -L"${LIBUV_LIBPATH}" -luv
+
+%.o: %.c osi.h swish.h ${UvInclude}
+	$C -I"${SCHEME_INCLUDE}" -I"${LIBUV_INCLUDE}" -I"${SQLITE_SRCPATH}" -c $<
+
+sqlite3.o: ${SQLITE_SRCPATH}/sqlite3.h ${SQLITE_SRCPATH}/sqlite3.c
+	$C -Wno-string-concatenation -DSQLITE_THREADSAFE=2 -DSQLITE_OMIT_DESERIALIZE -DSQLITE_USE_URI=1 -I"${SQLITE_SRCPATH}" -c ${SQLITE_SRCPATH}/sqlite3.c
+
+${UvLib}/libuv.a: Mf-arm64osx
+	cd ../../libuv && rm -rf build && mkdir build && cd build && cmake -D CMAKE_MESSAGE_LOG_LEVEL=WARNING -D CMAKE_POSITION_INDEPENDENT_CODE=ON ..
+	cmake --build ../../libuv/build -- uv_a
+
+io-constants: io-constants.c ${UvInclude}
+	$C -I"${LIBUV_INCLUDE}" io-constants.c -o io-constants
+
+SHLIBTEST := shlibtest.dylib
+${SHLIBTEST}: shlibtest.c
+	$C -dynamiclib -undefined dynamic_lookup -o $@ $^ -I"${LIBUV_INCLUDE}" -I"${SCHEME_INCLUDE}" -I"${SWISH_INCLUDE}"
+
+TESTREQUEST := test-request.dylib
+${TESTREQUEST}: test-request.c
+	$C -dynamiclib -undefined dynamic_lookup -o $@ $^ -I"${LIBUV_INCLUDE}" -I"${SCHEME_INCLUDE}" -I"${SWISH_INCLUDE}"
+
+platform-clean:
+	rm -f main.o osi.o run.o sha1.o sqlite.o
+
+pristine: clean
+	rm -rf sqlite3.o ../../libuv/build
