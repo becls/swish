@@ -345,15 +345,40 @@
          inputs))
       (let-values ([(keys vals) (hashtable-entries table)])
         (vector->list
-         (vector-sort (lambda (a b) (string<? (car a) (car b)))
-           (vector-map (lambda (k v) (cons (sfd-source-path k values) v))
-             keys vals)))))
+         (vector-sort (lambda (a b) (natural-string<? (car a) (car b)))
+           (vector-map
+            (lambda (sfd v)
+              (match (sfd-sig sfd)
+                [(,checksum . ,source-path) (cons source-path v)]))
+            keys vals)))))
     (unless (list-of-strings? inputs) (bad-arg 'profile:dump-html profile-in))
     (unless (string? output-fn) (bad-arg 'profile:dump-html output-fn))
     (unless (list-of-strings? include-globs) (bad-arg 'profile:dump-html include-globs))
     (unless (list-of-strings? exclude-globs) (bad-arg 'profile:dump-html exclude-globs))
     (let ([results (load-profiles)]
           [op (open-file-to-replace (make-directory-path output-fn))])
+      (define common-prefix
+        (fold-left
+         (lambda (pfx entry)
+           (match entry
+             [(,source-path . #f) pfx] ;; file skipped
+             [(,source-path . ,_)      ;; absolute path if not skipped
+              (let ([dir (path-parent source-path)])
+                (let loop ([pfx (or pfx dir)])
+                  (if (starts-with? dir pfx)
+                      pfx
+                      (loop (path-parent pfx)))))]))
+         #f
+         results))
+      (define strip-prefix
+        (if (not common-prefix)
+            values
+            (let* ([prefix-length (string-length common-prefix)]
+                   [n (if (ends-with? common-prefix (string (directory-separator)))
+                          prefix-length
+                          (+ prefix-length 1))])
+              (lambda (src)
+                (substring src n (string-length src))))))
       (fprintf op "<!DOCTYPE html>\n")
       (fprintf op "<html lang=\"en\">\n")
       (html->string op
@@ -376,14 +401,15 @@
         (let ([root (path-parent (get-real-path output-fn))])
           (for-each
            (lambda (entry)
-             ;; entry = (sfd . skiplist | #f)
+             ;; entry = (source-path . skiplist | #f)
              (match entry
-               [(,name . ,sl)
+               [(,source-path . ,sl)
                 (match (and sl (sl))
                   [,data
                    (guard (pair? data))
                    ;; non-blocking i/o OK: profile:dump-html runs from dedicated OS process, not interested in concurrency
-                   (let* ([ip (open-input-file name)]
+                   (let* ([ip (open-input-file source-path)]
+                          [name (strip-prefix source-path)]
                           [file-op (open-file-to-replace (make-directory-path (path-combine root (string-append name ".html"))))])
                      (on-exit (close-port file-op)
                        (annotate (pregexp-replace* "\\\\" name "/") ip data op file-op)))]

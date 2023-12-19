@@ -1418,8 +1418,9 @@
         e0 e1 ...))]))
 
 (isolate-mat profile ()
+  (define src-file "profile-code.ss")
   (define source-file
-    (write-test-file "profile-code.ss"
+    (write-test-file src-file
       (lambda ()
         (display "#!chezscheme\n")
         (display "(define (fac n)\n")
@@ -1472,8 +1473,8 @@
      ([#t (file-regular? coverage-file)]
       [,cov (utf8->string (read-file coverage-file))]
       [(,_) (pregexp-match "Overall 74% coverage with 17 of 23 sites covered" cov)]
-      [(,_) (pregexp-match (summary-row source-file-rel 17 23 74 12) cov)]
-      [,ss.html (path-combine (path-parent coverage-file) (string-append source-file-rel ".html"))]
+      [(,_) (pregexp-match (summary-row src-file 17 23 74 12) cov)]
+      [,ss.html (path-combine (path-parent coverage-file) (string-append src-file ".html"))]
       [#t (file-regular? ss.html)]
       [,ss (utf8->string (read-file ss.html))]
       [(,_) (check-count 2 "1" ss)]  ;; base case
@@ -1491,8 +1492,8 @@
    ([#t (file-regular? coverage1-file)]
     [,cov1 (utf8->string (read-file coverage1-file))]
     [(,_) (pregexp-match "Overall 45% coverage with 18 of 40 sites covered" cov1)]
-    [(,_) (pregexp-match (summary-row source-file-rel 18 40 45 1) cov1)]
-    [,ss.html (path-combine (path-parent coverage1-file) (string-append source-file-rel ".html"))]
+    [(,_) (pregexp-match (summary-row src-file 18 40 45 1) cov1)]
+    [,ss.html (path-combine (path-parent coverage1-file) (string-append src-file ".html"))]
     [#t (file-regular? ss.html)]
     [,ss (utf8->string (read-file ss.html))]
     [(,_) (check-count 1 "1" ss)] ;; base case
@@ -1519,8 +1520,8 @@
    ([#t (file-regular? coverage1-file)]
     [,cov1 (utf8->string (read-file coverage1-file))]
     [(,_) (pregexp-match "Overall 70% coverage with 28 of 40 sites covered" cov1)]
-    [(,_) (pregexp-match (summary-row source-file-rel 28 40 70 6) cov1)]
-    [,ss.html (path-combine (path-parent coverage1-file) (string-append source-file-rel ".html"))]
+    [(,_) (pregexp-match (summary-row src-file 28 40 70 6) cov1)]
+    [,ss.html (path-combine (path-parent coverage1-file) (string-append src-file ".html"))]
     [#t (file-regular? ss.html)]
     [,ss (utf8->string (read-file ss.html))]
     [(,_) (check-count 1 "1" ss)] ;; base case
@@ -1540,8 +1541,8 @@
    ([#t (file-regular? coverage1-file)]
     [,cov1 (utf8->string (read-file coverage1-file))]
     [(,_) (pregexp-match "Overall 85% coverage with 34 of 40 sites covered" cov1)]
-    [(,_) (pregexp-match (summary-row source-file-rel 34 40 85 7) cov1)]
-    [,ss.html (path-combine (path-parent coverage1-file) (string-append source-file-rel ".html"))]
+    [(,_) (pregexp-match (summary-row src-file 34 40 85 7) cov1)]
+    [,ss.html (path-combine (path-parent coverage1-file) (string-append src-file ".html"))]
     [#t (file-regular? ss.html)]
     [,ss (utf8->string (read-file ss.html))]
     [(,_) (check-count 2 "1" ss)] ;; base case
@@ -1575,8 +1576,8 @@
    ([#t (file-regular? coverage-file)]
     [,cov (utf8->string (read-file coverage-file))]
     [(,_) (pregexp-match "Overall 85% coverage with 34 of 40 sites covered" cov)]
-    [(,_) (pregexp-match (summary-row source-file-rel 34 40 85 31) cov)]
-    [,ss.html (path-combine (path-parent coverage-file) (string-append source-file-rel ".html"))]
+    [(,_) (pregexp-match (summary-row src-file 34 40 85 31) cov)]
+    [,ss.html (path-combine (path-parent coverage-file) (string-append src-file ".html"))]
     [#t (file-regular? ss.html)]
     [,ss (utf8->string (read-file ss.html))]
     [(,_) (check-count (+ (* 2 2)  2) "1" ss)] ;; base case
@@ -1597,8 +1598,8 @@
    ([#t (file-regular? coverage-file)]
     [,cov (utf8->string (read-file coverage-file))]
     [(,_) (pregexp-match "Overall 85% coverage with 34 of 40 sites covered" cov)]
-    [(,_) (pregexp-match (summary-row source-file-rel 34 40 85 (+ 31 7)) cov)]
-    [,ss.html (path-combine (path-parent coverage-file) (string-append source-file-rel ".html"))]
+    [(,_) (pregexp-match (summary-row src-file 34 40 85 (+ 31 7)) cov)]
+    [,ss.html (path-combine (path-parent coverage-file) (string-append src-file ".html"))]
     [#t (file-regular? ss.html)]
     [,ss (utf8->string (read-file ss.html))]
     [(,_) (check-count (+ (* 2 2)  (* 2 2)) "1" ss)] ;; base case
