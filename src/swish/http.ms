@@ -104,7 +104,7 @@
          (my-respond
           (http:call-with-ports conn
             (lambda (ip op)
-              (get-bytevector-n ip
+              (get-bytevector-exactly-n ip
                 (string->number
                  (or (find-param "count")
                      (http:get-header "Content-Length" header)))))
@@ -255,7 +255,7 @@
     (let* ([status (http:read-status ip 4096)]
            [header (http:read-header ip 1048576)]
            [len (http:get-content-length header)]
-           [content (and len (f (get-bytevector-n ip len)))])
+           [content (and len (f (get-bytevector-exactly-n ip len)))])
       (<response> make
         [status status]
         [header header]

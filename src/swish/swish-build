@@ -693,7 +693,7 @@
                    (let ([end (get-source-offset ip)])
                      (and (> end 0)
                           (begin (file-position ip 0) #t)
-                          (get-bytevector-n ip end)))))]
+                          (get-bytevector-exactly-n ip end)))))]
               [tmp (tmp-filename output-fn)]
               [ip (open-binary-file-to-read output-fn)]
               [op (open-file tmp (+ O_WRONLY O_CREAT O_TRUNC) #o777 'binary-output)])

@@ -23,6 +23,7 @@
 #!chezscheme
 (library (swish io)
   (export
+   $get-bytevector-exactly-n
    <stat>
    <uname>
    binary->utf8
@@ -35,6 +36,7 @@
    force-close-output-port
    foreign-handle-count
    foreign-handle-print
+   get-bytevector-exactly-n
    get-datum/annotations-all
    get-file-size
    get-real-path
@@ -317,6 +319,19 @@
            [ip (binary->utf8 raw-ip)])
       (on-exit (close-port ip)
         (handler ip sfd source-offset))))
+
+  (define ($get-bytevector-exactly-n ip size)
+    (let ([bv (make-bytevector size)])
+      (let ([count (get-bytevector-n! ip bv 0 size)])
+        (if (or (eof-object? count) (not (fx= count size)))
+            (throw 'unexpected-eof)
+            bv))))
+
+  (define (get-bytevector-exactly-n ip size)
+    (arg-check 'get-bytevector-exactly-n
+      [ip input-port? binary-port?]
+      [size fixnum? fxnonnegative?])
+    ($get-bytevector-exactly-n ip size))
 
   (define (get-datum/annotations-all ip sfd bfp)
     (let f ([bfp bfp])

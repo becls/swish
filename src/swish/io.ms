@@ -53,7 +53,7 @@
   (let* ([me self]
          [reader (spawn&link
                   (lambda ()
-                    (let ([x (get-bytevector-n ip len)])
+                    (let ([x (get-bytevector-exactly-n ip len)])
                       (send me `#(read ,self ,x)))))])
     (receive [#(read ,@reader ,x) x])))
 
@@ -1166,6 +1166,7 @@
       (syntax-rules ()
         [(_ ip check-n check-calls dest-op)
          (let* ([bv (get-bytevector-n ip chunk-size)]
+                [! (assert (bytevector? bv))]
                 [n (bytevector-length bv)]
                 [! (set! check-n (+ check-n n))]
                 [! (put-bytevector dest-op bv)]
@@ -1254,5 +1255,74 @@
     [#t (<= (live-osi-ports) original-ports)])
    'ok)
   )
+
+(isolate-mat get-bytevector-exactly-n ()
+  (define who 'get-bytevector-exactly-n)
+  (match-let*
+   ([,op-misguided
+     (let-values ([(op get) (open-bytevector-output-port)])
+       op)]
+    [,ip-text (open-input-string "")]
+    ;; must be binary input port
+    [`(catch #(bad-arg ,@who ,@op-misguided))
+     (try (get-bytevector-exactly-n op-misguided 7))]
+    [`(catch #(bad-arg ,@who ,@ip-text))
+     (try (get-bytevector-exactly-n ip-text 7))]
+    ;; must be non-negative fixnum
+    [,ip (open-bytevector-input-port '#vu8(0 1 2 3 4 5 6 7 8 9))]
+    [`(catch #(bad-arg ,@who 2.0))
+     (try (get-bytevector-exactly-n ip 2.0))]
+    [`(catch #(bad-arg ,@who -1))
+     (try (get-bytevector-exactly-n ip -1))]
+    ;; success
+    [#vu8(0 1 2) (get-bytevector-exactly-n ip 3)]
+    [#vu8() (get-bytevector-exactly-n ip 0)]
+    [#vu8(3) (get-bytevector-exactly-n ip 1)]
+    [#vu8(4 5 6 7 8 9) (get-bytevector-exactly-n ip 6)]
+    [#vu8() (get-bytevector-exactly-n ip 0)]
+    ;; fail
+    [`(catch unexpected-eof) (try (get-bytevector-exactly-n ip 1))]
+    [#vu8(1 2 3 4) (begin (file-position ip 1) (get-bytevector-exactly-n ip 4))]
+    [`(catch unexpected-eof) (try (get-bytevector-exactly-n ip (+ 1 (port-input-count ip))))]
+    ;; exercise cases where we must call port's r! multiple times
+    ;; success via retry
+    [,byte 0]
+    [,count 10]
+    [,ip (make-custom-binary-input-port "trickle"
+           (lambda (bv start n)
+             (cond
+              [(= count 0) 0]
+              [else
+               (bytevector-u8-set! bv start byte)
+               (set! byte (fxmod (fx+ byte 1) 256))
+               (set! count (- count 1))
+               1]))
+           #f #f #f)]
+    [#vu8(0) (get-bytevector-exactly-n ip 1)]
+    [#vu8(1 2) (get-bytevector-exactly-n ip 2)]
+    [#vu8(3 4 5) (get-bytevector-exactly-n ip 3)]
+    [#vu8(6 7 8 9) (get-bytevector-exactly-n ip 4)]
+    [,test-n
+     (lambda (len)
+       (set! byte 0)
+       (match-let*
+        ([,bv (get-bytevector-exactly-n ip len)]
+         [#t (bytevector? bv)]
+         [,@len (bytevector-length bv)])
+        (do ([i 0 (fx+ i 1)] [expect 0 (fxmod (fx+ expect 1) 256)])
+            ((fx= i len) 'ok)
+          (assert (fx= expect (bytevector-u8-ref bv i))))))]
+    [,_ (set! count (+ 127 513 4096))]
+    [ok (test-n 127)]
+    [ok (test-n 513)]
+    [ok (test-n 4096)]
+    ;; fail at eof
+    [`(catch unexpected-eof) (try (test-n 1))]
+    [,_ (set! count 7)]
+    [ok (test-n 3)]
+    ;; fail on retry
+    [`(catch unexpected-eof) (try (test-n 5))]
+    )
+   'ok))
 
 (hook-console-input)

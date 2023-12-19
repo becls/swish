@@ -1790,6 +1790,20 @@ cleared with \code{(clear-output-port \var{op})}, and
 \code{(close-output-port \var{op})} is called again.
 
 % ----------------------------------------------------------------------------
+\defineentry{get-bytevector-exactly-n}
+\begin{procedure}
+  \code{(get-bytevector-exactly-n \var{ip} \var{n})}
+\end{procedure}
+\returns{} a bytevector of length \var{n}
+
+The \code{get-bytevector-exactly-n} procedure takes a binary input
+port \var{ip} and an exact nonnegative integer \var{n} and
+returns a bytevector of the next \var{n} bytes from \var{ip}.
+If \var{ip} reaches end-of-file before it obtains \var{n} bytes,
+\code{get-bytevector-exactly-n} throws an \code{unexpected-eof}
+exception.
+
+% ----------------------------------------------------------------------------
 \defineentry{get-datum/annotations-all}
 \begin{procedure}
   \code{(get-datum/annotations-all \var{ip} \var{sfd} \var{bfp})}
