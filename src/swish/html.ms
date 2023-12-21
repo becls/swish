@@ -57,10 +57,18 @@
     ["<img>" (html->string `(img (@ ,(void))))]
     ["<img hidden display=\"false\" height=\"100\">"
      (html->string `(img (@ (hidden) (display "false") (height 100))))]
+    ["<html></html>" (html->string '(html))]
+    ["<!DOCTYPE html><html lang=\"en\"></html>" (html->string '(html5))]
+    ["<!DOCTYPE html><html lang=\"fr\"></html>" (html->string '(html5 (@ (lang "fr"))))]
+    ["<!DOCTYPE html><html lang=\"en\" xmlns=\"http://example.com/xhtml\"></html>"
+     (html->string '(html5 (@ (xmlns "http://example.com/xhtml"))))]
+    ["<!DOCTYPE html><html xmlns=\"http://example.com/xhtml\" lang=\"fr\"></html>"
+     (html->string '(html5 (@ (xmlns "http://example.com/xhtml") (lang "fr"))))]
+    ["<!DOCTYPE html><html lang></html>" (html->string '(html5 (@ (lang))))]
     ["<this>" (html->string '(raw "<this>"))]
     ["<this>=\"fun & games\""
      (html->string '(raw "<this>" "=" "\"fun & games\""))]
-    [,s1 "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>Example</title></head><body style=\"font-family:monospace;\"><p>Plain<br>text</p><p>&quot;Text in quotes&quot; &amp; &lt;taglike&gt;</p><p>Ten: 10</p><p>Three halves: 3/2</p><p>One point five: 1.5</p></body></html>"]
+    [,s1 "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"UTF-8\"><title>Example</title></head><body style=\"font-family:monospace;\"><p>Plain<br>text</p><p>&quot;Text in quotes&quot; &amp; &lt;taglike&gt;</p><p>Ten: 10</p><p>Three halves: 3/2</p><p>One point five: 1.5</p></body></html>"]
     [,exp1 `(html5
              (head
               (meta (@ (charset "UTF-8")))

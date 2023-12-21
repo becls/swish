@@ -268,7 +268,7 @@
   (parse-response (test input) bytevector->sexpr))
 
 (define internal-server-error
-  "HTTP/1.1 500 \r\nContent-Length: 167\r\nCache-Control: no-cache\r\n\r\n<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>Internal server error</title></head><body><h1>The server was unable to complete the request.</h1></body></html>")
+  "HTTP/1.1 500 \r\nContent-Length: 177\r\nCache-Control: no-cache\r\n\r\n<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"UTF-8\"><title>Internal server error</title></head><body><h1>The server was unable to complete the request.</h1></body></html>")
 
 (http-mat handlers ()
   ;; The request-timeout option should be relatively short (500ms) for

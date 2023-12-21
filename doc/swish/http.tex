@@ -861,6 +861,9 @@ HTML. The transformation, $H$, is described below:
 
 $E$ denotes the \code{html:encode} function.
 
+For the \code{html5} tag, if there is no \var{attr} with \code{lang} as its key,
+then $H$ acts as if the \var{attr} \code{(lang "en")} were specified.
+
 A \var{void-tag} is one of \code{area}, \code{base}, \code{br},
 \code{col}, \code{embed}, \code{hr}, \code{img},
 \code{input}, \code{keygen}, \code{link}, \code{menuitem},

@@ -107,7 +107,10 @@
        (open-tag op x tag attrs)]
       [(html5)
        (display-string "<!DOCTYPE html>" op)
-       (open-tag op x 'html attrs)
+       (open-tag op x 'html
+         (if (lang-present? attrs)
+             attrs
+             (cons '(lang "en") attrs)))
        (write-patterns patterns op)
        (close-tag op 'html)]
       [(script style)
@@ -124,6 +127,12 @@
     (display-string (symbol->string tag) op)
     (write-attrs attrs op x)
     (write-char #\> op))
+
+  (define (lang-present? attrs)
+    (and (not (null? attrs))
+         (match (car attrs)
+           [(lang . ,_) #t]
+           [,_ (lang-present? (cdr attrs))])))
 
   (define (write-attrs attrs op x)
     (unless (null? attrs)

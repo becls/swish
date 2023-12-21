@@ -355,7 +355,7 @@
     (let ([results (load-profiles)]
           [op (open-file-to-replace (make-directory-path output-fn))])
       (fprintf op "<!DOCTYPE html>\n")
-      (fprintf op "<html>\n")
+      (fprintf op "<html lang=\"en\">\n")
       (html->string op
         `(head
           (meta (@ (http-equiv "Content-Type")
@@ -582,7 +582,7 @@
     (fprintf op
       (ct:join #\newline
         "<!DOCTYPE html>"
-        "<html>"
+        "<html lang=\"en\">"
         "<head>"
         "<meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\">"
         "<title>~a</title>"
