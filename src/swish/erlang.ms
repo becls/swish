@@ -3956,3 +3956,781 @@
     ;; p's new call to receive restarts at head of queue
     [(subsequent-receive first-message) (receive [,x x])])
    'ok))
+
+(define (current-disable-count) (#%$tc-field 'disable-count (#%$tc)))
+(define (assert-valid-context)
+  ;; interrupts should be enabled
+  (match (current-disable-count)
+    [0 'ok]))
+
+(isolate-mat trap-exit-handler ()
+  (define me self)
+  (define (spawn-test handle-exit handle-message)
+    (define p
+      (spawn
+       (lambda ()
+         (parameterize ([process-trap-exit
+                         (if (eq? handle-exit raise-on-exit)
+                             raise-on-exit ;; don't unwrap for this guy
+                             (lambda (msg)
+                               (assert-valid-context)
+                               (match msg
+                                 [`(EXIT ,pid ,reason)
+                                  (handle-exit reason)])))])
+           (send me `(started ,self))
+           (let lp ()
+             (match (receive [,x x])
+               [quit (void)]
+               [,msg (handle-message msg) (lp)]))))))
+    ;; wait until we've armed the trap-exit handler
+    (receive
+     [(started ,@p) p]))
+  (define (get-messages p)
+    (when (process? p) (monitor p))
+    (let f ([n 1])
+      (let ([msg (receive [,x x])])
+        (match msg
+          [`(DOWN ,m ,@p ,r) (list msg)]
+          [,_
+           (if (eqv? n p)
+               (list msg)
+               (cons msg (f (+ n 1))))]))))
+  (define (clear-inbox)
+    (receive (after 0 'ok)
+      [,x (errorf 'clear-inbox "test did not account for ~s" x)]))
+  (define (multi proc pid message*)
+    (for-each (lambda (message) (proc pid message))
+      message*)
+    'ok)
+  (define (send&kill pid message)
+    (send pid message)
+    (kill pid message))
+
+  ;; check that we can set to procedural handler or boolean value
+  ;; and retrieve the expected value
+  (match-let*
+   ([,handler (lambda (msg) (raise 'cain))]
+    [#f (process-trap-exit)]
+    [,_ (process-trap-exit handler)]
+    [,@handler (process-trap-exit)]
+    [,_ (process-trap-exit #t)]
+    [#t (process-trap-exit)]
+    [,_ (process-trap-exit handler)]
+    [,@handler (process-trap-exit)]
+    [,_ (process-trap-exit #f)]
+    [#f (process-trap-exit)]
+    [`(catch #(bad-arg process-trap-exit "snare"))
+     (try (process-trap-exit "snare"))])
+   (clear-inbox))
+
+  ;; check that raise-on-exit works
+  (match-let*
+   ([,p0
+     (spawn-test raise-on-exit
+       (lambda (msg) (send me `(received ,msg))))]
+    [ok (with-interrupts-disabled
+         (multi send p0 '(1 2))
+         (multi kill p0 '(X Y Z)))]
+    [(`(DOWN ,m ,@p0 X)) (get-messages p0)]
+    [`(catch #(bad-arg raise-on-exit kids)) (try (raise-on-exit 'kids))])
+   (clear-inbox))
+
+  ;; check that raise-on-exit does not raise when reason is normal
+  (match-let*
+   ([,p0
+     (spawn-test raise-on-exit
+       (lambda (msg) (send me `(received ,msg))))]
+    [ok (with-interrupts-disabled
+         (multi send p0 '(1 2))
+         (multi kill p0 '(normal normal normal))
+         (send p0 'quit)
+         'ok)]
+    [((received 1) (received 2) `(DOWN ,m ,@p0 normal))
+     (get-messages p0)])
+   (clear-inbox))
+
+  ;; check that process handles trapped exits first upon waking;
+  ;; here trap-exit handler ignores the exit
+  (match-let*
+   ([,p0
+     (spawn-test
+      (lambda (reason) (send me `(trapped ,reason)))
+      (lambda (msg) (send me `(received ,msg))))]
+    [ok (with-interrupts-disabled
+         (multi send p0 '(1 2))
+         (multi send&kill p0 '(a b c))
+         (multi send p0 '(3 4 quit)))]
+    [((trapped a) (trapped b) (trapped c)
+      (received 1) (received 2)
+      (received a) (received b) (received c)
+      (received 3) (received 4)
+      `(DOWN ,m ,@p0 normal))
+     (get-messages p0)])
+   (clear-inbox))
+
+  ;; check that procedural trap-exit handler intervenes even
+  ;; when we're in a blind receive; here we receive between kills
+  ;; in order to tempt fate
+  (match-let*
+   ([,p0
+     (spawn-test
+      (lambda (reason) (send me `(trapped ,reason)))
+      (lambda (msg) (send me `(received ,msg))))]
+    [ok (multi send p0 '(1 2))]
+    [((received 1) (received 2)) (get-messages 2)]
+    [ok (begin (kill p0 'a) (send p0 3) 'ok)]
+    [((trapped a) (received 3)) (get-messages 2)]
+    [ok (begin (kill p0 'b) (send p0 4) 'ok)]
+    [((trapped b) (received 4)) (get-messages 2)]
+    [ok (begin (kill p0 'c) (send p0 'quit) 'ok)]
+    [((trapped c) `(DOWN ,m ,@p0 normal)) (get-messages p0)])
+   (clear-inbox))
+
+  ;; check that handler can change the trap-exit handler
+  ;; - handler ignores first message, forwards to me, and
+  ;;   arms the second handler
+  ;; - second handler raises the message
+  (match-let*
+   ([,p0
+     (spawn-test
+      (lambda (reason)
+        (send me `(trapped ,reason))
+        (process-trap-exit raise-on-exit))
+      (lambda (msg) (send me `(received ,msg))))]
+    [ok (with-interrupts-disabled
+         (multi send p0 '(1 2))
+         (multi kill p0 '(A B C))
+         (multi send p0 '(3 4 quit)))]
+    [((trapped A) `(DOWN ,m ,@p0 B)) (get-messages p0)])
+   (clear-inbox))
+
+  ;; check that handler can change the trap-exit handler
+  ;; - handler ignores first message, forwards to me, and
+  ;;   then sets process-trap-exit to a boolean
+  ;; - we call the current handler only if it is a procedure
+  ;; - changing it to a boolean has no effect on the trapped
+  ;;   EXIT messages already in our inbox (but will affect
+  ;;   exit signals that arrive after that point)
+  (let ()
+    (define (check-late bool)
+      (match-let*
+       ([,p0
+         (spawn-test
+          (lambda (reason)
+            (send me `(trapped ,reason))
+            (process-trap-exit bool))
+          (lambda (msg) (send me `(received ,msg))))]
+        [ok (with-interrupts-disabled
+             (multi send p0 '(1 2))
+             (multi kill p0 '(A B C))
+             (multi send p0 '(3 4)))]
+        [((trapped A)
+          (received 1) (received 2)
+          (received `(EXIT ,@me B))
+          (received `(EXIT ,@me C))
+          (received 3) (received 4))
+         (get-messages 7)])
+       ;; p0 has been through handler and has processed everything in its inbox
+       (kill p0 'kindness)
+       (multi send p0 '(5 quit))
+       p0))
+    ;; handler sets trap-exit to #t; EXIT from later kill arrives via inbox
+    (match-let*
+     ([,p0 (check-late #t)]
+      [ok
+       (receive (after 10 'wrong)
+         [(received `(EXIT ,@me kindness))
+          'ok])]
+      [((received 5) `(DOWN ,m ,@p0 normal))
+       (get-messages p0)])
+     (clear-inbox))
+    ;; handler sets trap-exit to #f; p0 does not run after later kill
+    (match-let*
+     ([,p0 (check-late #f)]
+      [ok (receive (after 10 'ok) [,_ 'wrong])]
+      [(`(DOWN ,m ,@p0 kindness))
+       (get-messages p0)])
+     (clear-inbox)))
+
+  ;; Handler can kill self: we don't prevent you from shooting yourself in
+  ;; the foot. With process-trap-exit #t it was also possible to kill self or
+  ;; re-send an EXIT message. Folks need to be mindful of the fact that a
+  ;; procedural handler runs eagerly.
+  (match-let*
+   ([,p0
+     (spawn-test
+      (lambda (reason)
+        (send me `(trapped ,reason))
+        (when (fixnum? reason)
+          (kill self (format "~s" reason))))
+      (lambda (msg) (send me `(received ,msg))))]
+    [ok (with-interrupts-disabled
+         (multi send p0 '(a b c))
+         (multi kill p0 '(1 2 3))
+         (multi send p0 '(d quit)))]
+    [((trapped 1) (trapped 2) (trapped 3)
+      (trapped "1") (trapped "2") (trapped "3")
+      (received a) (received b) (received c) (received d)
+      `(DOWN ,m ,@p0 normal))
+     (get-messages p0)])
+   (clear-inbox))
+
+  ;; Check that we don't re-enter a trap-exit handler that has already started
+  ;; running. Also shows that receive works within trap-exit handler.
+  (match-let*
+   ([,p0
+     (spawn&link
+      (lambda ()
+        (process-trap-exit
+         (lambda (msg)
+           (match-define `(EXIT ,p ,reason ,err) msg)
+           (assert-valid-context)
+           (send me `(trapped ,reason))
+           (receive [authorization 'ok])
+           (send me `(done-with ,reason))))
+        (send me 'ready)
+        (let lp ()
+          (match (receive [,x x])
+            [quit (void)]
+            [,msg (send me `(received ,msg)) (lp)]))))]
+    [ok (receive [ready 'ok])]
+    [ok (with-interrupts-disabled
+         (send p0 1)
+         (kill p0 'A)
+         (kill p0 'B)
+         'ok)]
+    [((trapped A)) (get-messages 1)]
+    [nothing (receive (after 50 'nothing) [,x x])]
+    [,_ (send p0 'authorization)]
+    [((done-with A) (trapped B)) (get-messages 2)]
+    [nothing (receive (after 50 'nothing) [,x x])]
+    [,_ (send p0 'authorization)]
+    [((done-with B) (received 1)) (get-messages 2)]
+    [,_ (send p0 'quit)]
+    [(`(DOWN ,m ,@p0 normal)) (get-messages p0)])
+   (clear-inbox))
+
+  ;; Check that a trap-exit handler can call raise and still be active for
+  ;; subsequent kill, i.e., the machinery for the preceding case tracks
+  ;; non-local exit.
+  (match-let*
+   ([,p0
+     (spawn&link
+      (lambda ()
+        (process-trap-exit
+         (lambda (msg)
+           (match-define `(EXIT ,p ,reason ,err) msg)
+           (assert-valid-context)
+           (send me `(trapped ,reason))
+           (raise reason)))
+        (send me 'ready)
+        (let lp ()
+          (match (try (receive [,x x]))
+            [quit (void)]
+            [`(catch ,reason) (send me `(caught ,reason)) (lp)]
+            [,msg (send me `(received ,msg)) (lp)]))))]
+    [ok (receive [ready 'ok])]
+    [ok (with-interrupts-disabled
+         (send p0 #\A)
+         (kill p0 'tomato)
+         'ok)]
+    [((trapped tomato)
+      ;; we get (caught tomato) before (received #\A) because the trap-exit
+      ;; handler raised and that returned back through lp's (try (receive ...)).
+      (caught tomato)
+      (received #\A))
+     (get-messages 3)]
+    [ok (with-interrupts-disabled
+         (send p0 #\B)
+         (kill p0 22)
+         (send p0 'quit)
+         'ok)]
+    [((trapped 22)
+      ;; likewise for (caught 22) arriving before (received #\B)
+      (caught 22)
+      (received #\B)
+      `(DOWN ,m ,@p0 normal))
+     (get-messages p0)])
+   (clear-inbox))
+
+  ;; Variation on previous test where we use with-interrupts-disabled to force
+  ;; the inbox to look as it might in a particular evaluation order. We skip the
+  ;; explicit `(catch ,reason) clause in lp and let it forward the fault as a
+  ;; message that matches (received `(catch reason)). Finally, the trap-exit
+  ;; handler switches process-trap-exit to #t before we have processed all of
+  ;; the EXIT messages to show that we leave the remaining EXIT messages in the
+  ;; inbox for lp to consume.
+  (match-let*
+   ([,p0
+     (spawn&link
+      (lambda ()
+        (process-trap-exit
+         (lambda (msg)
+           (match-define `(EXIT ,p ,reason ,err) msg)
+           (assert-valid-context)
+           (send me `(trapped ,reason))
+           (if (eq? reason 'switch-to-true)
+               (process-trap-exit #t)
+               (raise reason))))
+        (send me 'ready)
+        (let lp ()
+          (match (try (receive [,x x]))
+            [quit (void)]
+            [,msg (send me `(received ,msg)) (lp)]))))]
+    [ok (receive [ready 'ok])]
+    [ok (with-interrupts-disabled
+         (send p0 #\A)
+         (kill p0 'tomato)
+         (send p0 #\B)
+         (kill p0 22)
+         (send p0 #\C)
+         (kill p0 'switch-to-true)
+         (kill p0 "subsequent")
+         (send p0 'quit)
+         'ok)]
+    [((trapped tomato)
+      (received `(catch tomato))
+      (trapped 22)
+      (received `(catch 22))
+      (trapped switch-to-true)
+      ;; While the procedural trap-exit handler is in place, we get the faults
+      ;; for tomato and 22 *before* #\A because
+      ;;  1. the trap-exit handler raises,
+      ;;  2. that returns back through the (try (receive ...)) in lp, and
+      ;;  3. lp loops back to the (try (receive ...))
+      ;; and the internals of receive respect the procedural trap-exit handler.
+      (received #\A)
+      (received #\B)
+      (received #\C)
+      ;; We switch from a procedural handler to #t when we handle
+      ;; switch-to-true. The procedural trap-exit handler consumes the
+      ;; `(EXIT ,@me swish-to-true) message and we get the "subsequent"
+      ;; message via the inbox as usual.
+      (received `(EXIT ,@me "subsequent"))
+      `(DOWN ,m ,@p0 normal))
+     (get-messages p0)])
+   (clear-inbox))
+
+  ;; Check that $receive copes when @handle-trap-exit consumes messages.
+  (match-let*
+   ([,p0
+     (spawn&link
+      (lambda ()
+        (define raise? #t)
+        (process-trap-exit
+         (lambda (msg)
+           (match-define `(EXIT ,p ,reason ,err) msg)
+           (assert-valid-context)
+           (send me `(trapped ,reason))
+           (when (eq? reason 'C)
+             (process-trap-exit #t))
+           ;; Raise on the first EXIT. That will return back through the
+           ;; try/receive and loop back to call try/receive again.
+           ;; That means we'll hit the @handle-trap-exit in $receive.
+           ;;
+           ;; If our exit handler raised again, that would prevent the rest of
+           ;; the $receive code from trying to process the message we've just
+           ;; dequeued.
+           ;;
+           ;; Instead, we *don't* raise on the subsequent EXIT messages in
+           ;; order to check that $receive works properly if @handle-trap-exit
+           ;; consumes the msg that the find loop was considering.
+           (when raise?
+             (set! raise? #f)
+             (raise `(raised ,reason)))))
+        (send me 'ready)
+        (let lp ()
+          (match (try (receive [,x x]))
+            [quit (void)]
+            [,msg (send me `(received ,msg)) (lp)]))))]
+    [ok (receive [ready 'ok])]
+    [ok (with-interrupts-disabled
+         (kill p0 'A)
+         (kill p0 'B)
+         (kill p0 'C)
+         (send p0 'packing)
+         (kill p0 'D)
+         (send me 'go)
+         'ok)]
+    [ok (receive (after 1000 (throw 'timeout)) [go 'ok])]
+    [,_ (send p0 'quit)]
+    [((trapped A)
+      (received `(catch (raised A))) ;; raise on first EXIT
+      (trapped B) ;; these still go through our exit handler
+      (trapped C)
+      (received packing)
+      (received `(EXIT ,@me D))
+      `(DOWN ,m ,@p0 normal))
+     (get-messages p0)])
+   (clear-inbox))
+
+  ;; Check that we disallow re-entering a trap-exit handler via a saved
+  ;; continuation.
+  (let ([retry void])
+    (define p0
+      (spawn
+       (lambda ()
+         (process-trap-exit
+          (lambda (msg)
+            (assert-valid-context)
+            (call/cc
+             (lambda (k)
+               (set! retry k)
+               (send me 'armed)))
+            (send me `(trapped ,msg))))
+         (send me 'ready)
+         (let lp ()
+           (match (receive [,x x])
+             [quit (void)]
+             [explode (retry)]
+             [,msg (send me `(received ,msg)) (lp)])))))
+    (receive [ready 'ok])
+    (send p0 'howdy)
+    (kill p0 'bang)
+    (receive [armed 'ok])
+    (send p0 'explode)
+    (match-let*
+     ([((trapped `(EXIT ,@me bang))
+        (received howdy)
+        `(DOWN ,m ,@p0 ,reason))
+       (get-messages p0)]
+      [#t (starts-with? (exit-reason->english reason)
+            "Exception: attempt to reenter trap-exit handler")])
+     (clear-inbox)))
+
+  ;; Check that handler can explicitly remove an EXIT message from the inbox.
+  ;; While handling EXIT for odd numbered messages, we receive to intercept the
+  ;; even numbered ones.
+  (match-let*
+   ([,p0
+     (spawn&link
+      (lambda ()
+        (define raise? #t)
+        (process-trap-exit
+         (lambda (msg)
+           (match-define `(EXIT ,p ,reason ,err) msg)
+           (assert-valid-context)
+           (send me `(trapped ,reason))
+           (receive (after 0 (void))
+             [`(EXIT ,p ,reason) (send me `(intercepted ,reason))])))
+        (send me 'ready)
+        (let lp ()
+          (match (receive [,x x])
+            [quit (void)]
+            [,msg (send me `(received ,msg)) (lp)]))))]
+    [ok (receive [ready 'ok])]
+    [ok (with-interrupts-disabled
+         (kill p0 '1)
+         (kill p0 '2)
+         (kill p0 '3)
+         (kill p0 '4)
+         (send p0 'quit)
+         'ok)]
+    [((trapped 1)
+      (intercepted 2)
+      (trapped 3)
+      (intercepted 4)
+      `(DOWN ,m ,@p0 normal))
+     (get-messages p0)])
+   (clear-inbox))
+
+  ;; Check that we can handle multiple EXIT messages while process blocks in
+  ;; perpetual receive.
+  (let ()
+    (define p0
+      (spawn
+       (lambda ()
+         (process-trap-exit
+          (lambda (msg)
+            (assert-valid-context)
+            (send me msg)))
+         (send me 'ready)
+         (receive))))
+    (define (spawn-p0-link ready-msg)
+      (spawn
+       (lambda ()
+         (link p0)
+         (send me ready-msg)
+         (receive))))
+    (receive [ready 'ok])
+    (kill p0 'fork)
+    (match-let*
+     ([,p1 (spawn-p0-link 'p1-ready)]
+      [,p2 (spawn-p0-link 'p2-ready)]
+      [ok (receive [p1-ready 'ok])]
+      [ok (receive [p2-ready 'ok])]
+      [,_ (kill p1 'knife)]
+      [,_ (kill p2 'spoon)]
+      [(`(EXIT ,@me fork)
+        `(EXIT ,@p1 knife)
+        `(EXIT ,@p2 spoon))
+       (get-messages 3)])
+     ;; test succeeded, make it shut down faster
+     (unlink p1)
+     (kill p1 'kill))
+    (clear-inbox))
+
+  ;; Check that handler processes exit messages from kill and link.
+  (match-let*
+   ([,p0
+     (spawn
+      (lambda ()
+        (process-trap-exit
+         (lambda (msg)
+           (assert-valid-context)
+           (send me `(trap ,msg))))
+        (send me 'p0-ready)
+        (let lp ()
+          (match (receive [,x x])
+            [quit (void)]
+            [,msg (send me `(received ,msg)) (lp)]))))]
+    [,p1
+     (spawn
+      (lambda ()
+        (link p0)
+        (send me 'p1-ready)
+        (receive [,msg (raise msg)])))]
+    [ok (receive [p0-ready 'ok])]
+    [ok (receive [p1-ready 'ok])]
+    [ok (multi send p0 '(1 2))]
+    [((received 1) (received 2)) (get-messages 2)]
+    ;; crash p1, which is linked to p0
+    [,_ (send p1 'A)]
+    [,m1 (monitor p1)]
+    [ok (receive [`(DOWN ,@m1 ,@p1 A) 'ok])]
+    [ok (with-interrupts-disabled
+         (kill p0 'B)
+         (multi send p0 '(3 quit)))]
+    [((trap `(EXIT ,@p1 A))
+      (trap `(EXIT ,@me B))
+      (received 3)
+      `(DOWN ,m ,@p0 normal))
+     (get-messages p0)])
+   (clear-inbox))
+
+  ;; Cover the case where we link to a process that exited.
+  (match-let*
+   ([,p0 (spawn (lambda () (raise 'kaput)))]
+    [,p1
+     (spawn
+      (lambda ()
+        (process-trap-exit
+         (lambda (msg)
+           (assert-valid-context)
+           (send me `(trap ,msg))))
+        (send me 'p1-ready)
+        (let lp ()
+          (match (receive [,x x])
+            [quit (void)]
+            [,msg
+             (send me `(received ,msg))
+             (when (eq? msg 'link)
+               (link p0))
+             (lp)]))))]
+    [ok (receive [p1-ready 'ok])]
+    [,m0 (monitor p0)]
+    [ok (receive [`(DOWN ,@m0 ,@p0 kaput) 'ok])]
+    [ok (multi send p1 '(link p d quit))]
+    [((received link)
+      (trap `(EXIT ,@p0 kaput))
+      (received p)
+      (received d)
+      `(DOWN ,m ,@p1 normal))
+     (get-messages p1)])
+   (clear-inbox))
+
+  ;; Check that we can interrupt a trap-exit handler via keyboard interrupt.
+  (match-let*
+   ([,p0
+     (spawn
+      (lambda ()
+        (process-trap-exit
+         (lambda (msg)
+           (assert-valid-context)
+           (send me `(trap ,msg))
+           (parameterize ([keyboard-interrupt-handler
+                           (lambda ()
+                             (raise "keyboard interrupt"))])
+             (let f () (f)))))
+        (send me 'ready)
+        (let lp ()
+          (match (try (receive [,x x]))
+            [quit (void)]
+            [,msg (send me `(received ,msg)) (lp)]))))]
+    [ok (receive [ready 'ok])]
+    [,_ (send p0 'greetings)]
+    [(received greetings) (receive [,x x])]
+    [,_ (kill p0 'surprise)]
+    ;; kill p0 and make it spin
+    [(trap `(EXIT ,@me surprise)) (receive [,x x])]
+    [,_ (send p0 'bye)]
+    [,_ (keyboard-interrupt p0)]
+    [,_ (send p0 'quit)]
+    [((received `(catch "keyboard interrupt"))
+      (received bye)
+      `(DOWN ,m ,@p0 normal))
+     (get-messages p0)])
+   (clear-inbox))
+  )
+
+;; Check that we can safely resume a receive after trap-exit handler
+;; snags the message from which receive will resume its search.
+(isolate-mat safe-prev ()
+  (define me self)
+  (define p1
+    (spawn&link
+     (lambda ()
+       (process-trap-exit
+        (lambda (msg)
+          (assert-valid-context)
+          ;; lp has already scanned past 'joy in the inbox when the test kills
+          ;; p1, so the receive here will dequeue the msg that is the prev node
+          ;; where lp's receive will resume its search.
+          (receive (after 0 (send me "no joy"))
+            [joy (send me "joy")])
+          (send me msg)))
+       (let lp ()
+         (receive
+          [,x (guard (not (eq? x 'joy)))
+           (send me `(owed ,x))
+           (lp)])))))
+  (define (next) (receive [,x x]))
+  (send p1 'joy)
+  (send p1 2)
+  (match-let*
+   ([(owed 2) (next)]
+    [,_ (kill p1 'softly)]
+    ["joy" (next)]
+    [`(EXIT ,@self softly) (next)]
+    [,_ (kill p1 'tenderly)]
+    ["no joy" (next)]
+    [`(EXIT ,@self tenderly) (next)])
+   ;; test succeeded, make it shut down faster
+   (unlink p1)
+   (kill p1 'kill))
+  )
+
+;; Like save-prev above. This exercises the pcb-handling-exit? machinery
+;; and checks that the receive in lp does not re-consume the foolin message
+;; consumed by the trap-exit handler.
+(isolate-mat safe-prev2 ()
+  (define me self)
+  (define p1
+    (spawn&link
+     (lambda ()
+       (process-trap-exit
+        (lambda (msg)
+          (assert-valid-context)
+          ;; lp has already scanned past 'joy in the inbox when the test kills
+          ;; p1, so the receive here will dequeue the msg that is the prev node
+          ;; where lp's receive will resume its search.
+          (receive (after 0 (send me "no joy"))
+            [joy (send me "joy")])
+          (send me msg)
+          (receive (after 0 (send me "no foolin"))
+            [foolin (send me "foolin")])))
+       (let lp ()
+         (receive
+          [,x (guard (not (eq? x 'joy)))
+           (send me `(owed ,x))
+           (lp)])))))
+  (define (next) (receive [,x x]))
+  (send p1 'joy)
+  (send p1 2)
+  (match-let*
+   ([(owed 2) (next)]
+    [,_ (with-interrupts-disabled
+         (send p1 'foolin)
+         (kill p1 'softly))]
+    ["joy" (next)]
+    [`(EXIT ,@self softly) (next)]
+    ["foolin" (next)]
+    [,_ (kill p1 'tenderly)]
+    ["no joy" (next)]
+    [`(EXIT ,@self tenderly) (next)]
+    ["no foolin" (next)]
+    ;; in particular we do NOT get (owed foolin)
+    [done (receive (after 0 'done) [,x x])])
+   ;; test succeeded, make it shut down faster
+   (unlink p1)
+   (kill p1 'kill))
+  )
+
+;; like safe-prev2 but consume more messages in the trap-exit handler
+;; and show that lp's receive still gets the message not consumed by
+;; trap-exit handler
+(isolate-mat safe-prev3 ()
+  (define me self)
+  (define p1
+    (spawn&link
+     (lambda ()
+       (process-trap-exit
+        (lambda (msg)
+          (assert-valid-context)
+          ;; lp has already scanned past 'joy in the inbox when the test kills
+          ;; p1, so the receive here will dequeue the msg that is the prev node
+          ;; where lp's receive will resume its search.
+          (receive (after 0 (send me "no joy"))
+            [joy (send me "joy")])
+          (send me msg)
+          (receive (after 0 (send me "no foolin"))
+            [foolin (send me "foolin")])
+          (receive (after 0 (send me "no time"))
+            [time (send me "time")])))
+       (let lp ()
+         (receive
+          [,x (guard (not (eq? x 'joy)))
+           (send me `(owed ,x))
+           (lp)])))))
+  (define (next) (receive [,x x]))
+  (send p1 'joy)
+  (send p1 2)
+  (match-let*
+   ([(owed 2) (next)]
+    [,_ (with-interrupts-disabled
+         (send p1 'foolin)
+         (send p1 'time)
+         (kill p1 'softly)
+         (send p1 'apology))]
+    ["joy" (next)]
+    [`(EXIT ,@self softly) (next)]
+    ["foolin" (next)]
+    ["time" (next)]
+    [,_ (kill p1 'tenderly)]
+    [(owed apology) (next)]
+    ["no joy" (next)]
+    [`(EXIT ,@self tenderly) (next)]
+    ["no foolin" (next)]
+    ["no time" (next)]
+    [done (receive (after 0 'done) [,x x])])
+   ;; test succeeded, make it shut down faster
+   (unlink p1)
+   (kill p1 'kill))
+  )
+
+;; Check simple case where guard expression can dequeue the very message
+;; the $receive matcher is considering.
+(isolate-mat safe-msg ()
+  (define me self)
+  (define p0
+    (spawn&link
+     (lambda ()
+       (let lp ()
+         (receive
+          [quit (send me 'done)]
+          [,x (guard (receive (after 0 #f) [,@x #t]))
+           (send me `(got ,x))
+           (lp)])))))
+  (send p0 'joy)
+  (send p0 1)
+  (send p0 2)
+  (send p0 3)
+  (send p0 'quit)
+  (match-let*
+   ([((got joy) (got 1) (got 2) (got 3))
+     (let lp ()
+       (receive
+        [done '()]
+        [,x (cons x (lp))]))])
+   'ok)
+  )

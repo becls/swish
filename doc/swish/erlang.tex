@@ -973,11 +973,41 @@ garbage collected.
 \begin{parameter}
   \code{process-trap-exit}
 \end{parameter}
-\hasvalue{} boolean
+\hasvalue{} boolean or a procedure
 
 The \code{process-trap-exit} parameter specifies whether or not the
-calling process traps exit signals as messages. Processes start with
-this parameter set to \code{\#f}.
+calling process traps exit signals as messages.
+Processes do not trap exit signals by default; therefore,
+processes start with this parameter set to \code{\#f}.
+To trap exit signals as messages, a process sets this parameter
+to \code{\#t} or a procedure.
+A gen-server can set the parameter to \code{\#t} and handle exit messages
+via its \code{handle-info} callback; see Section~\ref{sec:gen-server-callback} for details.
+Other processes can handle these messages via \code{receive}.
+
+A process may set the \code{process-trap-exit} parameter to a \var{handler}
+procedure that accepts one argument, \var{msg}.
+When the scheduler resumes that process, it checks whether \code{kill} or
+\code{link} has delivered an exit signal as a message.
+If so, it retrieves the first exit message, invokes \var{handler} on that
+message, and repeats this until it has consumed the available exit messages.\footnote{An exit message delivered via \code{send} will not trigger \var{handler} on its own, but \var{handler} may consume that message if
+the scheduler invokes \var{handler}.}
+A \var{handler} procedure may be useful, for example, to perform some cleanup
+in case an exit signal arrives while a process is blocked awaiting a reply in
+\code{gen-server:call}.
+
+% ----------------------------------------------------------------------------
+\defineentry{raise-on-exit}
+\begin{procedure}
+  \code{(raise-on-exit \var{msg})}
+\end{procedure}
+\returns{} see below
+
+The \code{raise-on-exit} procedure expects an exit message \var{msg}
+matching \code{`(EXIT \var{pid} \var{reason})}.
+If \var{reason} is \code{normal}, \code{raise-on-exit} returns
+an unspecified value.
+Otherwise, it raises an exception involving \var{reason}.
 
 % ----------------------------------------------------------------------------
 \defineentry{self}
@@ -990,6 +1020,21 @@ The \code{self} macro uses \code{identifier-syntax} to expand into
 code that retrieves the global self variable's top-level value. The
 global variable cannot be used directly because library bindings are
 immutable.
+
+% ----------------------------------------------------------------------------
+\defineentry{with-interrupts-disabled-for-io}
+\begin{syntax}
+  \code{(with-interrupts-disabled-for-io \var{body$_1$} \var{body$_2$} \etc)}
+\end{syntax}
+\expandsto{} see below
+
+The \code{with-interrupts-disabled-for-io} macro is like
+\code{with-interrupts-disabled} except that, just before returning, it checks
+for trapped exit messages.
+The system handles trapped exit messages at this time only if
+\code{process-trap-exit} is set to a procedure.
+This macro is intended for use in code that calls \code{wait-for-io} and
+\code{complete-io} with interrupts disabled.
 
 % ----------------------------------------------------------------------------
 \subsection{Miscellaneous}

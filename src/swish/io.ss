@@ -162,7 +162,7 @@
 
   (define (read-osi-port port bv start n fp)
     (define result)
-    (with-interrupts-disabled
+    (with-interrupts-disabled-for-io
      (let retry ()
        (match (osi_read_port* (get-osi-port-handle 'read-osi-port port)
                 bv start n fp
@@ -182,7 +182,7 @@
 
   (define (write-osi-port port bv start n fp)
     (define result)
-    (with-interrupts-disabled
+    (with-interrupts-disabled-for-io
      (match (osi_write_port* (get-osi-port-handle 'write-osi-port port)
               bv start n fp
               (let ([p self])
@@ -200,7 +200,7 @@
   (define (close-osi-port port)
     (unless (osi-port? port)
       (bad-arg 'close-osi-port port))
-    (with-interrupts-disabled
+    (with-interrupts-disabled-for-io
      (@close-osi-port port)))
 
   (define (@close-osi-port port)
@@ -270,7 +270,7 @@
           count))
       (define (gp) fp)
       (define (close)
-        (with-interrupts-disabled
+        (with-interrupts-disabled-for-io
          (@set-port-osi-port! p #f)
          (when close? (@close-osi-port port))))
       (define p
@@ -296,7 +296,7 @@
           count))
       (define (gp) fp)
       (define (close)
-        (with-interrupts-disabled
+        (with-interrupts-disabled-for-io
          (@set-port-osi-port! p #f)
          (@close-osi-port port)))
       (define p
@@ -546,83 +546,88 @@
   (define (make-console-input)
     (binary->utf8 (make-osi-input-port (open-fd-port "stdin-nb" 0 #f))))
 
+  ;; Create a console-input-port that calls the keyboard-interrupt-handler
+  ;; when interrupted via CTRL-C. The Chez Scheme REPL sets the handler to
+  ;; reset and retry the read.
   (define (make-interruptable-console-input)
-    ;; Provide CTRL-C for the repl with a custom binary input port
-    ;; that can be interrupted by CTRL-C to call the
-    ;; keyboard-interrupt-handler and then retry the read just as Chez
-    ;; Scheme does.
+    (define console-process self)
     (define osip (open-fd-port "stdin-nb" 0 #f))
     (define fp 0)
     (define (r! bv start n)
-      (match (with-interrupts-disabled (@r! bv start n))
-        [,count
-         (guard (fixnum? count))
-         (set! fp (+ fp count))
-         count]
-        [interrupt
-         ((keyboard-interrupt-handler))
-         (r! bv start n)]
-        [`(catch ,r) (throw r)]))
+      (let ([count (get-message bv start n)])
+        (set! fp (+ fp count))
+        count))
     (define (gp) fp)
     (define (close) (close-osi-port osip))
+    (define (return v) (void))
+    (define (get-message bv start n)
+      (if (not (eq? self console-process))
+          0 ;; return EOF for console read from another process
+          (let ([r #f] [me self] [request `#(read ,bv ,start ,n)])
+            (send reader request)
+            (on-exit (send reader `#(remove ,request))
+              (let lp ()
+                (with-interrupts-disabled-for-io
+                 (fluid-let ([return (lambda (v) (set! r v) (complete-io me))])
+                   (wait-for-io 'console-input)))
+                (match r
+                  [interrupt (lp)] ;; wait for keyboard-interrupt
+                  [#(io-result ,r) r]
+                  [`(catch ,_) (raise r)]))))))
+    (define reader
+      ;; When CTRL-C or CTRL-BREAK is pressed in Windows, the read returns 0
+      ;; immediately, and later the signal is processed. libuv could return
+      ;; UV_EINTR in this case, but it doesn't. When CTRL-C is pressed in
+      ;; Unix-like systems, the read returns EINTR, and libuv automatically
+      ;; retries.
+      (spawn
+       (lambda ()
+         (define (do-read bv start n)
+           ;; We still assume that each call has the same bv, start, and n,
+           ;; which the Chez Scheme transcoded-port appears to do.
+           (read-osi-port osip bv start n -1))
+         (let lp ([x #f] [timeout 'infinity] [requests '()] [msg #f])
+           (let ([x (or x (receive (after timeout 'timeout) [,x x]))])
+             (match x
+               [#(read ,bv ,start ,n)
+                (lp #f 0 (cons x requests)
+                  (or msg
+                      (let ([msg `#(io-result ,(do-read bv start n))])
+                        (send self msg)
+                        msg)))]
+               [#(remove ,request)
+                (lp #f 0 (remq request requests) msg)]
+               [#(io-result ,r)
+                (return
+                 (if (and windows? (eqv? r 0))
+                     (receive (after 250 x) [interrupt 'interrupt])
+                     x))
+                (lp #f 'infinity requests #f)]
+               [interrupt
+                (guard windows?)
+                (receive (after 250 'ok) [#(io-result 0) 'ok])
+                (lp #f 'infinity requests #f)]
+               [timeout
+                (match requests
+                  [() (lp #f 'infinity '() msg)]
+                  [(,req . ,requests) (lp req 'infinity requests msg)])]))))))
+    (define (CTRL-C-handler n)
+      (when windows? (send reader 'interrupt))
+      (return 'interrupt) ;; wake console-process if it's in our wait-for-io
+      (keyboard-interrupt console-process))
     (meta-cond
      [windows?
-      ;; When CTRL-C or CTRL-BREAK is pressed in Windows, the read
-      ;; returns 0 immediately, and later the signal is processed.
-      ;; libuv could return UV_EINTR in this case, but it doesn't.
-      (define (@r! bv start n)
-        (match (try (read-osi-port osip bv start n -1))
-          [0 (call/1cc
-              (lambda (return)
-                ;; Give Windows time to deliver the signal before we
-                ;; close the input port.
-                (parameterize ([keyboard-interrupt-handler
-                                (lambda () (return 'interrupt))])
-                  (receive (after 100 0)))))]
-          [,r r]))]
+      (signal-handler SIGBREAK CTRL-C-handler)
+      (signal-handler SIGINT CTRL-C-handler)]
      [else
-      ;; When CTRL-C is pressed in Unix-like systems, the read
-      ;; returns EINTR, and libuv automatically retries. As a
-      ;; result, we spawn a separate reader process so that we can
-      ;; interrupt the read.
-      (define reader
-        (spawn
-         (lambda ()
-           (disable-interrupts)
-           (@read-loop #f))))
-      ;; cell: (pid . active?) is used to keep the reader process from
-      ;; responding to an interrupted read request.
-      (alias pid car)
-      (alias active? cdr)
-      (alias active?-set! set-cdr!)
-      (define (@read-loop r)
-        ;; r: result of read-osi-port or #f
-        (receive
-         [#(,bv ,start ,n ,cell)
-          (let ([r (or r (try (read-osi-port osip bv start n -1)))])
-            (cond
-             [(active? cell)
-              (active?-set! cell #f)
-              (send (pid cell) `#(,self ,r))
-              (@read-loop #f)]
-             [else
-              ;; We assume the next call will have the same bv,
-              ;; start & n, which the Chez Scheme transcoded-port
-              ;; appears to do.
-              (@read-loop r)]))]))
-      (define (@r! bv start n)
-        (define cell (cons self #t))
-        (send reader `#(,bv ,start ,n ,cell))
-        (call/1cc
-         (lambda (return)
-           (parameterize
-            ([keyboard-interrupt-handler
-              (lambda ()
-                ;; Ignore when the reader has already responded.
-                (when (active? cell)
-                  (active?-set! cell #f)
-                  (return 'interrupt)))])
-            (receive [#(,@reader ,r) r])))))])
+      (signal-handler SIGINT CTRL-C-handler)])
+    (spawn
+     (lambda ()
+       (monitor reader)
+       (receive
+        [`(DOWN ,_ ,@reader ,r ,e)
+         ($hook-console-input (make-console-input))
+         (return e)])))
     (binary->utf8
      (make-custom-binary-input-port "stdin-nb*" r! gp #f close)))
 
@@ -630,15 +635,20 @@
     (let ([hooked? #f])
       (lambda ()
         (unless hooked?
-          (let ([ip (if (interactive?)
-                        (make-interruptable-console-input)
-                        (make-console-input))])
-            ;; Chez Scheme uses $console-input-port to do smart
-            ;; flushing of console I/O.
-            (set! hooked? #t)
-            (#%$set-top-level-value! '$console-input-port ip)
-            (console-input-port ip)
-            (current-input-port ip))))))
+          ($hook-console-input
+           (if (interactive?)
+               (make-interruptable-console-input)
+               (make-console-input)))
+          (set! hooked? #t)))))
+
+  (define ($hook-console-input ip)
+    (let ([old-ip (console-input-port)])
+      ;; Chez Scheme uses $console-input-port to do smart
+      ;; flushing of console I/O.
+      (#%$set-top-level-value! '$console-input-port ip)
+      (console-input-port ip)
+      (current-input-port ip)
+      (close-port old-ip)))
 
   ;; File System
 
@@ -658,7 +668,7 @@
     (case-lambda
      [(path mode)
       (define result)
-      (with-interrupts-disabled
+      (with-interrupts-disabled-for-io
        (match (osi_make_directory* (tilde-expand path) mode
                 (let ([p self])
                   (lambda (r)
@@ -701,7 +711,7 @@
 
   (define (remove-directory path)
     (define result)
-    (with-interrupts-disabled
+    (with-interrupts-disabled-for-io
      (match (osi_remove_directory* (tilde-expand path)
               (let ([p self])
                 (lambda (r)
@@ -715,7 +725,7 @@
 
   (define (remove-file path)
     (define result)
-    (with-interrupts-disabled
+    (with-interrupts-disabled-for-io
      (match (osi_unlink* (tilde-expand path)
               (let ([p self])
                 (lambda (r)
@@ -729,7 +739,7 @@
 
   (define (rename-path path new-path)
     (define result)
-    (with-interrupts-disabled
+    (with-interrupts-disabled-for-io
      (match (osi_rename* (tilde-expand path) (tilde-expand new-path)
               (let ([p self])
                 (lambda (r)
@@ -743,7 +753,7 @@
 
   (define (set-file-mode path mode)
     (define result)
-    (with-interrupts-disabled
+    (with-interrupts-disabled-for-io
      (match (osi_chmod* (tilde-expand path) mode
               (let ([p self])
                 (lambda (r)
@@ -775,7 +785,7 @@
   (define (open-file-port name flags mode)
     (define result)
     (arg-check 'open-file-port [name string?])
-    (with-interrupts-disabled
+    (with-interrupts-disabled-for-io
      (match (osi_open_file* (tilde-expand name) flags mode
               (let ([p self])
                 (lambda (r)
@@ -792,7 +802,7 @@
 
   (define (get-file-size port)
     (define result)
-    (with-interrupts-disabled
+    (with-interrupts-disabled-for-io
      (match (osi_get_file_size* (get-osi-port-handle 'get-file-size port)
               (let ([p self])
                 (lambda (r)
@@ -809,7 +819,7 @@
   (define (get-real-path path)
     (define result)
     (arg-check 'get-real-path [path string?])
-    (with-interrupts-disabled
+    (with-interrupts-disabled-for-io
      (match (osi_get_real_path* (tilde-expand path)
               (let ([p self])
                 (lambda (r)
@@ -827,7 +837,7 @@
      [(path follow?)
       (define result)
       (arg-check 'get-stat [path string?])
-      (with-interrupts-disabled
+      (with-interrupts-disabled-for-io
        (match (osi_get_stat* (tilde-expand path) follow?
                 (let ([p self])
                   (lambda (r)
@@ -842,7 +852,7 @@
   (define (list-directory path)
     (define result)
     (arg-check 'list-directory [path string?])
-    (with-interrupts-disabled
+    (with-interrupts-disabled-for-io
      (match (osi_list_directory* (tilde-expand path)
               (let ([p self])
                 (lambda (r)

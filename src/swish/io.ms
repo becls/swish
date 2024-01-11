@@ -1018,7 +1018,10 @@
 (isolate-mat keyboard-interrupt-wait-for-io ()
   (define listener (listen-tcp "::1" 0 self))
   (define test-port (listener-port-number listener))
-  (define interrupts '())
+  (define me self)
+  (define (get-interrupt timeout)
+    (receive (after timeout 'nothing)
+      [(,pid ,disable-count) disable-count]))
   (define test self)
   (define message "This is a test")
   (define pid
@@ -1026,12 +1029,15 @@
      (lambda ()
        (keyboard-interrupt-handler
         (lambda ()
-          ;; no reset here, so return from handler, but check disable count
-          (set! interrupts (cons (current-disable-count) interrupts))))
+          ;; no reset here, so return from handler, but report disable count
+          (send me `(,self ,(current-disable-count)))))
        (let-values ([(cip cop) (connect-tcp "::1" test-port)])
          (clear-input-port cip)
          (send test (utf8->string (get-bytevector-all cip)))
-         (assert (= 0 (current-disable-count)))))))
+         (assert (= 0 (current-disable-count))))
+       ;; test keyboard interrupt when blocked in receive and when in a hard loop
+       (receive
+         [start-looping (let f () (f))]))))
   (receive
    [#(accept-tcp ,@listener ,sip ,sop)
     (match-let*
@@ -1049,10 +1055,9 @@
        (do ([i 0 (+ i 1)]) ((= i 5) 'ok)
          (receive (after 200 'ok))
          (keyboard-interrupt pid))]
-      [ok (receive (after 200 'ok))]
       ;; still waiting for I/O
       [(,_ #f ,_ #(waiting-for ,_io)) (with-process-details pid list)]
-      [() interrupts]
+      [nothing (get-interrupt 200)]
       [0 (current-disable-count)]
       ;; send output and unblock
       [ok
@@ -1062,10 +1067,20 @@
          (close-port sop)
          (receive (after 200 'ok)))]
       [0 (current-disable-count)]
-      ;; pid was interrupted during an I/O operation
-      [(1) interrupts])
+      ;; pid was interrupted during an I/O operation, but keyboard interrupt
+      ;; handler did not run until interrupts were enabled
+      [0 (get-interrupt 'infinity)]
+      ;; pid is now blocked in receive
+      [,_ (keyboard-interrupt pid)]
+      [0 (get-interrupt 'infinity)]
+      ;; pid is now blocked in receive
+      [,_ (send pid 'start-looping)]
+      [,_ (receive (after 100 (keyboard-interrupt pid)))]
+      [0 (get-interrupt 'infinity)])
      'ok)])
-  (receive [,@message 'ok]))
+  (receive [,@message 'ok])
+  (unlink pid)
+  (kill pid 'kill))
 
 ;; test keyboard-interrupt for pid blocked on receive
 (isolate-mat keyboard-interrupt-receive ()
@@ -1366,5 +1381,55 @@
     [`(catch unexpected-eof) (try (test-n 5))]
     )
    'ok))
+
+(isolate-mat trap-exit-I/O-bound ()
+  (define me self)
+  (define listener (listen-tcp "::1" 0 me))
+  (define test-port (listener-port-number listener))
+  (define (current-disable-count) (#%$tc-field 'disable-count (#%$tc)))
+  (on-exit (close-tcp-listener listener)
+    (match-let*
+     ([,p0
+       (spawn
+        (lambda ()
+          (define strikes 0)
+          (process-trap-exit
+           (lambda (msg)
+             (assert (= 0 (current-disable-count)))
+             (send me msg)
+             (set! strikes (+ strikes 1))
+             (when (>= strikes 3) (raise 'enough))))
+          ;; I/O bound; writer feeds us input slowly so we don't run
+          ;; fast enough to use up our quantum, i.e., we must rely on
+          ;; with-interrupts-disabled-for-io to run trap-exit handler,
+          ;; and we exit only when it is called and raises 'enough.
+          (let-values ([(cip cop) (connect-tcp "::1" test-port)])
+            (let f ()
+              (match (get-u8 cip)
+                [#!eof (void)]
+                [,n (put-u8 cop n) (f)])))))]
+      [#(accept-tcp ,@listener ,sip ,sop) (receive [,x x])]
+      [,writer
+       (spawn&link
+        (lambda ()
+          (do () (#f)
+            (receive (after 1 'ok))
+            (put-u8 sop (random 256))
+            (flush-output-port sop))))]
+      [,reader
+       (spawn&link
+        (lambda ()
+          (do () (#f) (get-u8 sip))))]
+      [,_ (receive (after 1 (kill p0 'A)))]
+      [,_ (receive (after 2 (kill p0 'B)))]
+      [,_ (receive (after 3 (kill p0 'C)))]
+      [,_ (receive (after 4 (kill p0 'D)))]
+      [,_ (monitor p0)]
+      [`(EXIT ,@me A) (receive [,x x])]
+      [`(EXIT ,@me B) (receive [,x x])]
+      [`(EXIT ,@me C) (receive [,x x])]
+      [`(DOWN ,m ,@p0 enough) (receive [,x x])])
+     'ok))
+  )
 
 (hook-console-input)

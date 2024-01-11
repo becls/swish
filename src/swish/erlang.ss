@@ -65,6 +65,7 @@
    process?
    profile-me
    ps-fold-left
+   raise-on-exit
    receive
    register
    reset-console-event-handler
@@ -80,6 +81,7 @@
    walk-stack
    walk-stack-max-depth
    whereis
+   with-interrupts-disabled-for-io
    with-process-details
    )
   (import
@@ -208,41 +210,45 @@
          ((new) id (erlang:now) (make-weak-eq-hashtable)
           #f cont 0 '() #f (make-queue) 0 0 '() '() #f)))))
 
-  (define (pcb-sleeping? p)
-    (fxlogbit? 0 (pcb-flags p)))
+  (define-syntax (define-pcb-flags x)
+    (syntax-case x ()
+      [(_ pcb-flag-test [flag bit] ...)
+       (with-syntax ([max-bit (min 29 (integer-length (most-positive-fixnum)))])
+         (and (andmap fixnum? (datum (bit ...)))
+              (apply fx< -1 (datum (bit ... max-bit)))))
+       (with-syntax ([(get ...)
+                      (map (lambda (f) (compound-id f "pcb-" f ""))
+                        #'(flag ...))]
+                     [(set ...)
+                      (map (lambda (f) (compound-id f "pcb-" f "-set!"))
+                        #'(flag ...))])
+         #'(begin
+             (define (get p)
+               (fxlogbit? bit (pcb-flags p)))
+             ...
+             (define (set p x)
+               (pcb-flags-set! p
+                 (if x
+                     (fxlogbit1 bit (pcb-flags p))
+                     (fxlogbit0 bit (pcb-flags p)))))
+             ...
+             (define-syntax (flag->bit x)
+               (syntax-case x (flag ...)
+                 [(_ flag) #'bit] ...))
+             (define-syntax (pcb-flag-test x)
+               (syntax-case x ()
+                 [(_ p [$flag $bool] (... ...))
+                  #'(let ([flags (pcb-flags p)])
+                      (and (eq? $bool (#3%fxlogbit? (flag->bit $flag) flags))
+                           (... ...)))]))))]))
 
-  (define (pcb-sleeping?-set! p x)
-    (pcb-flags-set! p
-      (if x
-          (fxlogbit1 0 (pcb-flags p))
-          (fxlogbit0 0 (pcb-flags p)))))
-
-  (define (pcb-trap-exit p)
-    (fxlogbit? 1 (pcb-flags p)))
-
-  (define (pcb-trap-exit-set! p x)
-    (pcb-flags-set! p
-      (if x
-          (fxlogbit1 1 (pcb-flags p))
-          (fxlogbit0 1 (pcb-flags p)))))
-
-  (define (pcb-blocked-io? p)
-    (fxlogbit? 2 (pcb-flags p)))
-
-  (define (pcb-blocked-io?-set! p x)
-    (pcb-flags-set! p
-      (if x
-          (fxlogbit1 2 (pcb-flags p))
-          (fxlogbit0 2 (pcb-flags p)))))
-
-  (define (pcb-interrupt? p)
-    (fxlogbit? 3 (pcb-flags p)))
-
-  (define (pcb-interrupt?-set! p x)
-    (pcb-flags-set! p
-      (if x
-          (fxlogbit1 3 (pcb-flags p))
-          (fxlogbit0 3 (pcb-flags p)))))
+  (define-pcb-flags pcb-flag-test
+    [sleeping?      0]
+    [trap-exit      1]
+    [blocked-io?    2]
+    [interrupt?     3]
+    [exit?          4]
+    [handling-exit? 5])
 
   (define (panic event)
     (on-exit (osi_exit 80)
@@ -369,6 +375,7 @@
     #t)
 
   (define (@send-EXIT target-pid exit-pid exit-reason)
+    (pcb-exit?-set! target-pid #t)
     (@send target-pid (make-EXIT-msg exit-pid exit-reason)))
 
   (define (keyboard-interrupt p)
@@ -386,11 +393,6 @@
             [(pcb-blocked-io? p) (void)]
             [(enqueued? p) (void)]
             [else (@enqueue p run-queue 0)])))))
-
-  (define process-trap-exit
-    (case-lambda
-     [() (pcb-trap-exit self)]
-     [(x) (pcb-trap-exit-set! self x)]))
 
   (define (@link p1 p2)
     (define (add-link from to)
@@ -768,9 +770,69 @@
      [(eq? time 'infinity) ($receive matcher src #f #f)]
      [else (throw `#(timeout-value ,time ,src))]))
 
+  ;; Procedures in io.ss may disable interrupts and call wait-for-io. The yield
+  ;; in wait-for-io then bumps the disable count from 1 to 2. When we resume
+  ;; after complete-io, the code in @yield restores the saved disable count 2
+  ;; and calls @handle-trap-exit, which does nothing since we must wait to call
+  ;; the handler with interrupts enabled. An I/O bound process might never use
+  ;; its quantum or call receive, so we avoid starving the trap-exit handler by
+  ;; checking again just before an I/O procedure re-enables interrupts.
+  (define-syntax with-interrupts-disabled-for-io
+    (syntax-rules ()
+      [(_ e1 e2 ...)
+       (dynamic-wind
+         #%disable-interrupts
+         (lambda () e1 e2 ...)
+         (lambda () (@check-and-enable-interrupts)))]))
+
+  (define (current-disable-count) (#3%$tc-field 'disable-count (#3%$tc)))
+
+  (define (@handle-trap-exit)
+    (when (pcb-flag-test self [exit? #t] [handling-exit? #f])
+      (when (#3%fx= (current-disable-count) 1)
+        (@handle-trap-exit-help))))
+
+  (define (@handle-trap-exit-help)
+    (let ([handle-exit (process-trap-exit)])
+      (cond
+       [(and (procedure? handle-exit) (@get-EXIT-msg)) =>
+        (lambda (msg)
+          (define prior-src (pcb-src self))
+          (define armed? #f)
+          (define content (msg-contents msg))
+          (@remove-msg msg)
+          (enable-interrupts)
+          (dynamic-wind
+            (lambda ()
+              (when armed?
+                (errorf #f "attempt to reenter trap-exit handler ~s" handle-exit))
+              (set! armed? #t)
+              (pcb-src-set! self #f)
+              (pcb-handling-exit?-set! self #t))
+            (lambda () (handle-exit content))
+            (lambda ()
+              (pcb-src-set! self prior-src)
+              (pcb-handling-exit?-set! self #f)))
+          (disable-interrupts)
+          (@handle-trap-exit-help))]
+       [else (pcb-exit?-set! self #f)])))
+
+  (define (@get-EXIT-msg)
+    ;; since we start with pcb-inbox and are not reentrant, we do not have
+    ;; to check for messages marked by @remove-msg
+    (let ([start (pcb-inbox self)])
+      (let find ([prev start])
+        (let ([msg (q-next prev)])
+          (cond
+           [(eq? start msg) #f]
+           [(EXIT-msg? (msg-contents msg)) msg]
+           [else (find msg)])))))
+
   (define ($receive matcher src waketime timeout-handler)
-    (disable-interrupts)
-    (let find ([prev (pcb-inbox self)])
+    (define (find0 prev)
+      (@handle-trap-exit)
+      (find1 prev))
+    (define (find1 prev)
       (let ([msg (q-next prev)])
         (cond
          [(eq? (pcb-inbox self) msg)
@@ -779,26 +841,29 @@
             (pcb-src-set! self src)
             (@yield-preserving-interrupts #f 0)
             (pcb-src-set! self #f)
-            (find prev)]
+            (find0 prev)]
            [(< (erlang:now) waketime)
             (pcb-src-set! self src)
             (pcb-sleeping?-set! self #t)
             (@yield-preserving-interrupts sleep-queue waketime)
             (pcb-src-set! self #f)
-            (find prev)]
+            (find0 prev)]
            [else
             (enable-interrupts)
             (timeout-handler)])]
+         [(not (q-prev msg)) (find1 msg)] ;; skip, already removed
          [else
           (enable-interrupts)
           (cond
            [(matcher (msg-contents msg)) =>
             (lambda (run)
-              (no-interrupts (@remove-q msg))
+              (no-interrupts (@remove-msg msg))
               (run))]
            [else
             (disable-interrupts)
-            (find msg)])]))))
+            (find1 msg)])])))
+    (disable-interrupts)
+    (find0 (pcb-inbox self)))
 
   (define process-default-ticks 1000)
 
@@ -818,6 +883,20 @@
       (q-prev-set! x #f)
       (q-next-set! x #f))
     x)
+
+  ;; If we have not already removed msg, splice it out of the inbox
+  ;; and mark it as removed, but preserve its next pointer.
+  ;; We do this because $receive or @get-EXIT-msg may consume messages when
+  ;; $receive yields or when $receive calls the user code in matcher.
+  ;; When $receive resumes its search, the find1 loop skips deleted messages
+  ;; by checking q-prev.
+  (define (@remove-msg msg)
+    (let ([prev (q-prev msg)])
+      (when prev
+        (let ([next (q-next msg)])
+          (q-next-set! prev next)
+          (q-prev-set! next prev)
+          (q-prev-set! msg #f)))))
 
   (define (@event-check)
     (unless (queue-empty? sleep-queue)
@@ -896,12 +975,19 @@
     (pcb-exception-state-set! self #f) ;; drop ref
     (osi_set_quantum quantum-nanoseconds)
     (set-timer process-default-ticks)
-    (if (pcb-interrupt? self)
-        (begin
-          (pcb-interrupt?-set! self #f)
-          (enable-interrupts)
-          ((keyboard-interrupt-handler)))
-        (enable-interrupts)))
+    (@check-and-enable-interrupts))
+
+  (define-syntax @check-and-enable-interrupts
+    (syntax-rules ()
+      [(_)
+       (begin
+         (@handle-trap-exit)
+         (if (and (pcb-interrupt? self) (#3%fx<= (current-disable-count) 1))
+             (begin
+               (pcb-interrupt?-set! self #f)
+               (enable-interrupts)
+               ((keyboard-interrupt-handler)))
+             (enable-interrupts)))]))
 
   (define @thunk->cont
     (let ([return #f])
@@ -1633,6 +1719,24 @@
          #`((sub-match #,v `(EXIT-msg [pid p] [reason `(exit-reason #t r ,_)])))]
         [`(EXIT p r e)
          #`((sub-match #,v `(EXIT-msg [pid p] [reason `(exit-reason #t r e)])))])))
+
+  (define (raise-on-exit msg)
+    (match msg
+      [`(EXIT ,pid ,reason ,err)
+       (unless (eq? reason 'normal)
+         (raise err))]
+      [,_ (bad-arg 'raise-on-exit msg)]))
+
+  (define process-trap-exit
+    (let ([trap-exit-handler (make-process-parameter #f)])
+      (case-lambda
+       [() (and (pcb-trap-exit self) (trap-exit-handler))]
+       [(x)
+        (unless (or (boolean? x) (procedure? x))
+          (bad-arg 'process-trap-exit x))
+        (no-interrupts
+         (pcb-trap-exit-set! self (and x #t))
+         (trap-exit-handler x))])))
 
   (define-syntax redefine
     (syntax-rules ()

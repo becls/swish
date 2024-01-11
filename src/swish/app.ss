@@ -180,17 +180,6 @@
           (try-import)
           (parameterize ([waiter-prompt-string (if (opt 'quiet) "" ">")]
                          [repl-level (+ (repl-level) 1)])
-            (define (trap-CTRL-C handler)
-              (meta-cond
-               [windows?
-                (signal-handler SIGBREAK handler)
-                (signal-handler SIGINT handler)]
-               [else
-                (signal-handler SIGINT handler)]))
-            (when (interactive?)
-              (trap-CTRL-C
-               (let ([p self])
-                 (lambda (n) (keyboard-interrupt p)))))
             (for-each load filenames)
             (new-cafe)))]
        [else                            ; script
