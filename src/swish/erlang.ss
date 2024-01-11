@@ -362,11 +362,14 @@
        (let ([reason (unwrap-fault-condition raw-reason)])
          (cond
           [(eq? reason 'kill) (@kill p 'killed)]
-          [(pcb-trap-exit p) (@send p (make-EXIT-msg self raw-reason))]
+          [(pcb-trap-exit p) (@send-EXIT p self raw-reason)]
           [(not (eq? reason 'normal)) (@kill p raw-reason)]))
        (unless (alive? self)
          (yield #f 0))))
     #t)
+
+  (define (@send-EXIT target-pid exit-pid exit-reason)
+    (@send target-pid (make-EXIT-msg exit-pid exit-reason)))
 
   (define (keyboard-interrupt p)
     (unless (pcb? p)
@@ -404,7 +407,7 @@
        (cond
         [(alive? p) (@link p self)]
         [(pcb-trap-exit self)
-         (@send self (make-EXIT-msg p (pcb-exception-state p)))]
+         (@send-EXIT self p (pcb-exception-state p))]
         [else
          (let ([r (pcb-exception-state p)])
            (unless (eq? (unwrap-fault-condition r) 'normal)
@@ -942,7 +945,7 @@
       (let ([linked (car links)])
         (cond
          [(not (alive? linked))]
-         [(pcb-trap-exit linked) (@send linked (make-EXIT-msg p raw-reason))]
+         [(pcb-trap-exit linked) (@send-EXIT linked p raw-reason)]
          [(not (eq? reason 'normal)) (@kill linked raw-reason)]))
       (@kill-linked (cdr links) p reason raw-reason)))
 
