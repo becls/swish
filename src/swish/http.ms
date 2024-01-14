@@ -495,6 +495,14 @@
             "Content-Type: application/x-www-form-urlencoded\r\n"
             "\r\n"
             "echo=ok"))]
+    ["HTTP/1.1 200 \r\nContent-Length: 13\r\nCache-Control: no-cache\r\n\r\n{\"echo\":\"ok\"}"
+     (test (string-append
+            "POST /mat?cmd=echo+form HTTP/1.1\r\n"
+            "Connection: close\r\n"
+            "Content-Length: 13\r\n"
+            "Content-Type: application/json\r\n"
+            "\r\n"
+            "{\"echo\":\"ok\"}"))]
     [`(<result> [reason http-input-violation] [output ,@internal-server-error])
      (test-error&output
       (string-append

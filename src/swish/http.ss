@@ -478,6 +478,14 @@
                       (get-chunk! ip content len)
                       (parse-encoded-kv content 0 len)))
                   timeout)]
+               [(starts-with? type "application/json")
+                (when (> len content-limit)
+                  (throw 'http-content-limit-exceeded))
+                (http:call-with-ports conn
+		  (lambda (ip op)
+		     (let ([content (make-bytevector len)])
+		       (get-chunk! ip content len)
+		       (json:bytevector->object content))))]
                [else (json:make-object)])])
         (on-exit (delete-tmp-files data)
           (f data)))]))
