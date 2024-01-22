@@ -604,7 +604,7 @@
         (display key op)
         (json:write-structural-char #\: indent op))]
      [else
-      (display whole op)
+      (display-string whole op)
       #f]))
 
   (define-syntax json-write-kv
@@ -620,15 +620,30 @@
         (let-values ([(op get) (open-string-output-port)])
           (write-string (json-key->string k) op)
           (get)))
+      (define (format-value wr val)
+        (and (free-identifier=? wr #'json:write)
+             ;; this should be a subset of the cases before custom-write call
+             ;; in (W define (wr x) ...) above.
+             (or (boolean? val) (fixnum? val) (string? val)
+                 (and (flonum? val) (finite? val))
+                 (eqv? val #\nul))
+             (eval `(let () (import (swish json)) (json:object->string ,val)))))
       (lambda (x)
         (syntax-case x ()
-          [(_ op indent wr prefix k v #f)
+          [(_ op #f wr prefix k v #f)
+           (let ([pfx (get-preamble (datum prefix) (datum k))]
+                 [val (format-value #'wr (datum v))])
+             ;; someday cp0 might consolidate adjacent display-string calls
+             (if val
+                 #`(begin (display-string #,(string-append pfx val) op) #f)
+                 #`(begin (display-string #,pfx op) (wr op v #f) #f)))]
+          [(_ op indent-expr wr prefix k v #f)
            (with-syntax ([whole (get-preamble (datum prefix) (datum k))]
                          [key (get-key (datum k))])
-             #'(let ([indent (write-key indent prefix key whole op)])
+             #'(let ([indent (write-key indent-expr prefix key whole op)])
                  (wr op v indent)
                  indent))]
-          [(_ op indent wr prefix k v-expr wfv-expr)
+          [(_ op indent-expr wr prefix k v-expr wfv-expr)
            (with-syntax ([whole (get-preamble (datum prefix) (datum k))]
                          [key (get-key (datum k))])
              #'(let* ([write-field-value wfv-expr] [v v-expr]
@@ -678,14 +693,24 @@
        (valid? (datum (key ...)))
        (with-syntax ([([k0 f0 wfv0] [k1 f1 wfv1] ...)
                       (maybe-sort (map parse-clause #'([key . spec] ...)))])
-         #'(let ([op op-expr] [indent indent-expr] [wr wr-expr])
-             (let ([indent (json-write-kv op indent wr #\{ k0 f0 wfv0)])
-               (json-write-kv op indent wr #\, k1 f1 wfv1)
-               ...
-               (json:write-structural-char #\} indent op))
-             (when (eqv? indent 0)
-               (newline op))
-             #t))]))
+         (if (and (eq? (datum indent-expr) #f)
+                  (identifier? #'wr-expr)
+                  (free-identifier=? #'wr-expr #'json:write))
+             #'(let ([op op-expr])
+                 ;; see cp0 note above
+                 (json-write-kv op #f json:write #\{ k0 f0 wfv0)
+                 (json-write-kv op #f json:write #\, k1 f1 wfv1)
+                 ...
+                 (json:write-structural-char #\} #f op)
+                 #t)
+             #'(let ([op op-expr] [indent indent-expr] [wr wr-expr])
+                 (let ([indent (json-write-kv op indent wr #\{ k0 f0 wfv0)])
+                   (json-write-kv op indent wr #\, k1 f1 wfv1)
+                   ...
+                   (json:write-structural-char #\} indent op))
+                 (when (eqv? indent 0)
+                   (newline op))
+                 #t)))]))
 
   (define json:pretty
     (case-lambda

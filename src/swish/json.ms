@@ -191,6 +191,58 @@
            [foo "tstep"]
            [ace "rbic"])
          (get))]
+      [(,@by-write ,@by-write ,@by-write ,@by-write ,@by-write)
+       ;; hit difference cases where we pre-compute all or part of a field write
+       ;; at expand-time; ideally cp0 would take it further from here
+       (let ()
+         (define (go1 x)
+           (json:write-object op #f json:write
+             [bar "rel"]
+             [foo "tstep"]
+             [ace x])
+           (get))
+         (define (go2 x)
+           (json:write-object op #f json:write
+             [bar "rel"]
+             [foo x]
+             [ace "rbic"])
+           (get))
+         (define (go3 x)
+           (json:write-object op #f json:write
+             [bar x]
+             [foo "tstep"]
+             [ace "rbic"])
+           (get))
+         (define (go4 x y)
+           (json:write-object op #f json:write
+             [bar x]
+             [foo "tstep"]
+             [ace y])
+           (get))
+         (define (go5 x y z)
+           (json:write-object op #f json:write
+             [bar x]
+             [foo z]
+             [ace y])
+           (get))
+         (list (go1 "rbic") (go2 "tstep") (go3 "rel")
+           (go4 "rel" "rbic")
+           (go5 "rel" "rbic" "tstep")))]
+      ["{\"pi\":3.14,\"zip\":null}"
+       (begin
+         (json:write-object op #f json:write
+           [pi 3.14]
+           [zip #\nul])
+         (get))]
+      [,fail
+       (guard (procedure? fail))
+       (lambda ()
+         ;; no error at expand time
+         (json:write-object op #f json:write
+           [abc 123456]
+           [bad +nan.0])
+         (get))]
+      [`(catch #(invalid-datum +nan.0)) (on-exit (get) (try (fail)))]
       [,write-field-value
        (lambda (op v indent wr)
          (if (vector? v)
