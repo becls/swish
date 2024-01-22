@@ -191,7 +191,7 @@
            [foo "tstep"]
            [ace "rbic"])
          (get))]
-      [,custom-write
+      [,write-field-value
        (lambda (op v indent wr)
          (if (vector? v)
              (fprintf op "[~{\"~r\"~^,~}]" (vector->list v))
@@ -200,8 +200,8 @@
        (begin
          (json:write-object op #f json:write
            [ghi 3]
-           [abc '#(4 5 6) custom-write]
-           [def '(7 8 9) custom-write])
+           [abc '#(4 5 6) write-field-value]
+           [def '(7 8 9) write-field-value])
          (get))]
       [,g1 (gensym)]
       [,g2 (gensym)]

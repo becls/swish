@@ -628,14 +628,12 @@
              #'(let ([indent (write-key indent prefix key whole op)])
                  (wr op v indent)
                  indent))]
-          [(_ op indent wr prefix k v-expr cw-expr)
+          [(_ op indent wr prefix k v-expr wfv-expr)
            (with-syntax ([whole (get-preamble (datum prefix) (datum k))]
                          [key (get-key (datum k))])
-             #'(let* ([custom-writer cw-expr] [v v-expr]
-                      [indent (write-key indent prefix key whole op)])
-                 (if custom-writer
-                     (custom-writer op v indent wr)
-                     (wr op v indent))
+             #'(let* ([write-field-value wfv-expr] [v v-expr]
+                      [indent (write-key indent-expr prefix key whole op)])
+                 (write-field-value op v indent wr)
                  indent))]))))
 
   (define-syntax (json:write-object x)
@@ -650,9 +648,13 @@
                (begin (symbol-hashtable-set! novel key #f) #t)))
         (andmap ok? keys)))
     (define (parse-clause c)
+      ;; The undocumented write-field-value expression must evaluate to a
+      ;; procedure (lambda (op value indent wr) ...) that writes the field
+      ;; value. Unlike a custom-write procedure, it cannot return #f to defer
+      ;; to the default writer.
       (syntax-case c ()
         [(key field) #'(key field #f)]
-        [(key field custom-write) c]
+        [(key field write-field-value) c]
         [_ (syntax-error c)]))
     (define (maybe-sort ls)
       (let ([key<?
@@ -674,11 +676,11 @@
            #t)]
       [(_ op-expr indent-expr wr-expr [key . spec] ...)
        (valid? (datum (key ...)))
-       (with-syntax ([([k0 f0 cw0] [k1 f1 cw1] ...)
+       (with-syntax ([([k0 f0 wfv0] [k1 f1 wfv1] ...)
                       (maybe-sort (map parse-clause #'([key . spec] ...)))])
          #'(let ([op op-expr] [indent indent-expr] [wr wr-expr])
-             (let ([indent (json-write-kv op indent wr #\{ k0 f0 cw0)])
-               (json-write-kv op indent wr #\, k1 f1 cw1)
+             (let ([indent (json-write-kv op indent wr #\{ k0 f0 wfv0)])
+               (json-write-kv op indent wr #\, k1 f1 wfv1)
                ...
                (json:write-structural-char #\} indent op))
              (when (eqv? indent 0)
