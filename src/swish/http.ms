@@ -776,7 +776,7 @@
   (let-values ([(ip op) (connect-tcp "127.0.0.1" (get-http-port))])
     (put-bytevector op (string->utf8 "Malformed Request\r\n\r\n"))
     (flush-output-port op)
-    (receive (after 10 (throw 'no-child-log))
+    (test:receive (after 10 (throw 'no-child-log))
       [`(<child-end> [reason #(http-unhandled-input ,x)])
        (assert (string=? (utf8->string x) "Malformed Request"))])
     (close-port op))
@@ -792,7 +792,7 @@
       (spawn&link
        (lambda ()
          (send me `#(read ,(utf8->string (get-bytevector-all ip)))))))
-    (receive (after 100 (throw 'timeout))
+    (test:receive (after 100 (throw 'timeout))
       [#(read ,x)
        (unless (string=? x
                  (string-append
@@ -807,7 +807,7 @@
         [fail-msg `#(accept-tcp-failed "listener" "who" "errno")])
     (link http)
     (send http fail-msg)
-    (receive (after 100 (throw 'timeout))
+    (test:receive (after 100 (throw 'timeout))
       [`(EXIT ,@http ,@fail-msg) 'ok])))
 
 (http-mat http-respond ()
@@ -1058,7 +1058,7 @@
           (match ls
             [() 'ok]
             [(,n . ,rest)
-             (receive (after 100 (throw `#(failed-to-read-data ,n)))
+             (test:receive (after 100 (throw `#(failed-to-read-data ,n)))
                [#(read ,@n) (lp rest)])])))
 
       (check-loopback '(9 8 7 6 5))
@@ -1387,14 +1387,14 @@
         (send pid msg)
         (check c s)))
     (define (check-crash c s)
-      (receive (after 100 (throw 'no-client-close))
+      (test:receive (after 100 (throw 'no-client-close))
         [#(ws:closed ,@c 1011 "") 'ok])
-      (receive (after 100 (throw 'no-child-log))
+      (test:receive (after 100 (throw 'no-child-log))
         [`(<child-end> [pid ,@s] [reason crashed]) 'ok]))
     (define (check-normal c s)
-      (receive (after 100 (throw 'no-client-close))
+      (test:receive (after 100 (throw 'no-client-close))
         [#(ws:closed ,@c 1000 "") 'ok])
-      (receive (after 100 (throw 'no-child-log))
+      (test:receive (after 100 (throw 'no-child-log))
         [`(<child-end> [pid ,@s] [reason normal]) 'ok]))
     (do-test #f 'crash check-crash)
     (do-test #t 'crash check-crash)
