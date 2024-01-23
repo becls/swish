@@ -1065,10 +1065,26 @@
     [,_ (event-mgr:notify `#(,self waiting))]
     [ok (receive [in-sync 'ok])]
     [,@expected (reverse rev-actual)])
+   (define lo delay-ms)
+   (define hi (* 2 delay-ms))
+   (define okay? #t)
+   (define rows-checked 0)
+   (define DEBUG? (and (member (getenv "DEBUG") '("yes" "true" "y" "t")) #t))
+   (define op (open-output-string))
    (define (print-row id ts1 ts2 delta)
-     (when (getenv "DEBUG")
-       (printf "~3a ~13a ~13a ~5a\n" id ts1 ts2 delta)))
+     (fprintf op "~3a ~13a ~13a ~5a\n" id ts1 ts2 delta))
+   (define p
+     (spawn&link
+      (lambda ()
+        (process-trap-exit #t)
+        (send me 'ready)
+        (receive
+          [`(EXIT ,pid ,reason)
+           (when (or DEBUG? (informative-exit-reason? reason))
+             (display-string (get-output-string op)))]))))
+   (receive [ready 'ok])
    (transaction db
+     (fprintf op ";; check that (<= ~s delta ~s)\n" lo hi)
      (print-row "id" "queued" "actual" "delta")
      (for-each
       (lambda (v)
@@ -1076,8 +1092,14 @@
           [#(,id ,ts1 ,julian)
            (let ([ts2 (julian->timestamp julian)])
              (print-row id ts1 ts2 (- ts2 ts1))
-             (assert (<= delay-ms (- ts2 ts1) (* 2 delay-ms))))]))
-      (execute "select id, queued, actual from log order by rowid asc")))))
+             (set! rows-checked (+ rows-checked 1))
+             (when okay?
+               (set! okay? (<= lo (- ts2 ts1) hi))))]))
+      (execute "select id, queued, actual from log order by rowid asc")))
+   (match-let*
+    ([#t okay?]                           ; all rows matched
+     [,@rows-checked (apply + expected)]) ; checked all rows
+    p)))
 
 (db-mat cache-timeout ()
   (match-let*
