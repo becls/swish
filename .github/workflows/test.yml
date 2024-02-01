@@ -18,7 +18,7 @@ jobs:
           echo "HASH_KEY=$(cat ChezScheme/.git/refs/heads/main)" >> "${GITHUB_OUTPUT}"
       - name: Establish Chez Scheme .git / boot file cache
         id: build-restore-bootfiles
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         env:
           cache-name: boot-files
         with:
@@ -121,12 +121,12 @@ jobs:
         if: ${{ runner.os == 'Windows' }}
         run: git config --global core.autocrlf false
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         # the checkout action wipes the workarea, so do the checkout
         # *before* we restore and build Chez Scheme from cache
       - name: Restore Chez Scheme .git / boot file cache
         id: mats-restore-bootfiles
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         env:
           cache-name: boot-files
         with:
@@ -173,7 +173,7 @@ jobs:
       - name: Run tests
         run: make test || echo "Run tests failed" >> failures
       - name: Archive test results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.config.machine }}-${{ matrix.config.chez }}-test
           path: |
@@ -185,7 +185,7 @@ jobs:
       - name: Run coverage
         run: .github/workflows/unless-failed.sh coverage
       - name: Archive coverage results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.config.machine }}-${{ matrix.config.chez }}-coverage
           path: |
@@ -193,7 +193,7 @@ jobs:
             src/swish/*.mo
       - name: Archive coverage reports
         if: ${{ matrix.config.chez == 'main' }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.config.machine }}-${{ matrix.config.chez }}-coverage-report
           path: |
@@ -211,7 +211,7 @@ jobs:
           tar -cvf ${{ matrix.config.machine }}-${{ matrix.config.chez }}-build.tar build/swish
       - name: Archive build artifacts
         if: ${{ matrix.config.chez != 'main' && !startsWith(matrix.config.machine, 't') }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.config.machine }}-${{ matrix.config.chez }}-build.tar
           path: ${{ matrix.config.machine }}-${{ matrix.config.chez }}-build.tar
