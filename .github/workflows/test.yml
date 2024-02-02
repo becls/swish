@@ -85,7 +85,7 @@ jobs:
           - machine: a6nt
             os: windows-2022
             chez: v9.6.4
-          - machine: a6nt
+          - machine: ta6nt
             os: windows-2022
             chez: v9.6.4
           - machine: a6nt
