@@ -175,7 +175,7 @@ jobs:
       - name: Archive test results
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.config.machine }}-${{ matrix.config.chez }}-test
+          name: ${{ matrix.config.machine }}-${{ matrix.config.os }}-${{ matrix.config.chez }}-test
           path: |
             data/mat-report.html
             src/swish/*.mo
@@ -187,7 +187,7 @@ jobs:
       - name: Archive coverage results
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.config.machine }}-${{ matrix.config.chez }}-coverage
+          name: ${{ matrix.config.machine }}-${{ matrix.config.os }}-${{ matrix.config.chez }}-coverage
           path: |
             data/mat-report.html
             src/swish/*.mo
@@ -195,7 +195,7 @@ jobs:
         if: ${{ matrix.config.chez == 'main' }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.config.machine }}-${{ matrix.config.chez }}-coverage-report
+          name: ${{ matrix.config.machine }}-${{ matrix.config.os }}-${{ matrix.config.chez }}-coverage-report
           path: |
             data/coverage.html
             data/src/**/*.html
@@ -213,7 +213,7 @@ jobs:
         if: ${{ matrix.config.chez != 'main' && !startsWith(matrix.config.machine, 't') }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.config.machine }}-${{ matrix.config.chez }}-build.tar
-          path: ${{ matrix.config.machine }}-${{ matrix.config.chez }}-build.tar
+          name: ${{ matrix.config.machine }}-${{ matrix.config.os }}-${{ matrix.config.chez }}-build.tar
+          path: ${{ matrix.config.machine }}-${{ matrix.config.os }}-${{ matrix.config.chez }}-build.tar
       - name: Check for failures
         run: if test -f failures; then cat failures; exit 1; fi
