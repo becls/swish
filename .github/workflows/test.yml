@@ -208,7 +208,7 @@ jobs:
             target="$(realpath "$f")"
             ln -vsf "../$(realpath --relative-to="${PWD}/build/swish" "${target}")" "$f"
           done
-          tar -cvf ${{ matrix.config.machine }}-${{ matrix.config.chez }}-build.tar build/swish
+          tar -cvf ${{ matrix.config.machine }}-${{ matrix.config.os }}-${{ matrix.config.chez }}-build.tar build/swish
       - name: Archive build artifacts
         if: ${{ matrix.config.chez != 'main' && !startsWith(matrix.config.machine, 't') }}
         uses: actions/upload-artifact@v4
