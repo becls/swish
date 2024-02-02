@@ -119,6 +119,7 @@ clean: platform-clean
 	rm -f ../../${BUILD}/lib/swish/*.wpo
 	rm -f ${SwishLibs}
 	rm -f ${SHLIBTEST}
+	rm -f ${TESTREQUEST}
 	rm -f scheme_aux.h
 	rm -f chezscheme-revision.include
 	rm -f swish-revision.include
