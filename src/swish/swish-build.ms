@@ -224,13 +224,16 @@
   ;; fat with scheme only
   (write-example "fat3" hello-fat)
   (build-example "fat3" '("-b" "scheme"))
-  ;; Set SCHEMEHEAPDIRS explicitly since Chez Scheme v10.x changes the default
-  ;; heap search path so that it is relative to the executable. Otherwise the
-  ;; fat3 binary cannot find the system petite.boot.
+  ;; To allow the fat3 binary to find petite.boot, we explicitly set
+  ;; SCHEMEHEAPDIRS. Chez v10.x changes the default heap search path
+  ;; so that it is relative to the executable. As of Chez v10.x, the
+  ;; executables are installed into the lib directory, so we must also
+  ;; include the base executable path.
   (parameterize ([SCHEMEHEAPDIRS
                   (let ([base (path-parent scheme-exe)])
                     (join
                      (list
+                      base ;; v10.x symlinks .../bin/scheme to .../lib/csv%v/%m/scheme
                       (path-combine base ".." ".." "boot" "%m")
                       (path-combine base ".." "lib" "csv%v" "%m")
                       "")
