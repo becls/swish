@@ -194,9 +194,11 @@
                      (let ([m (monitor p)])
                        (receive (until deadline (cons p ls))
                          [`(DOWN ,@m ,@p ,r) ls])))))])
+        ;; in case p is not linked to the process running the mat
+        (for-each (lambda (p) (kill p 'shutdown)) rogues)
         (for-each
          (lambda (rogue)
-           (receive (after kill-delay (kill rogue 'shutdown))
+           (receive (after kill-delay (kill rogue 'kill))
              [`(DOWN ,m ,@rogue ,r) 'ok]))
          rogues))))
 
