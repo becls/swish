@@ -166,9 +166,9 @@ else
 	${GNU_INSTALL} ${SwishLibs} "${INSTLIBDIR}"
 endif
 	${GNU_INSTALL} --directory "${INSTALLROOT}"/bin
-	ln -sf "${INSTLIBDIR}"/swish${EXESUFFIX} "${INSTALLROOT}"/bin/swish
-	ln -sf "${INSTLIBDIR}"/swish-build "${INSTALLROOT}"/bin/swish-build
-	ln -sf "${INSTLIBDIR}"/swish-test "${INSTALLROOT}"/bin/swish-test
+	ln -srf "${INSTLIBDIR}"/swish${EXESUFFIX} "${INSTALLROOT}"/bin/swish
+	ln -srf "${INSTLIBDIR}"/swish-build "${INSTALLROOT}"/bin/swish-build
+	ln -srf "${INSTLIBDIR}"/swish-test "${INSTALLROOT}"/bin/swish-test
 	${GNU_INSTALL} --directory "${INSTLIBDIR}"/lib
 	cd ../../${BUILD}/lib ; find . -type f -name '*.wpo' -a -not -iname 'internal*' -exec ${GNU_INSTALL} --mode=444 -D -T {} "${INSTLIBDIR}"/wpo/{} \;
 	cd ../../${BUILD}/lib ; find . -type f -name '*.so' -a -not -iname 'internal*' -exec ${GNU_INSTALL} --mode=444 -D -T {} "${INSTLIBDIR}"/lib/{} \;
