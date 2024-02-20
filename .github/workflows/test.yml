@@ -15,7 +15,7 @@ jobs:
         id: build-clone-main
         run: |
           git clone --filter=blob:none --branch main https://github.com/cisco/ChezScheme.git
-          echo "HASH_KEY=$(cat ChezScheme/.git/refs/heads/main)" >> "${GITHUB_OUTPUT}"
+          echo "HASH_KEY=v2_$(cat ChezScheme/.git/refs/heads/main)" >> "${GITHUB_OUTPUT}"
       - name: Establish Chez Scheme .git / boot file cache
         id: build-restore-bootfiles
         uses: actions/cache@v4
@@ -47,6 +47,7 @@ jobs:
           make re.boot
           make
           make bootquick XM=a6osx
+          make bootquick XM=arm64osx
           make bootquick XM=a6nt
           make bootquick XM=i3le
           make bootquick XM=ta6nt
@@ -55,7 +56,7 @@ jobs:
     continue-on-error: ${{ startsWith(matrix.machine, 't') }}
     needs: build
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         config:
           - machine: a6osx
@@ -63,6 +64,9 @@ jobs:
             chez: v9.6.4
           - machine: a6osx
             os: macos-12
+            chez: main
+          - machine: arm64osx
+            os: macos-14
             chez: main
           - machine: i3le
             os: ubuntu-22.04
@@ -116,6 +120,9 @@ jobs:
         if: ${{ runner.os == 'macOS' }}
         run: |
           brew install coreutils
+          echo "$(brew --prefix)/opt/coreutils/libexec/gnubin" > /tmp/path
+          cat $GITHUB_PATH >> /tmp/path
+          mv /tmp/path $GITHUB_PATH
           echo "TIMEOUT_SCALE_FACTOR=10" >> $GITHUB_ENV
       - name: Setup Windows
         if: ${{ runner.os == 'Windows' }}
