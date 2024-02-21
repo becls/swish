@@ -16,6 +16,7 @@ test: src/swish/Makefile
 	@./src/run-mats
 
 safe-check: src/swish/Makefile
+	@if git grep -l '[(]include "[^"]\+unsafe.ss"[)]'; then echo "inconsistent include of unsafe.ss in file(s) listed above"; exit 1; fi
 	@touch src/swish/unsafe.ss
 	@UNSAFE_PRIMITIVES=no $(MAKE) -C src/swish mat-prereq
 	@./src/run-mats

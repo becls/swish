@@ -56,7 +56,7 @@
 
   (define default-options (parallel:options))
 
-  (include "swish/unsafe.ss")
+  (include "unsafe.ss")
 
   (define (shuffle-fxvector! v)
     (declare-unsafe-primitives fx> fx- fxvector-length fxvector-ref fxvector-set!)
