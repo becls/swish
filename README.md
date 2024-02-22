@@ -74,7 +74,7 @@ hash.
 ## Mac
 
 - Chez Scheme 9.6.4 or later
-- ginstall and realpath (can be installed through homebrew using `brew install coreutils`)
+- coreutils (install via `brew install coreutils` and set `PATH` accordingly)
 - cmake for libuv (can be installed through homebrew using `brew install cmake`)
 - XCode Command Line Tools
 - dot (can be installed through homebrew using `brew install graphviz`)
