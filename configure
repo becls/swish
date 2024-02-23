@@ -481,6 +481,7 @@ add "CFLAGS:=${MYCFLAGS}"
 add "LD:=${MYLD}"
 add "LDFLAGS:=${MYLDFLAGS}"
 if [ "${Windows}" = "yes" ]; then
+  add "export SCHEMEDLL:=${SchemeDLL}"
   if [ -n "${CUSTOMPATH}" ]; then
     case "${CONFIG_UNAME}" in
       MINGW64_NT-* | MSYS_NT-*)

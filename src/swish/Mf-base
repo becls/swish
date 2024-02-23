@@ -151,6 +151,9 @@ install-batteries: install-check
 	${GNU_INSTALL} --mode=444 "${SCHEMEBOOT}"/petite.boot "${INSTLIBDIR}"
 	${GNU_INSTALL} --mode=444 "${SCHEMEBOOT}"/scheme.boot "${INSTLIBDIR}"
 	${GNU_INSTALL} --mode=444 "${SCHEMEBOOT}"/scheme.h "${INSTLIBDIR}"
+ifneq ($(SCHEMEDLL),)
+	${GNU_INSTALL} --mode=555 "${SCHEMEDLL}" "${INSTLIBDIR}"
+endif
 
 install-bin: install-check all
 	${GNU_INSTALL} --directory "${INSTLIBDIR}"
