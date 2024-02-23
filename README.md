@@ -74,11 +74,11 @@ hash.
 ## Mac
 
 - Chez Scheme 9.6.4 or later
-- coreutils (install via `brew install coreutils` and set `PATH` accordingly)
-- cmake for libuv (can be installed through homebrew using `brew install cmake`)
+- coreutils (install via [Homebrew](https://brew.sh): `brew install coreutils`)
+- cmake for libuv (install via [Homebrew](https://brew.sh): `brew install cmake`)
 - XCode Command Line Tools
-- dot (can be installed through homebrew using `brew install graphviz`)
-- pdflatex (can be installed through homebrew using `brew cask install mactex`)
+- dot (install via [Homebrew](https://brew.sh): `brew install graphviz`)
+- pdflatex (install via [Homebrew](https://brew.sh): `brew cask install mactex`)
 - Latin Modern fonts from LaTeX (can be installed with Font Book from a location like `/usr/local/texlive/2020/texmf-dist/fonts/opentype/public/lm`)
 
 ## Windows

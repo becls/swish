@@ -120,9 +120,6 @@ jobs:
         if: ${{ runner.os == 'macOS' }}
         run: |
           brew install coreutils
-          echo "$(brew --prefix)/opt/coreutils/libexec/gnubin" > /tmp/path
-          cat $GITHUB_PATH >> /tmp/path
-          mv /tmp/path $GITHUB_PATH
           echo "TIMEOUT_SCALE_FACTOR=10" >> $GITHUB_ENV
       - name: Setup Windows
         if: ${{ runner.os == 'Windows' }}

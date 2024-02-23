@@ -48,7 +48,7 @@ case "${CONFIG_UNAME}" in
     Windows=no
     EXESUFFIX=
     DLLSUFFIX=.dylib
-    NORMALIZE_PATH="realpath -m"
+    NORMALIZE_PATH="grealpath -m"
     ;;
   *)
     Windows=no
@@ -144,7 +144,7 @@ fi
 if [ -n "${PREFIX}" ]; then
   # use absolute path, after limited tilde expansion, since "make install"
   # runs in src/swish where a relative path would cause confusion
-  PREFIX="$(realpath -m "$(weak_tilde_expansion "${PREFIX}")")"
+  PREFIX="$(${NORMALIZE_PATH} "$(weak_tilde_expansion "${PREFIX}")")"
 fi
 
 notilde() {
@@ -435,8 +435,10 @@ add "SQLITE_SRCPATH:=${SQLITE_SRCPATH}"
 add "NORMALIZE_PATH:=${NORMALIZE_PATH}"
 if [ "${CONFIG_UNAME}" = "Darwin" ]; then
   add "GNU_INSTALL:=ginstall"
+  add "GNU_LN:=gln"
 else
   add "GNU_INSTALL:=install"
+  add "GNU_LN:=ln"
 fi
 # build server may not have GNU make >= 4.4, but we don't use -j there either
 TMPFILE="$(mktemp)"
@@ -453,7 +455,7 @@ set_output ";;" src/osi-bootstrap.ss
 if [ "${Windows}" = "yes" ]; then
   ROOT="$(cygpath -am "${BASE}")"
 else
-  ROOT="$(realpath -m "${BASE}")"
+  ROOT="$(${NORMALIZE_PATH} "${BASE}")"
 fi
 add "(let ()"
 add "  (define (path-combine . paths) (format \"~{~a~^/~}\" paths))"
