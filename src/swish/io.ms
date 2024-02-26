@@ -818,7 +818,7 @@
      (sort <
        (cons SIGWINCH
          (meta-cond
-          [(memq (machine-type) '(i3nt ti3nt a6nt ta6nt))
+          [windows?
            (list SIGBREAK SIGHUP SIGINT)]
           [else
            (list SIGHUP SIGINT SIGTERM)])))]
@@ -845,7 +845,7 @@
     [,_ (print-signal-handlers (open-output-string))]) ;; should not crash
    'ok)
   (meta-cond
-   [(memq (machine-type) '(i3nt ti3nt a6nt ta6nt))
+   [windows?
     ;; skip signal-handling tests on Windows
     (void)]
    [else

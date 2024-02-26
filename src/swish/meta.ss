@@ -178,7 +178,7 @@
 
   (define-syntax windows?
     (meta-cond
-     [(memq (machine-type) '(i3nt ti3nt a6nt ta6nt))
+     [(eqv? (directory-separator) #\\)
       (identifier-syntax #t)]
      [else
       (identifier-syntax #f)]))

@@ -75,7 +75,7 @@
              [op (open-binary-file-to-replace out)])
         (on-exit (close-port op)
           (put-bytevector op bv))))
-    (when (memq (machine-type) '(a6nt i3nt ta6nt ti3nt))
+    (when windows?
       (for-each
        (lambda (fn)
          (let* ([in (path-combine (prereq-path) fn)]

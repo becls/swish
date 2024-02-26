@@ -238,7 +238,7 @@
                       (path-combine base ".." "lib" "csv%v" "%m")
                       "")
                      (meta-cond
-                      [(memq (machine-type) '(a6nt ta6nt i3nt ti3nt)) #\;]
+                      [windows? #\;]
                       [else #\:])))])
     (run-fat "fat3" '() '("Hello, World!"))))
 

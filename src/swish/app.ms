@@ -485,7 +485,7 @@
       [() 'no-extraneous-output])]))
 
 (meta-cond
- [(memq (machine-type) '(i3nt ti3nt a6nt ta6nt))
+ [windows?
   ;; test manually on Windows
   (void)]
  [else

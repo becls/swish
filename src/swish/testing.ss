@@ -78,7 +78,7 @@
   (define-syntax scheme-exe (identifier-syntax (get-scheme-exe)))
 
   (define scheme-environment-variable
-    (if (memq (machine-type) '(a6nt i3nt ta6nt ti3nt)) "SCHEME_WIN" "SCHEME"))
+    (if windows? "SCHEME_WIN" "SCHEME"))
 
   (define (get-scheme-exe)
     (or (getenv scheme-environment-variable)

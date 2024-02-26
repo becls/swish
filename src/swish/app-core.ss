@@ -175,7 +175,7 @@
 
   (define (trap-signals handler)
     (meta-cond
-     [(memq (machine-type) '(i3nt ti3nt a6nt ta6nt))
+     [windows?
       (signal-handler SIGBREAK handler)
       (signal-handler SIGHUP handler)
       (signal-handler SIGINT handler)]

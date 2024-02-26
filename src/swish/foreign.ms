@@ -69,10 +69,12 @@
 
 (define shlibtest.so
   (let ([shlib
-         (case (machine-type)
-           [(a6nt i3nt ta6nt ti3nt) "shlibtest.dll"]
-           [(a6osx arm64osx ta6osx tarm64osx) "shlibtest.dylib"]
-           [else "shlibtest.so"])])
+         (cond
+          [windows? "shlibtest.dll"]
+          [else
+           (case (machine-type)
+             [(a6osx arm64osx ta6osx tarm64osx) "shlibtest.dylib"]
+             [else "shlibtest.so"])])])
     ;; deliberately left this in src/swish, not in build/mat-prereq/bin,
     ;; so we don't happen to find shared library just because it's near
     ;; one of our binaries or is in the path
