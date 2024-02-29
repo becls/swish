@@ -1127,7 +1127,8 @@
             [(,who . ,errno) (io-error name who errno)]
             [,port
              (let ([name (osi-port-name port)])
-               (values (@make-iport name port #f) (@make-oport name port)))])]))))
+               (values (@make-iport name port #f) (@make-oport name port)))])]
+         [(,who . ,errno) (io-error name who errno)]))))
 
   (define (reuse-or-make-new-buffer p get-buffer)
     (define (reuse-or-make orig get-length make-new copy!)
