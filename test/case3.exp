@@ -1,0 +1,89 @@
+package require Expect
+
+# Warning: anchored match ^ and $ do not behave as expected; see man page.
+
+source common.tcl
+
+# configure `send -h` to emulate fast and consistent human typist
+set send_human {.1 .3 1 .05 2}
+set timeout 1
+
+# 1. start repl
+set sid [spawn swish]
+# check that we are interactive
+expect "> "
+send "(interactive?)\n"
+must "#t"
+must "> "
+send "(software-revision 'swish)\n"
+must "> "
+
+# print some output to help us interrupt when read is running
+send "(define read!\n"
+send "  (let ((n 0))\n"
+send "    (lambda ()\n"
+send "      (set! n (+ n 1))\n"
+send "      (printf \"\n<read ~s> \" n)\n"
+send "      (read))))\n"
+must "> "
+
+# 1. start a read for x
+send "(define x (read!))\n"
+must "<read 1> "
+# 2. interrupt the read with ^C
+send \x03
+must "break> "
+# 3. start a new cafe, but mess around a bit with whitespace
+send "\n \t   n\n"
+must "\n>> "
+# 4. start a read for y
+send "(define y (read!))\n"
+must "<read 2> "
+# 5. interrupt the read with ^C a few times
+send \x03
+must "break> "
+send \x03
+must "break> "
+send \x03
+must "break> "
+# 6. get statistics
+send "s\n"
+must "elapsed real time"
+must "bytes allocated"
+# 7. resume the read for y
+send "e\n"
+send "\"this is Y\"\n"
+must "\n>> "
+# 8. start a loop, with output to aid expect
+send "(let f ((n 1)) (receive (after 1 (pretty-print n) (f (+ n 1)))))\n"
+# 9. type lines of input that we'll discard because we hit ^C to interrupt
+#    the loop and get the REPL to read
+expect "2"
+send "We should ignore this input ...\n"
+expect "3"
+send "because the REPL is busy and has not issued another r!\n"
+expect "4"
+send "and we are about to hit ^C\n"
+expect "5"
+send \x03
+#    we should not get "Invalid command." since that would mean ^C did not
+#    discard the text
+expect {
+  "Invalid command." fail
+  "break> " {}
+}
+# 10. reset to bail out of the loop and return to the cafe
+send "r\n"
+must "\n>> "
+# 11. hit ^D to exit the cafe and return to the break handler from step 2
+send \x04
+must "break> "
+# 12. exit the interrupt handler and enter something for x
+send "e\n"
+send "tofu\n"
+must "\> "
+# 13. check the results
+send "(list x y)\n"
+must "(tofu \"this is Y\")"
+
+pass

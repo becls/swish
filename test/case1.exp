@@ -1,0 +1,42 @@
+package require Expect
+
+# Warning: anchored match ^ and $ do not behave as expected; see man page.
+
+source common.tcl
+
+# 1. start repl
+set sid [spawn swish]
+# check that we are interactive
+must "> "
+send "(interactive?)\n"
+must "#t"
+must "> "
+send "(software-revision 'swish)\n"
+must "> "
+set timeout 1.5
+
+# test type-ahead: we enter several lines of input while
+# the REPL is sleeping and make sure we got them all
+send "(define (go)\n"
+send "  (let* ((x (receive (after 5 (read))))\n"
+send "         (y (receive (after 5 (read))))\n"
+send "         (z (receive (after 5 (read)))))\n"
+send "    (list x y z)))\n"
+send "go\n"
+must "#<procedure go>"
+must "\n> "
+send "(go)\n"
+send "1\n 2\n   3\n(+ 4 2)\n"
+must "(1 2 3)"
+must "6"
+
+must "\n> "
+send "(list (go))\n"
+send "alpha\n"
+send "baker\n"
+send "charlie\n"
+send "cons\n"
+must "((alpha baker charlie))"
+must "#<procedure cons>"
+
+pass

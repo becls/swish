@@ -14,6 +14,7 @@ See [app.ms](swish/app.ms) and [io.ms](swish/io.ms).
 ## Keyboard Interrupt
 
 Here are some test cases to try at the REPL.
+These are also captured in the [`expect` scripts](../test/ReadMe.md).
 
 ### Simple Case
 

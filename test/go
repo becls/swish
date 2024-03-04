@@ -1,0 +1,13 @@
+#! /bin/bash -e
+
+LOG="$(mktemp /tmp/console-test.XXXXXXXX)"
+echo "Writing results to ${LOG}"
+for script in *.exp; do
+  echo -n "== running ${script}: "
+  if expect "${script}" >> "${LOG}"; then
+    echo "Pass"
+  else
+    echo "FAIL"
+    exit 1
+  fi
+done

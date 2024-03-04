@@ -1,0 +1,170 @@
+package require Expect
+
+# Warning: anchored match ^ and $ do not behave as expected; see man page.
+
+source common.tcl
+
+# configure `send -h` to emulate fast and consistent human typist
+set send_human {.1 .3 1 .05 2}
+set timeout 1
+
+# 1. start repl
+set sid [spawn swish]
+# check that we are interactive
+expect "> "
+send "(interactive?)\n"
+must "#t"
+must "> "
+send "(software-revision 'swish)\n"
+must "> "
+# 2. press ^C several times; this just gives us another REPL prompt each time
+send \x03
+must "> "
+send \x03
+must "> "
+send \x03
+must "> "
+# 3. start loop
+send "(let f () (f))\n"
+# 4. press ^C to interrupt the loop after it runs a bit; hard loop for once
+expect timeout { send \x03 }
+must "break> "
+# 5. at the "break>" prompt, enter `n` to start a new cafe; the prompt changes to ">>" to reflect the cafe nesting level
+send -h "n\n"
+must "\n>> "
+# 6. run `(let g () (g))`, but generate output so expect can stop us sooner
+send "(let g () (receive (after 10 (pretty-print 'tick))) (g))\n"
+# 7. press ^C to interrupt the loop after it runs a bit; use \ntick to avoid matching 'tick in code
+must "\ntick"
+must "tick"
+must "tick"
+send \x03
+# 8. at the "break>" prompt, enter `e` to exit the interrupt handler and resume the loop
+must "break> "
+send -h "e\n"
+# 9. press ^C to interrupt the loop again
+must "tick"
+must "tick"
+send \x03
+# 10. at the "break>" prompt, enter `q` to reset to the cafe; again the prompt is ">>" to reflect the current cafe level
+must "break> "
+send -h "q\n"
+must "\n>> "
+# 11. run `(new-cafe)`
+send "(new-cafe)\n"
+must "\n>>> "
+# 12. press ^C a few times; this just gives another REPL prompt
+send \x03
+must "\n>>> "
+send \x03
+must "\n>>> "
+send \x03
+must "\n>>> "
+# 13. run `(let f () (f))`, but generate output so expect can stop us sooner
+send "(let f () (receive (after 10 (pretty-print 'tock))) (f))\n"
+# 14. press ^C to interrupt the loop after a few iterations; use \ntock to avoid matching 'tock in code
+must "\ntock"
+must "tock"
+must "tock"
+must "tock"
+send \x03
+# 15. at the "break>" prompt, enter `n` to start a new cafe; the prompt changes to ">>>>" to reflect the cafe nesting level
+must "break> "
+send "n\n"
+must "\n>>>> "
+# 16. evaluate `(let f ([n 3]) (if (= n 0) (begin (break) 'ok) (list (f (- n 1)))))`
+#     use curly braces to prevent Tcl from trying to expand [n 3]
+send { (let f ([n 3]) (if (= n 0) (begin (break) 'ok) (list (f (- n 1))))) }
+send "\n"
+# 17. at the "break>" prompt, enter `n` to start a new cafe; the prompt changes
+#     to ">>>>>" to reflect the cafe nesting level
+must "break> "
+send "n\n"
+must "\n>>>>> "
+# 18. run `(let f () (f))`, again generate output to aid expect
+send "(let f () (receive (after 10 (pretty-print 'ping))) (f))\n"
+# 19. press ^C to interrupt the loop; use \nping to avoid matching 'ping in code
+must "\nping"
+send \x03
+# 20. at the "break>" prompt, enter `e` to exit the interrupt handler and resume the loop
+must "break> "
+send "e\n"
+# 21. press ^C to interrupt the loop again
+must "ping"
+must "ping"
+send \x03
+# 22. at the "break>" prompt, press ^C; this just gives us another "break>" prompt
+must "break> "
+send \x03
+must "break> "
+# 23. at the "break>" prompt, enter `q` to reset to the cafe; again the prompt is ">>>>>" to reflect the current cafe level
+send "q\n"
+must "\n>>>>> "
+# 24. run `(exit)`, returning to the "break>" prompt
+send "(exit)\n"
+must "break> "
+# 25. at the "break>" prompt, enter `e` to exit and continue the loop from step 16; the REPL prints `(((ok)))`
+send "e\n"
+must "(((ok)))"
+# 26. run `(exit)`, returning to the "break>" prompt
+send "(exit)\n"
+must "break> "
+# 27. at the "break>" prompt, press ^C; this just gives us another "break>" prompt
+send \x03
+must "break> "
+# 28. at the "break>" prompt, enter `q`, returning to the cafe with prompt ">>>"
+send "q\n"
+must "\n>>> "
+# 29. run `(let f () (receive (after 5000 (f))))`; with output to help expect
+send "\n(let f ()\n"
+send "  (receive (after 10 (display-string (utf8->string #vu8(111 107 10)))))\n"
+send "  (receive (after 5000 (f))))\n"
+must "ok"
+# 30. press ^C to interrupt the loop
+send \x03
+# 31. at the "break>" prompt, press ^C a few times; this just gives another "break>" prompt
+must "break> "
+send \x03
+must "break> "
+send \x03
+must "break> "
+send \x03
+must "break> "
+send \x03
+# 32. at the "break>" prompt, enter `q`
+must "break> "
+send "q\n"
+must "\n>>> "
+# 33. run `(exit)`, returning to the cafe with prompt ">>"
+send "(exit)\n"
+must "\n>> "
+# 34. run `(let f () (f))`; again with output to aid expect
+send {(let f ([n 0]) (pretty-print n) (receive (after 1 (f (+ n 1)))))}
+send "\n"
+# 35. press ^C to interrupt the loop
+must "\n5"
+send \x03
+# 36. at the "break>" prompt, enter `q`
+must "break> "
+send "q\n"
+must "\n>>"
+# 37. run `(exit)`, returning to the "break>" prompt from step 5
+send "(exit)\n"
+must "break> "
+# 38. at the "break>" prompt, enter `e` to continue the loop from step 3
+send "e\n"
+# 39. press ^C to interrupt the loop
+expect timeout
+send \x03
+# 40. at the "break>" prompt, enter `q`, returning to the ">" prompt
+must "break> "
+send "q\n"
+must "\n> "
+# 41. type the incomplete expression `(cons 1` and press ^C; we get a new ">" prompt
+send -h "(cons 1\x03"
+must "\n> "
+# 42. run `(* 6 7)`; we get the expected answer
+send "(* 6 7)\n"
+must "42"
+
+pass

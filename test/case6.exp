@@ -1,0 +1,52 @@
+package require Expect
+
+source common.tcl
+
+# configure `send -h` to emulate fast and consistent human typist
+set send_human {.1 .3 1 .05 2}
+set timeout 1
+
+# 1. start repl and test a bunch of nested reads
+set sid [spawn swish]
+# check that we are interactive
+expect "> "
+send "(interactive?)\n"
+must "#t"
+must "\n> "
+send "(software-revision 'swish)\n"
+must "\n> "
+
+# ensure that console doesn't interfere with ability of the REPL to
+# blind-receive messages; this could be a problem if our console uses
+# send/receive.
+
+send "(send self 'one)\n"
+must "\n> "
+send "(define me self)\n"
+must "\n> "
+send "(spawn (lambda () (receive (after 10 'ok)) (send me 'two) (send me 'three)))\n"
+must "<process :"
+must "\n> "
+
+send {(receive [,x x])}
+send "\n"
+must "one"
+
+send {(define x (list (receive [,x x]) (read)))}
+send "\n"
+send "turnips\n"
+
+must "\n> "
+send "(send self x)\n"
+
+must "\n> "
+send {(receive [,x x])}
+send "\n"
+must "three"
+
+must "\n> "
+send {(receive [,x x])}
+send "\n"
+must "(two turnips)"
+
+pass

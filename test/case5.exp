@@ -1,0 +1,136 @@
+package require Expect
+
+# Warning: anchored match ^ and $ do not behave as expected; see man page.
+
+source common.tcl
+
+# configure `send -h` to emulate fast and consistent human typist
+set send_human {.1 .3 1 .05 2}
+set timeout 1
+
+# 1. start repl and test a bunch of nested reads
+set sid [spawn swish]
+# check that we are interactive
+expect "> "
+send "(interactive?)\n"
+must "#t"
+must "\n> "
+send "(software-revision 'swish)\n"
+must "\n> "
+
+# hitting ^C just gives us another prompt
+send \x03
+must "\n> "
+send \x03
+must "\n> "
+send \x03
+must "\n> "
+
+# 2. start a read for x
+send "(define x (read))\n"
+send " (\n"
+send "     one\n"
+send "     cancel this"
+
+# hit ^C; use -h human mode to give prior input time to land before we cancel
+# that last line of input where we did not hit enter
+send -h "   \x03"
+must "break> "
+
+# 3. start a nested read for y
+send "n\n"
+must "\n>> "
+send "(define y (read))\n"
+send " \"this is\n"
+send " not going to be seen"
+
+# hit ^C; use -h human mode so there is time for the input to land before we
+# cancel that second line where we did not hit enter
+send -h "   \x03"
+must "break> "
+
+# 4. start a nested read for z
+send "n\n"
+must "\n>>> "
+send "(define z (read))\n"
+send "\"one\n"
+send -h "two\n"
+send "completely ignore this one ;; we're going to hit ^C"
+
+# hit ^C; use -h human mode so there is time for the input to land before we
+# cancel that third line
+send -h "   \x03"
+must "break> "
+send "n\n"
+must "\n>>>>"
+# 5. yet another nested read
+send "(make-list 4 (read))\n"
+send "score\n"
+must "(score score score score)"
+must "\n>>>>"
+send "(exit)\n"
+
+# 6. resume the read for z from step 4
+must "break> "
+send "e\n"
+send "three\n"
+send "four\"\n"
+must "\n>>> "
+
+# 7. exit the nested cafe for reading z
+send "(exit)\n"
+must "break> "
+
+# 8. resume the interrupted read for y started in step 3
+send "e\n"
+send "great\" ;; end string y\n"
+must "\n>> "
+
+# 9. exit nested cafe we started during interrupted read for x
+send "(exit)\n"
+must "break> "
+# make sure another ^C doesn't cause problems
+send \x03
+must "break> "
+send \x03
+must "break> "
+
+# 10. resume the interrupted read for x
+send "e\n"
+send "potato\n"
+send ")\n"
+must "\n> "
+
+# check x
+send "x\n"
+must "(one potato)"
+
+# check y: "this is\ngreat"
+must "\n> "
+send "(define ip (open-input-string y))\n"
+must "\n> "
+send "(read ip)\n"
+must "this"
+must "\n> "
+send "(read ip)\n"
+must "is"
+must "\n> "
+send "(read ip)\n"
+must "great"
+
+# check z: "one\ntwo\nthree\nfour"
+must "\n> "
+send "(define ip (open-input-string z))\n"
+must "\n> "
+send "(get-line ip)\n"
+must "\"one\""
+send "(get-line ip)\n"
+must "\"two\""
+send "(get-line ip)\n"
+must "\"three\""
+send "(get-line ip)\n"
+must "\"four\""
+send "(get-line ip)\n"
+must "#!eof"
+
+pass

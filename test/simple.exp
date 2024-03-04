@@ -1,0 +1,28 @@
+package require Expect
+
+# TODO abstract so we can run swish or scheme --eedisable
+
+source common.tcl
+
+set sid [spawn swish]
+# check that we are interactive
+must "> "
+set timeout 1
+send "(interactive?)\n"
+must "#t"
+must "> "
+# press ^C; this has no effect: we simply get another REPL prompt
+send \x03
+must "> "
+# start an infinite loop
+send "(let f () (f))\n"
+# press ^C; this should interrupt the loop, giving us the "break>" prompt
+expect timeout { send \x03 }
+set timeout 10
+must "break> "
+# enter ? for options
+send "?\n"
+must "Type e to exit interrupt handler and continue"
+must "break> "
+
+pass

@@ -1,0 +1,50 @@
+package require Expect
+
+# Warning: anchored match ^ and $ do not behave as expected; see man page.
+
+source common.tcl
+
+# configure `send -h` to emulate fast and consistent human typist
+set send_human {.1 .3 1 .05 2}
+set timeout 1
+
+# 1. start repl
+set sid [spawn swish]
+# check that we are interactive
+expect "> "
+send "(interactive?)\n"
+must "#t"
+must "\n> "
+send "(software-revision 'swish)\n"
+must "\n> "
+
+# hitting ^C just gives us another prompt
+send \x03
+must "\n> "
+
+# start a hard loop, with some output to help us know when to break
+send "(let f ((p? #t)) (when p? (pretty-print 'running)) (f #f))"
+# wait for echo before sending newline
+must "f #f"
+send "\n"
+must "\nrunning"
+
+# loop is running, so now we can interrupt it with ^C
+send \x03
+must "break> "
+
+# hit ^D to resume the loop
+send \x04
+
+# enter "s" while REPL is busy with loop and then hit ^C
+send -h "s\n \x03"
+expect {
+  "elapsed real time" fail
+  "break> " {}
+}
+
+# quit the interrupt handler and we're back to the cafe prompt
+send "q\n"
+must "\n> "
+
+pass

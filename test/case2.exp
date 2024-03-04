@@ -1,0 +1,33 @@
+package require Expect
+
+# Warning: anchored match ^ and $ do not behave as expected; see man page.
+
+source common.tcl
+
+# configure `send -h` to emulate fast and consistent human typist
+set send_human {.1 .3 1 .05 2}
+set timeout 1
+
+# 1. start repl
+set sid [spawn swish]
+# check that we are interactive
+expect "> "
+send "(interactive?)\n"
+must "#t"
+must "> "
+send "(software-revision 'swish)\n"
+must "> "
+
+send "(define x (read))\n"
+# start entering a string
+send -h "\"this is\n"
+# hit ^C after the newline
+expect timeout { send \x03 }
+must "break> "
+send "e\n"
+send "  fine\n\"\n"
+must "> "
+send "(printf \"~s\n\" (split x #\\newline))\n"
+must {("this is" "  fine" "")}
+
+pass
