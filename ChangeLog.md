@@ -1,5 +1,74 @@
 # Change Log
 
+## 2024-03-12 Version 2.6.0 (Stable)
+
+### New
+
+* Enabled use with Chez Scheme 10.0
+* Enabled use with arm64osx, tarm64osx, arm64le, and tarm64le machine types
+* Added `db:start`
+* Added end timestamp to the child view
+* Added `not-reached` macro which omits source when profiling
+* Added `port->notify-port` for TCP ports
+* Added `tcp-nodelay`
+* WebSockets
+  - Added error code 1009 when exceeding size limit
+  - Added error code 1011 when reader raises an exception
+  - Improved performance by enabling `tcp-nodelay`
+  - Improved performance by masking in place rather than copying the
+    payload using optimized primitives
+  - Improved performance by reusing the codec buffer if possible
+  - Improved performance by sending the header and payload with a
+    single call `osi_tcp_write2`
+* Added `get-bytevector-exactly-n`
+* Added `define-syntactic-monad`
+* Added `natural-string<?` and `natural-string-ci<?`
+* Added `osi_is_service`
+* Added `fold-files` and `filter-files`
+* Added `--prelude` and `--prelude-file` to `swish-build`
+* Added `swish-test --progress suite-verbose`
+* Improved performance of JSON reading and writing
+* Added `json:pretty`, `json:key<?`, and `json:custom-write`
+* Added parallel library including `parallel`, `parallel!`,
+  `parallel:execute`, `parallel:execute!`, `parallel:for-each`,
+  `parallel:map`, and `parallel:vector-map`
+* Added support for procedural `process-trap-exit` handler
+
+### Bug Fixes
+
+* Fixed writing to closed stderr on exception
+* Fixed clearing unset signal handler
+* Clarified scopes for define-options sub-forms
+* HTTP and WebSocket code now closes ports rather than leaving them to
+  the collector
+* Fixed console-event-handler retaining objects indefinitely when
+  attempting to suppress duplicate stack dumps
+* Fixed leak in sqlite:marshal-bindings where an out-of-range value
+  may cause the Scheme runtime to longjmp beyond Swish's error handling
+* Fixed premature closing of WebSocket while reading large payloads
+* Fixed usage of `get-bytevector-n`
+* Fixed to release profile counts using `profile-release-counter`
+  introduced in Chez Scheme 9.5.1
+* Fixed destination for annotated files when profiling
+* Fixed `swish-build -s` to resolve `<source>` files using the
+  `source-directories` specified
+* Fixed potential `watch-path` crash
+* Fixed typical use-cases for Swish scripts under Cygwin
+
+### Updates
+
+* Updated to SQLite 3.45.1
+* Updated to libuv 1.48.0
+* Require Chez Scheme 9.6.4 or later
+* Eliminated dependency on jQuery
+* Updated profile coverage report
+  - added legend
+  - added line numbers
+  - changed DOCTYPE to HTML5
+  - no longer colors leading whitespace
+* Updated `html5` form to include `lang="en"` if not otherwise specified
+* Updated `console-event-handler` to elide specific `<child-end>` messages
+
 ## 2022-06-09 Version 2.4.0 (Stable)
 
 ### New
