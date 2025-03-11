@@ -35,9 +35,11 @@
        (assert (equal? exp 'res))
        (test-cases clause ...))]))
 
+(define-tuple <pregexp> pat backrefs)
+
 (test set1
 
-  (pregexp "c.r")
+  (<pregexp> pat (pregexp "c.r"))
   (:sub (:or (:seq #\c :any #\r)))
 
   (pregexp-match-positions "brain" "bird")
@@ -403,10 +405,10 @@
 (test set6
 
   ;; PLT bug 6095 from Neil W. Van Dyke
-  (pregexp "[a-z-]")
+  (<pregexp> pat (pregexp "[a-z-]"))
   (:sub (:or (:seq (:one-of-chars (:char-range #\a #\z) #\-))))
                                         ;
-  (pregexp "[-a-z]")
+  (<pregexp> pat (pregexp "[-a-z]"))
   (:sub (:or (:seq (:one-of-chars #\- (:char-range #\a #\z)))))
 
   ;; PLT bug 6442 from David T. Pierson
@@ -421,10 +423,10 @@
   3
 
   ;; PLT bug 7232 from Neil Van Dyke
-  (pregexp "[-a]")
+  (<pregexp> pat (pregexp "[-a]"))
   (:sub (:or (:seq (:one-of-chars #\- #\a))))
                                         ;
-  (pregexp "[a-]")
+  (<pregexp> pat (pregexp "[a-]"))
   (:sub (:or (:seq (:one-of-chars #\a #\-))))
 
   )

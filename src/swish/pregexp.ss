@@ -17,6 +17,7 @@
 ;;; - added re macro for compile-time parsing
 ;;; - updated replace functions to use a string output port for efficiency
 ;;; - removed unused sn argument from pregexp-match-positions-aux
+;;; - reduced construction of backrefs list in pregexp-match-positions-aux
 ;;; - lookbehind matching handles newlines and honors non-zero start
 ;;; - removed *pregexp-version*
 ;;; - inlined *pregexp-comment-char*, *pregexp-nul-char-int*,
@@ -437,13 +438,13 @@
           (let ([car-re (car re)]
                 [sub-cdr-re (sub (cdr re))])
             (if (eq? car-re ':sub)
-                (cons (cons re #f) sub-cdr-re)
+                (cons re sub-cdr-re)
                 (append (sub car-re) sub-cdr-re)))
           '())))
 
-  (define (pregexp-match-positions-aux re s start n i)
+  (define (pregexp-match-positions-aux re backrefs s start n i)
     (let ([identity (lambda (x) x)]
-          [backrefs (pregexp-make-backref-list re)]
+          [backrefs (map (lambda (re) (cons re #f)) backrefs)]
           [case-sensitive? #t])
       (let sub ([re re] [i i] [sk identity] [fk (lambda () #f)])
         (cond
@@ -647,9 +648,19 @@
             (put-char p c)
             (loop (+ i 1))])))))
 
-  (define (pregexp s)
+  (define-tuple <pregexp> pat backrefs)
+  (define (pregexp-help s)
     (set! *pregexp-space-sensitive?* #t) ;; in case it got corrupted
-    (list ':sub (car (pregexp-read-pattern s 0 (string-length s)))))
+    (pregexp-help-pair (list ':sub (car (pregexp-read-pattern s 0 (string-length s))))))
+
+  (define (pregexp-help-pair pat)
+    (values pat (pregexp-make-backref-list pat)))
+
+  (define (pregexp s)
+    (let-values ([(pat backrefs) (if (pair? s) (pregexp-help-pair s) (pregexp-help s))])
+      (<pregexp> make
+        [pat pat]
+        [backrefs backrefs])))
 
   (define pregexp-match-positions
     (case-lambda
@@ -658,15 +669,17 @@
      [(pat str start)
       (pregexp-match-positions pat str start (string-length str))]
      [(pat str start end)
-      (let ([pat (cond
-                  [(string? pat) (pregexp pat)]
-                  [(pair? pat) pat]
-                  [else (pregexp-error 'pregexp-match-positions
-                          'pattern-must-be-compiled-or-string-regexp
-                          pat)])])
+      (let-values ([(pat backrefs)
+                    (match pat
+                      [`(<pregexp> ,pat ,backrefs) (values pat backrefs)]
+                      [,_ (guard (string? pat)) (pregexp-help pat)]
+                      [,_ (guard (pair? pat)) (pregexp-help-pair pat)]
+                      [,_ (pregexp-error 'pregexp-match-positions
+                            'pattern-must-be-compiled-or-string-regexp
+                            pat)])])
         (let loop ([i start])
           (and (<= i end)
-               (or (pregexp-match-positions-aux pat str start end i)
+               (or (pregexp-match-positions-aux pat backrefs str start end i)
                    (loop (+ i 1))))))]))
 
   (define pregexp-match
