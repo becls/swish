@@ -122,7 +122,6 @@
               (equal? (datum (required optional)) '(required optional)))
          (with-syntax
           ([<name> (compound-id #'name "<" #'name ">")]
-           [<name>? (compound-id #'name "<" #'name ">?")]
            [make-<name> (compound-id #'name "make-<" #'name ">")]
            [((req-key req-fml #f req-check-expr) ...)
             (map parse-required #'(req-field ...))]
