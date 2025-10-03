@@ -1,0 +1,83 @@
+% Copyright 2025 Indigo BioAutomation, Inc.
+%
+% Permission is hereby granted, free of charge, to any person
+% obtaining a copy of this software and associated documentation files
+% (the "Software"), to deal in the Software without restriction,
+% including without limitation the rights to use, copy, modify, merge,
+% publish, distribute, sublicense, and/or sell copies of the Software,
+% and to permit persons to whom the Software is furnished to do so,
+% subject to the following conditions:
+%
+% The above copyright notice and this permission notice shall be
+% included in all copies or substantial portions of the Software.
+%
+% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+% EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+% MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+% NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+% BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+% ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+% CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+% SOFTWARE.
+
+\chapter {Options Library}\label{chap:options}
+
+\section {Introduction}
+
+The \code{(swish options)} library provides a way to define a set of named options. The
+options are stored in a record.
+
+\section {Programming Interface}
+
+\defineentry{define-options}
+\begin{syntax}\begin{alltt}
+(define-options \var{opt-name}
+  (required [\var{key} \nt{req-spec} \etc] \etc)
+  (optional [\var{key} \nt{opt-spec} \etc] \etc))\end{alltt}
+\begin{grammar}
+  \prodrow{\nt{req-spec}}{\code{(must-be \var{pred?} \etc)}}
+  \altrow{\code{(filter \var{filter-expr})}}
+  \prodrow{\nt{opt-spec}}{\nt{req-spec}}
+  \altrow{\code{(default \var{default-expr})}}
+\end{grammar}
+\end{syntax}
+\returns{} an \var{opt-name} macro and an \code{<\var{opt-name}>} record type that can be
+used in \code{match} patterns
+
+The \code{define-options} form generates an internal make-record procedure that evaluates
+the \var{default-expr}, \var{pred?}, and \var{filter-expr} expressions left-to-right in
+the order that fields appear in the definition. The order of evaluation for individual
+expressions of a particular field is unspecified.  This means that default expressions are
+generative. If this is not desirable, bind \var{default-expr} to a variable.
+
+\var{opt-name} is an identifier. The \var{key}s are distinct identifiers.
+
+The \var{opt-name} macro supports
+\begin{itemize}
+
+\item record construction and copying\begin{alltt}
+(\var{opt-name} [\var{key} \var{val}] \etc)
+(\var{opt-name} copy \var{obj} [\var{key} \var{val}] \etc)
+(\var{opt-name} copy* \var{obj} [\var{key} \var{val}] \etc)\end{alltt}
+
+\item record field access\begin{alltt}
+((\var{opt-name} \var{key}) \var{obj})
+(\var{opt-name} \var{key} \var{obj})\end{alltt}
+    
+\item record predicate\begin{alltt}
+((\var{opt-name} is?) \var{obj})
+(\var{opt-name} is? \var{obj})\end{alltt}
+
+\end{itemize}
+
+\defineentry{procedure/arity?}
+\begin{procedure}\begin{alltt}
+((procedure/arity? \var{mask}) \var{p})
+(procedure/arity? \var{mask} \var{p})\strut\end{alltt}
+\end{procedure}
+\returns{} a boolean
+
+The \code{procedure/arity?} procedure returns true if and only if \var{p} is a procedure
+with an arity that matches one of the bits in \var{mask}. For example,
+\code{(procedure/arity? 12 \var{x})} returns true if and only if \var{x} is procedure that
+takes 2 ($2^2 = 4$) or 3 ($2^3 = 8$) arguments.

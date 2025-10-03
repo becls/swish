@@ -56,42 +56,6 @@
                [else key]))
         (syntax->list all-keys))))
 
-  ;; (define-options opt-name
-  ;;   (required [key req-spec ...] ...)
-  ;;   (optional [key opt-spec ...] ...))
-  ;;
-  ;; opt-name is an identifier
-  ;; required, optional, must-be, filter, and default are keywords
-  ;; key ... are distinct identifiers
-  ;;
-  ;; req-spec -> (must-be pred? ...)
-  ;;           | (filter filter-expr)
-  ;;
-  ;; opt-spec -> req-spec
-  ;;           | (default default-expr)
-  ;;
-  ;; The define-options form generates an internal make-record procedure that
-  ;; evaluates the default-expr, pred?, and filter-expr expressions left-to-right
-  ;; in the order that fields appear in the definition, though the order of
-  ;; evaluation for individual expressions of a particular field is unspecified.
-  ;; This means that default expressions are generative. We can bind
-  ;; default-expr to a variable where this is not desirable.
-  ;;
-  ;; The define-options form defines:
-  ;;  - a macro opt-name that supports
-  ;;    - record construction and copying
-  ;;      (opt-name [key val] ...)
-  ;;      (opt-name copy obj [key val] ...)
-  ;;      (opt-name copy* obj [key val] ...)
-  ;;    - record field access
-  ;;      ((opt-name key) obj)
-  ;;      (opt-name key obj)
-  ;;    - record predicate
-  ;;      ((opt-name is?) obj)
-  ;;      (opt-name is? obj)
-  ;;  - a native record type called <opt-name> for use in:
-  ;;    (match obj [`(<opt-name> ,key ...) ...])
-
   (define-syntax (define-options input)
     (define (parse-optional opt-field) (parse-spec opt-field '(default)))
     (define (parse-required opt-field) (parse-spec opt-field '()))
@@ -208,5 +172,4 @@
     (lambda (r p wr)
       (display-string "#" p)
       (wr (record-type-name (record-rtd r)) p)))
-
   )
