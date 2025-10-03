@@ -69,15 +69,3 @@ The \var{opt-name} macro supports
 (\var{opt-name} is? \var{obj})\end{alltt}
 
 \end{itemize}
-
-\defineentry{procedure/arity?}
-\begin{procedure}\begin{alltt}
-((procedure/arity? \var{mask}) \var{p})
-(procedure/arity? \var{mask} \var{p})\strut\end{alltt}
-\end{procedure}
-\returns{} a boolean
-
-The \code{procedure/arity?} procedure returns true if and only if \var{p} is a procedure
-with an arity that matches one of the bits in \var{mask}. For example,
-\code{(procedure/arity? 12 \var{x})} returns true if and only if \var{x} is procedure that
-takes 2 ($2^2 = 4$) or 3 ($2^3 = 8$) arguments.
