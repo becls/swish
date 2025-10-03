@@ -305,7 +305,7 @@
   ;; check that (foo x) and (foo x obj) can see <foo>-x field
   ;; accessor at top-level
   (match-let*
-   ([,env (environment '(scheme) '(swish imports))]
+   ([,env (environment '(scheme) '(swish options))]
     [ok
      (eval
       '(begin
@@ -353,10 +353,10 @@
   (let ()
     (define x 11)
     (define-options foo (required [x]) (optional [y (default x)]))
-    (define-options bar (optional [spawn (default spawn)]))
+    (define-options bar (optional [dump-stack (default dump-stack)]))
     (match-let*
-     ([,@spawn (bar spawn (bar))]
-      [7 (bar spawn (bar [spawn 7]))]
+     ([,@dump-stack (bar dump-stack (bar))]
+      [7 (bar dump-stack (bar [dump-stack 7]))]
       [,x 'local]
       [,opt (foo [x 'act])]
       [act (foo y opt)]
