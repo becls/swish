@@ -1418,15 +1418,62 @@
      (equal? x (match x [,(exp <= (5 #f foo . ,_)) exp])))))
 
 (mat t14 ()
-  ;; Using identifier-syntax or a library rename, the tuple
-  ;; constructor should always create the original type.
+  ;; Tuple constructors, accessors, predicates, and copy operations
+  ;; should expect the symbolic type named in the original define-tuple
+  ;; form regardless of alias, identifier-syntax, or library renames.
+  #0=
+  (define-syntax exercise-variants
+    (syntax-rules ()
+      [(_ <t0> [<t1> robust?] ...)
+       (match-let*
+        ([,p0 (<t0> make [x 1] [y 2])]
+         [,x0 (<t0> x p0)]
+         [,y0 (<t0> y p0)]
+         [,getx0 (<t0> x)]
+         [,gety0 (<t0> y)]
+         [,is0? (<t0> is?)]
+         [#f (is0? '#(<t0>))]
+         [,swap0 (lambda (p) (<t0> copy* p [x y] [y x]))]
+         [,swapped (swap0 p0)]
+         [,zap0 (lambda (p) (<t0> copy p [x 0]))]
+         [,zapped (zap0 p0)])
+        (match-let*
+         ([,p1 (<t1> make [x 1] [y 2])]
+          [,@p0 p1]
+          [,@x0 (<t1> x p1)]
+          [,@y0 (<t1> y p1)]
+          [,@x0 (getx0 p1)]
+          [,@y0 (gety0 p1)]
+          [,getx1 (<t1> x)]
+          [,gety1 (<t1> y)]
+          [,@x0 (getx1 p0)]
+          [,@y0 (gety1 p0)]
+          [,is1? (<t1> is?)]
+          [#t (is0? p1)]
+          [#t (is1? p0)]
+          [#f (is1? '#(<t0>))]
+          [#f (is1? '#(<t1> x y))]
+          [,swap1 (lambda (p) (<t1> copy* p [x y] [y x]))]
+          [,@swapped (swap0 p1)]
+          [,@swapped (swap1 p0)]
+          [,zap1 (lambda (p) (<t1> copy p [x 0]))]
+          [,@zapped (zap0 p1)]
+          [,@zapped (zap1 p0)]
+          [`(<t0> [x ,@x0] [y ,@y0]) p1])
+         (meta-cond
+          [robust?
+           ;; At present, match cannot resolve the fields if <t1> expands to
+           ;; <t0>. That might change if we moved some match code into the <t0>
+           ;; macro transformer, but it could be difficult to generate good
+           ;; error messages.
+           (match-let* ([`(<t1> [x ,@x0] [y ,@y0]) p0])
+             'ok)]))
+        ...)]))
   (let ()
     (define-tuple <point> x y)
     (define-syntax <should-be-a-point> (identifier-syntax <point>))
-    (assert
-     (equal? (<point> make [x 1] [y 2])
-       (<should-be-a-point> make [x 1] [y 2]))))
-
+    (alias <also-a-point> <point>)
+    (exercise-variants <point> [<should-be-a-point> #f] [<also-a-point> #t]))
   (repl-test 0
     '(begin
        (library (A)
@@ -1439,11 +1486,11 @@
          (import (rename (A) (<point> <should-be-a-point>))))
 
        (let ()
-         (import (scheme) (A) (B))
-         (assert
-          (equal? (<point> make [x 1] [y 2])
-            (<should-be-a-point> make [x 1] [y 2])))
-         (exit 0)))))
+         (import (scheme) (swish erlang) (A) (B))
+         #0#
+         (match (try (exercise-variants <point> [<should-be-a-point> #t]))
+           [`(catch ,reason) (exit 1)]
+           [,_ (exit 0)])))))
 
 ;; single-clause match -> match-let*
 (mat t15 ()
@@ -2827,6 +2874,20 @@
                             (match-let* ([x x] [y not] [snoo z] [now now])
                               'ok)])))])
        inject))
+   ;; alias works, since we can resolve the property, but identifier-syntax wouldn't work
+   (let ()
+     (define-match-extension P0
+       (lambda (v pattern)
+         (syntax-case pattern ()
+           [(_quasi (p var . rest))
+            #`((bind var `(,#,v P0 p . rest)))])))
+     (alias P1 P0)
+     (match-let*
+      ([`(P0 z 1 4) 'one]
+       [(one P0 P0 1 4) z]
+       [`(P1 g 7 11) 'two]
+       [(two P0 P1 7 11) g])
+      'ok))
    ))
 
 (mat uuid ()

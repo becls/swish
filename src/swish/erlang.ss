@@ -1606,21 +1606,21 @@
                 (and (eq? (datum make) 'make)
                      (valid-bindings? #'bindings))
                 #`(vector 'name #,@(make-tuple #'(field ...) #'bindings))]
-               [(name copy e . bindings)
+               [(_name copy e . bindings)
                 (and (eq? (datum copy) 'copy)
                      (valid-bindings? #'bindings))
                 (handle-copy x #'e #'bindings 'copy)]
-               [(name copy* e . bindings)
+               [(_name copy* e . bindings)
                 (and (eq? (datum copy*) 'copy*)
                      (valid-bindings? #'bindings))
                 (handle-copy x #'e #'bindings 'copy*)]
-               [(name open expr prefix field-names)
+               [(_name open expr prefix field-names)
                 (and (eq? (datum open) 'open) (identifier? #'prefix))
                 (handle-open x #'expr #'prefix #'field-names)]
-               [(name open expr field-names)
+               [(_name open expr field-names)
                 (eq? (datum open) 'open)
                 (handle-open x #'expr #f #'field-names)]
-               [(name is? . args)
+               [(_name is? . args)
                 (eq? (datum is?) 'is?)
                 (let ([is?
                        #'(lambda (x)
@@ -1631,27 +1631,27 @@
                     [() is?]
                     [(e) #`(#,is? e)]
                     [else (syntax-case x ())]))]
-               [(name fn e)
+               [(_name fn e)
                 (syntax-datum-eq? #'fn #'field)
                 (with-syntax ([getter (replace-source x #'(name fn))])
                   #`(getter e))]
                ...
-               [(name fn)
+               [(_name fn)
                 (syntax-datum-eq? #'fn #'field)
                 #`(lambda (x)
                     (unless (name is? x)
                       (throw `#(bad-tuple name ,x ,#,(find-source x))))
                     (#3%vector-ref x #,(find-index #'fn #'(field ...) 1)))]
                ...
-               [(name no-check fn e)
+               [(_name no-check fn e)
                 (and (eq? (datum no-check) 'no-check)
                      (syntax-datum-eq? #'fn #'field))
                 #`(#3%vector-ref e #,(find-index #'fn #'(field ...) 1))]
                ...
-               [(name fn)
+               [(_name fn)
                 (identifier? #'fn)
                 (syntax-violation #f "unknown field" x #'fn)]
-               [(name fn expr)
+               [(_name fn expr)
                 (identifier? #'fn)
                 (syntax-violation #f "unknown field" x #'fn)]
                ))

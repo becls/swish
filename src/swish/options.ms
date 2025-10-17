@@ -384,6 +384,19 @@
       [11 (foo y b)]
       )
      'ok))
+  ;; alias works
+  (let ()
+    (define-options foo
+      (required [x])
+      (optional [y (default 0)]))
+    (alias bar foo)
+    (alias <zap> <foo>)
+    (match-let*
+     ([,a (foo [x 11])]
+      [11 (bar x a)]
+      [0 (bar y a)]
+      [`(<zap> [x 11] [y 0]) a])
+     'ok))
   )
 
 (mat procedure/arity ()

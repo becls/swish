@@ -250,3 +250,47 @@
     "|(F 0 2 (3) 9)"
     "|(F 0 3 () 11)"
     "|14"))
+
+(mat dsm-alias ()
+  (define-syntactic-monad M a b)
+  ;; alias should work
+  (alias P M)
+  #; ;; The following macro may work, but stock identifier-syntax will not work.
+  (define-syntax (P x)
+    (syntax-case x ()
+      [(k x ...) (with-implicit (k M) #'(M x ...))]))
+  (define-tuple <testf> f0 f1 call)
+  (define-syntax (build x)
+    (syntax-case x ()
+      [(_ A)
+       ;; resort to with-implicit for DRY test-helper macro
+       (with-implicit (A a b)
+         #'(let ()
+             (A define (f0 y) (list 'f0 a b y))
+             (<testf> make
+               [f0 f0]
+               [f1 (A lambda (z) `#(f1 ,a ,b ,z))]
+               [call (lambda (f a b d) (A f () d))]
+               )))]))
+  (match-let*
+   ([`(<testf> [f0 ,Mf0] [f1 ,Mf1] [call ,Mcall]) (build M)]
+    [`(<testf> [f0 ,Pf0] [f1 ,Pf1] [call ,Pcall]) (build P)]
+    [(f0 1 2 3) (Mcall Mf0 1 2 3)]
+    [(f0 2 3 4) (Mcall Pf0 2 3 4)]
+    [(f0 3 4 5) (Pcall Mf0 3 4 5)]
+    [(f0 4 5 6) (Pcall Pf0 4 5 6)]
+    [#(f1 1 2 3) (Mcall Mf1 1 2 3)]
+    [#(f1 2 3 4) (Mcall Pf1 2 3 4)]
+    [#(f1 3 4 5) (Pcall Mf1 3 4 5)]
+    [#(f1 4 5 6) (Pcall Pf1 4 5 6)]
+    [(a: (5 3 1) b: (6 4 2))
+     (let ([a '()] [b '()])
+       (M let lp1 () ([ls '(1 2 3 4 5 6)])
+         (match ls
+           [() `(a: ,a b: ,b)]
+           [(,h . ,t)
+            (guard (odd? h))
+            (P lp1 ([a (cons h a)]) t)]
+           [(,h . ,t)
+            (let ([b (cons h b)]) (M lp1 () t))])))])
+   'ok))
