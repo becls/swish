@@ -1,6 +1,8 @@
 ---
 name: Test
 on: [push]
+env:
+  RELEASED: v10.2.0
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -43,7 +45,7 @@ jobs:
           cp boot/a6le/* ../build/lib/csv9.6.4/a6le
           export PATH=$(realpath ../build/bin):${PATH}
           export SCHEMEHEAPDIRS=$(realpath ../build/lib/csv9.6.4/a6le):
-          git checkout main
+          git checkout "${RELEASED}"
           git clean -dxf .
           ./configure --force -m=a6le
           make re.boot
@@ -52,8 +54,6 @@ jobs:
           make bootquick XM=arm64osx
           make bootquick XM=a6nt
           make bootquick XM=i3le
-          make bootquick XM=ta6nt
-          make bootquick XM=ta6le
   mats:
     continue-on-error: ${{ startsWith(matrix.machine, 't') }}
     needs: build
@@ -62,40 +62,34 @@ jobs:
       matrix:
         config:
           - machine: a6osx
-            os: macos-13
-            chez: v9.6.4
+            os: macos-15-intel
+            chez: released
           - machine: a6osx
-            os: macos-13
+            os: macos-15-intel
             chez: main
           - machine: arm64osx
-            os: macos-14
+            os: macos-15
+            chez: released
+          - machine: arm64osx
+            os: macos-15
             chez: main
           - machine: i3le
-            os: ubuntu-22.04
+            os: ubuntu-24.04
             chez: main
           - machine: a6le
-            os: ubuntu-22.04
+            os: ubuntu-24.04
             chez: v9.6.4
           - machine: a6le
-            os: ubuntu-22.04
+            os: ubuntu-24.04
+            chez: released
+          - machine: a6le
+            os: ubuntu-24.04
             chez: main
-          - machine: ta6le
-            os: ubuntu-22.04
-            chez: main
-          - machine: i3nt
-            os: windows-2022
-            chez: v9.6.4
           - machine: a6nt
-            os: windows-2022
-            chez: v9.6.4
-          - machine: ta6nt
-            os: windows-2022
-            chez: v9.6.4
+            os: windows-2025
+            chez: released
           - machine: a6nt
-            os: windows-2022
-            chez: main
-          - machine: ta6nt
-            os: windows-2022
+            os: windows-2025
             chez: main
     runs-on: ${{ matrix.config.os }}
     defaults:
@@ -108,7 +102,7 @@ jobs:
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get install gcc-multilib lib32ncurses5-dev\
+          sudo apt-get install gcc-multilib libncurses-dev:i386 \
             libsystemd-dev:i386 libx11-dev:i386 uuid-dev:i386
       - name: Setup 64-bit Linux
         if: ${{ endsWith(matrix.config.machine, 'a6le') }}
@@ -143,28 +137,65 @@ jobs:
       - name: Fail if no cache
         if: ${{ steps.mats-restore-bootfiles.outputs.cache-hit != 'true' }}
         run: exit 1
-      - name: Build Chez Scheme ${{ matrix.config.chez }}
+      - name: Resolve Chez Scheme version
+        # We can't reference RELEASED within the matrix config,
+        # so resolve placeholders like "released" here.
+        id: resolve
+        run: |
+          V="${{ matrix.config.chez }}"
+          if [ "$V" = "released" ]; then
+            V="${RELEASED}"
+          fi
+          echo "chez=$V" >> "$GITHUB_OUTPUT"
+      - name: Build Chez Scheme v9.6.4
+        if: ${{ matrix.config.chez == 'v9.6.4' && matrix.config.machine == 'a6le' }}
         run: |
           M=${{ matrix.config.machine }}
           cd ChezScheme
-          git checkout -q -f ${{ matrix.config.chez }}
-          git reset --hard ${{ matrix.config.chez }}
-          if [ "${{ matrix.config.chez }}" = "main" ]; then
-            ./configure -m=$M --force
-            make bin/zuo
-            if [ "$RUNNER_OS" = "Windows" ]; then
-              cmd //c build.bat $M //force //as-is //MD  //kernel
-            else
-              cd $M
-              ../bin/zuo . kernel
-              cd ..
-            fi
+          git checkout -q -f v9.6.4
+          git reset --hard v9.6.4
+          ./configure -m=$M
+          cd $M/c
+          make
+          cd ../..
+          echo "$(realpath "$PWD/$M/bin/$M")" >> $GITHUB_PATH
+          echo "SCHEMEHEAPDIRS=$(realpath $PWD/$M/boot/$M)" >> $GITHUB_ENV
+          echo "done building in $PWD"
+      - name: Build Chez Scheme ${{ steps.resolve.version.chez }}
+        if: ${{ matrix.config.chez != 'v9.6.4' }}
+        run: |
+          M=${{ matrix.config.machine }}
+          cd ChezScheme
+          git checkout -q -f "${RELEASED}"
+          git reset --hard "${RELEASED}"
+          ./configure -m=$M --force
+          make bin/zuo
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cmd //c build.bat $M //force //as-is //MD //kernel
           else
-            ./configure -m=$M
-            cd $M/c
-            make
-            cd ../..
+            ./bin/zuo $M kernel
           fi
+      - name: Build Chez Scheme ${{ steps.resolve.version.chez }}
+        if: ${{ matrix.config.chez == 'main' }}
+        run: |
+          M=${{ matrix.config.machine }}
+          cd ChezScheme
+          cp $M/boot/$M/*.boot $M/bin/$M
+          mv $M $M-released
+          git checkout -q -f main --
+          git reset --hard main
+          ./configure -m=$M --force --cross
+          make bin/zuo
+          ./bin/zuo $M boot --host-workarea $M-released
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cmd //c build.bat $M //force //as-is //MD //kernel
+          else
+            ./bin/zuo $M kernel
+          fi
+      - name: Set SCHEMEHEAPDIRS
+        run: |
+          M=${{ matrix.config.machine }}
+          cd ChezScheme
           if [ "$RUNNER_OS" = "Windows" ]; then
             echo "$(cygpath -u "$PWD/$M/bin/$M")" >> $GITHUB_PATH
             echo "SCHEMEHEAPDIRS=$(cygpath -w "$PWD/$M/boot/$M")" >> $GITHUB_ENV
@@ -172,7 +203,6 @@ jobs:
             echo "$(realpath "$PWD/$M/bin/$M")" >> $GITHUB_PATH
             echo "SCHEMEHEAPDIRS=$(realpath $PWD/$M/boot/$M)" >> $GITHUB_ENV
           fi
-          echo "done building in $PWD"
       - name: Build Swish
         run: ./configure && make
       - name: Run tests
@@ -180,7 +210,7 @@ jobs:
       - name: Archive test results
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.config.machine }}-${{ matrix.config.os }}-${{ matrix.config.chez }}-test
+          name: ${{ matrix.config.machine }}-${{ matrix.config.os }}-${{ steps.resolve.outputs.chez }}-test
           path: |
             data/mat-report.html
             src/swish/*.mo
@@ -192,7 +222,7 @@ jobs:
       - name: Archive coverage results
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.config.machine }}-${{ matrix.config.os }}-${{ matrix.config.chez }}-coverage
+          name: ${{ matrix.config.machine }}-${{ matrix.config.os }}-${{ steps.resolve.outputs.chez }}-coverage
           path: |
             data/mat-report.html
             src/swish/*.mo
@@ -200,12 +230,12 @@ jobs:
         if: ${{ matrix.config.chez == 'main' }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.config.machine }}-${{ matrix.config.os }}-${{ matrix.config.chez }}-coverage-report
+          name: ${{ matrix.config.machine }}-${{ matrix.config.os }}-${{ steps.resolve.outputs.chez }}-coverage-report
           path: |
             data/coverage.html
             data/src/**/*.html
       - name: Assemble tarball
-        if: ${{ matrix.config.chez != 'main' && !startsWith(matrix.config.machine, 't') }}
+        if: ${{ matrix.config.chez == 'released' }}
         # install only the binaries and replace absolute symlinks with relative symlinks
         run: |
           git fetch --tags
@@ -214,12 +244,12 @@ jobs:
             target="$(realpath "$f")"
             ln -vsf "../$(realpath --relative-to="${PWD}/build/swish" "${target}")" "$f"
           done
-          tar -cvf ${{ matrix.config.machine }}-${{ matrix.config.os }}-${{ matrix.config.chez }}-build.tar build/swish
+          tar -cvf ${{ matrix.config.machine }}-${{ matrix.config.os }}-${{ steps.resolve.outputs.chez }}-build.tar build/swish
       - name: Archive build artifacts
-        if: ${{ matrix.config.chez != 'main' && !startsWith(matrix.config.machine, 't') }}
+        if: ${{ matrix.config.chez == 'released' }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.config.machine }}-${{ matrix.config.os }}-${{ matrix.config.chez }}-build.tar
-          path: ${{ matrix.config.machine }}-${{ matrix.config.os }}-${{ matrix.config.chez }}-build.tar
+          name: ${{ matrix.config.machine }}-${{ matrix.config.os }}-${{ steps.resolve.outputs.chez }}-build.tar
+          path: ${{ matrix.config.machine }}-${{ matrix.config.os }}-${{ steps.resolve.outputs.chez }}-build.tar
       - name: Check for failures
         run: if test -f failures; then cat failures; exit 1; fi

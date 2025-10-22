@@ -16,8 +16,8 @@ The latest design document can be found
 Swish uses [libuv](http://libuv.org) for cross-platform asynchronous
 I/O.
 
-Although Swish can be run in threaded Chez Scheme for convenience, it
-is not thread safe and should be used from the main thread only.
+Swish requires a non-threaded Chez Scheme runtime.
+Swish does not support threaded Chez Scheme builds.
 
 # Versioning
 

@@ -867,6 +867,13 @@
       (mat-data-results obj)))
   ;; case where all tests pass
   (zero-exit (swish-test "--progress none " all-pass) '())
+  ;; Tests like the following failed on ta6nt when we switched to the Github
+  ;; windows-2025 image. The tests pass on the corresponding non-threaded build,
+  ;; a6nt. Bob found that this test passed on ta6nt if we remove "--progress
+  ;; none", which suggests a bug on ta6nt when a spawned Swish OS process exits
+  ;; having written nothing to stdout (which is connected to a pipe). Since
+  ;; threaded builds like ta6nt are not supported, we removed them from our
+  ;; github test actions.
   (zero-exit (swish-test "--progress none --harvest " mo-all-pass) '())
   ;; case where some tests fail
   (nonzero-exit
