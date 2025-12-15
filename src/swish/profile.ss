@@ -747,8 +747,6 @@
     (define (invalid-sfd? sfd)
       (cond
        [(eq-hashtable-ref okay sfd #f) #f]
-       [(path-absolute? (source-file-descriptor-path sfd))
-        "absolute path"]
        [else
         (let ([ip (open-source-file sfd)])
           (cond
