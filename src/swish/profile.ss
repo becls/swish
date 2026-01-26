@@ -197,7 +197,20 @@
                 [`(<profile-data> ,entries) (add! entries)]
                 [`(<profile-config> ,excluded-paths ,excluded-ranges ,source-directories)
                  (vector-for-each profile-exclude! excluded-paths excluded-ranges)
-                 (vector-for-each add-source-dir! source-directories)])
+                 (vector-for-each add-source-dir! source-directories)]
+                [,_
+                 (guard
+                  (and (list? x)
+                       (andmap
+                        (lambda (p)
+                          (match p
+                            [(,so . ,count)
+                             (and (source-object? so)
+                                  (exact? count)
+                                  (nonnegative? count))]
+                            [,_ #f]))
+                        x)))
+                 (add! x)])
               (lp)))))))
 
   (define (source-table->list source-table)
