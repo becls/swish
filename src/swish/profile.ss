@@ -47,7 +47,7 @@
    (swish string-utils)
    )
 
-  (define-state-tuple <profile-state> ht filename context waketime)
+  (define-state-tuple <profile-state> ht filename waketime)
 
   (define (profile:prepare)
     (library-extensions
@@ -107,7 +107,6 @@
       [(pem path range) #`(module () (add-profile-exclusion `#(at ,range ,path)))]))
 
   (define-tuple <profile-config> excluded-paths excluded-ranges source-directories)
-  (define-tuple <profile-data> context entries)
 
   (define profile-exclusions (make-hashtable string-hash string=?))
   (define source-dirs (make-hashtable string-hash string=?))
@@ -194,7 +193,6 @@
           (let ([x (fasl-read ip)])
             (unless (eof-object? x)
               (match x
-                [`(<profile-data> ,entries) (add! entries)]
                 [`(<profile-config> ,excluded-paths ,excluded-ranges ,source-directories)
                  (vector-for-each profile-exclude! excluded-paths excluded-ranges)
                  (vector-for-each add-source-dir! source-directories)]
@@ -224,26 +222,26 @@
                (cons (vector-ref keys i) (vector-ref vals i))
                ls))))))
 
-  (define (profile-save filename context sfd-table)
+  (define (profile-save filename sfd-table)
     (let ([op (open-binary-file-to-replace (make-directory-path filename))])
       (on-exit (close-port op)
         (fasl-write (current-profile-config) op)
         (let-values ([(keys vals) (hashtable-entries sfd-table)])
           (vector-for-each
            (lambda (sfd source-table)
-             (fasl-write (<profile-data> make [context context] [entries (source-table->list source-table)]) op))
+             (fasl-write (source-table->list source-table) op))
            keys vals))
         'ok)))
 
   (define (profile-update state)
-    (<profile-state> open state [context filename ht])
+    (<profile-state> open state [filename ht])
     (add-filedata ht
       (with-interrupts-disabled
        (let ([data (profile-dump)])
          (profile-clear)
          data)))
     (profile-release-counters)
-    (profile-save filename context ht))
+    (profile-save filename ht))
 
   (define (resolve path)
     (if (path-absolute? path)
@@ -279,7 +277,6 @@
              [state (<profile-state> make
                       [ht ht]
                       [filename filename]
-                      [context #f]
                       [waketime (next-waketime)])])
         (when input-fn (profile-load ht input-fn))
         `#(ok ,state ,($state waketime)))]))
