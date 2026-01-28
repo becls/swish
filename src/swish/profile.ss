@@ -369,25 +369,18 @@
     (let ([results (load-profiles)]
           [op (open-file-to-replace (make-directory-path output-fn))])
       (define common-prefix
-        (fold-left
-         (lambda (pfx entry)
-           (match entry
-             [(,source-path . #f) pfx] ;; file skipped
-             [(,source-path . ,_)      ;; absolute path if not skipped
-              (let ([dir (path-parent source-path)])
-                (let loop ([pfx (or pfx dir)])
-                  (if (starts-with? dir pfx)
-                      pfx
-                      (loop (path-parent pfx)))))]))
-         #f
-         results))
+        (common-path-prefix
+         (fold-left
+          (lambda (paths entry)
+            (match entry
+              [(,source-path . #f) paths] ;; file skipped
+              [(,source-path . ,_) (cons source-path paths)]))
+          '()
+          results)))
       (define strip-prefix
         (if (not common-prefix)
             values
-            (let* ([prefix-length (string-length common-prefix)]
-                   [n (if (ends-with? common-prefix (string (directory-separator)))
-                          prefix-length
-                          (+ prefix-length 1))])
+            (let ([n (string-length common-prefix)])
               (lambda (src)
                 (substring src n (string-length src))))))
       (fprintf op "<!DOCTYPE html>\n")

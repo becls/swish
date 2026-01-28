@@ -30,6 +30,7 @@
    close-osi-port
    close-path-watcher
    close-tcp-listener
+   common-path-prefix
    connect-tcp
    count-foreign-handles
    directory?
@@ -685,6 +686,50 @@
                (write-char (directory-separator) op))
              (display-string s op)
              (f more (ends-with-directory-separator? s))])))]))
+
+  (define (common-path-prefix paths)
+    (define (bogus-UNC? prefix/)
+      ;; Valid UNC directory prefix needs \\server\share\ (4+ separators).
+      (let ([len (string-length prefix/)])
+        (and (fx>= len 2)
+             (directory-separator? (string-ref prefix/ 0))
+             (directory-separator? (string-ref prefix/ 1))
+             (let loop ([i 2] [count 2])
+               (cond
+                [(fx>= count 4) #f]       ; found enough, not bogus
+                [(fx>= i len) #t]         ; ran out, bogus
+                [(directory-separator? (string-ref prefix/ i))
+                 (loop (fx+ i 1) (fx+ count 1))]
+                [else (loop (fx+ i 1) count)])))))
+    (define (sanitize prefix/)
+      (if (and windows? (bogus-UNC? prefix/))
+          #f
+          prefix/))
+    (define (directory-prefix s end)
+      (let loop ([i (fx- end 1)])
+        (cond
+         [(fx< i 0) #f]
+         [(directory-separator? (string-ref s i))
+          (sanitize (substring s 0 (fx+ i 1)))]
+         [else (loop (fx- i 1))])))
+    (define (char-match? a b)
+      (or (char=? a b)
+          (and windows? (directory-separator? a) (directory-separator? b))))
+    (match paths
+      [() #f]
+      [(,first-path . ,rest)
+       (define (common-prefix-upto s limit)
+         (let ([len (fxmin (string-length s) limit)])
+           (let scan ([i 0])
+             (if (or (fx= i len)
+                     (not (char-match? (string-ref first-path i) (string-ref s i))))
+                 i
+                 (scan (fx+ i 1))))))
+       (let loop ([rest rest] [prefix-len (string-length first-path)])
+         (match rest
+           [() (directory-prefix first-path prefix-len)]
+           [(,path . ,rest)
+            (loop rest (common-prefix-upto path prefix-len))]))]))
 
   (define make-directory
     (case-lambda

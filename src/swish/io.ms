@@ -25,6 +25,7 @@
  (swish erlang)
  (swish io)
  (swish mat)
+ (swish meta)
  (swish osi)
  (swish script-testing)
  (swish testing)
@@ -1487,5 +1488,102 @@
    (equal? (string-append /a/ /b/ /c) (path-combine "" /a/ /b/ /c))
    )
   )
+
+(isolate-mat common-path-prefix ()
+  (define / (string (directory-separator)))
+  (define (/p . args) (apply path-combine / args))
+  (define (/p/ . args) (string-append (apply /p args) /))
+  (match-let*
+   (;; empty list
+    [#f (common-path-prefix '())]
+    ;; single path at root
+    [,@/ (common-path-prefix (list (/p "foo")))]
+    ;; single path
+    [,/foo/ (/p/ "foo")]
+    [,@/foo/ (common-path-prefix (list /foo/))]
+    [,@/foo/ (common-path-prefix `(,(/p "foo" "bar.ss")))]
+    ;; only root in common
+    [,@/
+     (common-path-prefix
+      `(,(/p "foo" "one.ss")
+        ,(/p "bar" "two.ss")))]
+    ;; paths in same directory
+    [,/foo/bar/ (/p/ "foo" "bar")]
+    [,@/foo/bar/
+     (common-path-prefix
+      `(,(/p "foo" "bar" "one.ss")
+        ,(/p "foo" "bar" "two.ss")))]
+    ;; paths in sibling directories
+    [,@/foo/
+     (common-path-prefix
+      `(,(/p "foo" "bar" "one.ss")
+        ,(/p "foo" "baz" "two.ss")))]
+    ;; paths where common prefix is not at a directory boundary
+    [,/home/user/ (/p/ "home" "user")]
+    [,@/home/user/
+     (common-path-prefix
+      `(,(/p "home" "user" "project" "main.ss")
+        ,(/p "home" "user" "project-backup" "main.ss")))]
+    ;; more nested common prefix
+    [,/src/lib/erty/ (/p/ "src" "lib" "erty")]
+    [,@/src/lib/erty/
+     (common-path-prefix
+      `(,(/p "src" "lib" "erty" "io" "reader.ss")
+        ,(/p "src" "lib" "erty" "db" "query.ss")
+        ,(/p "src" "lib" "erty" "util.ss")))]
+    ;; relative paths
+    ["foo/" (common-path-prefix '("foo/bar" "foo/baz"))]
+    ;; mixed relative and absolute
+    [#f (common-path-prefix '("foo/bar" "/foo/bar"))]
+    [#f (common-path-prefix `("foo/bar" ,(/p "abc" "def")))]
+    ;; mixed separators (Windows treats / and \ as equivalent)
+    ;; the separator in the result comes from the first path
+    [,expected (and windows? "foo/")]
+    [,@expected (common-path-prefix '("foo/bar" "foo\\baz"))]
+    [,expected (and windows? "C:/")]
+    [,@expected (common-path-prefix '("C:/foo" "C:\\bar"))]
+    ;; edge cases
+    ;; empty string in list
+    [#f (common-path-prefix '("" "/foo/bar"))]
+    [#f (common-path-prefix '("/foo/bar" "/foo/ba" ""))]
+    ;; one path is root-only
+    [,@/ (common-path-prefix `(,(/p "foo") ,/))]
+    ;; no separator in paths
+    [#f (common-path-prefix '("foo.ss" "bar.ss"))]
+    [#f (common-path-prefix '("foo.ss"))]
+    ;; one path is prefix of another directory
+    [,@/ (common-path-prefix `(,(/p "foo") ,(/p "foo" "bar")))]
+    ;; just a single slash
+    [,@/ (common-path-prefix (list /))]
+    ;; dot and dotdot paths
+    ["./" (common-path-prefix '("./foo" "./bar"))]
+    ["../" (common-path-prefix '("../foo" "../bar"))]
+    ["../foo/" (common-path-prefix '("../foo/bar" "../foo/abc"))]
+    ;; multiple consecutive separators
+    [,expected (and (not windows?) "///")]
+    [,@expected (common-path-prefix '("///foo" "///bar"))]
+    ;; directory (trailing separator) vs file inside it
+    [,@/foo/ (common-path-prefix `(,(/p/ "foo") ,(/p "foo" "bar")))]
+    ;; identical directories
+    [,@/foo/bar/ (common-path-prefix `(,(/p/ "foo" "bar") ,(/p/ "foo" "bar")))]
+    ;; paths with spaces
+    [,/foo-bar/ (/p/ "foo bar")]
+    [,@/foo-bar/
+     (common-path-prefix
+      `(,(/p "foo bar" "one.ss")
+        ,(/p "foo bar" "two.ss")))]
+    ;; Windows UNC paths: need \\server\share\ minimum for valid prefix
+    ;; Same server, same share - valid common prefix
+    [,expected (and windows? "\\\\server\\share\\")]
+    [,@expected (common-path-prefix '("\\\\server\\share\\foo" "\\\\server\\share\\bar"))]
+    ;; Same server, different shares - no valid common prefix (\\server\ alone is not valid)
+    [#f (common-path-prefix '("\\\\server\\share" "\\\\server\\other"))]
+    ;; Different servers - no valid common prefix
+    [#f (common-path-prefix '("\\\\server\\share" "\\\\server2\\other"))]
+    ;; paths diverge at first char
+    [#f (common-path-prefix '("abc/def" "xyz/def"))]
+    ;; paths with common non-directory prefix
+    [#f (common-path-prefix '("foobar" "foobaz"))])
+   'ok))
 
 (hook-console-input)

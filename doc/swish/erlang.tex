@@ -1810,6 +1810,22 @@ fixnum between 0 and 65535 inclusive or a string, exception
 \code{\#(bad-arg connect-tcp \var{port-spec})} is raised.
 
 % ----------------------------------------------------------------------------
+\defineentry{common-path-prefix}
+\begin{procedure}
+  \code{(common-path-prefix \var{paths})}
+\end{procedure}
+\returns{} a string or \code{\#f}
+
+The \code{common-path-prefix} procedure finds the longest common directory
+prefix of a list of strings representing filesystem paths. It returns \code{\#f}
+if the list is empty or no common prefix exists. The result includes the
+trailing directory separator.
+The procedure compares paths case-sensitively, regardless of the case sensitivity of the native filesystem.
+On Windows, \code{/} and \code{\textbackslash} are
+treated as equivalent; the separator style in the result comes from the first
+path.
+
+% ----------------------------------------------------------------------------
 \defineentry{directory?}
 \begin{procedure}
   \code{(directory? \var{path})}
