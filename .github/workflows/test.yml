@@ -2,7 +2,7 @@
 name: Test
 on: [push]
 env:
-  RELEASED: v10.2.0
+  RELEASED: v10.3.0
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -17,7 +17,7 @@ jobs:
         id: build-clone-main
         run: |
           git clone --filter=blob:none --branch main https://github.com/cisco/ChezScheme.git
-          echo "HASH_KEY=v2_$(cat ChezScheme/.git/refs/heads/main)" >> "${GITHUB_OUTPUT}"
+          echo "HASH_KEY=v3_$(cat ChezScheme/.git/refs/heads/main)" >> "${GITHUB_OUTPUT}"
       - name: Establish Chez Scheme .git / boot file cache
         id: build-restore-bootfiles
         uses: actions/cache@v4
