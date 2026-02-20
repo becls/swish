@@ -176,7 +176,7 @@
 
 (define (malformed-config-file app-name)
   (let* ([config-file (path-combine (output-dir) (config-file-name app-name))]
-         [reason `#(invalid-config-file ,config-file unexpected-eof)])
+         [reason `#(invalid-config-file ,config-file #(json:unexpected |object value| #!eof 13 "bytevector"))])
     (app-exception app-name (exit-reason->english reason))))
 
 (define (bad-shared-object app-name caught)

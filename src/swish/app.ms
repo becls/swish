@@ -124,8 +124,8 @@
     ["bummer: foo.\n"
      ;; when app:name is set, we get app-exception-handler
      (go "bummer" 'foo)]
-    ["oops: Invalid datum: \"flobble\".\n"
-     (go "oops" '#(invalid-datum "flobble"))]
+    ["oops: Invalid datum while writing JSON: \"flobble\".\n"
+     (go "oops" '#(json:invalid-datum "flobble"))]
     ["dang: HTTP handler failed: Exception in cdr: 2 is not a pair.\n"
      ;; nested exit-reason->english with native exception
      (go "dang" `#(http-handler-failed ,(guard (c [else c]) (cdr 2))))]
@@ -609,20 +609,19 @@
          (lambda () (json:object->string (app:config))))]
       ;; malformed config file
       [,expected (fake-path "usr" "local" "lib" "zorp" "config")]
-      [#(EXIT #(invalid-config-file ,expected unexpected-eof))
+      [#(EXIT #(invalid-config-file ,@expected #(json:unexpected ,_ #!eof ,_ ,_)))
        (catch
         (with-fake-config `("usr" "local" "bin" ,(fix-exe "zorp"))
           (lambda (op) (display "{" op)) ;; incomplete
           app:config))]
       ;; config file contains non-dictionary at top level
       [,expected (fake-path "usr" "local" "lib" "zorp" "config")]
-      [#(EXIT #(invalid-config-file ,expected expected-dictionary))
+      [#(EXIT #(invalid-config-file ,@expected expected-dictionary))
        (catch
         (with-fake-config `("usr" "local" "bin" ,(fix-exe "zorp"))
           (lambda (op) (json:write op '("apple" "pear" "banana") 0))
           app:config))]
       ;; config file deleted before we reload, so config is empty
-      [,expected (fake-path "Applications" "zap.config")]
       ["got default"
        (with-fake-config `("Applications" ,(fix-exe "zap"))
          (lambda (op)

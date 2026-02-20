@@ -1296,12 +1296,12 @@
   (nonzero-exit
    (swish-test "--harvest " mo-path1 " " report-file1)
    '()
-   "swish-test: cannot load mat results from.*report1.html: Unexpected input at position")
+   "swish-test: cannot load mat results from.*report1.html: Unexpected input")
   ;; try loading results from the wrong place
   (nonzero-exit
    (swish-test "--load-results " report-file1)
    '()
-   "swish-test: cannot load results from.*report1.html: Unexpected input at position")
+   "swish-test: cannot load results from.*report1.html: Unexpected input")
   )
 
 (isolate-mat annotation ()

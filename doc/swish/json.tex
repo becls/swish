@@ -35,28 +35,47 @@
 
 \section {Introduction}
 
-The programming interface includes procedures for JavaScript Object
+The programming interface provides support for JavaScript Object
 Notation (JSON)~\cite{RFC7159}.
 
-This implementation translates JavaScript types into the following
-Scheme types:
+This implementation defines a mapping between JSON values and Scheme
+values as follows:
 
+\begin{center}
 \begin{tabular}{ll}
-  JavaScript & Scheme \\ \hline
+  JSON & Scheme \\ \hline
 
-  \code{true} & \code{\#t} \\
+  \code{true}  & \code{\#t} \\
   \code{false} & \code{\#f} \\
-  \code{null} & symbol \code{null} \\
-  \var{string} & \var{string} \\
-  \var{number} & \var{number} \\
-  \var{array} & \var{list} \\
-  \var{object} & hashtable mapping symbols to values \\
+  \code{null}  & symbol \code{null} \\
+  string       & string \\
+  number       & number \\
+  array        & list \\
+  object       & hashtable mapping symbols to values \\
 
   \hline
 \end{tabular}
+\end{center}
 
-This implementation does not range check values to ensure that a
-JavaScript implementation can interpret the data.
+JSON objects are represented as hashtables whose keys are symbols
+derived from the corresponding JSON object member names.
+
+No validation is performed to ensure that numeric values fall within
+the range supported by typical JavaScript implementations. As a result,
+some values produced by this implementation may not be portable to all
+JSON consumers.
+
+By default, this implementation accepts input conforming to
+JSON5~\cite{JSON5}, a superset of JSON. This allows additional syntax
+not permitted by standard JSON, including comments, single-quoted
+strings, and numeric values such as \code{Infinity}, \code{-Infinity},
+and \code{NaN}.
+
+Output is, by default, written in standard JSON format. However, the
+implementation permits the non-standard numeric values
+\code{Infinity}, \code{-Infinity}, and \code{NaN} to be written as
+well. This behavior is controlled by an option that is enabled by
+default.
 
 \section {Programming Interface}
 
@@ -202,24 +221,31 @@ before reporting an error.
 \returns{} a Scheme object or the eof object
 
 The \code{json:read} procedure reads characters from the textual input
-port \var{ip} and returns an appropriate Scheme object. The
-\var{options} are defined with \code{(json:read-options (\var{option}
-  \var{value}) \etc)}. The following options may be used:
+port \var{ip} and returns an appropriate Scheme object. If no more
+input is available, the end-of-file object is returned.
+
+The optional \var{options} argument is constructed using
+\code{(json:read-options (\var{option} \var{value}) \dots)}. The
+following options are supported:
 
 \begin{tabular}{lrp{.5\textwidth}}
   option & default & description \\ \hline
 
-  \code{inflate-object} & \code{\#f} & When \code{json:read}
-  encounters a JSON object, it builds the corresponding hashtable and
-  calls \var{inflate-object} to perform application-specific
-  conversion. By default, \var{inflate-object} is disabled.
+  \code{inflate-object} & \code{\#f} &
+  When a JSON object is read, it is first converted into a hashtable.
+  If \code{inflate-object} is provided, it is then applied to the
+  hashtable to perform application-specific transformation. By default,
+  no transformation is performed. \\
+
+  \code{json5?} & \code{\#t} & If \code{\#t}, input is parsed according
+  to JSON5. If \code{\#f}, only standard JSON syntax is accepted.
+
 \end{tabular}
 
 The following exceptions may be raised:
 \begin{itemize}
 \item \code{invalid-surrogate-pair}
-\item \code{unexpected-eof}
-\item \code{\#(unexpected-input \var{data} \var{input-position})}
+\item \code{\#(json:unexpected-input \var{context} \var{data} \var{input-position} \var{name})}
 \end{itemize}
 
 \defineentry{json:write}
@@ -275,12 +301,19 @@ used:
 
   The default value of \var{custom-write} is \code{\#f}, which
   indicates that the \code{json:custom-write} process parameter is
-  used.
+  used. \\
+
+  \code{json5?} & \code{\#t} &
+  If true, enables writing of the non-standard numeric values
+  \code{Infinity}, \code{-Infinity}, and \code{NaN}. If false, output
+  is restricted to standard JSON to maximize compatibility with other
+  systems, and an exception is raised if any of these values are
+  encountered.
 
 \end{tabular}
 
-If an object cannot be formatted, \code{\#(invalid-datum \var{x})}
-is raised.
+If an object cannot be formatted, \code{\#(json:invalid-datum \var{x})}
+is raised. The code does not check for cyclic data.
 
 \defineentry{json:write-object}
 \begin{syntax}
@@ -429,9 +462,6 @@ The \code{json:write-structural-char} procedure writes the character
 \var{x} at an appropriate \var{indent} level to the textual output
 port \var{op}. The character should be one of the following JSON
 structural characters: \code{[ ] \{ \} : ,}
-
-This procedure is intended for use within custom writers passed in to
-\code{json:write} and, for performance, it does not check its input arguments.
 
 \defineentry{stack->json}
 \begin{procedure}

@@ -58,11 +58,16 @@
    (swish string-utils)
    )
 
+  (include "unsafe.ss")
+
   (define-options json:read-options
     (optional
      [inflate-object
       (default #f)
       (must-be valid-inflate-object?)]
+     [json5?
+      (default #t)
+      (must-be boolean?)]
      ))
 
   (define-options json:write-options
@@ -70,13 +75,17 @@
      [custom-write
       (default #f)
       (must-be valid-custom-write?)]
+     [json5?
+      (default #t)
+      (must-be boolean?)]
      ))
 
   (define-syntax extend-object-internal
     (syntax-rules ()
       [(_ x $ht (key val) ...)
        (let ([ht $ht])
-         (hashtable-set! ht (parse-key key x) val)
+         (declare-unsafe-primitives symbol-hashtable-set!)
+         (symbol-hashtable-set! ht (parse-key key x) val)
          ...
          ht)]))
 
@@ -86,10 +95,16 @@
       [(_ (unquote e) form) #'e]
       [(_ key form) (syntax-error #'form (format "invalid key ~s in" (datum key)))]))
 
+  (define (verify-json-object who x)
+    (unless (json:object? x)
+      (bad-arg who x))
+    x)
+
   (define-syntax (json:extend-object x)
     (syntax-case x ()
       [(_ $ht (key val) ...)
-       #`(extend-object-internal #,x $ht (key val) ...)]))
+       #`(extend-object-internal #,x (verify-json-object 'json:extend-object $ht)
+           (key val) ...)]))
 
   (define-syntax (json:make-object x)
     (syntax-case x ()
@@ -97,21 +112,19 @@
        #`(extend-object-internal #,x (make-json-object)
            (key val) ...)]))
 
-  (define (json:key=? x y) (eq? x y))
-
   (define (make-json-object)
-    (make-hashtable symbol-hash json:key=?))
+    (make-hashtable symbol-hash eq?))
 
   (define (json:object? x)
-    (and (hashtable? x)
-         (eq? (#3%hashtable-equivalence-function x) json:key=?)))
+    (symbol-hashtable? x))
 
   (define (json:cells x)
-    (unless (json:object? x) (bad-arg 'json:cells x))
-    (#3%hashtable-cells x))
+    (declare-unsafe-primitives hashtable-cells)
+    (hashtable-cells (verify-json-object 'json:cells x)))
 
   (define (walk-path who obj full-path extend? default found)
-    (unless (json:object? obj) (bad-arg who obj))
+    (declare-unsafe-primitives symbol-hashtable-ref symbol-hashtable-set!)
+    (verify-json-object who obj)
     (when (null? full-path) (bad-arg who full-path))
     (if (symbol? full-path)
         (found obj full-path default)
@@ -122,127 +135,313 @@
              (found obj key default)]
             [(,key1 . ,more)
              (guard (symbol? key1))
-             (let ([hit (#3%hashtable-ref obj key1 #f)])
+             (let ([hit (symbol-hashtable-ref obj key1 #f)])
                (cond
                 [(json:object? hit) (lp hit more)]
                 [extend?
                  (let ([new (json:make-object)])
-                   (#3%hashtable-set! obj key1 new)
+                   (symbol-hashtable-set! obj key1 new)
                    (lp new more))]
                 [else default]))]
             [,_ (bad-arg who full-path)]))))
 
   (define (json:ref obj path default)
+    (declare-unsafe-primitives symbol-hashtable-ref)
     (walk-path 'json:ref obj path #f default
       (lambda (obj sym default)
-        (#3%hashtable-ref obj sym default))))
+        (symbol-hashtable-ref obj sym default))))
 
   (define (json:set! obj path value)
+    (declare-unsafe-primitives symbol-hashtable-set!)
     (walk-path 'json:set! obj path #t value
       (lambda (obj key value)
-        (#3%hashtable-set! obj key value))))
+        (symbol-hashtable-set! obj key value))))
 
   (define (json:update! obj path f default)
+    (declare-unsafe-primitives symbol-hashtable-update!)
     (unless (procedure? f) (bad-arg 'json:update! f))
     (walk-path 'json:update! obj path #t default
       (lambda (obj key default)
-        (#3%hashtable-update! obj key f default))))
+        (symbol-hashtable-update! obj key f default))))
 
   (define (json:delete! obj path)
+    (declare-unsafe-primitives symbol-hashtable-delete!)
     (walk-path 'json:delete! obj path #f (void)
       (lambda (obj key default)
-        (#3%hashtable-delete! obj key))))
+        (symbol-hashtable-delete! obj key))))
 
   (define (json:size obj)
-    (unless (json:object? obj) (bad-arg 'json:size obj))
-    (#3%hashtable-size obj))
+    (declare-unsafe-primitives symbol-hashtable-size)
+    (hashtable-size (verify-json-object 'json:size obj)))
 
-  (define (unexpected-input c ip)
-    (if (eof-object? c)
-        (throw 'unexpected-eof)
-        (throw `#(unexpected-input ,c
-                   ,(and (port-has-port-position? ip)
-                         (- (port-position ip) 1))))))
+  (define (json:unexpected context what pos name)
+    (throw `#(json:unexpected ,context ,what ,pos ,name)))
 
-  (include "unsafe.ss")
+  (define (unexpected-input context what ip)
+    (json:unexpected context what
+      (and (port-has-port-position? ip)
+           ;; read-char advanced the port-position if it returned a
+           ;; character.
+           (let ([pos (port-position ip)])
+             (if (eof-object? what)
+                 pos
+                 (- pos 1))))
+      (port-name ip)))
 
-  (define (next-char ip)
+  (define (unexpected-str context str ip)
+    (let ([len (string-length str)])
+      (json:unexpected context
+        (if (= len 1)
+            (string-ref str 0)
+            (string->symbol str))
+        (and (port-has-port-position? ip) (- (port-position ip) len))
+        (port-name ip))))
+
+  (define (next-char context ip)
     (declare-unsafe-primitives read-char)
     (let ([x (read-char ip)])
       (if (eof-object? x)
-          (throw 'unexpected-eof)
+          (unexpected-input context x ip)
           x)))
 
-  (define (ws? x)
-    (memv x '(#\x20 #\x09 #\x0A #\x0D)))
+  (define (structural? c)
+    (memv c '(#\{ #\} #\: #\, #\[ #\])))
 
-  (define (next-non-ws ip)
-    (declare-unsafe-primitives read-char)
-    (let ([c (read-char ip)])
-      (if (ws? c)
-          (next-non-ws ip)
-          c)))
+  (define (ws? c json5?)
+    (declare-unsafe-primitives char=?)
+    (cond
+     [(not json5?)
+      (memv c '(#\x20 #\x09 #\x0A #\x0D))]
+     [(char-whitespace? c)] ; char-whitespace? includes everything in Zs
+     [(char=? c #\xFEFF)]   ; Byte order mark
+     [else #f]))
 
-  (define (seek-non-ws ip)
-    (declare-unsafe-primitives read-char)
+  (define (next-non-ws ip json5?)
+    (declare-unsafe-primitives char=? peek-char read-char)
+    (define (read-line-comment)
+      (let ([c (read-char ip)])
+        (cond
+         [(eof-object? c) c]
+         [(memv c '(#\newline #\return #\x2028 #\x2029))
+          (next-non-ws ip json5?)]
+         [else (read-line-comment)])))
+    (define (read-block-comment)
+      (let ([c (next-char 'comment ip)])
+        (cond
+         [(char=? c #\*)
+          (let inner-lp ()
+            (let ([c2 (next-char 'comment ip)])
+              (cond
+               [(char=? c2 #\/) (next-non-ws ip json5?)]
+               [(char=? c2 #\*) (inner-lp)]
+               [else (read-block-comment)])))]
+         [else (read-block-comment)])))
     (let ([c (read-char ip)])
       (cond
        [(eof-object? c) c]
-       [(ws? c) (seek-non-ws ip)]
+       [(ws? c json5?)
+        (next-non-ws ip json5?)]
+       [(and json5? (char=? c #\/))
+        (let ([c2 (peek-char ip)])
+          (cond
+           [(eof-object? c2) c]
+           [(char=? c2 #\/)
+            (read-char ip)
+            (read-line-comment)]
+           [(char=? c2 #\*)
+            (read-char ip)
+            (read-block-comment)]
+           [else
+            c]))]
        [else c])))
 
-  (define (read-string ip op)
+  (define (unicode-escape context ip op)
+    (declare-unsafe-primitives fx+ fx<= fxlogand fxsll integer->char write-char)
+    (let ([x (read-4hexdig ip)])
+      (cond
+       [(fx<= #xD800 x #xDBFF) ;; high surrogate
+        (expect-char context #\\ ip)
+        (expect-char context #\u ip)
+        (let ([y (read-4hexdig ip)])
+          (unless (fx<= #xDC00 y #xDFFF)
+            (throw 'invalid-surrogate-pair))
+          (write-char
+           (integer->char
+            (fx+ (fxsll (fxlogand x #x3FF) 10)
+                 (fxlogand y #x3FF)
+                 #x10000))
+           op))]
+       [(fx<= #xDC00 x #xDFFF) (throw 'invalid-surrogate-pair)]
+       [else (write-char (integer->char x) op) #t])))
+
+  (define (string-escape ip op)
+    (declare-unsafe-primitives char=? unread-char write-char)
+    (let ([c (next-char 'string ip)])
+      (cond
+       [(char=? c #\") (write-char c op) #t]
+       [(char=? c #\\) (write-char c op) #t]
+       [(char=? c #\/) (write-char c op) #t]
+       [(char=? c #\b) (write-char #\x08 op) #t]
+       [(char=? c #\f) (write-char #\x0C op) #t]
+       [(char=? c #\n) (write-char #\x0A op) #t]
+       [(char=? c #\r) (write-char #\x0D op) #t]
+       [(char=? c #\t) (write-char #\x09 op) #t]
+       [(char=? c #\u) (unicode-escape 'string ip op)]
+       [else
+        (unread-char c ip)
+        #f])))
+
+  (define (string-escape5 ip op)
+    (declare-unsafe-primitives char<=? char=? unread-char write-char)
+    (or (string-escape ip op)
+        (let ([c (read-char ip)])
+          (cond
+           [(char=? c #\') (write-char c op) #t]
+           [(char=? c #\v) (write-char #\x0B op) #t]
+           [(char=? c #\0)
+            (let ([c (next-char 'string ip)])
+              (cond
+               [(char<=? #\0 c #\9)
+                (unread-char c ip)
+                #f]
+               [else
+                (unread-char c ip)
+                (write-char #\x00 op)
+                #t]))]
+           [(char=? c #\x)
+            (let ([x (read-2hexdig ip)])
+              (write-char (integer->char x) op) #t)]
+           [(char=? c #\newline) #t]
+           [(char=? c #\return)
+            (let ([c (next-char 'string ip)])
+              (unless (char=? c #\newline)
+                (unread-char c ip))
+              #t)]
+           [(char=? c #\x2028) #t]      ; line separator
+           [(char=? c #\x2029) #t]      ; paragraph separator
+           [(char<=? #\1 c #\9)
+            (unread-char c ip)
+            #f]
+           [else
+            (write-char c op) #t]))))
+
+  (define (read-string ip op mark json5?)
+    (declare-unsafe-primitives char<=? char=? write-char)
+    (let ([c (next-char 'string ip)])
+      (cond
+       [(char=? c mark) (get-json-buffer-string op)]
+       [(char=? c #\\)
+        (or (if json5?
+                (string-escape5 ip op)
+                (string-escape ip op))
+            (unexpected-input 'string (read-char ip) ip))
+        (read-string ip op mark json5?)]
+       [(if json5?
+            (memv c '(#\newline #\return))
+            (char<=? c #\x1F))
+        (unexpected-input 'string c ip)]
+       [else (write-char c op) (read-string ip op mark json5?)])))
+
+  (define (json5-strict-char? c first?)
+    (cond
+     [(memq (char-general-category c) '(Lu Ll Lt Lm Lo Nl)) #t]
+     [(memv c '(#\$ #\_)) #t]
+     [first? #f]
+     [(memq (char-general-category c) '(Mn Mc Nd Pc)) #t]
+     [(memv c '(#\x200C #\x200D)) #t]   ; ZWNJ, ZWJ
+     [else #f]))
+
+  (define (identifier-helper context ip op first? clean?)
+    (declare-unsafe-primitives char=? peek-char read-char unread-char write-char)
+    (let lp ([first? first?] [clean? clean?])
+      (let ([c (peek-char ip)])
+        (cond
+         [(or (eof-object? c)
+              (char-whitespace? c)
+              (structural? c))
+          (values (get-output-string op) clean?)]
+         [(char=? c #\\)
+          (read-char ip)
+          (let ([c (next-char context ip)])
+            (cond
+             [(char=? c #\u)
+              (unicode-escape context ip op)
+              (lp #f clean?)]
+             [else
+              (unexpected-input context c ip)]))]
+         [else
+          (read-char ip)
+          (cond
+           [(and (char=? c #\/)
+                 (memv (peek-char ip) '(#\/ #\*)))
+            (unread-char c ip)
+            (values (get-output-string op) clean?)]
+           [else
+            (write-char c op)
+            (lp #f (and clean? (json5-strict-char? c first?)))])]))))
+
+  (define (read-unquoted-key ip op)
+    (let-values ([(str clean?) (identifier-helper '|object key| ip op #t #t)])
+      (cond
+       [(not clean?)
+        (unexpected-str '|object key| str ip)]
+       [else
+        (let ([sym (string->symbol str)])
+          (when (memq sym '(true false null))
+            (unexpected-str '|object key| str ip))
+          sym)])))
+
+  (define (read-identifier chars ip op json5?)
     (declare-unsafe-primitives write-char)
-    (let ([c (next-char ip)])
-      (case c
-        [(#\") (get-json-buffer-string op)]
-        [(#\\)
-         (let ([c (next-char ip)])
-           (case c
-             [(#\" #\\ #\/) (write-char c op)]
-             [(#\b) (write-char #\x08 op)]
-             [(#\f) (write-char #\x0C op)]
-             [(#\n) (write-char #\x0A op)]
-             [(#\r) (write-char #\x0D op)]
-             [(#\t) (write-char #\x09 op)]
-             [(#\u)
-              (let ([x (read-4hexdig ip)])
-                (cond
-                 [(<= #xD800 x #xDBFF) ;; high surrogate
-                  (expect-char #\\ ip)
-                  (expect-char #\u ip)
-                  (let ([y (read-4hexdig ip)])
-                    (unless (<= #xDC00 y #xDFFF)
-                      (throw 'invalid-surrogate-pair))
-                    (write-char
-                     (integer->char
-                      (+ (ash (bitwise-and x #x3FF) 10)
-                         (bitwise-and y #x3FF)
-                         #x10000))
-                     op))]
-                 [(<= #xDC00 x #xDFFF) (throw 'invalid-surrogate-pair)]
-                 [else (write-char (integer->char x) op)]))]
-             [else (unexpected-input c ip)]))
-         (read-string ip op)]
-        [else (write-char c op) (read-string ip op)])))
+    (let lp ([chars chars] [first? #t] [clean? #t])
+      (match chars
+        [()
+         (let-values ([(str clean?) (identifier-helper 'value ip op first? clean?)])
+           (let ([sym (string->symbol str)])
+             (cond
+              [(eq? sym 'true) #t]
+              [(eq? sym 'false) #f]
+              [(eq? sym 'null) 'null]
+              [(and json5?
+                    (match sym
+                      [Infinity +inf.0]
+                      [+Infinity +inf.0]
+                      [-Infinity -inf.0]
+                      [NaN +nan.0]
+                      [+NaN +nan.0]
+                      [-NaN -nan.0]
+                      [,_ #f]))]
+              [else
+               (unexpected-str 'value str ip)])))]
+        [(,c . ,chars)
+         (write-char c op)
+         (lp chars #f (and clean? (json5-strict-char? c first?)))])))
 
   (define (read-4hexdig ip)
+    (declare-unsafe-primitives fx+ fxsll)
     (let* ([x (hex-digit ip)]
-           [x (+ (ash x 4) (hex-digit ip))]
-           [x (+ (ash x 4) (hex-digit ip))]
-           [x (+ (ash x 4) (hex-digit ip))])
+           [x (fx+ (fxsll x 4) (hex-digit ip))]
+           [x (fx+ (fxsll x 4) (hex-digit ip))]
+           [x (fx+ (fxsll x 4) (hex-digit ip))])
       x))
 
-  (define (expect-char expected ip)
-    (let ([c (next-char ip)])
+  (define (read-2hexdig ip)
+    (declare-unsafe-primitives fx+ fxsll)
+    (let* ([x (hex-digit ip)]
+           [x (fx+ (fxsll x 4) (hex-digit ip))])
+      x))
+
+  (define (expect-char context expected ip)
+    (declare-unsafe-primitives char=?)
+    (let ([c (next-char context ip)])
       (unless (char=? c expected)
-        (unexpected-input c ip))))
+        (unexpected-input context c ip))))
 
   (define-syntax make-write-string
     (syntax-rules ()
       [(_ s op)
        (lambda (s op)
-         (declare-unsafe-primitives char->integer char<=? fx+ fx= string-ref write-char) ;; #3%
+         (declare-unsafe-primitives char->integer char<=? fx+ fx= string-length string-ref write-char)
          (write-char #\" op)
          (do ([i 0 (fx+ i 1)] [n (string-length s)]) [(fx= i n)]
            (let ([c (string-ref s i)])
@@ -254,55 +453,102 @@
 
   (define write-string (make-write-string s op))
 
+  (define (char->hex-digit c)
+    (declare-unsafe-primitives char->integer char<=? fx-)
+    (cond
+     [(char<=? #\0 c #\9) (digit-value c)]
+     [(char<=? #\A c #\F) (fx- (char->integer c) (fx- (char->integer #\A) 10))]
+     [(char<=? #\a c #\f) (fx- (char->integer c) (fx- (char->integer #\a) 10))]
+     [else #f]))
+
   (define (hex-digit ip)
-    (let ([c (next-char ip)])
-      (cond
-       [(char<=? #\0 c #\9) (digit-value c)]
-       [(char<=? #\A c #\F) (- (char->integer c) (- (char->integer #\A) 10))]
-       [(char<=? #\a c #\f) (- (char->integer c) (- (char->integer #\a) 10))]
-       [else (unexpected-input c ip)])))
+    (let ([c (next-char '|hexadecimal number| ip)])
+      (or (char->hex-digit c)
+          (unexpected-input '|hexadecimal number| c ip))))
 
-  (define (digit-value c) (- (char->integer c) (char->integer #\0)))
+  (define (digit-value c)
+    (declare-unsafe-primitives char->integer fx-)
+    (fx- (char->integer c) (char->integer #\0)))
 
-  (define (read-unsigned ip)
-    (let-values ([(mantissa n c) (read-digits ip 0 0)])
+  (define (read-unsigned* chars ip json5?)
+    (declare-unsafe-primitives fx- unread-char)
+    (let-values ([(chars mantissa n c) (read-digits chars ip 0 0)])
       (cond
-       [(eqv? n 0) (unexpected-input c ip)]
        [(eqv? c #\.)
-        (let-values ([(mantissa m c) (read-digits ip mantissa 0)])
+        (let-values ([(chars mantissa m c) (read-digits chars ip mantissa 0)])
           (cond
-           [(eqv? m 0) (unexpected-input c ip)]
+           [(and (not json5?) (eqv? m 0))
+            (unexpected-input 'number c ip)]
            [(memv c '(#\e #\E)) (read-exp ip mantissa m)]
            [else
             (unless (eof-object? c)
               (unread-char c ip))
-            (scale mantissa (- m))]))]
+            (scale mantissa (fx- m))]))]
        [(memv c '(#\e #\E)) (read-exp ip mantissa 0)]
        [else
         (unless (eof-object? c)
           (unread-char c ip))
         mantissa])))
 
-  (define (read-digits ip mantissa n)
+  (define (read-unsigned chars ip json5?)
+    (declare-unsafe-primitives peek-char read-char)
+    (let ([x (read-unsigned* chars ip json5?)])
+      (let ([c (peek-char ip)])
+        (unless (or (eof-object? c)
+                    (ws? c json5?)
+                    (structural? c))
+          (read-char ip)
+          (unexpected-input 'number c ip)))
+      x))
+
+  (define (read-digits chars ip mantissa n)
+    (declare-unsafe-primitives car cdr char<=? fx+)
+    (let ([c (if (null? chars)
+                 (read-char ip)
+                 (car chars))]
+          [chars (if (null? chars)
+                     chars
+                     (cdr chars))])
+      (if (or (eof-object? c)
+              (not (char<=? #\0 c #\9)))
+          (values chars mantissa n c)
+          (read-digits chars ip (+ (* mantissa 10) (digit-value c)) (fx+ n 1)))))
+
+  (define (read-hex-digits ip mantissa n json5?)
+    (declare-unsafe-primitives fx+ read-char unread-char)
     (let ([c (read-char ip)])
       (cond
-       [(eof-object? c) (values mantissa n c)]
-       [(char<=? #\0 c #\9)
-        (read-digits ip (+ (* mantissa 10) (digit-value c)) (+ n 1))]
+       [(eof-object? c)
+        (values mantissa n c)]
+       [(or (ws? c json5?)
+            (structural? c))
+        (unread-char c ip)
+        (values mantissa n c)]
+       [(char->hex-digit c) =>
+        (lambda (value)
+          (read-hex-digits ip (+ (* mantissa 16) value) (fx+ n 1) json5?))]
        [else
-        (values mantissa n c)])))
+        (unexpected-input '|hexadecimal number| c ip)])))
+
+  (define (read-hex ip json5?)
+    (let-values ([(mantissa n c) (read-hex-digits ip 0 0 json5?)])
+      (when (and (eqv? n 0) (eqv? mantissa 0))
+        (unexpected-input '|hexadecimal number| c ip))
+      mantissa))
 
   (define (read-exp ip mantissa m)
-    (let ([c (next-char ip)])
+    (declare-unsafe-primitives unread-char)
+    (let ([c (next-char 'exponent ip)])
       (case c
         [(#\+) (scale mantissa (- (read-int ip) m))]
         [(#\-) (scale mantissa (- (- (read-int ip)) m))]
         [else (unread-char c ip) (scale mantissa (- (read-int ip) m))])))
 
   (define (read-int ip)
-    (let-values ([(int n c) (read-digits ip 0 0)])
+    (declare-unsafe-primitives unread-char)
+    (let-values ([(chars int n c) (read-digits '() ip 0 0)])
       (cond
-       [(eqv? n 0) (unexpected-input c ip)]
+       [(eqv? n 0) (unexpected-input 'exponent c ip)]
        [else
         (unless (eof-object? c)
           (unread-char c ip))
@@ -316,6 +562,7 @@
      [else (inexact (/ mantissa (expt 10 (- exponent))))]))
 
   (define (string->key s)
+    (declare-unsafe-primitives char=? fx- fx>= string-length string-ref)
     (let ([len (string-length s)])
       (or (and (fx>= len 6)
                (char=? (string-ref s 0) #\#)
@@ -350,61 +597,165 @@
   ;; Strings and objects are common enough that it appears
   ;; to be worth resolving json-buffer eagerly and making
   ;; it available via json-buf within R.
-  (define-syntactic-monad R json-buf inflate-object)
+  (define-syntactic-monad R
+    json-buf
+    inflate-object
+    json5?
+    )
 
-  (R define (rd ip)
-    (let ([c (next-non-ws ip)])
+  (R define (rd ip eof-who)
+    (declare-unsafe-primitives char=?)
+    (let ([c (next-non-ws ip json5?)])
       (cond
-       [(eqv? c #\t)
-        (expect-char #\r ip)
-        (expect-char #\u ip)
-        (expect-char #\e ip)
-        #t]
-       [(eqv? c #\f)
-        (expect-char #\a ip)
-        (expect-char #\l ip)
-        (expect-char #\s ip)
-        (expect-char #\e ip)
-        #f]
-       [(eqv? c #\n)
-        (expect-char #\u ip)
-        (expect-char #\l ip)
-        (expect-char #\l ip)
-        'null]
-       [(eqv? c #\") (read-string ip json-buf)]
-       [(eqv? c #\[)
-        (let lp ([acc '()])
-          (let ([c (next-non-ws ip)])
+       [(eof-object? c)
+        (if eof-who
+            (unexpected-input eof-who c ip)
+            c)]
+       [(memv c '(#\} #\: #\, #\] #\\)) (unexpected-input 'value c ip)]
+       [(or (char=? c #\") (and json5? (char=? c #\')))
+        (read-string ip json-buf c json5?)]
+       [(char=? c #\[)
+        (R read-array () ip)]
+       [(char=? c #\{)
+        (R read-object () ip)]
+       [else
+        (R read-number-or-identifier () c ip)])))
+
+  (R define (read-array ip)
+    (declare-unsafe-primitives char=? unread-char)
+    (let lp ([acc '()])
+      (let ([c (next-non-ws ip json5?)])
+        (cond
+         [(eof-object? c) (unexpected-input 'array c ip)]
+         [(and (char=? c #\]) (null? acc)) '()]
+         [else
+          (unread-char c ip)
+          (let* ([acc (cons (R rd () ip 'array) acc)]
+                 [c (next-non-ws ip json5?)])
             (cond
-             [(and (eqv? c #\]) (null? acc)) '()]
-             [else
-              (unread-char c ip)
-              (let* ([acc (cons (R rd () ip) acc)]
-                     [c (next-non-ws ip)])
-                (case c
-                  [(#\,) (lp acc)]
-                  [(#\]) (reverse acc)]
-                  [else (unexpected-input c ip)]))])))]
-       [(eqv? c #\{)
-        (inflate-object
-         (let lp ([obj (json:make-object)])
-           (let ([c (next-non-ws ip)])
-             (cond
-              [(eqv? c #\")
-               (let* ([key (string->key (read-string ip json-buf))]
-                      [c (next-non-ws ip)])
-                 (unless (eqv? c #\:)
-                   (unexpected-input c ip))
-                 (#3%hashtable-set! obj key (R rd () ip)))
-               (let ([c (next-non-ws ip)])
-                 (case c
-                   [(#\,) (lp obj)]
-                   [(#\}) obj]
-                   [else (unexpected-input c ip)]))]
-              [(and (eqv? c #\}) (eqv? (#3%hashtable-size obj) 0)) obj]
-              [else (unexpected-input c ip)]))))]
-       [(eqv? c #\-) (- (read-unsigned ip))]
-       [else (unread-char c ip) (read-unsigned ip)])))
+             [(eof-object? c) (unexpected-input 'array c ip)]
+             [(char=? c #\,)
+              (if json5?
+                  (let ([c (next-non-ws ip json5?)])
+                    (cond
+                     [(eof-object? c) (lp acc)]
+                     [(char=? c #\]) (reverse acc)]
+                     [else
+                      (unread-char c ip)
+                      (lp acc)]))
+                  (lp acc))]
+             [(char=? c #\]) (reverse acc)]
+             [else (unexpected-input 'array c ip)]))]))))
+
+  (R define (read-object ip)
+    (declare-unsafe-primitives char=? hashtable-size symbol-hashtable-set! unread-char)
+    (inflate-object
+     (let ([obj (json:make-object)])
+       (define (read-key)
+         (let ([c (next-non-ws ip json5?)])
+           (cond
+            [(eof-object? c) (unexpected-input '|object key| c ip)]
+            [(or (char=? c #\") (and json5? (char=? c #\')))
+             (read-value (string->key (read-string ip json-buf c json5?)))]
+            [(and (char=? c #\}) (eqv? (hashtable-size obj) 0)) obj]
+            [(and json5? (not (memv c '(#\} #\: #\, #\]))))
+             (unread-char c ip)
+             (read-value (read-unquoted-key ip json-buf))]
+            [else (unexpected-input '|object key| c ip)])))
+       (define (read-value key)
+         (let ([c (next-non-ws ip json5?)])
+           (if (or (eof-object? c)
+                   (not (char=? c #\:)))
+               (unexpected-input '|object value| c ip)
+               (symbol-hashtable-set! obj key (R rd () ip '|object value|))))
+         (let ([c (next-non-ws ip json5?)])
+           (cond
+            [(eof-object? c)
+             (unexpected-input 'object c ip)]
+            [(char=? c #\,)
+             (if json5?
+                 (let ([c (next-non-ws ip json5?)])
+                   (cond
+                    [(eof-object? c) (read-key)]
+                    [(char=? c #\}) obj]
+                    [else
+                     (unread-char c ip)
+                     (read-key)]))
+                 (read-key))]
+            [(char=? c #\}) obj]
+            [else (unexpected-input 'object c ip)])))
+       (read-key))))
+
+  (R define (read-number-or-identifier c ip)
+    (declare-unsafe-primitives char<=? char=? peek-char read-char)
+    (define (sign rchars)
+      ;; A decimal point is allowed without a leading digit by JSON5.
+      (let ([c (peek-char ip)])
+        (cond
+         [(or (eof-object? c)
+              (ws? c json5?)
+              (structural? c))
+          (start-identifier rchars)]
+         [(char=? #\0 c)
+          (read-char ip)
+          (zero (cons c rchars))]
+         [(char<=? #\1 c #\9)
+          (read-char ip)
+          (start-number (cons c rchars))]
+         [(and json5? (char=? c #\.))
+          (read-char ip)
+          (point (cons c rchars))]
+         [else
+          (read-char ip)
+          (start-identifier (cons c rchars))])))
+    (define (zero rchars)
+      (let ([c (peek-char ip)])
+        (cond
+         [(or (eof-object? c)
+              (ws? c json5?)
+              (structural? c))
+          (start-number rchars)]
+         [(char<=? #\0 c #\9)
+          (read-char ip)
+          (unexpected-input 'number #\0 ip)]
+         [(not json5?)
+          (start-number rchars)]
+         [else
+          (read-char ip)
+          (start-number (cons c rchars))])))
+    (define (point rchars)
+      (let ([c (peek-char ip)])
+        (cond
+         [(or (eof-object? c)
+              (ws? c json5?)
+              (structural? c))
+          (start-identifier rchars)]
+         [(char<=? #\0 c #\9)
+          (read-char ip)
+          (start-number (cons c rchars))]
+         [else
+          (read-char ip)
+          (start-identifier (cons c rchars))])))
+    (define (start-number rchars)
+      (let lp ([chars (reverse rchars)])
+        (match chars
+          [(#\- . ,rest) (- (lp rest))]
+          [(#\+ . ,rest) (lp rest)]
+          [(#\0 ,x)
+           (guard (memv x '(#\x #\X)))
+           (read-hex ip json5?)]
+          [,_
+           (read-unsigned chars ip json5?)])))
+    (define (start-identifier rchars)
+      (read-identifier (reverse rchars) ip json-buf json5?))
+    (cond
+     [(char=? c #\-) (sign (list c))]
+     [(char=? c #\0) (zero (list c))]
+     [(char<=? #\1 c #\9) (start-number (list c))]
+     [(not json5?) (start-identifier (list c))]
+     [(char=? c #\+) (sign (list c))]
+     [(char=? c #\.) (point (list c))]
+     [else (start-identifier (list c))]))
 
   (define (no-inflate-object x) x)
 
@@ -412,24 +763,29 @@
     (case-lambda
      [(ip) (json:read ip (json:read-options))]
      [(ip options)
+      (declare-unsafe-primitives peek-char)
       (arg-check 'json:read
         [ip input-port? textual-port?]
         [options (json:read-options is?)])
-      (let ([x (seek-non-ws ip)])
+      (let ([x (peek-char ip)])
         (cond
          [(eof-object? x) x]
          [else
-          (unread-char x ip)
-          (match-let* ([`(<json:read-options> ,inflate-object) options])
-            (let ([inflate-object (or inflate-object no-inflate-object)])
-              (R rd ([json-buf (json-buffer)]) ip)))]))]))
+          (match options
+            [`(<json:read-options>
+               ,inflate-object
+               ,json5?)
+             (let ([inflate-object (or inflate-object no-inflate-object)])
+               (R rd ([json-buf (json-buffer)]) ip #f))])]))]))
 
   (define (newline-and-indent indent op)
+    (declare-unsafe-primitives fx+ fx= newline write-char)
     (newline op)
     (do ([i 0 (fx+ i 1)]) ((fx= i indent))
       (write-char #\space op)))
 
-  (define (json:write-structural-char x indent op)
+  (define (write-structural-char x indent op)
+    (declare-unsafe-primitives char=? fx+ fx- write-char)
     (cond
      [(not indent)
       (write-char x op)
@@ -444,16 +800,23 @@
         (newline-and-indent indent op)
         (write-char x op)
         indent)]
-     [(eqv? x #\:)
+     [(char=? x #\:)
       (write-char x op)
       (write-char #\space op)
       indent]
-     [(eqv? x #\,)
+     [(char=? x #\,)
       (write-char x op)
       (newline-and-indent indent op)
       indent]
      [else
       not-reached]))
+
+  (define (json:write-structural-char x indent op)
+    (arg-check 'json:write-structural-char
+      [x (lambda (x) (memv x '(#\[ #\] #\{ #\} #\: #\,)))]
+      [indent valid-indent?]
+      [op output-port? textual-port?])
+    (write-structural-char x indent op))
 
   (define-syntax json-key->sort-key
     (syntax-rules ()
@@ -478,7 +841,7 @@
          (lambda () (make-string len))
          values))
       (declare-unsafe-primitives char->integer fx+ fx- fx< fx<= fx= fxabs
-        fxdiv-and-mod integer->char put-string string-set! write-char) ;; #3%
+        fxdiv-and-mod integer->char put-string string-set! write-char)
       (define (digit->char d)
         (integer->char (fx+ d (char->integer #\0))))
       (lambda (x op)
@@ -517,60 +880,77 @@
         x)))
 
   (define (sort-cells! key<? v)
+    (declare-unsafe-primitives car)
     (vector-sort!
      (lambda (x y)
        (key<? (json-key->sort-key (car x)) (json-key->sort-key (car y))))
      v))
 
-  (define-syntactic-monad W op indent custom-write key<?)
+  (define-syntactic-monad W op indent custom-write key<? json5?)
 
   (W define (finish end-char)
-    (or (json:write-structural-char end-char indent op)
+    (or (write-structural-char end-char indent op)
         ;; Always return a non-false value (either a fixnum indent or void).
         ;; This ensures that we recognize when `custom-write` has handled the input
         ;; if it tail-calls `wr` on a list or JSON object.
         (and custom-write (void))))
 
   (W define (wr x)
-    (declare-unsafe-primitives display-string) ;; #3%
+    (declare-unsafe-primitives display-string fl= hashtable-cells hashtable-size)
     (cond
      [(eq? x #t) (display-string "true" op)]
      [(eq? x #f) (display-string "false" op)]
      [(eq? x 'null) (display-string "null" op)]
      [(string? x) (write-string x op)]
      [(fixnum? x) (display-fixnum x op)]
-     [(or (bignum? x) (and (flonum? x) (finite? x)))
-      (display-string (number->string x) op)]
-     [(and custom-write (custom-write op x indent))]
+     [(bignum? x) (display-string (number->string x) op)]
+     [(flonum? x)
+      (cond
+       [(finite? x)
+        (parameterize ([print-precision #f] [print-subnormal-precision #f])
+          (display-string (number->string x) op))]
+       [(not json5?)
+        (throw `#(json:invalid-datum ,x))]
+       [(fl= x +inf.0) (display-string "Infinity" op)]
+       [(fl= x -inf.0) (display-string "-Infinity" op)]
+       [else (display-string "NaN" op)])]
+     [(and custom-write (custom-write op x indent)) (void)]
      [(null? x) (display-string "[]" op)]
      [(pair? x)
-      (let ([indent (json:write-structural-char #\[ indent op)])
+      (let ([indent (write-structural-char #\[ indent op)])
+        (declare-unsafe-primitives car cdr)
         (W wr () (car x))
-        (let lp ([ls x])
-          (let ([ls (cdr ls)])
-            (when (pair? ls)
-              (json:write-structural-char #\, indent op)
+        (let lp ([p x])
+          (let ([ls (cdr p)])
+            (cond
+             [(null? ls) (void)]
+             [(pair? ls)
+              (write-structural-char #\, indent op)
               (W wr () (car ls))
-              (lp ls))))
+              (lp ls)]
+             [else
+              (throw `#(json:invalid-datum ,p))])))
         (W finish () #\]))]
      [(json:object? x)
-      (if (zero? (#3%hashtable-size x))
+      (if (eqv? (hashtable-size x) 0)
           (display-string "{}" op)
-          (let ([indent (json:write-structural-char #\{ indent op)])
-            (let ([v (#3%hashtable-cells x)])
+          (let ([indent (write-structural-char #\{ indent op)])
+            (let ([v (hashtable-cells x)])
+              (declare-unsafe-primitives fx+ fx= fx> vector-length vector-ref)
               (when key<? (sort-cells! key<? v))
               (do ([i 0 (fx+ i 1)]) ((fx= i (vector-length v)))
                 (when (fx> i 0)
-                  (json:write-structural-char #\, indent op))
+                  (write-structural-char #\, indent op))
                 (match-let* ([(,key . ,val) (vector-ref v i)])
                   (write-string (json-key->string key) op)
-                  (json:write-structural-char #\: indent op)
+                  (write-structural-char #\: indent op)
                   (W wr () val))))
             (W finish () #\})))]
-     [else (throw `#(invalid-datum ,x))]))
+     [else (throw `#(json:invalid-datum ,x))]))
 
   (define (internal-write op x indent options default-key<?)
-    (match-define `(<json:write-options> ,custom-write) options)
+    (declare-unsafe-primitives newline)
+    (match-define `(<json:write-options> ,custom-write ,json5?) options)
     (define custom-writer (or custom-write (json:custom-write)))
     (define key<?
       (let ([x (json:key<?)])
@@ -582,11 +962,13 @@
                 (letrec ([custom-adapter (lambda (op x indent) (custom-writer op x indent wr-adapter))]
                          [wr-adapter (lambda (op x indent) (W wr ([custom-write custom-adapter]) x))])
                   custom-adapter))])
-      (W wr () x))
-    (when (eqv? indent 0)
-      (newline op)))
+      (W wr () x)
+      (when (eqv? indent 0)
+        (newline op))))
 
-  (define (valid-indent? x) (or (not x) (and (fixnum? x) (fx>= x 0))))
+  (define (valid-indent? x)
+    (declare-unsafe-primitives fx>=)
+    (or (not x) (and (fixnum? x) (fx>= x 0))))
 
   (define json:write
     (case-lambda
@@ -632,11 +1014,12 @@
 
   (define (->object ip options)
     (let ([obj (json:read ip options)])
+      (match-define `(<json:read-options> ,json5?) options)
       ;; Make sure there's nothing but whitespace left.
-      (let ([x (seek-non-ws ip)])
+      (let ([x (next-non-ws ip json5?)])
         (if (eof-object? x)
             obj
-            (unexpected-input x ip)))))
+            (unexpected-input #f x ip)))))
 
   (define (write-key indent pre key whole op)
     ;; pre is a token
@@ -644,9 +1027,9 @@
     ;; whole is a pre-rendered string with prefix and trailer included.
     (cond
      [indent
-      (let ([indent (json:write-structural-char pre indent op)])
-        (display key op)
-        (json:write-structural-char #\: indent op))]
+      (let ([indent (write-structural-char pre indent op)])
+        (display-string key op)
+        (write-structural-char #\: indent op))]
      [else
       (display-string whole op)
       #f]))
@@ -745,13 +1128,13 @@
                  (json-write-kv op #f json:write #\{ k0 f0 wfv0)
                  (json-write-kv op #f json:write #\, k1 f1 wfv1)
                  ...
-                 (json:write-structural-char #\} #f op)
+                 (write-structural-char #\} #f op)
                  #t)
              #'(let ([op op-expr] [indent indent-expr] [wr wr-expr])
                  (let ([indent (json-write-kv op indent wr #\{ k0 f0 wfv0)])
                    (json-write-kv op indent wr #\, k1 f1 wfv1)
                    ...
-                   (json:write-structural-char #\} indent op))
+                   (write-structural-char #\} indent op))
                  (when (eqv? indent 0)
                    (newline op))
                  #t)))]))

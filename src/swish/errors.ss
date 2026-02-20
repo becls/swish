@@ -74,14 +74,20 @@
       [#(http-unhandled-input ,x) (format "Unhandled HTTP input: ~s." x)]
       [#(invalid-config-file ,config-file ,reason) (format #f "invalid config file ~s: ~a" config-file (exit-reason->english reason))]
       [#(invalid-context ,who) (format "Invalid context for ~a." who)]
-      [#(invalid-datum ,x) (format "Invalid datum: ~s." x)]
       [#(invalid-intensity ,x) (format "Invalid intensity: ~s." x)]
-      [#(invalid-number ,x) (format "Invalid number: ~s." x)]
       [#(invalid-owner ,owner) (format "Invalid owner: ~s." owner)]
       [#(invalid-period ,period) (format "Invalid period: ~s." period)]
       [#(invalid-procedure ,proc) (format "Invalid procedure: ~s." proc)]
       [#(invalid-strategy ,x) (format "Invalid strategy: ~s." x)]
       [#(io-error ,name ,who ,errno) (format "I/O error ~d from ~a on ~a: ~a." errno who name (errno->english errno))]
+      [#(json:unexpected ,context ,what ,position ,name)
+       (let ([eof? (eof-object? what)])
+         (format "Unexpected ~:[input~;end-of-file~]~a~@[ while parsing a JSON ~a~]~@[: ~s~]."
+           eof?
+           (file-offset->english name position)
+           context
+           (and (not eof?) what)))]
+      [#(json:invalid-datum ,what) (format "Invalid datum while writing JSON: ~s." what)]
       [#(listen-tcp-failed ,address ,port-number ,who ,errno) (format "Error ~d from ~a when listening on TCP port ~d: ~a." errno who port-number (errno->english errno))]
       [#(name-already-registered ,pid) (format "Name is already registered to ~s." pid)]
       [#(osi-error ,name ,who ,errno) (format "Error ~d from ~a during ~a: ~a." errno who name (errno->english errno))]
@@ -96,7 +102,6 @@
       [#(start-specs #(invalid-type ,x)) (format "Invalid type in start-specs: ~s." x)]
       [#(timeout-value ,x ,src) (format "Invalid timeout value~a: ~s." (src->english src) x)]
       [#(type-already-registered ,name) (format "Type ~s is already registered." name)]
-      [#(unexpected-input ,x ,position) (format "Unexpected input at position ~d: ~s." position x)]
       [#(unknown-shared-object ,so-name) (format "Unknown shared object ~s." so-name)]
       [#(unowned-resource ,resource) (format "Unowned resource: ~s." resource)]
       [#(unsupported-db-version ,name ,version) (format "The database ~s schema version (~a) is unsupported by this software." name version)]
@@ -139,6 +144,13 @@
            (write-char #\. op)
            (get-output-string op))]
         [else (format "~s" x)])]))
+
+  (define (file-offset->english file offset)
+    (cond
+     [(and file offset) (format " at offset ~a of ~a" offset file)]
+     [offset (format " at offset ~a" offset)]
+     [file (format " in ~a" file)]
+     [else ""]))
 
   (define (src->english x)
     (match x
