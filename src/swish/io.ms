@@ -251,10 +251,13 @@
         primes))
      '()
      buffer-sizes))
+  (define macos? (memq (machine-type) '(a6osx arm64osx ta6osx tarm64osx)))
+  (define test-dir "\x2022;files-test\x2022;") ; \x2022 is a bullet
   (define (watch-callbacks who renames updates)
+    ;; macOS doesn't send updates, and sometimes it sends the test-dir as the rename.
     (let lp ([renames-tbd renames]
-             [renames-seen '()]
-             [updates-tbd updates]
+             [renames-seen (if macos? (list test-dir) '())]
+             [updates-tbd (if macos? '() updates)]
              [updates-seen '()])
       (receive
        (after 500
@@ -278,8 +281,6 @@
           (lp renames-tbd renames-seen updates-tbd updates-seen)]
          [else
           (throw `#(unexpected-path-updated ,who ,filename ,updates))])])))
-  (define bullet "\x2022;")
-  (define test-dir (string-append bullet "files-test" bullet "/"))
   (match-let*
    ([#(EXIT #(bad-arg open-file bad-type))
      (catch (open-file "foo.bar" 0 0 'bad-type))]
@@ -314,7 +315,7 @@
     [#t (directory? (osi_get_home_directory))])
    'ok)
   (delete-tree test-dir)
-  (make-directory-path test-dir)
+  (make-directory-path (path-combine test-dir "x"))
   (on-exit (delete-tree test-dir)
     (let ([watcher (watch-path test-dir self)]
           [fn (path-combine test-dir "basic")]
@@ -334,19 +335,13 @@
           (match-let* ([2 (path-watcher-count)])
             (print-path-watchers op))))
       (write-file fn)
-      (watch-callbacks 1 '("basic")
-        (if (memq (machine-type) '(a6osx arm64osx ta6osx tarm64osx))
-            '()
-            '("basic")))
+      (watch-callbacks 1 '("basic") '("basic"))
       (rename-path fn fn2)
       (assert (not (file-exists? fn)))
       (assert (file-exists? fn2))
       (watch-callbacks 2 '("basic" "moved") '())
       (write-file fn)
-      (watch-callbacks 3 '("basic")
-        (if (memq (machine-type) '(a6osx arm64osx ta6osx tarm64osx))
-            '()
-            '("basic")))
+      (watch-callbacks 3 '("basic") '("basic"))
       (delete-file fn2)
       (assert (not (file-exists? fn2)))
       (watch-callbacks 4 '("moved") '())
@@ -1038,7 +1033,7 @@
          (assert (= 0 (current-disable-count))))
        ;; test keyboard interrupt when blocked in receive and when in a hard loop
        (receive
-         [start-looping (let f () (f))]))))
+        [start-looping (let f () (f))]))))
   (receive
    [#(accept-tcp ,@listener ,sip ,sop)
     (match-let*
