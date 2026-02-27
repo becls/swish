@@ -305,17 +305,18 @@
                  (read (open-input-string s))))
           (string->symbol s))))
 
-  (define (make-weak-process-local init)
+  (define (make-weak-process-local init refresh!)
     (define param (make-process-parameter #f))
     (lambda ()
       (let ([val (cond [(param) => car] [else #!bwp])])
         (if (not (eq? val #!bwp))
-            val
+            (refresh! val)
             (let ([val (init)])
               (param (weak-cons val #f))
               val)))))
 
-  (define json-buffer (make-weak-process-local open-output-string))
+  (define json-buffer (make-weak-process-local open-output-string
+                        (lambda (op) (set-port-output-index! op 0) op)))
   (define (get-json-buffer-string op)
     ;; We don't reset string output port's buffer via get-output-string since
     ;; we will likely have to regrow the buffer. The collector can reclaim the
@@ -450,7 +451,8 @@
     (let ([len (string-length (number->string (most-negative-fixnum)))])
       (define display-fixnum-buffer
         (make-weak-process-local
-         (lambda () (make-string len))))
+         (lambda () (make-string len))
+         values))
       (declare-unsafe-primitives char->integer fx+ fx- fx< fx<= fx= fxabs
         fxdiv-and-mod integer->char put-string string-set! write-char) ;; #3%
       (define (digit->char d)

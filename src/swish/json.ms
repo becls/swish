@@ -798,3 +798,12 @@
   ;;   such as (foo . bar)
   ;;   in particular, we'll smash everything along that path
   )
+
+(mat internal-buffer ()
+  ;; Verify that the internal buffer does not hold state after a
+  ;; failure.
+  (match-let*
+   ([`(catch ,_) (try (json:string->object "\"foo\\xbar\""))]
+    ["baz" (json:string->object "\"baz\"")])
+   'ok)
+  )
