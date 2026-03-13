@@ -85,6 +85,7 @@
     #(1.2e11 "12.0e10")
     #(1.234e10 "1.234e+10")
     #(-1.234e-10 "-1.234e-10")
+    #(0.0 "0e100")
     #((1.0 2) "[1.0e0,2]")
     #("" "\"\"")
     ,@(map (lambda (n) `#(,n ,(format "~d" n)))
@@ -134,6 +135,12 @@
       "{\"#{looks more like gensym}\":123}")
     ))
 
+;; These specific objects work when reading, but do not round trip.
+(define test-objs-read-only
+  `(#(+inf.0 "1e+1000")     ; integer with excessive positive exponent
+    #(0.0 "1e-1000")        ; integer with excessive negative exponent
+    ))
+
 (mat read ()
   (assert (eof-object? (json:read (open-input-string ""))))
   (assert (eof-object? (json:read (open-input-string "  \t  \n  "))))
@@ -149,14 +156,14 @@
    (lambda (obj)
      (match-let* ([#(,x ,y) obj])
        (assert (equal? (dump x) (dump (json:string->object y))))))
-   test-objs))
+   (append test-objs test-objs-read-only)))
 
 (mat bytevector->object ()
   (for-each
    (lambda (obj)
      (match-let* ([#(,x ,y) obj])
        (assert (equal? (dump x) (dump (json:bytevector->object (string->utf8 y)))))))
-   test-objs))
+   (append test-objs test-objs-read-only)))
 
 (mat round-trip ()
   (for-each

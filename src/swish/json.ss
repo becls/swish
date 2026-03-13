@@ -291,9 +291,11 @@
         int])))
 
   (define (scale mantissa exponent)
-    (if (>= exponent 0)
-        (inexact (* mantissa (expt 10 exponent)))
-        (inexact (/ mantissa (expt 10 (- exponent))))))
+    (cond
+     [(eqv? mantissa 0) 0.0]
+     [(> exponent 308) +inf.0]
+     [(>= exponent 0) (inexact (* mantissa (expt 10 exponent)))]
+     [else (inexact (/ mantissa (expt 10 (- exponent))))]))
 
   (define (string->key s)
     (let ([len (string-length s)])
