@@ -1,0 +1,384 @@
+% Copyright 2018 Beckman Coulter, Inc.
+%
+% Permission is hereby granted, free of charge, to any person
+% obtaining a copy of this software and associated documentation files
+% (the "Software"), to deal in the Software without restriction,
+% including without limitation the rights to use, copy, modify, merge,
+% publish, distribute, sublicense, and/or sell copies of the Software,
+% and to permit persons to whom the Software is furnished to do so,
+% subject to the following conditions:
+%
+% The above copyright notice and this permission notice shall be
+% included in all copies or substantial portions of the Software.
+%
+% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+% EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+% MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+% NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+% BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+% ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+% CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+% SOFTWARE.
+
+\lstdefinelanguage{json}{
+  basicstyle=\upshape\mdseries\frenchspacing\ttfamily,
+  columns=flexible,
+  string=[s]{"}{"},
+  stringstyle=\color{blue},
+  comment=[l]{:},
+  commentstyle=\color{black},
+  escapeinside={|}{|},
+  frame=single
+}
+
+\chapter {JSON Interface}
+
+\section {Introduction}
+
+The programming interface includes procedures for JavaScript Object
+Notation (JSON)~\cite{RFC7159}.
+
+This implementation translates JavaScript types into the following
+Scheme types:
+
+\begin{tabular}{ll}
+  JavaScript & Scheme \\ \hline
+
+  \code{true} & \code{\#t} \\
+  \code{false} & \code{\#f} \\
+  \code{null} & \code{\#\textbackslash nul} \\
+  \var{string} & \var{string} \\
+  \var{number} & \var{number} \\
+  \var{array} & \var{list} \\
+  \var{object} & hashtable mapping symbols to values \\
+
+  \hline
+\end{tabular}
+
+This implementation does not range check values to ensure that a
+JavaScript implementation can interpret the data.
+
+\section {Programming Interface}
+
+\defineentry{json:extend-object}
+\begin{syntax}
+  \code{(json:extend-object \var{ht} [\var{key} \var{value}] \etc)}
+\end{syntax}
+
+The \code{json:extend-object} construct adds the \var{key} /
+\var{value} pairs to the hashtable \var{ht} using
+\code{hashtable-set!}. Each \var{key} is a literal identifier
+or an unquoted expression \code{,\var{e}} that evaluates to a
+symbol. The resulting expression returns \var{ht}.
+
+\defineentry{json:make-object}
+\begin{syntax}
+  \code{(json:make-object [\var{key} \var{value}] \etc)}
+\end{syntax}
+
+The \code{json:make-object} construct expands into a call to
+\code{json:extend-object} with a new hashtable.
+
+\defineentry{json:object?}
+\begin{procedure}
+  \code{(json:object? \var{x})}
+\end{procedure}
+\returns{} a boolean
+
+The \code{json:object?} procedure determines whether or not the datum
+\var{x} is an object created by \code{json:make-object}.
+
+\defineentry{json:cells}
+\begin{procedure}
+  \code{(json:cells \var{ht})}
+\end{procedure}
+\returns{} a vector
+
+The \code{json:cells} procedure returns a vector containing the
+cells of the underlying hashtable.
+
+\defineentry{json:size}
+\begin{procedure}
+  \code{(json:size \var{ht})}
+\end{procedure}
+\returns{} an integer
+
+The \code{json:size} procedure returns the number of cells
+in the underlying hashtable.
+
+\defineentry{json:delete"!}
+\begin{procedure}
+  \code{(json:delete! \var{ht} \var{path})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{json:delete!} procedure expects \var{path} to be a symbol or
+a non-empty list of symbols.
+If \var{path} is a symbol, then \code{json:delete!} is equivalent
+to \code{hashtable-delete!}.
+Otherwise, \code{json:delete!} follows \var{path} as it descends into
+the nested hashtable \var{ht}, treating each element as a key into
+the hashtable reached by traversing the preceding elements.
+When \code{json:delete!} reaches the final key in \var{path},
+it calls \code{hashtable-delete!} to remove the association for
+that key in the hashtable reached at that point.
+If any key along the way does not map to a hashtable,
+\code{json:delete!} has no effect.
+
+\defineentry{json:ref}
+\begin{procedure}
+  \code{(json:ref \var{ht} \var{path} \var{default})}
+\end{procedure}
+\returns{} the value found by traversing \var{path} in \var{ht},
+\var{default} if none
+
+The \code{json:ref} procedure expects \var{path} to be a symbol or
+a non-empty list of symbols.
+If \var{path} is a symbol, then \code{json:ref} is equivalent
+to \code{hashtable-ref}.
+Otherwise, \code{json:ref} follows \var{path} as it descends into
+the nested hashtable \var{ht}, treating each element as a key into
+the hashtable reached by traversing the preceding elements.
+When \code{json:ref} reaches the final key in \var{path},
+it calls \code{hashtable-ref} to retrieve the value of that key
+in the hashtable reached at that point.
+If any key along the way does not map to a hashtable,
+or if the final hashtable does not contain the final key,
+\code{json:ref} returns \var{default}.
+
+\defineentry{json:set"!}
+\begin{procedure}
+  \code{(json:set! \var{ht} \var{path} \var{value})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{json:set!} procedure expects \var{path} to be a symbol or
+a non-empty list of symbols.
+If \var{path} is a symbol, then \code{json:set!} is equivalent
+to \code{hashtable-set!}.
+Otherwise, \code{json:set!} follows \var{path} as it descends into
+the nested hashtable \var{ht}, treating each element as a key into
+the hashtable reached by traversing the preceding elements.
+When \code{json:set!} reaches the final key in \var{path},
+it calls \code{hashtable-set!} to set that key in the
+hashtable reached at that point.
+If any key along the way does not map to a hashtable,
+\code{json:set!} installs an empty hashtable at that key
+before proceding.
+If \var{path} is malformed at some point, \code{json:set!} may
+still mutate hashtables along the valid portion of the path
+before reporting an error.
+
+\defineentry{json:update"!}
+\begin{procedure}
+  \code{(json:update! \var{ht} \var{path} \var{procedure} \var{default})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{json:update!} procedure expects \var{path} to be a symbol or
+a non-empty list of symbols.
+If \var{path} is a symbol, then \code{json:update!} is equivalent
+to \code{hashtable-update!}.
+Otherwise, \code{json:update!} follows \var{path} as it descends into
+the nested hashtable \var{ht}, treating each element as a key into
+the hashtable reached by traversing the preceding elements.
+When \code{json:update!} reaches the final key in \var{path},
+it calls \code{hashtable-update!} to update that key in the
+hashtable reached at that point.
+If any key along the way does not map to a hashtable,
+\code{json:update!} installs an empty hashtable at that key
+before proceding.
+If \var{path} is malformed at some point, \code{json:update!} may
+still mutate hashtables along the valid portion of the path
+before reporting an error.
+
+\defineentry{json:read}
+\begin{procedure}
+  \code{(json:read \var{ip} \opt{\var{custom-inflate}})}
+\end{procedure}
+\returns{} a Scheme object or the eof object
+
+The \code{json:read} procedure reads characters from the textual
+input port \var{ip} and returns an appropriate Scheme object.
+When \code{json:read} encounters a JSON object, it builds
+the corresponding hashtable and calls \var{custom-inflate}
+to perform application-specific conversion.
+By default, \var{custom-inflate} is the identity function.
+
+The following exceptions may be raised:
+\begin{itemize}
+\item \code{invalid-surrogate-pair}
+\item \code{unexpected-eof}
+\item \code{\#(unexpected-input \var{data} \var{input-position})}
+\end{itemize}
+
+\defineentry{json:write}
+\begin{procedure}
+  \code{(json:write \var{op} \var{x} \opt{\var{indent}} \opt{\var{custom-write}})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{json:write} procedure writes the object \var{x} to the
+textual output port \var{op} in JSON format. By default, \code{json:write}
+sorts the keys of JSON objects using \code{string<?}, after converting
+the symbolic keys to strings.
+This sort order provides stable output.
+The \code{json:key<?} parameter may be used to alter or disable key sorting.
+Scheme fixnums, bignums, and finite flonums may
+be used as numbers.
+
+When \var{indent} is a non-negative fixnum, the output is more
+readable by a human. List items and key/value pairs are indented on
+individual lines by the specified number of spaces. When \var{indent}
+is 0, a newline is added to the end of the output. The default indent
+of \code{\#f} produces compact output.
+
+The optional \var{custom-write} procedure may intervene to handle
+lists and hashtables differently or to handle objects that have no
+direct JSON counterpart.  If \var{custom-write} does not handle a
+given object, it should return false to let \code{json:write} proceed
+normally.  The \var{custom-write} procedure is called with four
+arguments: the textual output port \var{op}, the Scheme object
+\var{x}, the current \var{indent} level, and a writer procedure
+\var{wr} that should be used to write the values of arbitrary Scheme
+objects.  The \var{wr} procedure is equivalent to
+\code{(lambda (\var{op} \var{x} \var{indent}) (json:write \var{op} \var{x} \var{indent} \var{custom-write}))}.
+
+The default value of \var{custom-write} is the value stored in the
+\code{json:custom-write} process-parameter.
+
+If an object cannot be formatted, \code{\#(invalid-datum \var{x})}
+is raised.
+
+\defineentry{json:write-object}
+\begin{syntax}
+  \code{(json:write-object \var{op} \var{indent} \var{wr} [\var{key} \var{value}] \etc)}
+\end{syntax}
+\returns{} \code{\#t}
+
+Given a textual output port \var{op}, an \var{indent} level, and a
+writer procedure \var{wr}, the \code{json:write-object} construct
+writes a JSON object with the given \var{key} / \var{value} pairs to
+\var{op}. By default, \code{json:write-object} sorts the keys using
+\code{string<?} on the string values of the symbols.
+To alter or disable key sorting, see the \code{json:key<?} parameter.
+
+Each \var{key} must be a distinct symbol.  The \var{wr}
+procedure takes \var{op}, an object \var{x}, and an \var{indent} level
+just like the \var{wr} procedure that is passed to \code{json:write}'s
+\var{custom-write} procedure.
+
+The following are equivalent, provided the keys are symbols and \code{json:key<?} has its default value.
+
+\antipar\begin{alltt}
+(begin (json:write \var{op} (json:make-object [\var{key} \var{value}] \etc) \var{indent}) \#t)
+(json:write-object \var{op} \var{indent} json:write [\var{key} \var{value}] \etc)\end{alltt}\antipar
+
+The latter trades code size and compile time for run-time efficiency.
+At compile time, \code{json:write-object} sorts the keys and
+preformats the strings that will separate values.
+
+\defineentry{json:pretty}
+\begin{procedure}
+  \code{(json:pretty \var{x} \opt{\var{op}})}
+\end{procedure}
+\returns{} unspecified
+
+The \code{json:pretty} procedure formats an object \var{x} to the
+optional textual output port \var{op} in a human-readable form. The
+object is indented and keys are sorted using
+\code{natural-string-ci<?}. The default value of \var{op} is
+\code{(current-output-port)}.
+
+Calling \code{(json:pretty x)} is roughly equivalent to the following:
+\antipar\codebegin
+(parameterize ([json:key<? natural-string-ci<?])
+  (json:write (current-output-port) x 0))
+\codeend
+
+\defineentry{json:custom-write}
+\begin{parameter}
+  \code{json:custom-write}
+\end{parameter}
+\returns{} a procedure or \code{\#f}
+
+The \code{json:custom-write} process-parameter determines the default
+\var{custom-write} argument for \code{json:write} and the other JSON
+output procedures.
+
+\defineentry{json:key<?}
+\begin{parameter}
+  \code{json:key<?}
+\end{parameter}
+\returns{} a boolean or a predicate for comparing two strings
+
+The \code{json:key<?} parameter determines whether and how
+\code{json:pretty}, \code{json:write}, and \code{json:write-object} sort keys
+when writing JSON objects.
+If set to \code{\#f}, keys are not sorted and the output order is arbitrary.
+Otherwise, the output is sorted by obtaining a string for each key
+via \code{symbol->string} and comparing those strings using the predicate
+specified by \code{json:key<?}.
+If \code{json:key<?} is set to \code{\#t}, which is the default,
+then \code{json:pretty} sorts with \code{natural-string-ci<?}
+while \code{json:write} and \code{json:write-object} sort with
+\code{string<?}.
+To affect the output of \code{json:write-object}, \code{json:key<?} must
+be set to the desired value at expand time.
+
+\defineentry{json:object->bytevector}
+\begin{procedure}
+  \code{(json:object->bytevector \var{x} \opt{\var{indent}} \opt{\var{custom-write}})}
+\end{procedure}
+\returns{} a bytevector
+
+The \code{json:object->bytevector} procedure calls \code{json:write}
+on \var{x} with the optional \var{indent} and \var{custom-write}, if
+any, using a bytevector output port transcoded using
+\code{(make-utf8-transcoder)} and returns the resulting bytevector.
+
+\defineentry{json:bytevector->object}
+\begin{procedure}
+  \code{(json:bytevector->object \var{x} \opt{\var{custom-inflate}})}
+\end{procedure}
+\returns{} a Scheme object
+
+The \code{json:bytevector->object} procedure creates a bytevector input port
+on \var{x}, calls \code{json:read} with the optional \var{custom-inflate},
+if any, and returns the resulting Scheme object after making sure the rest
+of the bytevector is only whitespace.
+
+\defineentry{json:object->string}
+\begin{procedure}
+  \code{(json:object->string \var{x} \opt{\var{indent}} \opt{\var{custom-write}})}
+\end{procedure}
+\returns{} a JSON formatted string
+
+The \code{json:object->string} procedure creates a string output port,
+calls \code{json:write} on \var{x} with the optional \var{indent} and
+\var{custom-write}, if any, and returns the resulting string.
+
+\defineentry{json:string->object}
+\begin{procedure}
+  \code{(json:string->object \var{x} \opt{\var{custom-inflate}})}
+\end{procedure}
+\returns{} a Scheme object
+
+The \code{json:string->object} procedure creates a string input port
+on \var{x}, calls \code{json:read} with the optional \var{custom-inflate},
+if any, and returns the resulting Scheme object after making sure the rest
+of the string is only whitespace.
+
+\defineentry{json:write-structural-char}
+\begin{procedure}
+  \code{(json:write-structural-char \var{x} \var{indent} \var{op})}
+\end{procedure}
+\returns{} the new indent level
+
+The \code{json:write-structural-char} procedure writes the character
+\var{x} at an appropriate \var{indent} level to the textual output
+port \var{op}. The character should be one of the following JSON
+structural characters: \code{[ ] \{ \} : ,}
+
+This procedure is intended for use within custom writers passed in to
+\code{json:write} and, for performance, it does not check its input arguments.
