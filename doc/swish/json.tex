@@ -193,17 +193,27 @@ still mutate hashtables along the valid portion of the path
 before reporting an error.
 
 \defineentry{json:read}
+\defineentry{json:read-options}
+\phantomsection % make pageref go to correct page for this label
+\label{json:read-options}
 \begin{procedure}
-  \code{(json:read \var{ip} \opt{\var{custom-inflate}})}
+  \code{(json:read \var{ip} \opt{\var{options}})}
 \end{procedure}
 \returns{} a Scheme object or the eof object
 
-The \code{json:read} procedure reads characters from the textual
-input port \var{ip} and returns an appropriate Scheme object.
-When \code{json:read} encounters a JSON object, it builds
-the corresponding hashtable and calls \var{custom-inflate}
-to perform application-specific conversion.
-By default, \var{custom-inflate} is the identity function.
+The \code{json:read} procedure reads characters from the textual input
+port \var{ip} and returns an appropriate Scheme object. The
+\var{options} are defined with \code{(json:read-options (\var{option}
+  \var{value}) \etc)}. The following options may be used:
+
+\begin{tabular}{lrp{.5\textwidth}}
+  option & default & description \\ \hline
+
+  \code{inflate-object} & \code{\#f} & When \code{json:read}
+  encounters a JSON object, it builds the corresponding hashtable and
+  calls \var{inflate-object} to perform application-specific
+  conversion. By default, \var{inflate-object} is disabled.
+\end{tabular}
 
 The following exceptions may be raised:
 \begin{itemize}
@@ -213,8 +223,11 @@ The following exceptions may be raised:
 \end{itemize}
 
 \defineentry{json:write}
+\defineentry{json:write-options}
+\phantomsection % make pageref go to correct page for this label
+\label{json:write-options}
 \begin{procedure}
-  \code{(json:write \var{op} \var{x} \opt{\var{indent}} \opt{\var{custom-write}})}
+  \code{(json:write \var{op} \var{x} \opt{\var{indent}} \opt{\var{options}})}
 \end{procedure}
 \returns{} unspecified
 
@@ -233,19 +246,38 @@ individual lines by the specified number of spaces. When \var{indent}
 is 0, a newline is added to the end of the output. The default indent
 of \code{\#f} produces compact output.
 
-The optional \var{custom-write} procedure may intervene to handle
-lists and hashtables differently or to handle objects that have no
-direct JSON counterpart.  If \var{custom-write} does not handle a
-given object, it should return false to let \code{json:write} proceed
-normally.  The \var{custom-write} procedure is called with four
-arguments: the textual output port \var{op}, the Scheme object
-\var{x}, the current \var{indent} level, and a writer procedure
-\var{wr} that should be used to write the values of arbitrary Scheme
-objects.  The \var{wr} procedure is equivalent to
-\code{(lambda (\var{op} \var{x} \var{indent}) (json:write \var{op} \var{x} \var{indent} \var{custom-write}))}.
+The \var{options} are defined with \code{(json:write-options
+  (\var{option} \var{value}) \etc)}. The following options may be
+used:
 
-The default value of \var{custom-write} is the value stored in the
-\code{json:custom-write} process-parameter.
+\begin{tabular}{lrp{.5\textwidth}}
+  option & default & description \\ \hline
+
+  \code{custom-write} & \code{\#f} & The \var{custom-write} procedure
+  is invoked for any Scheme object that does not have a direct JSON
+  representation (i.e., objects other than booleans, the symbol
+  \code{null}, strings, and numbers). It may intervene to handle lists
+  and hashtables differently or to handle objects that have no direct
+  JSON counterpart.
+
+  If \var{custom-write} does not handle a given object, it should
+  return \code{\#f} to allow \code{json:write} to proceed with its
+  default behavior.
+
+  The \var{custom-write} procedure is called with four arguments: the
+  textual output port \var{op}, the Scheme object \var{x}, the current
+  \var{indent} level, and a writer procedure \var{wr} that should be
+  used to write arbitrary Scheme objects. The \var{wr} procedure is
+  equivalent to
+  \code{(lambda (\var{op} \var{x} \var{indent})
+    (json:write \var{op} \var{x} \var{indent} (json:write-options
+      [custom-write \var{custom-write}])))}.
+
+  The default value of \var{custom-write} is \code{\#f}, which
+  indicates that the \code{json:custom-write} process parameter is
+  used.
+
+\end{tabular}
 
 If an object cannot be formatted, \code{\#(invalid-datum \var{x})}
 is raised.
@@ -280,7 +312,7 @@ preformats the strings that will separate values.
 
 \defineentry{json:pretty}
 \begin{procedure}
-  \code{(json:pretty \var{x} \opt{\var{op}})}
+  \code{(json:pretty \var{x} \opt{\var{op}} \opt{\var{options}})}
 \end{procedure}
 \returns{} unspecified
 
@@ -289,6 +321,10 @@ optional textual output port \var{op} in a human-readable form. The
 object is indented and keys are sorted using
 \code{natural-string-ci<?}. The default value of \var{op} is
 \code{(current-output-port)}.
+
+The optional \var{options} argument is defined using
+\code{json:write-options} described in
+Section~\ref{json:write-options}.
 
 Calling \code{(json:pretty x)} is roughly equivalent to the following:
 \antipar\codebegin
@@ -328,46 +364,60 @@ be set to the desired value at expand time.
 
 \defineentry{json:object->bytevector}
 \begin{procedure}
-  \code{(json:object->bytevector \var{x} \opt{\var{indent}} \opt{\var{custom-write}})}
+  \code{(json:object->bytevector \var{x} \opt{\var{indent}} \opt{\var{options}})}
 \end{procedure}
 \returns{} a bytevector
 
 The \code{json:object->bytevector} procedure calls \code{json:write}
-on \var{x} with the optional \var{indent} and \var{custom-write}, if
+on \var{x} with the optional \var{indent} and \var{options}, if
 any, using a bytevector output port transcoded using
 \code{(make-utf8-transcoder)} and returns the resulting bytevector.
 
+The optional \var{options} argument is defined using
+\code{json:write-options} described in
+Section~\ref{json:write-options}.
+
 \defineentry{json:bytevector->object}
 \begin{procedure}
-  \code{(json:bytevector->object \var{x} \opt{\var{custom-inflate}})}
+  \code{(json:bytevector->object \var{x} \opt{\var{options}})}
 \end{procedure}
 \returns{} a Scheme object
 
 The \code{json:bytevector->object} procedure creates a bytevector input port
-on \var{x}, calls \code{json:read} with the optional \var{custom-inflate},
+on \var{x}, calls \code{json:read} with the optional \var{options},
 if any, and returns the resulting Scheme object after making sure the rest
 of the bytevector is only whitespace.
 
+The optional \var{options} argument is defined using
+\code{json:read-options} described in Section~\ref{json:read-options}.
+
 \defineentry{json:object->string}
 \begin{procedure}
-  \code{(json:object->string \var{x} \opt{\var{indent}} \opt{\var{custom-write}})}
+  \code{(json:object->string \var{x} \opt{\var{indent}} \opt{\var{options}})}
 \end{procedure}
 \returns{} a JSON formatted string
 
 The \code{json:object->string} procedure creates a string output port,
 calls \code{json:write} on \var{x} with the optional \var{indent} and
-\var{custom-write}, if any, and returns the resulting string.
+\var{options}, if any, and returns the resulting string.
+
+The optional \var{options} argument is defined using
+\code{json:write-options} described in
+Section~\ref{json:write-options}.
 
 \defineentry{json:string->object}
 \begin{procedure}
-  \code{(json:string->object \var{x} \opt{\var{custom-inflate}})}
+  \code{(json:string->object \var{x} \opt{\var{options}})}
 \end{procedure}
 \returns{} a Scheme object
 
 The \code{json:string->object} procedure creates a string input port
-on \var{x}, calls \code{json:read} with the optional \var{custom-inflate},
+on \var{x}, calls \code{json:read} with the optional \var{options},
 if any, and returns the resulting Scheme object after making sure the rest
 of the string is only whitespace.
+
+The optional \var{options} argument is defined using
+\code{json:read-options} described in Section~\ref{json:read-options}.
 
 \defineentry{json:write-structural-char}
 \begin{procedure}

@@ -49,22 +49,22 @@
 (define round-trip
   (case-lambda
    [(x) (round-trip x #f #f)]
-   [(x custom-write custom-inflate)
+   [(x custom-write inflate-object)
     (define (->string x)
       (if custom-write
-          (json:object->string x #f custom-write)
+          (json:object->string x #f (json:write-options [custom-write custom-write]))
           (json:object->string x)))
     (define (->bytevector x)
       (if custom-write
-          (json:object->bytevector x #f custom-write)
+          (json:object->bytevector x #f (json:write-options [custom-write custom-write]))
           (json:object->bytevector x)))
     (define (string-> x)
-      (if custom-inflate
-          (json:string->object x custom-inflate)
+      (if inflate-object
+          (json:string->object x (json:read-options [inflate-object inflate-object]))
           (json:string->object x)))
     (define (bytevector-> x)
-      (if custom-inflate
-          (json:bytevector->object x custom-inflate)
+      (if inflate-object
+          (json:bytevector->object x (json:read-options [inflate-object inflate-object]))
           (json:bytevector->object x)))
     (let ([y (string-> (->string x))])
       (assert (equal? (dump x) (dump y))))
@@ -290,7 +290,7 @@
                    [abc 123]
                    [n0 (box 0)]
                    [n1 (list (box 1) (box 2))])])
-         (json:write op obj 0 custom-write)
+         (json:write op obj 0 (json:write-options [custom-write custom-write]))
          (get))]
       [,@expected
        (parameterize ([json:custom-write custom-write])
@@ -338,12 +338,14 @@
             [abc '#(4 5 6)]
             [def '(7 8 9)])
            0
-           (lambda (op x indent wr)
-             (cond
-              [(vector? x)
-               (wr op (map (lambda (x) (format "~r" x)) (vector->list x)) indent)
-               #t]
-              [else #f])))
+           (json:write-options
+            [custom-write
+             (lambda (op x indent wr)
+               (cond
+                [(vector? x)
+                 (wr op (map (lambda (x) (format "~r" x)) (vector->list x)) indent)
+                 #t]
+                [else #f]))]))
          (get))]
       ["{\n  \"abc\": [\"four\",\"five\",\"six\"],\n  \"def\": [\n    7,\n    8,\n    9\n  ],\n  \"ghi\": 3\n}\n"
        (begin
@@ -353,13 +355,15 @@
             [abc '#(4 5 6)]
             [def '(7 8 9)])
            0
-           (lambda (op x indent wr)
-             (cond
-              [(vector? x)
-               ;; Explicitly bypasses pretty mechanisms.
-               (fprintf op "[~{\"~r\"~^,~}]" (vector->list x))
-               #t]
-              [else #f])))
+           (json:write-options
+            [custom-write
+             (lambda (op x indent wr)
+               (cond
+                [(vector? x)
+                 ;; Explicitly bypasses pretty mechanisms.
+                 (fprintf op "[~{\"~r\"~^,~}]" (vector->list x))
+                 #t]
+                [else #f]))]))
          (get))]
       [,goodbye (lambda (op x indent wr) (wr op "goodbye" indent))]
       ["{\n  \"list\": [\n    1,\n    2,\n    {\n      \"tiki\": \"torch\",\n      \"wiki\": \"goodbye\"\n    }\n  ]\n}\n"
@@ -368,14 +372,16 @@
            (json:make-object
             [list (list 1 2 'flubber)])
            0
-           (lambda (op x indent wr)
-             (match x
-               [flubber
-                (json:write-object op indent wr
-                  [tiki "torch"]
-                  [wiki "hello" goodbye])
-                #t]
-               [,_ #f])))
+           (json:write-options
+            [custom-write
+             (lambda (op x indent wr)
+               (match x
+                 [flubber
+                  (json:write-object op indent wr
+                    [tiki "torch"]
+                    [wiki "hello" goodbye])
+                  #t]
+                 [,_ #f]))]))
          (get))]
       ;; ensure that json:write-object matches json:write
       ["{}" (compare-output #f)]
@@ -390,6 +396,19 @@
       )
      'ok)))
 
+(mat pretty-output-port ()
+  ;; Verify json:pretty writes to current-output-port
+  (let ([op (open-output-string)])
+    (parameterize ([current-output-port op])
+      (json:pretty #t))
+    (match (get-output-string op)
+      ["true\n" 'ok]))
+  (let ([op (open-output-string)])
+    (parameterize ([current-output-port op])
+      (json:pretty #t (json:write-options [custom-write #f])))
+    (match (get-output-string op)
+      ["true\n" 'ok])))
+
 (mat custom ()
   (define-tuple <obj> a b c)
   (define dne (box #t))
@@ -398,7 +417,7 @@
       (if (eq? hit dne)
           (errorf 'must-ref "did not find ~s" key)
           hit)))
-  (define (custom-inflate x)
+  (define (inflate-object x)
     (match (json:ref x '_type_ #f)
       ["<obj>"
        (<obj> make
@@ -447,13 +466,13 @@
       (and (json:object? y)
            (compare (hashtable->alist x) (hashtable->alist y)))]
      [else #f]))
-  (define (nop-custom-inflate x) x)
+  (define (nop-inflate-object x) x)
   (define (nop-custom-write op x indent wr) #f)
-  ;; test inert custom-write / custom-inflate
+  ;; test inert custom-write / inflate-object
   (for-each
    (lambda (obj)
      (match-let* ([#(,x ,_) obj])
-       (round-trip x nop-custom-write nop-custom-inflate)))
+       (round-trip x nop-custom-write nop-inflate-object)))
    test-objs)
   (match-let*
    ([,x (<obj> make
@@ -471,15 +490,15 @@
                 [c (json:make-object [take "cake"])]))])]
     ;; use custom-write
     ;; first without indentation:
-    [,string (json:object->string x #f custom-write)]
-    [ok (compare x (json:string->object string custom-inflate))]
-    [,bv (json:object->bytevector x #f custom-write)]
-    [ok (compare x (json:bytevector->object bv custom-inflate))]
+    [,string (json:object->string x #f (json:write-options [custom-write custom-write]))]
+    [ok (compare x (json:string->object string (json:read-options [inflate-object inflate-object])))]
+    [,bv (json:object->bytevector x #f (json:write-options [custom-write custom-write]))]
+    [ok (compare x (json:bytevector->object bv (json:read-options [inflate-object inflate-object])))]
     ;; now indent:
-    [,string (json:object->string x 0 custom-write)]
-    [ok (compare x (json:string->object string custom-inflate))]
-    [,bv (json:object->bytevector x 0 custom-write)]
-    [ok (compare x (json:bytevector->object bv custom-inflate))])
+    [,string (json:object->string x 0 (json:write-options [custom-write custom-write]))]
+    [ok (compare x (json:string->object string (json:read-options [inflate-object inflate-object])))]
+    [,bv (json:object->bytevector x 0 (json:write-options [custom-write custom-write]))]
+    [ok (compare x (json:bytevector->object bv (json:read-options [inflate-object inflate-object])))])
    'ok)
   (match-let*
    ([,x (vector
@@ -487,12 +506,12 @@
          (<obj> make [a '#(x y z)] [b 4] [c 7]))]
     ;; now use custom-write2
     ;; without indentation
-    [,string1 (json:object->string x #f custom-write2)]
-    [,string2 (json:object->string x 0 custom-write2)]
+    [,string1 (json:object->string x #f (json:write-options [custom-write custom-write2]))]
+    [,string2 (json:object->string x 0 (json:write-options [custom-write custom-write2]))]
     [#f (string=? string1 string2)]
     [,@string1 (pregexp-replace* "\\s" string2 "")]
     ;; By design, some vectors in the input are lists in the output.
-    [,y (json:string->object string1 custom-inflate)]
+    [,y (json:string->object string1 (json:read-options [inflate-object inflate-object]))]
     [,@y (let f ([x x]) ;; rebuild x suitable for comparison with y
            (match x
              [`(<obj> ,a ,b ,c)

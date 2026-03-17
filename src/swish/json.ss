@@ -35,6 +35,7 @@
    json:object?
    json:pretty
    json:read
+   json:read-options
    json:ref
    json:set!
    json:size
@@ -42,6 +43,7 @@
    json:update!
    json:write
    json:write-object
+   json:write-options
    json:write-structural-char
    )
   (import
@@ -53,6 +55,20 @@
    (swish options)
    (swish string-utils)
    )
+
+  (define-options json:read-options
+    (optional
+     [inflate-object
+      (default #f)
+      (must-be valid-inflate-object?)]
+     ))
+
+  (define-options json:write-options
+    (optional
+     [custom-write
+      (default #f)
+      (must-be valid-custom-write?)]
+     ))
 
   (define-syntax extend-object-internal
     (syntax-rules ()
@@ -332,7 +348,7 @@
   ;; Strings and objects are common enough that it appears
   ;; to be worth resolving json-buffer eagerly and making
   ;; it available via json-buf within R.
-  (define-syntactic-monad R json-buf custom-inflate)
+  (define-syntactic-monad R json-buf inflate-object)
 
   (R define (rd ip)
     (let ([c (next-non-ws ip)])
@@ -368,7 +384,7 @@
                   [(#\]) (reverse acc)]
                   [else (unexpected-input c ip)]))])))]
        [(eqv? c #\{)
-        (custom-inflate
+        (inflate-object
          (let lp ([obj (json:make-object)])
            (let ([c (next-non-ws ip)])
              (cond
@@ -388,19 +404,23 @@
        [(eqv? c #\-) (- (read-unsigned ip))]
        [else (unread-char c ip) (read-unsigned ip)])))
 
+  (define (no-inflate-object x) x)
+
   (define json:read
     (case-lambda
-     [(ip) (json:read ip no-custom-inflate)]
-     [(ip custom-inflate)
+     [(ip) (json:read ip (json:read-options))]
+     [(ip options)
       (arg-check 'json:read
         [ip input-port? textual-port?]
-        [custom-inflate valid-custom-inflate?])
+        [options (json:read-options is?)])
       (let ([x (seek-non-ws ip)])
         (cond
          [(eof-object? x) x]
          [else
           (unread-char x ip)
-          (R rd ([json-buf (json-buffer)]) ip)]))]))
+          (match-let* ([`(<json:read-options> ,inflate-object) options])
+            (let ([inflate-object (or inflate-object no-inflate-object)])
+              (R rd ([json-buf (json-buffer)]) ip)))]))]))
 
   (define (newline-and-indent indent op)
     (newline op)
@@ -477,8 +497,8 @@
   (define (valid-custom-write? x)
     (or (not x) (procedure/arity? #b10000 x)))
 
-  (define (valid-custom-inflate? x)
-    (procedure/arity? #b10 x))
+  (define (valid-inflate-object? x)
+    (or (not x) (procedure/arity? #b10 x)))
 
   (define json:custom-write
     (make-process-parameter #f
@@ -547,20 +567,20 @@
             (W finish () #\})))]
      [else (throw `#(invalid-datum ,x))]))
 
-  (define (internal-write op x indent custom-writer default-key<? who)
+  (define (internal-write op x indent options default-key<?)
+    (match-define `(<json:write-options> ,custom-write) options)
+    (define custom-writer (or custom-write (json:custom-write)))
     (define key<?
       (let ([x (json:key<?)])
         (cond
          [(eq? x #t) default-key<?]
          [else x])))
-    (define custom-write
-      (and custom-writer
-           (letrec ([custom-adapter (lambda (op x indent) (custom-writer op x indent wr-adapter))]
-                    [wr-adapter (lambda (op x indent) (W wr ([custom-write custom-adapter]) x))])
-             custom-adapter)))
-    (arg-check who
-      [op output-port? textual-port?])
-    (W wr () x)
+    (let ([custom-write
+           (and custom-writer
+                (letrec ([custom-adapter (lambda (op x indent) (custom-writer op x indent wr-adapter))]
+                         [wr-adapter (lambda (op x indent) (W wr ([custom-write custom-adapter]) x))])
+                  custom-adapter))])
+      (W wr () x))
     (when (eqv? indent 0)
       (newline op)))
 
@@ -569,53 +589,52 @@
   (define json:write
     (case-lambda
      [(op x) (json:write op x #f)]
-     [(op x indent) (json:write op x indent (json:custom-write))]
-     [(op x indent custom-writer)
+     [(op x indent) (json:write op x indent (json:write-options))]
+     [(op x indent options)
       (arg-check 'json:write
+        [op output-port? textual-port?]
         [indent valid-indent?]
-        [custom-writer valid-custom-write?])
-      (internal-write op x indent custom-writer string<? 'json:write)]))
+        [options (json:write-options is?)])
+      (internal-write op x indent options string<?)]))
 
   (define json:object->string
     (case-lambda
      [(x) (json:object->string x #f)]
-     [(x indent) (json:object->string x indent (json:custom-write))]
-     [(x indent custom-write)
+     [(x indent) (json:object->string x indent (json:write-options))]
+     [(x indent options)
       (let-values ([(op get) (open-string-output-port)])
-        (json:write op x indent custom-write)
+        (json:write op x indent options)
         (get))]))
 
   (define json:string->object
     (case-lambda
-     [(x) (json:string->object x no-custom-inflate)]
-     [(x custom-inflate)
-      (->object (open-string-input-port x) custom-inflate)]))
+     [(x) (json:string->object x (json:read-options))]
+     [(x options)
+      (->object (open-string-input-port x) options)]))
 
   (define json:object->bytevector
     (case-lambda
      [(x) (json:object->bytevector x #f)]
-     [(x indent) (json:object->bytevector x indent (json:custom-write))]
-     [(x indent custom-write)
+     [(x indent) (json:object->bytevector x indent (json:write-options))]
+     [(x indent options)
       (call-with-bytevector-output-port
-       (lambda (op) (json:write op x indent custom-write))
+       (lambda (op) (json:write op x indent options))
        (make-utf8-transcoder))]))
 
   (define json:bytevector->object
     (case-lambda
-     [(x) (json:bytevector->object x no-custom-inflate)]
-     [(x custom-inflate)
+     [(x) (json:bytevector->object x (json:read-options))]
+     [(x options)
       (->object (open-bytevector-input-port x (make-utf8-transcoder))
-        custom-inflate)]))
+        options)]))
 
-  (define (->object ip custom-inflate)
-    (let ([obj (json:read ip custom-inflate)])
+  (define (->object ip options)
+    (let ([obj (json:read ip options)])
       ;; Make sure there's nothing but whitespace left.
       (let ([x (seek-non-ws ip)])
         (if (eof-object? x)
             obj
             (unexpected-input x ip)))))
-
-  (define (no-custom-inflate x) x)
 
   (define (write-key indent pre key whole op)
     ;; pre is a token
@@ -738,6 +757,13 @@
   (define json:pretty
     (case-lambda
      [(x) (json:pretty x (current-output-port))]
-     [(x op)
-      (internal-write op x 0 (json:custom-write) natural-string-ci<? 'json:pretty)]))
+     [(x op/opt)
+      (if ((json:write-options is?) op/opt)
+          (json:pretty x (current-output-port) op/opt)
+          (json:pretty x op/opt (json:write-options)))]
+     [(x op options)
+      (arg-check 'json:pretty
+        [op output-port? textual-port?]
+        [options (json:write-options is?)])
+      (internal-write op x 0 options natural-string-ci<?)]))
   )
