@@ -73,9 +73,9 @@
     'ok]))
 
 (define test-objs
-  `(#(#\nul "null")
-    #(#t "true")
+  `(#(#t "true")
     #(#f "false")
+    #(null "null")
     #(1 "1")
     #(3.1415 "3.1415")
     #(-1 "-1")
@@ -125,7 +125,7 @@
     #(,(json:make-object [,'foo (json:make-object [bar #t])])
       "{\"foo\":{\"bar\":true}}")
 
-    #((-123 "foo" ,(json:make-object [bar '()]) #\nul)
+    #((-123 "foo" ,(json:make-object [bar '()]) null)
       "[-123,\"foo\",{\"bar\":[]},null]")
     #(,(json:make-object [,(gensym "bar" "unique-name") 456] [#{foo lish} 789])
       "{\"#{foo lish}\":789,\"#{bar unique-name}\":456}")
@@ -239,7 +239,7 @@
        (begin
          (json:write-object op #f json:write
            [pi 3.14]
-           [zip #\nul])
+           [zip 'null])
          (get))]
       [,fail
        (guard (procedure? fail))

@@ -352,7 +352,7 @@
         (expect-char #\u ip)
         (expect-char #\l ip)
         (expect-char #\l ip)
-        #\nul]
+        'null]
        [(eqv? c #\") (read-string ip json-buf)]
        [(eqv? c #\[)
         (let lp ([acc '()])
@@ -514,7 +514,7 @@
     (cond
      [(eq? x #t) (display-string "true" op)]
      [(eq? x #f) (display-string "false" op)]
-     [(eqv? x #\nul) (display-string "null" op)]
+     [(eq? x 'null) (display-string "null" op)]
      [(string? x) (write-string x op)]
      [(fixnum? x) (display-fixnum x op)]
      [(or (bignum? x) (and (flonum? x) (finite? x)))
@@ -649,7 +649,7 @@
              ;; in (W define (wr x) ...) above.
              (or (boolean? val) (fixnum? val) (string? val)
                  (and (flonum? val) (finite? val))
-                 (eqv? val #\nul))
+                 (eq? val 'null))
              (eval `(let () (import (swish json)) (json:object->string ,val)))))
       (lambda (x)
         (syntax-case x ()
