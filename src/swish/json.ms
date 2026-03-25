@@ -652,7 +652,20 @@
     [,proc3 (lambda (a b c) "bad")]
     [#(EXIT #(bad-arg json:custom-write ,@proc3))
      (catch (json:custom-write proc3))]
-    )
+    [`(catch #(bad-arg stack->json 234)) (try (stack->json 234))]
+    [,empty-stack (json:make-object [type "stack"])]
+    [`(catch #(bad-arg stack->json port))
+     (try (stack->json 'port empty-stack))]
+    [`(catch #(bad-arg json-stack->string deck))
+     (try (json-stack->string 'deck))]
+    [,ip (open-input-string "")]
+    [`(catch #(bad-arg json-stack->string ,@ip))
+     (try (json-stack->string ip empty-stack))]
+    [,op (let-values ([(op get) (open-bytevector-output-port)]) op)]
+    [`(catch #(bad-arg json-stack->string ,@op))
+     (try (json-stack->string op empty-stack))]
+    [`(catch #(bad-arg json-stack->string 123))
+     (try (json-stack->string (open-output-string) 123))])
    'ok))
 
 ;; default canonical ordering for JSON serialization
