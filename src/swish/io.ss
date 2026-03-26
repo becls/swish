@@ -111,7 +111,6 @@
    )
   (import
    (chezscheme)
-   (swish compat)
    (swish erlang)
    (swish meta)
    (swish osi)

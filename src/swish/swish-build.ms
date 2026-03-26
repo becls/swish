@@ -581,10 +581,8 @@
     [#(EXIT `(<os-process-failed>
               [stdout ("A: [1,2,3]")]
               [stderr (,err-msg)]))
-     (assert
-      (or (string=? err-msg "rtlibs-swish-fat: library (swish dsm) not found.") ;; (swish json) now imports (swish dsm)
-          ;; 9.5.3 provides a more precise error message
-          (string=? err-msg "rtlibs-swish-fat: attempt to import invisible library (swish json).")))
+     ;; (swish json) now imports (swish dsm)
+     (assert (string=? err-msg "rtlibs-swish-fat: library (swish dsm) not found."))
      'ok])
 
   ;; Success case
@@ -921,10 +919,7 @@
     [#(EXIT `(<os-process-failed>
               [stdout ,@common-prefix]
               [stderr (,err-msg)]))
-     (assert
-      (or (string=? err-msg "prog1: variable say is not bound.")
-          ;; 9.5.3 change in library-manager error messages
-          (string=? err-msg "prog1: attempt to invoke invisible library (lib1).")))
+     (assert (string=? err-msg "prog1: attempt to invoke invisible library (lib1)."))
      'ok])
 
   ;; table not duplicated when prog2 is loaded and say is visible
@@ -962,10 +957,8 @@
     [#(EXIT `(<os-process-failed>
               [stdout ,@common-prefix]
               [stderr (,err-msg)]))
-     (assert
-      (or (string=? err-msg "prog1: library (lib1) is not visible.")
-          ;; 9.5.3 provides more precise error message
-          (string=? err-msg "prog1: attempt to import invisible library (lib1).")))
+
+     (assert (string=? err-msg "prog1: attempt to import invisible library (lib1)."))
      'ok])
 
   ;; expected crash does not happen since comp1 duplicates unarmed (crash-component)
@@ -1014,8 +1007,7 @@
       [#(EXIT `(<os-process-failed> ,stdout ,stderr))
        (match-regexps comp-common stdout)
        (match-regexps
-        ;; 9.5.3 provides more precise error message
-        '("^(Exception in visit: library \\(lib1\\) is not visible|Exception: attempt to import invisible library \\(lib1\\)\\.)")
+        '("^(Exception: attempt to import invisible library \\(lib1\\)\\.)")
         stderr)])
     ;; can import lib1 by loading comp3, since it was compiled with --libs-visible
     (test-os-process swish-exe '("-q") (make-test-input comp3.out)

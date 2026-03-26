@@ -51,7 +51,7 @@ scheme, starting with 2.0.0 to avoid confusion with internal projects.
 
 ## Linux
 
-- Chez Scheme 9.6.4 or later
+- Chez Scheme 10.3.0 or later
 - GCC, the GNU Compiler Collection
 - GNU make 4.4 or later
 - GNU C++ compiler for libuv
@@ -61,7 +61,7 @@ scheme, starting with 2.0.0 to avoid confusion with internal projects.
 
 ## Mac
 
-- Chez Scheme 9.6.4 or later
+- Chez Scheme 10.3.0 or later
 - coreutils (install via [Homebrew](https://brew.sh): `brew install coreutils`)
 - cmake for libuv (install via [Homebrew](https://brew.sh): `brew install cmake`)
 - XCode Command Line Tools
@@ -71,7 +71,7 @@ scheme, starting with 2.0.0 to avoid confusion with internal projects.
 
 ## Windows
 
-- Chez Scheme 9.6.4 or later
+- Chez Scheme 10.3.0 or later
 - Cygwin or MinGW/MSYS with bash, git, graphviz, grep, perl, texlive,
   GNU make, etc.
 - cmake for libuv (https://cmake.org/)

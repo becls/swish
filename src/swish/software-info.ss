@@ -83,8 +83,7 @@
                   (lambda (x)
                     (format "~{~a~^.~}~@[-pre-release.~a~]"
                       (call-with-values scheme-version-number list)
-                      (and (top-level-bound? 'scheme-pre-release)
-                           (eval '(scheme-pre-release)))))])
+                      (scheme-pre-release)))])
       scheme-version))
   (software-revision 'chezscheme
     (include-line "swish/chezscheme-revision.include"))
@@ -124,15 +123,10 @@
     ["Foo" (software-product-name 'foo)]
     [,_ (json:delete! (software-info) 'foo)] ;; try to keep foo out of coverage report
     [,cs-version
-     (format "~a~@[-pre-release.~a~]"
-       (scheme-version)
-       (and (top-level-bound? 'scheme-pre-release)
-            (eval '(scheme-pre-release))))]
+     (format "~a~@[-pre-release.~a~]" (scheme-version) (scheme-pre-release))]
     [,@cs-version
      (parameterize ([app:name "chezscheme"])
-       (format "~a Version ~a"
-         (software-product-name)
-         (software-version)))]
+       (format "~a Version ~a" (software-product-name) (software-version)))]
     [#f (json:ref (software-info) '(abc version) #f)]
     [,@swish-hash (json:ref (software-info) '(swish revision) #f)]
     [#(machine-type product-name revision version)

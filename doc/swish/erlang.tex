@@ -263,12 +263,11 @@ not used because they perform synchronous I/O.  The default custom port buffer
 size is set to 1024 with \code{custom-port-buffer-size}.\footnote{1024 was
 chosen because prior versions of Chez Scheme use 1024 for the buffer size
 of buffered transcoded ports.}
-When compiled with Chez Scheme versions 9.6.2 and later, Swish uses
-\code{file-buffer-size} as the buffer size for custom file ports.
-The custom binary port read and write
-procedures call \code{osi\_read\_port} and \code{osi\_write\_port}
-with callbacks that send a message to the calling process, which waits
-until it receives the message.
+Swish uses \code{file-buffer-size} as the buffer size for custom file
+ports.  The custom binary port read and write procedures call
+\code{osi\_read\_port} and \code{osi\_write\_port} with callbacks that
+send a message to the calling process, which waits until it receives
+the message.
 
 \concern{Using a port from more than one process at the same time may
   cause errors including buffer corruption.}  \mitigation The code is
@@ -1383,7 +1382,7 @@ The \var{handle-frame} procedure is called with four arguments:
 
 If \var{max-depth} is omitted or is the symbol \code{default}, then
 \code{walk-stack} uses the value of \code{walk-stack-max-depth} as
-\var{max-depth} and stops if recognizes a \code{limit-stack} frame.
+\var{max-depth} and stops if it recognizes a \code{limit-stack} frame.
 If \var{max-depth} is specified explicitly, then \var{walk-stack}
 does not stop at \code{limit-stack} frames.
 If \code{walk-stack} reaches a depth of \var{max-depth}, it calls

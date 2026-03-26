@@ -76,7 +76,6 @@
    )
   (import
    (chezscheme)
-   (swish compat)
    (swish erlang)
    (swish event-mgr)
    (swish events)
