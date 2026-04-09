@@ -234,8 +234,16 @@ following options are supported:
   \code{inflate-object} & \code{\#f} &
   When a JSON object is read, it is first converted into a hashtable.
   If \code{inflate-object} is provided, it is then applied to the
-  hashtable to perform application-specific transformation. By default,
-  no transformation is performed. \\
+  hashtable to perform application-specific transformation. By
+  default, no transformation is performed. \\
+
+  \code{inflate-symbol} & \code{\#f} &
+  Specifies a procedure of one argument for interpreting unquoted
+  symbols in value position. The procedure is called with the symbol
+  as its argument and may return any Scheme object. If
+  \code{inflate-symbol} is \code{\#f}, the occurrence of an unquoted
+  symbol in value position is an error. This behavior does not apply
+  to object member names. \\
 
   \code{json5?} & \code{\#t} & If \code{\#t}, input is parsed according
   to JSON5. If \code{\#f}, only standard JSON syntax is accepted.

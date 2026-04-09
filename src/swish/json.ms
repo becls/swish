@@ -1356,3 +1356,29 @@
     ["baz" (json:string->object "\"baz\"" opts)])
    'ok)
   )
+
+(mat inflate-symbol ()
+  ;; Setting inflate-symbol to values allows unquoted symbols as
+  ;; values.
+  (define specs
+    `(("bare" bare)
+      ("[a1,a2,a3]" (a1 a2 a3))
+      ("{\"quoted_key\": unquoted_value}" ,(json:make-object [quoted_key 'unquoted_value]))
+      ("{unquoted_key: unquoted_value}"
+       [json ,(err #(json:unexpected |object key| #\u 1 ,_))]
+       [json5 ,(json:make-object [unquoted_key 'unquoted_value])])
+      ))
+
+  (check-reader specs
+    (lambda (str opts)
+      (json:string->object str
+        (json:read-options copy opts [inflate-symbol values]))))
+
+  ;; Options
+  (match-let*
+   ([#t (begin (json:read-options [inflate-symbol #f]) #t)]
+    [#t (begin (json:read-options [inflate-symbol (lambda (a) #t)]) #t)]
+    [,proc2 (lambda (a b) #t)]
+    [`(catch #(bad-arg inflate-symbol ,@proc2))
+     (try (json:read-options [inflate-symbol proc2]))])
+   'ok))

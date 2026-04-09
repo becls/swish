@@ -65,6 +65,9 @@
      [inflate-object
       (default #f)
       (must-be valid-inflate-object?)]
+     [inflate-symbol
+      (default #f)
+      (must-be (lambda (x) (or (not x) (procedure/arity? #b10 x))))]
      [json5?
       (default #t)
       (must-be boolean?)]
@@ -391,7 +394,7 @@
             (unexpected-str '|object key| str ip))
           sym)])))
 
-  (define (read-identifier chars ip op json5?)
+  (define (read-identifier chars ip op json5? inflate-symbol)
     (declare-unsafe-primitives write-char)
     (let lp ([chars chars] [first? #t] [clean? #t])
       (match chars
@@ -411,6 +414,8 @@
                       [+NaN +nan.0]
                       [-NaN -nan.0]
                       [,_ #f]))]
+              [inflate-symbol
+               (inflate-symbol sym)]
               [else
                (unexpected-str 'value str ip)])))]
         [(,c . ,chars)
@@ -600,6 +605,7 @@
   (define-syntactic-monad R
     json-buf
     inflate-object
+    inflate-symbol
     json5?
     )
 
@@ -747,7 +753,7 @@
           [,_
            (read-unsigned chars ip json5?)])))
     (define (start-identifier rchars)
-      (read-identifier (reverse rchars) ip json-buf json5?))
+      (read-identifier (reverse rchars) ip json-buf json5? inflate-symbol))
     (cond
      [(char=? c #\-) (sign (list c))]
      [(char=? c #\0) (zero (list c))]
@@ -774,6 +780,7 @@
           (match options
             [`(<json:read-options>
                ,inflate-object
+               ,inflate-symbol
                ,json5?)
              (let ([inflate-object (or inflate-object no-inflate-object)])
                (R rd ([json-buf (json-buffer)]) ip #f))])]))]))
