@@ -231,6 +231,15 @@ following options are supported:
 \begin{tabular}{lrp{.5\textwidth}}
   option & default & description \\ \hline
 
+  \code{extended-identifiers?} & \code{\#f} &
+  If true, enables more permissive reading of unquoted symbols. In
+  value position, this applies to both JSON and JSON5 input. If
+  \code{json5?} is enabled, it also applies to object member
+  names. When enabled, unquoted symbols may include characters not
+  permitted by the JSON5 identifier syntax (for example, hyphenated
+  identifiers in the style of Scheme). If false, unquoted symbols must
+  conform to the JSON5 identifier syntax. \\
+
   \code{inflate-object} & \code{\#f} &
   When a JSON object is read, it is first converted into a hashtable.
   If \code{inflate-object} is provided, it is then applied to the

@@ -62,6 +62,9 @@
 
   (define-options json:read-options
     (optional
+     [extended-identifiers?
+      (default #f)
+      (must-be boolean?)]
      [inflate-object
       (default #f)
       (must-be valid-inflate-object?)]
@@ -383,10 +386,11 @@
             (write-char c op)
             (lp #f (and clean? (json5-strict-char? c first?)))])]))))
 
-  (define (read-unquoted-key ip op)
-    (let-values ([(str clean?) (identifier-helper '|object key| ip op #t #t)])
+  (define (read-unquoted-key ip op extended?)
+    (define strict? (not extended?))
+    (let-values ([(str clean?) (identifier-helper '|object key| ip op #t strict?)])
       (cond
-       [(not clean?)
+       [(and strict? (not clean?))
         (unexpected-str '|object key| str ip)]
        [else
         (let ([sym (string->symbol str)])
@@ -394,9 +398,10 @@
             (unexpected-str '|object key| str ip))
           sym)])))
 
-  (define (read-identifier chars ip op json5? inflate-symbol)
+  (define (read-identifier chars ip op json5? extended? inflate-symbol)
+    (define strict? (not extended?))
     (declare-unsafe-primitives write-char)
-    (let lp ([chars chars] [first? #t] [clean? #t])
+    (let lp ([chars chars] [first? #t] [clean? strict?])
       (match chars
         [()
          (let-values ([(str clean?) (identifier-helper 'value ip op first? clean?)])
@@ -414,6 +419,8 @@
                       [+NaN +nan.0]
                       [-NaN -nan.0]
                       [,_ #f]))]
+              [(and strict? (not clean?))
+               (unexpected-str 'value str ip)]
               [inflate-symbol
                (inflate-symbol sym)]
               [else
@@ -604,6 +611,7 @@
   ;; it available via json-buf within R.
   (define-syntactic-monad R
     json-buf
+    extended-identifiers?
     inflate-object
     inflate-symbol
     json5?
@@ -666,7 +674,7 @@
             [(and (char=? c #\}) (eqv? (hashtable-size obj) 0)) obj]
             [(and json5? (not (memv c '(#\} #\: #\, #\]))))
              (unread-char c ip)
-             (read-value (read-unquoted-key ip json-buf))]
+             (read-value (read-unquoted-key ip json-buf extended-identifiers?))]
             [else (unexpected-input '|object key| c ip)])))
        (define (read-value key)
          (let ([c (next-non-ws ip json5?)])
@@ -753,7 +761,7 @@
           [,_
            (read-unsigned chars ip json5?)])))
     (define (start-identifier rchars)
-      (read-identifier (reverse rchars) ip json-buf json5? inflate-symbol))
+      (read-identifier (reverse rchars) ip json-buf json5? extended-identifiers? inflate-symbol))
     (cond
      [(char=? c #\-) (sign (list c))]
      [(char=? c #\0) (zero (list c))]
@@ -779,6 +787,7 @@
          [else
           (match options
             [`(<json:read-options>
+               ,extended-identifiers?
                ,inflate-object
                ,inflate-symbol
                ,json5?)

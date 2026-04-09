@@ -1357,6 +1357,30 @@
    'ok)
   )
 
+(mat extended-identifiers ()
+  ;; JSON5 read syntax for identifiers limits to a ECMAScript subset
+  ;; of characters, yet with Unicode escaping, it can encode almost
+  ;; any character. By setting extended-identifiers? we can
+  ;; Scheme-like identifiers when desired.
+  (define specs
+    `(("{kebab-case-identifier: 'kebab'}"
+       [json ,(err #(json:unexpected |object key| #\k 1 ,_))]
+       [json5 ,(json:make-object [kebab-case-identifier "kebab"])])
+      ))
+  (check-reader specs
+    (lambda (str opts)
+      (json:string->object str
+        (json:read-options copy opts [extended-identifiers? #t]))))
+
+  ;; Options
+  (match-let*
+   ([#t (begin (json:read-options [extended-identifiers? #f]) #t)]
+    [#t (begin (json:read-options [extended-identifiers? #t]) #t)]
+    [,nonsense (lambda (a) #t)]
+    [`(catch #(bad-arg extended-identifiers? ,@nonsense))
+     (try (json:read-options [extended-identifiers? nonsense]))])
+   'ok))
+
 (mat inflate-symbol ()
   ;; Setting inflate-symbol to values allows unquoted symbols as
   ;; values.
