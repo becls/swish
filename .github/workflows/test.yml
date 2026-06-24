@@ -2,7 +2,7 @@
 name: Test
 on: [push]
 env:
-  RELEASED: v10.3.0
+  RELEASED: v10.4.1
 jobs:
   build:
     runs-on: ubuntu-latest
