@@ -88,6 +88,7 @@
            context
            (and (not eof?) what)))]
       [#(json:invalid-datum ,what) (format "Invalid datum while writing JSON: ~s." what)]
+      [#(json:invalid-key ,what ,src) (format "Invalid key~a: ~s" (src->english src) what)]
       [#(listen-tcp-failed ,address ,port-number ,who ,errno) (format "Error ~d from ~a when listening on TCP port ~d: ~a." errno who port-number (errno->english errno))]
       [#(name-already-registered ,pid) (format "Name is already registered to ~s." pid)]
       [#(osi-error ,name ,who ,errno) (format "Error ~d from ~a during ~a: ~a." errno who name (errno->english errno))]

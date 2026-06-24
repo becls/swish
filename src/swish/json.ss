@@ -95,10 +95,15 @@
          ...
          ht)]))
 
+  (define (ensure-key x src)
+    (unless (symbol? x)
+      (throw `#(json:invalid-key ,x ,src)))
+    x)
+
   (define-syntax (parse-key x)
     (syntax-case x (unquote)
       [(_ id form) (identifier? #'id) #'(quote id)]
-      [(_ (unquote e) form) #'e]
+      [(_ (unquote e) form) #`(ensure-key e #,(find-source #'form))]
       [(_ key form) (syntax-error #'form (format "invalid key ~s in" (datum key)))]))
 
   (define (verify-json-object who x)

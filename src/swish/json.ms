@@ -1057,7 +1057,13 @@
   (assert-syntax-error (json:make-object ["str" 123]) "invalid key \"str\" in" match-form)
   (assert-syntax-error (json:extend-object x ["str" 123]) "invalid key \"str\" in" match-form)
   (match-let*
-   ([#(EXIT #(bad-arg json:write -1))
+   ([#(EXIT #(json:invalid-key "x" ,_))
+     (catch (json:make-object [,"x" 123]))]
+    [#(EXIT #(json:invalid-key "y" ,_))
+     (catch (json:extend-object (json:make-object) [,"y" 123]))]
+    ["Invalid key at offset 123 of bug.ss: \"B-flat\""
+     (exit-reason->english `#(json:invalid-key "B-flat" #(at 123 "bug.ss")))]
+    [#(EXIT #(bad-arg json:write -1))
      (catch (json:write (open-output-string) 12 -1))]
     [,ip (open-input-string "wrong")]
     [#(EXIT #(bad-arg json:write ,@ip))
