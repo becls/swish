@@ -17,7 +17,9 @@ jobs:
         id: build-clone-main
         run: |
           git clone --filter=blob:none --branch main https://github.com/cisco/ChezScheme.git
-          echo "HASH_KEY=v3_$(cat ChezScheme/.git/refs/heads/main)" >> "${GITHUB_OUTPUT}"
+          MAIN_HASH="$(git -C ChezScheme rev-parse main^{commit})"
+          RELEASED_HASH="$(git -C ChezScheme rev-parse "${RELEASED}^{commit}")"
+          echo "HASH_KEY=v4_${RELEASED_HASH}_${MAIN_HASH}" >> "${GITHUB_OUTPUT}"
       - name: Establish Chez Scheme .git / boot file cache
         id: build-restore-bootfiles
         uses: actions/cache@v5
@@ -142,7 +144,7 @@ jobs:
             V="${RELEASED}"
           fi
           echo "chez=$V" >> "$GITHUB_OUTPUT"
-      - name: Build Chez Scheme ${{ steps.resolve.version.chez }}
+      - name: Build Chez Scheme ${{ env.RELEASED }}
         run: |
           M=${{ matrix.config.machine }}
           cd ChezScheme
@@ -155,7 +157,7 @@ jobs:
           else
             ./bin/zuo $M kernel
           fi
-      - name: Build Chez Scheme ${{ steps.resolve.version.chez }}
+      - name: Build Chez Scheme 'main'
         if: ${{ matrix.config.chez == 'main' }}
         run: |
           M=${{ matrix.config.machine }}
