@@ -22,22 +22,22 @@ esac
 
 LIBSEP="::"
 DIR="${PWD}"
-GITTOP="$(git rev-parse --show-toplevel)"
 case "$(uname -s)" in
   CYGWIN_NT-*)
     LIBSEP=";;"
     ;;
   MINGW64_NT-* | MSYS_NT-*)
     LIBSEP=";;"
-    GITTOP="$(cygpath -u "$GITTOP")"
     ;;
   *)
     DIR="$(realpath "${DIR}")"
     ;;
 esac
-if [ "$DIR" != "$GITTOP" ]; then
-  echo "${this} expected to be run from the repository root"
-  fail
+
+PREFIX="$(git rev-parse --show-prefix 2>/dev/null)" || fail
+if [ -n "$PREFIX" ]; then
+    echo "${this} expected to be run from the repository root"
+    fail
 fi
 
 if [ ! -d "${LIBDIR}" ]; then

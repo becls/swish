@@ -205,11 +205,11 @@
   ;; run fat app via PATH search, not via relative or absolute path
   (test-os-process (fix-exe "bash") '()
     (string-append
-     "PATH=\"${PWD}/data/tmp/mat-output/:${PATH}\"\n"
+     (format "PATH=\"~a:${PATH}\"\n" (output-dir))
      "type -a fat1\n"
      "fat1\n"
      "exit\n")
-    '("^fat1 is .*/data/tmp/mat-output/fat1.*"
+    '("^fat1 is .*[\\\\/]data[\\\\/]tmp[\\\\/]mat-output[\\\\/]fat1.*"
       "^Hello, World!"))
   )
 
