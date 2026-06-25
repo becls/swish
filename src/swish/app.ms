@@ -517,23 +517,23 @@
             (app:start)
             (printf "started\n")
             (flush-output-port)
-            (receive (after 1000) (exit 3)))
+            (test:receive (after 1000) (exit 3)))
          to-stdin)
         (flush-output-port to-stdin)
         (match-let*
          (["started"
-           (receive (after 1500 'bad-start)
+           (test:receive (after 1500 'bad-start)
              [(,@from-stdout . ,msg) msg])]
           [,! (osi_kill os-pid signum)]
           [,expected-exit-code 0]
           [,expected-signal 0]
           [ok
-           (receive (after 1500 'fail)
+           (test:receive (after 1500 'fail)
              [#(process-terminated ,@os-pid ,@expected-exit-code ,@expected-signal)
               'ok])])
          (match (match-regexps '()
                   (let f ()
-                    (receive (after 0 '())
+                    (test:receive (after 0 '())
                       [(,@from-stderr . ,msg) (cons msg (f))])))
            [() 'no-extraneous-output])
          'ok)))
