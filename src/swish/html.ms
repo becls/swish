@@ -145,3 +145,17 @@
     '(area base br col command embed hr img input keygen link meta param
        source track wbr))
    'ok))
+
+(mat print-parameters ()
+  (parameterize ([print-radix 16] [print-precision 3] [print-subnormal-precision #t])
+    (match-let*
+     (["<p f=\"-123456\">123456</p>" (html->string '(p (@ (f -123456)) 123456))]
+      ["<p f=\"-10.0\">10.0</p>" (html->string '(p (@ (f -10.0)) 10.0))]
+      ["<p f=\"-1e-315\">1e-315</p>" (html->string '(p (@ (f -1e-315)) 1e-315))])
+     'ok)))
+
+(mat denormal ()
+  (match-let*
+   (["1e-315" (html->string 1e-315)]
+    ["<img f=\"1e-315\">" (html->string `(img (@ (f 1e-315))))])
+   'ok))
