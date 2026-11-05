@@ -1,5 +1,41 @@
 # Change Log
 
+## 2026-11-05 Version 3.0.0 (Stable)
+
+### Breaking Changes
+
+* Require Chez Scheme 10.3.0 or later.
+* Changed the representation of JSON null from `#\nul` to the symbol `null`.
+* Changed JSON read and write functions to use `json:read-options` and `json:write-options`.
+* Moved `stack->json` and `json-stack->string` from `(swish log-db)` to `(swish json)`.
+
+### New
+
+* Added JSON5 read and write support.
+* Added `extended-identifiers?` and `inflate-symbol` options to `json:read-options`.
+* Added `osi_get_available_parallelism`.
+* Added `common-path-prefix`.
+* `software-info` now includes Chez Scheme pre-release information when applicable.
+
+### Bug Fixes
+
+* Fixed `json:extend-object` to check `,key` usage.
+* Fixed reading JSON floats with large exponents.
+* Fixed reading JSON strings after a failure.
+* Fixed `json:write` custom-write handling for lists and JSON objects.
+* Fixed a `define-tuple` bug with aliases or library renames.
+* Fixed profile report path handling for absolute paths and common path prefixes.
+* Fixed `html->string` writing precision suffixes, such as `1e-315|28`, when printing inexact numbers.
+* Improved `pregexp-match-positions-aux` performance.
+
+### Updates
+
+* Updated to SQLite 3.54.1.
+* Updated to libuv 1.52.1.
+* Generate Swish version information using `git describe`.
+* Split JSON documentation into a separate chapter.
+* Updated Visual Studio and CI runner configuration.
+
 ## 2024-09-03 Version 2.8.1 (Stable)
 
 ### Bug Fixes
